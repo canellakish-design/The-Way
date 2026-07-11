@@ -1,12 +1,19 @@
-// Local-first shell cache. Data calls go network-first.
-const SHELL = 'the-way-shell-v1';
-self.addEventListener('install', e => {
-  e.waitUntil(caches.open(SHELL).then(c =>
-    c.addAll(['/', '/index.html', '/app.js', '/styles.css'])));
+// The Way — service worker v2. Network-first: updates always land.
+const SHELL = "the-way-shell-v2";
+self.addEventListener("install", e => { self.skipWaiting(); });
+self.addEventListener("activate", e => {
+  e.waitUntil(caches.keys().then(keys =>
+    Promise.all(keys.filter(k => k !== SHELL).map(k => caches.delete(k)))
+  ).then(() => self.clients.claim()));
 });
-self.addEventListener('fetch', e => {
+self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  if (['/index.html','/','/app.js','/styles.css'].includes(u.pathname)) {
-    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request)));
+  const shellPaths = ["/", "/index.html", "/app.js", "/styles.css"];
+  if (shellPaths.includes(u.pathname)) {
+    e.respondWith(fetch(e.request).then(r => {
+      const copy = r.clone();
+      caches.open(SHELL).then(c => c.put(e.request, copy));
+      return r;
+    }).catch(() => caches.match(e.request)));
   }
 });

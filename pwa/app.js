@@ -6,12 +6,38 @@ function saveS(){ localStorage.setItem("way-settings", JSON.stringify(S)); }
 const BAND = [-600,-300], TARGET = -450, BASE_BURN = 2050, PROTEIN_GOAL = 190;
 const DAY_TYPES = ["Day 1 · fasted Z2","Day 2 · HIIT","Day 3 · grocery + batch","Day 4 · fasted Z2","Day 5 · strength (kettlebell)","Commute · 35 mi evening"];
 
+/* API base auto-select:
+   - explicit Bridge URL in Settings wins
+   - PWA served by the local bridge (port 8420) -> same-origin ""
+   - hosted (Netlify) -> /.netlify/functions/api                     */
+const DEFAULT_API = (location.port === "8420") ? "" : "/.netlify/functions/api";
+const DEMO = {
+  "/route-weather": { now:{t:74,w:8,ride:"crosswind 8 mph"}, evening:{t:81,w:12,ride:"headwind 12 mph"}, stormAfterHour:16 },
+  "/weight/latest": { latest:{ lb:176.4, logged_today:true }, ma7_lb:177.0, week_change_lb:-0.5 },
+  "/sleep/latest": { sleep:{performance:87,hours:7.4}, recovery:{score:72,hrv:68,rhr:47} },
+  "/fuel-state": { carbs_g:62, fasted:false, meals_today:2, balance_kcal:-410, ball_carbs_g:19.4, fresh:true },
+  "/meals/today": { meals:[ {meal:"breakfast",name:"Blueberry oatmeal smoothie",kcal:520}, {meal:"lunch",name:"Post-ride bowl",kcal:750} ] },
+  "/race": { race:{name:"Gran Fondo Maryland — Medio"}, weeks_out:10.1, phase:"build",
+    need:{aerobic_h:6.2,hi_min:88,strength:2}, done:{aerobic_h:0,hi_min:0,strength:0}, remaining:{aerobic_h:6.2,hi_min:88,strength:2} },
+  "/prescription/lunch": { kcal:850, note:"carb-weighted recovery", units:{protein:2,carb:5,fat:1,greens:2} },
+  "/prescription/dinner": { kcal:1140, note:"settles the day in the band", units:{protein:4,carb:4,fat:2,greens:2} },
+  "/podcasts/list": { episodes:[] },
+  "/plan": { ride:null, for_today:false },
+  "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
+  "/agent/closeout": { ok:true }, "/meals": { ok:true }
+};
 async function bridge(pathname, opts){
-  if (!S.bridgeUrl) throw new Error("no bridge configured");
-  const sep = pathname.includes("?") ? "&" : "?";
-  const r = await fetch(S.bridgeUrl + pathname + sep + "token=" + (S.token||""), opts);
-  if (!r.ok) throw new Error("bridge " + r.status);
-  return r.json();
+  const base = S.bridgeUrl || DEFAULT_API;
+  try{
+    const sep = pathname.includes("?") ? "&" : "?";
+    const r = await fetch(base + pathname + sep + "token=" + (S.token||""), opts);
+    if (!r.ok) throw new Error("bridge " + r.status);
+    return await r.json();
+  }catch(e){
+    const k = Object.keys(DEMO).find(k => pathname.startsWith(k));
+    if (k && (!opts || !opts.method || opts.method === "GET")) return JSON.parse(JSON.stringify(DEMO[k]));
+    throw e;
+  }
 }
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.rate=1.03; speechSynthesis.speak(u);}catch(e){} }
@@ -35,11 +61,12 @@ V.morning = async function(){
   const greet = hr<12 ? "Good morning, Harry" : hr<18 ? "Good afternoon, Harry" : "Good evening, Harry";
   view.innerHTML = `<span class="eyebrow">Morning Mode · ${esc(S.dayType||DAY_TYPES[0])}</span>
     <div class="greet">${greet}</div>
+    <div class="card" id="race"><h4>The race</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="wx"><h4>Weather</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="weigh"><h4>Step on the scale</h4><div class="small">waiting for the weigh-in…</div></div>
     <div class="card" id="sleep"><h4>Sleep</h4><div class="small">waiting for WHOOP…</div></div>
     <div class="card"><h4>Mobility — 10 min</h4><ul class="plain" id="mob"></ul>
-      <button id="mobNext">Next</button></div>
+      <button id="mobNext">Next</button> <button id="mobRepeat" disabled>Repeat that</button></div>
     <div class="card"><h4>Then</h4><div class="small">30-min warm-up spin — the Agent is on the <a href="#agent">Agent tab</a>. Breakfast unlocks after weigh-in.</div></div>`;
 
   (async ()=>{
@@ -83,6 +110,12 @@ V.morning = async function(){
   };
   pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#morning") clearInterval(wp); else pollWeight(); }, 10000);
 
+  bridge("/race").then(r=>{
+    document.getElementById("race").innerHTML =
+      `<h4>${r.race.name} · ${r.weeks_out} weeks out · ${r.phase}</h4>
+       <div class="small">This week still owes: <b>${r.remaining.aerobic_h}h</b> aerobic · <b>${r.remaining.hi_min}min</b> hard · <b>${r.remaining.strength}</b> strength
+       <br>(done: ${r.done.aerobic_h}h / ${r.done.hi_min}min / ${r.done.strength})</div>`;
+  }).catch(()=>{ document.getElementById("race").innerHTML = `<h4>The race</h4><div class="small">bridge unreachable</div>`; });
   bridge("/sleep/latest").then(s=>{
     const el = document.getElementById("sleep");
     if (s.sleep) el.innerHTML = `<h4>Slept ${s.sleep.performance ?? "—"} · ${s.sleep.hours ?? "—"} h</h4>
@@ -143,6 +176,13 @@ V.morning = async function(){
   document.getElementById("mobNext").onclick = ()=>{
     if (mi < 0) listenForReady();
     nextMove();
+    document.getElementById("mobRepeat").disabled = (mi < 0 || mi >= moves.length);
+  };
+  document.getElementById("mobRepeat").onclick = ()=>{
+    if (mi >= 0 && mi < moves.length){
+      const m = moves[mi];
+      speak(m.n + ". " + m.d);
+    }
   };
 };
 

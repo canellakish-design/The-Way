@@ -1,97 +1,92 @@
-// ============================================================
-// agent.js — The Way Agent (Coach, voiced)
-// POST /agent { text, mode? }  mode: "cockpit" (default) | "watch"
-// Server-side daily thread; tools are the bridge's own data.
-// Env: ANTHROPIC_API_KEY, FUEL_TOKEN
-// ============================================================
-const fs = require('fs');
-const path = require('path');
+// The Way Coach. Tools call module functions directly (no self-HTTP —
+// required for serverless). Daily thread persisted in storage.
+const { getJSON, setJSON } = require('./storage');
+const { auth, fuelState, logMeal } = require('./fuel-log');
+const { getPlan } = require('./plan');
+const { routeWeather } = require('./weather');
+const { prescription } = require('./prescriptions');
+const { weekState, logTraining } = require('./race');
+const { sleepLatest } = require('./whoop');
 
-const TOKEN = process.env.FUEL_TOKEN || '';
 const KEY = process.env.ANTHROPIC_API_KEY || '';
-const THREAD = path.join(__dirname, 'agent-thread.json');
-const PORT = process.env.PORT || 8420;
 
-function loadThread() {
-  try {
-    const t = JSON.parse(fs.readFileSync(THREAD, 'utf8'));
-    // new day = new thread (close-out summary carries context forward)
-    if (t.day !== new Date().toDateString()) {
-      return { day: new Date().toDateString(), messages: [], yesterday: t.summary || null };
-    }
-    return t;
-  } catch {
-    return { day: new Date().toDateString(), messages: [], yesterday: null };
+async function loadThread() {
+  const t = await getJSON('agent-thread', null);
+  if (!t || t.day !== new Date().toDateString()) {
+    return { day: new Date().toDateString(), messages: [], yesterday: t ? t.summary : null };
   }
-}
-function saveThread(t) { fs.writeFileSync(THREAD, JSON.stringify(t, null, 2)); }
-
-// local helper: call our own endpoints so the agent and UI share one brain
-async function local(pathname) {
-  const r = await fetch(`http://127.0.0.1:${PORT}${pathname}${pathname.includes('?') ? '&' : '?'}token=${TOKEN}`);
-  return r.json();
+  return t;
 }
 
 const TOOLS = [
-  { name: 'get_state', description: 'Current fuel state, ledger balance, meals today, carbs on board',
-    input_schema: { type: 'object', properties: {} } },
-  { name: 'get_weight', description: 'Latest weigh-in, 7-day trend, week change',
-    input_schema: { type: 'object', properties: {} } },
-  { name: 'get_sleep', description: 'Last night: WHOOP sleep performance, hours, recovery score, HRV, RHR',
-    input_schema: { type: 'object', properties: {} } },
-  { name: 'get_route_weather', description: 'Weather now and for the evening leg, wind interpreted against the route',
-    input_schema: { type: 'object', properties: {} } },
-  { name: 'get_prescription', description: 'Lunch or dinner prescription in Energy Bank units',
+  { name: 'get_state', description: 'Fuel state: ledger balance, carbs on board, meals today', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_weight', description: 'Latest weigh-in and 7-day trend', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_sleep', description: 'WHOOP sleep performance, hours, recovery, HRV, RHR', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_route_weather', description: 'Weather now/evening, wind vs the planned route', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_plan', description: "Planned ride: name, start time, route facts", input_schema: { type: 'object', properties: {} } },
+  { name: 'get_race_week', description: "Weeks to race, phase, this week's buckets: needed/done/remaining", input_schema: { type: 'object', properties: {} } },
+  { name: 'get_prescription', description: 'Lunch or dinner in Energy Bank units',
     input_schema: { type: 'object', properties: { meal: { type: 'string', enum: ['lunch', 'dinner'] } }, required: ['meal'] } },
-  { name: 'log_meal', description: 'Log a meal to the ledger. CONFIRM with the athlete before calling.',
-    input_schema: { type: 'object', properties: {
-      name: { type: 'string' }, meal: { type: 'string' },
-      kcal: { type: 'number' }, carbs_g: { type: 'number' },
-      protein_g: { type: 'number' }, fat_g: { type: 'number' } }, required: ['name', 'kcal'] } },
+  { name: 'log_meal', description: 'Write a meal to the ledger. CONFIRM first.',
+    input_schema: { type: 'object', properties: { name: { type: 'string' }, meal: { type: 'string' },
+      kcal: { type: 'number' }, carbs_g: { type: 'number' }, protein_g: { type: 'number' }, fat_g: { type: 'number' } }, required: ['name', 'kcal'] } },
+  { name: 'log_training', description: 'Drain week buckets after a session. CONFIRM first. aerobic_h = Z2 hours, hi_min = minutes at threshold+, strength = sessions.',
+    input_schema: { type: 'object', properties: { aerobic_h: { type: 'number' }, hi_min: { type: 'number' }, strength: { type: 'number' } } } }
 ];
 
 async function runTool(name, input) {
-  if (name === 'get_state') return local('/fuel-state');
-  if (name === 'get_weight') return local('/weight/latest');
-  if (name === 'get_sleep') return local('/sleep/latest');
-  if (name === 'get_route_weather') return local('/route-weather');
-  if (name === 'get_prescription') return local('/prescription/' + (input.meal || 'dinner'));
-  if (name === 'log_meal') {
-    const r = await fetch(`http://127.0.0.1:${PORT}/meals?token=${TOKEN}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input) });
-    return r.json();
-  }
+  try {
+    if (name === 'get_state') return await fuelState();
+    if (name === 'get_weight') return await getJSON('withings-trend', { note: 'no scale connected yet' });
+    if (name === 'get_sleep') return await sleepLatest();
+    if (name === 'get_route_weather') return await routeWeather(NaN);
+    if (name === 'get_plan') return await getPlan();
+    if (name === 'get_race_week') return await weekState();
+    if (name === 'get_prescription') return await prescription(input.meal || 'dinner', 0);
+    if (name === 'log_meal') return await logMeal(input);
+    if (name === 'log_training') return await logTraining(input);
+  } catch (e) { return { error: e.message }; }
   return { error: 'unknown tool' };
 }
 
 function systemPrompt(mode, yesterday) {
-  return `You are The Way — Harry's cycling and nutrition coach. Doctrine:
-fuel the work, take the deficit at the margins; the day settles in the green
-band (-600 to -300 kcal, target -450). FTP 265. Protein goal 190g. Five-day
-cycle: Days 1 & 4 fasted Z2, HIIT, Day 3 grocery/batch, strength = 70lb
-kettlebell. Ride Fuel Unit = spicy anchovy rice ball (19g carbs).
-${yesterday ? 'Yesterday: ' + yesterday : ''}
-Rules: be direct and brief — ${mode === 'watch'
-    ? 'ONE short sentence, no follow-up questions (watch mode).'
-    : 'two or three sentences max unless asked to go deeper.'}
-Use tools for any number you state — never guess state. Before any write
-(log_meal), confirm once conversationally. Numbers rounded; band language
-("green", "-430") over false precision.`;
+  return `You are The Way — Harry's coach. Not an assistant: a coach with a
+point of view, built into his training and fueling operating system.
+
+THE ATHLETE: Harry. Competitive cyclist, Cervelo R5, FTP 265. Green band:
+the day settles -300 to -600 kcal (target -450). Protein goal 190g.
+Training ingredients: fasted Z2, HIIT, 70lb kettlebell strength, batch
+cooking day, 35-mile evening commute leg. Ride Fuel Unit = spicy anchovy
+rice ball, 19g carbs.
+
+THE RACE: Gran Fondo Maryland (Medio) — Sept 20, 2026, Frederick. 57 miles,
+6,200 ft: a climbing race, won on W/kg and repeated threshold climbs. The
+race creates the training: weekly buckets (get_race_week) say what the week
+owes. Harry chooses WHEN to pay; you coach WHAT is owed and flag imbalance.
+After sessions, offer to log them (log_training, confirm first).
+
+DOCTRINE (never violate):
+- Fuel the work; take the deficit at the margins. Under-fueling is a bug.
+- The band has a FLOOR. Never praise a huge deficit; coach it back to green.
+- Numbers come from tools, never memory. Round them; band language over
+  false precision.
+- Confirm before any write (log_meal, log_training): once, briefly.
+
+VOICE: Direct, warm, economical. A coach at the trainer, not a wellness app.
+${mode === 'watch' ? 'WATCH MODE: ONE short sentence. No follow-up questions.'
+                   : 'Two or three sentences unless asked to go deeper.'}
+${yesterday ? 'Yesterday: ' + yesterday : ''}`;
 }
 
-module.exports = function (app) {
+function attach(app) {
   app.post('/agent', async (req, res) => {
-    if ((req.query.token || req.body.token || '') !== TOKEN) {
-      return res.status(401).json({ error: 'bad token' });
-    }
+    if (!auth(req, res)) return;
     if (!KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
     const mode = req.body.mode === 'watch' ? 'watch' : 'cockpit';
-    const t = loadThread();
+    const t = await loadThread();
     t.messages.push({ role: 'user', content: req.body.text || '' });
-
     try {
-      let messages = t.messages.slice(-30); // keep the day, cap the window
+      let messages = t.messages.slice(-30);
       let reply = '';
       for (let hop = 0; hop < 4; hop++) {
         const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -103,33 +98,26 @@ module.exports = function (app) {
         });
         const d = await r.json();
         if (d.error) throw new Error(d.error.message);
-        const toolUses = (d.content || []).filter(c => c.type === 'tool_use');
+        const uses = (d.content || []).filter(c => c.type === 'tool_use');
         reply = (d.content || []).filter(c => c.type === 'text').map(c => c.text).join(' ').trim();
-        if (toolUses.length === 0) break;
+        if (!uses.length) break;
         messages = messages.concat([{ role: 'assistant', content: d.content }]);
         const results = [];
-        for (const tu of toolUses) {
-          const out = await runTool(tu.name, tu.input || {});
-          results.push({ type: 'tool_result', tool_use_id: tu.id,
-                         content: JSON.stringify(out) });
-        }
+        for (const u of uses) results.push({ type: 'tool_result', tool_use_id: u.id,
+          content: JSON.stringify(await runTool(u.name, u.input || {})) });
         messages = messages.concat([{ role: 'user', content: results }]);
       }
       t.messages.push({ role: 'assistant', content: reply });
-      saveThread(t);
+      await setJSON('agent-thread', t);
       res.json({ reply, mode });
-    } catch (e) {
-      console.error('[agent]', e.message);
-      res.status(500).json({ error: e.message });
-    }
+    } catch (e) { res.status(500).json({ error: e.message }); }
   });
-
-  // Close-out writes the day's summary; it seeds tomorrow's briefing.
-  app.post('/agent/closeout', (req, res) => {
-    if ((req.query.token || '') !== TOKEN) return res.status(401).json({ error: 'bad token' });
-    const t = loadThread();
+  app.post('/agent/closeout', async (req, res) => {
+    if (!auth(req, res)) return;
+    const t = await loadThread();
     t.summary = String(req.body.summary || '').slice(0, 500);
-    saveThread(t);
+    await setJSON('agent-thread', t);
     res.json({ ok: true });
   });
-};
+}
+module.exports = { attach };
