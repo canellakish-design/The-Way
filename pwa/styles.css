@@ -35,6 +35,7 @@ ul.plain li.done{color:var(--muted);text-decoration:line-through}
 input,select{font-family:var(--body);font-size:14px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-top:6px;width:100%;background:#fff}
 label{font-size:12px;color:var(--muted);display:block;margin-top:10px}
 .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+#alarmOverlay[hidden]{display:none}
 #alarmOverlay{position:fixed;inset:0;background:var(--paper);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;z-index:50}
 #agentLog{min-height:200px}
 .turn{margin-top:10px}
