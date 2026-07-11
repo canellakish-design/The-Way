@@ -42,10 +42,27 @@ V.morning = async function(){
       <button id="mobNext">Next</button></div>
     <div class="card"><h4>Then</h4><div class="small">30-min warm-up spin — the Agent is on the <a href="#agent">Agent tab</a>. Breakfast unlocks after weigh-in.</div></div>`;
 
-  bridge("/route-weather").then(w=>{
-    document.getElementById("wx").innerHTML = `<h4>${w.now.t}° · wind ${Math.round(w.now.w)} mph</h4>
-      <div class="small">${esc(w.now.ride)} now · evening: ${esc(w.evening.ride)}${w.stormAfterHour>0 ? " · storms possible after "+w.stormAfterHour+":00" : ""}</div>`;
-  }).catch(()=>{ document.getElementById("wx").innerHTML = `<h4>Weather</h4><div class="small">bridge unreachable — check settings</div>`; });
+  (async ()=>{
+    try{
+      const plan = await bridge("/plan").catch(()=>({for_today:false}));
+      if (plan.for_today && plan.start){
+        const hr = parseInt(plan.start.split(":")[0],10);
+        const w = await bridge("/route-weather?hour="+hr);
+        const a = w.at || w.now;
+        const rain = a.p>=50 ? "likely rain ("+a.p+"%)" : a.p>=25 ? "rain possible ("+a.p+"%)" : "dry";
+        const verdict = a.p>=50 ? "pack the shell" : /headwind/.test(a.ride) ? "budget extra time into the wind" : /tailwind/.test(a.ride) ? "fast one — enjoy the push" : "steady conditions";
+        const facts = plan.route ? ` · ${plan.route.miles} mi · ${plan.route.climb_ft} ft` : "";
+        document.getElementById("wx").innerHTML =
+          `<h4>Today's ride · ${esc(plan.ride)} · ${esc(plan.start)}${facts}</h4>
+           <div class="small">At rollout: ${a.t}° · ${esc(a.ride)} · ${rain}. ${verdict}.</div>
+           <div class="small">Now: ${w.now.t}° · ${esc(w.now.ride)}${w.stormAfterHour>0 ? " · storms possible after "+w.stormAfterHour+":00" : ""}</div>`;
+      } else {
+        const w = await bridge("/route-weather");
+        document.getElementById("wx").innerHTML = `<h4>${w.now.t}° · wind ${Math.round(w.now.w)} mph</h4>
+          <div class="small">${esc(w.now.ride)} now · evening: ${esc(w.evening.ride)}${w.stormAfterHour>0 ? " · storms possible after "+w.stormAfterHour+":00" : ""} · no ride planned — set one in Night</div>`;
+      }
+    }catch(e){ document.getElementById("wx").innerHTML = `<h4>Weather</h4><div class="small">bridge unreachable — check settings</div>`; }
+  })();
 
   let announced = sessionStorage.getItem("wkg-announced");
   const pollWeight = async ()=>{
@@ -73,13 +90,60 @@ V.morning = async function(){
     else el.innerHTML = `<h4>Sleep</h4><div class="small">no WHOOP data yet — connect at /whoop/auth on the bridge</div>`;
   }).catch(()=>{});
 
-  const moves = ["Cat / Cow — 15x","Cobra — 30s","Deep lunge — 30s/side","World's greatest — 15x","Open books — 10x/side","Quad stretch — 30s/side","Downward dog — 30s","Pigeon — 30s/side","90/90s — 15x/side","Deep squat hold — 30s"];
-  let mi = 0;
-  const drawMob = ()=>{ document.getElementById("mob").innerHTML =
-    moves.map((m,i)=>`<li class="${i<mi?"done":""}"><span>${m}</span><span>${i<mi?"✓":""}</span></li>`).join(""); };
+  // Guided mobility, coach-paced: describe the move, then wait for you.
+  // Advance by voice ("ready", "next", "done") or the button.
+  const moves = [
+    {n:"Cat Cow", d:"On all fours. Arch your back up like an angry cat, then drop the belly and lift the chest. Move with your breath, about 15 slow reps."},
+    {n:"Cobra", d:"Lie face down, hands under shoulders. Press the chest up, hips stay heavy on the floor. Hold and breathe, about 30 seconds — this is the extension your spine wants after the bike."},
+    {n:"Deep lunge", d:"Big step forward, back knee down, sink the hips low and forward. 30 seconds, then switch legs. This is your hip flexors paying rent."},
+    {n:"World's greatest stretch", d:"From a lunge, drop the inside hand, rotate the other arm to the sky and follow it with your eyes. About 15 slow reps, alternating sides."},
+    {n:"Open books", d:"Lie on your side, knees bent, arms stacked in front. Open the top arm across your body like a book cover, eyes following the hand. 10 each side — this is the thoracic rotation cyclists lose first."},
+    {n:"Quad stretch", d:"Standing or side-lying, pull the heel to your glute, knee pointing down. 30 seconds each side, hips pressed forward."},
+    {n:"Downward dog", d:"Hands and feet on the floor, hips to the sky. Pedal the heels one at a time. 30 seconds, long spine."},
+    {n:"Pigeon", d:"One shin folded in front, back leg long behind. Square the hips and fold forward over the front leg. 30 seconds each side, breathe into it."},
+    {n:"90 90s", d:"Seated, both knees bent at right angles, one in front, one to the side. Rotate the knees over to the other side with control. 15 slow transitions."},
+    {n:"Deep squat hold", d:"Feet shoulder width, sink all the way down. Heels stay on the floor, chest tall, elbows can pry the knees out. 30 seconds — this is your bottom-bracket position insurance."}
+  ];
+  let mi = -1, mobRec = null;
+  const mobDone = ()=> LS.setItem("mob-am-"+new Date().toDateString(),"1");
+  const drawMob = ()=>{
+    document.getElementById("mob").innerHTML =
+      moves.map((m,i)=>`<li class="${i<mi?"done":""}"><span>${i===mi?"<b>":""}${m.n}${i===mi?"</b>":""}</span><span>${i<mi?"✓":(i===mi?"now":"")}</span></li>`).join("");
+    const btn = document.getElementById("mobNext");
+    if (mi >= moves.length){ btn.textContent = "Done ✓"; btn.disabled = true; }
+    else btn.textContent = mi < 0 ? "Start guided flow" : "Ready — next";
+  };
+  const listenForReady = ()=>{
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) return; // button still works everywhere
+    try{
+      mobRec = new SR(); mobRec.lang = "en-US"; mobRec.continuous = true; mobRec.interimResults = false;
+      mobRec.onresult = e=>{
+        const t = e.results[e.results.length-1][0].transcript.toLowerCase();
+        if (/\b(ready|next|done|go|continue)\b/.test(t)) nextMove();
+        else if (/\b(repeat|again)\b/.test(t) && mi >= 0) speak(moves[mi].d);
+      };
+      mobRec.onend = ()=>{ if (mi >= 0 && mi < moves.length) { try{ mobRec.start(); }catch(e){} } };
+      mobRec.start();
+    }catch(e){}
+  };
+  const stopListening = ()=>{ if (mobRec){ mobRec.onend = null; try{ mobRec.stop(); }catch(e){} mobRec = null; } };
+  const nextMove = ()=>{
+    mi++;
+    if (mi >= moves.length){
+      stopListening(); mobDone(); drawMob();
+      speak("That's the flow. Ten minutes well spent. Onto the bike.");
+      return;
+    }
+    const m = moves[mi];
+    speak(m.n + ". " + m.d + " ... Let me know when you're ready to move on.");
+    drawMob();
+  };
   drawMob();
-  document.getElementById("mobNext").onclick = ()=>{ mi=Math.min(moves.length,mi+1); drawMob();
-    if(mi===moves.length){ localStorage.setItem("mob-am-"+new Date().toDateString(),"1"); } };
+  document.getElementById("mobNext").onclick = ()=>{
+    if (mi < 0) listenForReady();
+    nextMove();
+  };
 };
 
 /* ---------------- DAY (ledger + logging + Energy Bank) ---------------- */
@@ -167,6 +231,13 @@ V.night = async function(){
       <h4 style="margin-top:10px">Podcast</h4><div id="pods" class="small">reaching the bridge…</div>
       <audio id="player" controls style="width:100%;margin-top:8px" hidden></audio></div>
     <div class="card"><h4>Shower</h4><div class="small">~90 min before bed helps sleep onset</div></div>
+    <div class="card"><h4>Tomorrow's ride</h4>
+      <div class="row2"><span><label>Ride</label><input id="planRide" placeholder="Woodlawn leg home"></span>
+      <span><label>Start time</label><input id="planTime" type="time" value="06:00"></span></div>
+      <label>Ride with GPS link (optional — pulls route, distance, wind bearings)</label>
+      <input id="planRwgps" placeholder="https://ridewithgps.com/routes/12345678">
+      <button class="primary" id="planSave">Save plan</button>
+      <div class="small" id="planMsg"></div></div>
     <div class="card"><h4>Gear check — tomorrow: 
       <select id="tmw">${DAY_TYPES.map(d=>`<option ${d===tomorrow?"selected":""}>${d}</option>`).join("")}</select></h4>
       <ul class="plain" id="gear"></ul></div>
@@ -200,6 +271,21 @@ V.night = async function(){
   };
   document.getElementById("tmw").onchange = e=>{ S.tomorrow=e.target.value; saveS(); drawGear(); };
   drawGear();
+  bridge("/plan").then(p=>{ if(p.ride){ document.getElementById("planRide").value=p.ride;
+    document.getElementById("planTime").value=p.start; } }).catch(()=>{});
+  document.getElementById("planSave").onclick = async ()=>{
+    try{
+      const p = await bridge("/plan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ride:document.getElementById("planRide").value||"Ride",
+                             start:document.getElementById("planTime").value,
+                             rwgps:document.getElementById("planRwgps").value||null})});
+      let msg = "Planned: "+p.ride+" at "+p.start;
+      if (p.route) msg += " · "+p.route.miles+" mi, "+p.route.climb_ft+" ft — wind will be read against the real route.";
+      else if (p.route_error) msg += " · route not pulled ("+p.route_error+") — plan saved anyway.";
+      else msg += " — Morning will brief it.";
+      document.getElementById("planMsg").textContent = msg;
+    }catch(e){ document.getElementById("planMsg").textContent = "bridge unreachable"; }
+  };
 
   bridge("/fuel-state").then(st=>{
     const b = st.balance_kcal;

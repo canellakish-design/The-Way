@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Way Privacy Policy</title>
+<style>
+body{
+    font-family:Arial,sans-serif;
+    max-width:800px;
+    margin:50px auto;
+    line-height:1.7;
+    padding:20px;
+}
+h1,h2{
+    color:#222;
+}
+</style>
+</head>
+<body>
+
+<h1>The Way Privacy Policy</h1>
+
+<p>Last updated: July 2026</p>
+
+<p>The Way is a personal performance application created and operated by Harry Canellakis.</p>
+
+<h2>Information Collected</h2>
+
+<p>The Way may access training and wellness data that you explicitly authorize, including data from WHOOP, Garmin, and other connected services.</p>
+
+<h2>How Information Is Used</h2>
+
+<p>The data is used solely to provide personalized training, recovery, nutrition, and coaching recommendations.</p>
+
+<h2>Data Sharing</h2>
+
+<p>The Way does not sell or share your personal information with third parties.</p>
+
+<h2>Data Security</h2>
+
+<p>Reasonable technical measures are used to protect your information.</p>
+
+<h2>Your Control</h2>
+
+<p>You may revoke access to connected services at any time through those services.</p>
+
+<h2>Contact</h2>
+
+<p>
+Harry Canellakis<br>
+Email: your-email@example.com
+</p>
+
+</body>
+</html>

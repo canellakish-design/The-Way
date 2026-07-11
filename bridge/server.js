@@ -17,6 +17,7 @@ require('./prescriptions')(app);
 require('./agent')(app);
 require('./podcasts')(app);
 require('./weather')(app);
+require('./plan')(app);
 
 // The PWA is served by the bridge itself — one origin, no CORS.
 app.use(express.static(path.join(__dirname, '..', 'pwa')));
