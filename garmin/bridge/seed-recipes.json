@@ -1,0 +1,32 @@
+{
+  "recipes": [
+    {
+      "id": "ride-fuel-anchovy-rice-ball-v1",
+      "name": "Spicy Anchovy Rice Balls",
+      "role": "ride_fuel_unit",
+      "units": 16,
+      "prepTime": "35 min (Day 3 batch, alongside groceries)",
+      "storage": "Fridge 4 days wrapped in foil squares; freeze half the batch. Pack in jersey pocket in foil — unwrap one-handed.",
+      "ingredients": [
+        { "name": "Short-grain rice, dry (2 cups)", "grams": 370, "kcal": 1317, "carbs_g": 289, "protein_g": 24,   "fat_g": 2.2 },
+        { "name": "Anchovies in oil, drained (2 tins)", "grams": 90, "kcal": 190, "carbs_g": 0,  "protein_g": 26,  "fat_g": 8.7 },
+        { "name": "Sesame oil (1 tbsp)",              "grams": 14,  "kcal": 120,  "carbs_g": 0,   "protein_g": 0,   "fat_g": 13.6 },
+        { "name": "Chili crisp (1 tbsp)",             "grams": 15,  "kcal": 80,   "carbs_g": 2,   "protein_g": 0,   "fat_g": 8 },
+        { "name": "Honey (1 tbsp)",                   "grams": 21,  "kcal": 64,   "carbs_g": 17,  "protein_g": 0,   "fat_g": 0 },
+        { "name": "Soy sauce (1 tbsp)",               "grams": 16,  "kcal": 10,   "carbs_g": 1,   "protein_g": 1.3, "fat_g": 0 },
+        { "name": "Rice vinegar (1 tbsp)",            "grams": 15,  "kcal": 3,    "carbs_g": 0,   "protein_g": 0,   "fat_g": 0 },
+        { "name": "Furikake (1 tbsp)",                "grams": 8,   "kcal": 30,   "carbs_g": 1,   "protein_g": 1,   "fat_g": 2.5 }
+      ],
+      "batchTotals": { "kcal": 1814, "carbs_g": 310, "protein_g": 52.3, "fat_g": 35 },
+      "perUnit":     { "kcal": 113,  "carbs_g": 19.4, "protein_g": 3.3, "fat_g": 2.2, "sodium_mg": 230 },
+      "instructions": [
+        "Rinse rice until water runs clear; cook with a splash extra water so it binds sticky.",
+        "While warm, fold in vinegar, soy, honey, and sesame oil.",
+        "Chop anchovies fine with the chili crisp; fold through the rice evenly.",
+        "With wet hands, press into 16 golf-ball rounds (~60 g each); roll in furikake.",
+        "Cool fully before wrapping — warm balls steam the foil and go mushy."
+      ],
+      "notes": "The Ride Fuel Unit. 2 balls/hr with a bottle ≈ 39 g carbs/hr; 3/hr ≈ 58 g. Sodium rides along (~230 mg/ball). Re-weigh a batch after any recipe change and update perUnit — the RICE field divisor comes from carbs_g here."
+    }
+  ]
+}

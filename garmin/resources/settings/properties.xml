@@ -1,0 +1,19 @@
+<properties>
+    <!-- FTP in watts -->
+    <property id="ftp" type="number">265</property>
+    <!-- Manual carb-curve shift in percent (-15..15). Negative = fat-adapted. -->
+    <property id="carbShift" type="number">0</property>
+    <!-- Fallback fasted toggle, used when the bridge is unreachable/stale -->
+    <property id="fasted" type="boolean">false</property>
+    <!-- Coach Tadej Fuel bridge base URL, e.g. https://your-app.onrender.com -->
+    <property id="bridgeUrl" type="string"></property>
+    <!-- Shared token matching FUEL_TOKEN on the bridge server -->
+    <property id="token" type="string"></property>
+    <!-- Ride Fuel Unit: carbs per ball. Default 19 = Spicy Anchovy Rice Balls v1
+         (bridge/seed-recipes.json). Bridge value overrides when connected. -->
+    <property id="ballCarbs" type="number">19</property>
+    <!-- Fraction of burned carbs to replace on the bike (percent) -->
+    <property id="replacePct" type="number">75</property>
+    <!-- Lap button logs one rice ball eaten (turn off on interval days) -->
+    <property id="lapLogsFuel" type="boolean">false</property>
+</properties>

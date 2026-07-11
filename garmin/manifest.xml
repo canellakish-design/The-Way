@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<iq:manifest xmlns:iq="http://www.garmin.com/xml/connectiq" version="3">
+    <iq:application id="4adbde2c-6491-42ed-9bc6-b2d90671d58e"
+                    type="datafield"
+                    name="@Strings.AppName"
+                    entry="FuelFieldApp"
+                    launcherIcon="@Drawables.LauncherIcon"
+                    minApiLevel="3.1.0">
+        <iq:products>
+            <iq:product id="edge530"/>
+            <iq:product id="edge130plus"/>
+        </iq:products>
+        <iq:permissions>
+            <iq:uses-permission id="Communications"/>
+        </iq:permissions>
+        <iq:languages>
+            <iq:language>eng</iq:language>
+        </iq:languages>
+        <iq:barrels/>
+    </iq:application>
+</iq:manifest>

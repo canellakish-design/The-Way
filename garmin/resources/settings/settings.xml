@@ -1,0 +1,26 @@
+<settings>
+    <setting propertyKey="@Properties.ftp" title="FTP (watts)">
+        <settingConfig type="numeric" min="100" max="500"/>
+    </setting>
+    <setting propertyKey="@Properties.fasted" title="Fasted ride (fallback if bridge offline)">
+        <settingConfig type="boolean"/>
+    </setting>
+    <setting propertyKey="@Properties.carbShift" title="Carb curve shift % (neg = fat-adapted)">
+        <settingConfig type="numeric" min="-15" max="15"/>
+    </setting>
+    <setting propertyKey="@Properties.bridgeUrl" title="Fuel bridge URL (https://...)">
+        <settingConfig type="alphaNumeric"/>
+    </setting>
+    <setting propertyKey="@Properties.token" title="Bridge token">
+        <settingConfig type="alphaNumeric"/>
+    </setting>
+    <setting propertyKey="@Properties.ballCarbs" title="Carbs per rice ball (g)">
+        <settingConfig type="numeric" min="5" max="60"/>
+    </setting>
+    <setting propertyKey="@Properties.replacePct" title="Carb replacement on bike (%)">
+        <settingConfig type="numeric" min="0" max="100"/>
+    </setting>
+    <setting propertyKey="@Properties.lapLogsFuel" title="Lap button logs a rice ball">
+        <settingConfig type="boolean"/>
+    </setting>
+</settings>
