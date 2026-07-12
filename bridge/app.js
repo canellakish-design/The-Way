@@ -13,6 +13,7 @@ require('./weather').attach(app);
 require('./race').attach(app);
 require('./prescriptions').attach(app);
 require('./whoop').attach(app);
+require('./calendar').attach(app);
 require('./agent').attach(app);
 
 // Local-only extras: static PWA + podcast cache need a real disk.

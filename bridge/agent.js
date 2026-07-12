@@ -7,6 +7,7 @@ const { routeWeather } = require('./weather');
 const { prescription } = require('./prescriptions');
 const { weekState, logTraining } = require('./race');
 const { sleepLatest } = require('./whoop');
+const calendar = require('./calendar');
 
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 
@@ -25,6 +26,8 @@ const TOOLS = [
   { name: 'get_route_weather', description: 'Weather now/evening, wind vs the planned route', input_schema: { type: 'object', properties: {} } },
   { name: 'get_plan', description: "Planned ride: name, start time, route facts", input_schema: { type: 'object', properties: {} } },
   { name: 'get_race_week', description: "Weeks to race, phase, this week's buckets: needed/done/remaining", input_schema: { type: 'object', properties: {} } },
+  { name: 'get_availability', description: "Today's calendar-derived training windows (from Google Calendar), best window length, recovery color, and the engine's session recommendation. Also weekly available vs recommended hours.",
+    input_schema: { type: 'object', properties: { scope: { type: 'string', enum: ['today', 'week'] } } } },
   { name: 'get_prescription', description: 'Lunch or dinner in Energy Bank units',
     input_schema: { type: 'object', properties: { meal: { type: 'string', enum: ['lunch', 'dinner'] } }, required: ['meal'] } },
   { name: 'log_meal', description: 'Write a meal to the ledger. CONFIRM first.',
@@ -42,6 +45,17 @@ async function runTool(name, input) {
     if (name === 'get_route_weather') return await routeWeather(NaN);
     if (name === 'get_plan') return await getPlan();
     if (name === 'get_race_week') return await weekState();
+    if (name === 'get_availability') {
+      const d = await (require('./storage').getJSON('gcal', { tokens: null, events: [] }));
+      if (!d.tokens) return { connected: false, note: 'Google Calendar not connected — /gcal/auth' };
+      const s = await sleepLatest().catch(() => null);
+      const rec = s && s.recovery ? s.recovery.score : null;
+      if ((input.scope || 'today') === 'week') return calendar.weekAvailability(d.events, rec);
+      const key = new Date().toISOString().slice(0, 10);
+      const day = calendar.windowsForDate(d.events, key);
+      const w = await weekState().catch(() => null);
+      return { ...day, ...calendar.recommendToday(day, rec, w ? w.remaining : null) };
+    }
     if (name === 'get_prescription') return await prescription(input.meal || 'dinner', 0);
     if (name === 'log_meal') return await logMeal(input);
     if (name === 'log_training') return await logTraining(input);
@@ -64,6 +78,12 @@ THE RACE: Gran Fondo Maryland (Medio) — Sept 20, 2026, Frederick. 57 miles,
 race creates the training: weekly buckets (get_race_week) say what the week
 owes. Harry chooses WHEN to pay; you coach WHAT is owed and flag imbalance.
 After sessions, offer to log them (log_training, confirm first).
+
+AVAILABILITY: When the calendar is connected (get_availability), it is the
+source of truth for WHEN Harry can train — never ask him how many hours he
+has. Answer "can I ride tomorrow?" by reading the calendar: name the
+blocks, name the window, check recovery, then recommend the session that
+pays what the week owes and fits the window.
 
 DOCTRINE (never violate):
 - Fuel the work; take the deficit at the margins. Under-fueling is a bug.
