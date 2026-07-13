@@ -442,6 +442,9 @@ V.bedroom = function(){
 
   const transition = (rec)=>{
     if(__transitioned) return;
+    // only transition to morning during morning hours (5am-10am)
+    const h = new Date().getHours();
+    if(h < 5 || h >= 10) return;
     __transitioned = true;
     clearInterval(clockInt);
     clearInterval(__bedPoll);
