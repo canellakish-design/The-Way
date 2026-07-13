@@ -72,11 +72,6 @@ function fileToBase64(file){
     r.readAsDataURL(file);
   });
 }
-async function photoBridge(pathname, file, extra){
-  const image_base64 = await fileToBase64(file);
-  return bridge(pathname, { method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ image_base64, media_type: file.type || "image/jpeg", ...(extra||{}) }) });
-}
 async function multiPhotoBridge(pathname, files, extra){
   const images = await Promise.all(Array.from(files).map(async f=> ({
     image_base64: await fileToBase64(f), media_type: f.type || "image/jpeg" })));
@@ -253,7 +248,7 @@ V.day = async function(){
 
     <div class="card"><h4>Food Log · photo</h4>
       <div class="small">One-off meal — not from a batch. Snap it, review, log it.</div>
-      <input id="foodPhoto" type="file" accept="image/*" capture="environment">
+      <input id="foodPhoto" type="file" accept="image/*" multiple>
       <button id="foodAnalyze" disabled>Analyze</button>
       <div class="small" id="foodMsg"></div>
       <div class="small" id="foodMicros"></div></div>
@@ -329,13 +324,13 @@ V.day = async function(){
   const foodBtn = document.getElementById("foodAnalyze");
   foodInput.onchange = ()=>{ foodBtn.disabled = !foodInput.files.length; };
   foodBtn.onclick = async ()=>{
-    const f = foodInput.files[0];
-    if (!f) return;
+    const files = foodInput.files;
+    if (!files.length) return;
     foodBtn.disabled = true; foodBtn.textContent = "Analyzing…";
     document.getElementById("foodMsg").textContent = "";
     document.getElementById("foodMicros").innerHTML = "";
     try{
-      const r = await photoBridge("/kitchen/log", f);
+      const r = await multiPhotoBridge("/kitchen/log", files);
       const p = r.proposal;
       document.getElementById("mName").value = p.food_name || "meal";
       if (p.meal_guess) document.getElementById("mMeal").value = p.meal_guess;
@@ -370,11 +365,11 @@ V.day = async function(){
       <ul class="plain">${ingredRows}</ul>
       ${scoopLine}
       <div class="small" style="margin-top:8px">Add ingredient — take 2 photos: one clear shot of the scale display, one of the food (cumulative weight after adding it)</div>
-      <input class="ingredPhoto" type="file" accept="image/*" capture="environment" multiple>
+      <input class="ingredPhoto" type="file" accept="image/*" multiple>
       <button class="ingredBtn" disabled>Add to Batch ${b.slot}</button>
       ${!b.scoop_g ? `
       <div class="small" style="margin-top:8px">Calibrate scoop — take 2 photos: scale display + the scoop itself</div>
-      <input class="scoopPhoto" type="file" accept="image/*" capture="environment" multiple>
+      <input class="scoopPhoto" type="file" accept="image/*" multiple>
       <button class="scoopCalBtn" disabled>Calibrate + log first scoop</button>` : `
       <button class="scoopBtn" style="margin-top:8px">Log one scoop</button>`}
       <button class="resetBtn" style="margin-top:8px">Reset batch</button>
