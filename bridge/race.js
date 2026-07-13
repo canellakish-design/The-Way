@@ -1,7 +1,8 @@
 // The Race Architecture: weekly buckets from weeks-to-race.
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
-const FALLBACK_HOURS = parseFloat(process.env.HOURS_PER_WEEK || '8');
+function num(v, dflt) { const n = parseFloat(v); return (isFinite(n) && n > 0) ? n : dflt; }
+const FALLBACK_HOURS = num(process.env.HOURS_PER_WEEK, 8);
 
 const RACE = {
   name: 'Gran Fondo Maryland — Medio', date: '2026-09-20',
@@ -14,6 +15,7 @@ function phase(w) {
   if (w > 1) return 'peak'; if (w > 0.3) return 'taper'; return 'race week';
 }
 function buckets(w, HOURS) {
+  HOURS = (isFinite(HOURS) && HOURS > 0) ? HOURS : 8;
   const p = phase(w);
   if (p === 'base')  return { phase: p, aerobic_h: HOURS * .90, hi_min: HOURS * 6,  strength: 2 };
   if (p === 'build') return { phase: p, aerobic_h: HOURS * .78, hi_min: HOURS * 11, strength: 2 };
@@ -32,7 +34,7 @@ async function weeklyHours() {
     const h = await trainingHours(rec);
     if (h != null && h > 0) return { hours: h, source: 'calendar' };
   } catch (e) {}
-  return { hours: FALLBACK_HOURS, source: 'env fallback' };
+  return { hours: num(FALLBACK_HOURS, 8), source: 'env fallback' };
 }
 function isoWeek(d) {
   const t = new Date(d); t.setHours(0, 0, 0, 0);
