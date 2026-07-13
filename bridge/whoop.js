@@ -67,7 +67,11 @@ function attach(app) {
       const d = await db();
       d.tokens = { access_token: j.access_token, refresh_token: j.refresh_token,
         expires_at: Date.now() + j.expires_in * 1000 };
-      await setJSON('whoop', d);
+      try {
+        await setJSON('whoop', d);
+      } catch(se) {
+        return res.status(500).send('WHOOP auth failed — storage error: ' + se.message);
+      }
       await syncLatest().catch(() => {});
       res.send('WHOOP connected. You can close this tab.');
     } catch (e) { res.status(500).send('WHOOP auth failed: ' + e.message); }
