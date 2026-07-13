@@ -24,7 +24,10 @@ function checkSlot(slot) {
   return n;
 }
 
-async function callVision(prompt, image_base64, media_type) {
+async function callVision(prompt, images) {
+  const content = images.map(img => ({ type: 'image',
+    source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
+  content.push({ type: 'text', text: prompt });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -34,10 +37,7 @@ async function callVision(prompt, image_base64, media_type) {
     },
     body: JSON.stringify({
       model: MODEL, max_tokens: 500,
-      messages: [{ role: 'user', content: [
-        { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
-        { type: 'text', text: prompt }
-      ] }]
+      messages: [{ role: 'user', content }]
     })
   });
   const j = await r.json();
@@ -48,31 +48,36 @@ async function callVision(prompt, image_base64, media_type) {
   catch { throw new Error('vision response was not valid JSON: ' + cleaned.slice(0, 200)); }
 }
 
-// One photo, shows the bowl on the scale AFTER adding the new ingredient.
-// previous_total_g lets the model compute the delta itself and estimate
-// macros for only the newly added portion.
-async function readIngredientAddition(image_base64, media_type, previous_total_g) {
-  const prompt = `This photo shows a bowl of food on a kitchen scale, mid-batch-prep.
-The scale previously read ${previous_total_g}g before this photo was taken; an
-ingredient has just been added on top. Read the CURRENT total weight shown on
-the scale display. Identify the ingredient that was just added (the newest,
-top-most one). Estimate nutrition for ONLY the delta weight (current minus
-${previous_total_g}g) of that ingredient — not the whole bowl.
+// Multiple photos of the SAME addition (e.g. one clear shot of the scale
+// display, one of the food itself) — improves both weight-reading and
+// ingredient-identification accuracy over a single photo.
+async function readIngredientAddition(images, previous_total_g) {
+  const prompt = `These ${images.length} photo(s) all show the SAME moment: a bowl
+of food on a kitchen scale, mid-batch-prep, immediately after one ingredient was
+added. Use whichever photo most clearly shows the scale display to read the
+weight, and whichever most clearly shows the food to identify the ingredient —
+they are different angles of the same addition, not different additions.
+The scale previously read ${previous_total_g}g before this addition. Read the
+CURRENT total weight shown on the scale display. Identify the ingredient that
+was just added (the newest, top-most one). Estimate nutrition for ONLY the
+delta weight (current minus ${previous_total_g}g) of that ingredient — not the
+whole bowl.
 Respond with ONLY raw JSON, no markdown fences, no preamble:
 {"current_total_g":number,"ingredient_name":"...","delta_g":number,
 "kcal":number,"protein_g":number,"carbs_g":number,"fat_g":number,
 "confidence":"high|medium|low","notes":"one short sentence on any uncertainty"}`;
-  return callVision(prompt, image_base64, media_type);
+  return callVision(prompt, images);
 }
 
-// One photo, shows a single scoop on the scale (batch complete, calibrating).
-async function readScoopWeight(image_base64, media_type) {
-  const prompt = `This photo shows one scoop of prepared food on a kitchen
-scale, used to calibrate portion size for a batch. Read the exact weight
-shown on the scale display.
+// Multiple photos of the same scoop calibration (e.g. scale display + scoop itself).
+async function readScoopWeight(images) {
+  const prompt = `These ${images.length} photo(s) all show the SAME moment: one
+scoop of prepared food on a kitchen scale, used to calibrate portion size for a
+batch. Use whichever photo most clearly shows the scale display. Read the exact
+weight shown.
 Respond with ONLY raw JSON, no markdown fences, no preamble:
 {"scoop_g":number,"confidence":"high|medium|low","notes":"one short sentence on any uncertainty"}`;
-  return callVision(prompt, image_base64, media_type);
+  return callVision(prompt, images);
 }
 
 function scoopMacros(batch) {
@@ -103,16 +108,17 @@ function attach(app) {
       scoops_remaining: d[s].scoop_g ? Math.floor(d[s].remaining_g / d[s].scoop_g) : null })) });
   });
 
-  // Add one ingredient to a batch — photo shows cumulative weight after adding it.
+  // Add one ingredient to a batch — multiple photos of the same addition
+  // (e.g. scale display + food close-up) improve read accuracy.
   app.post('/batch/:slot/ingredient', async (req, res) => {
     if (!auth(req, res)) return;
     try {
       const slot = checkSlot(req.params.slot);
-      const { image_base64, media_type } = req.body || {};
-      if (!image_base64) return res.status(400).json({ ok: false, error: 'missing image_base64' });
+      const { images } = req.body || {};
+      if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
       const d = await db();
       const b = d[slot];
-      const read = await readIngredientAddition(image_base64, media_type, b.last_reading_g);
+      const read = await readIngredientAddition(images, b.last_reading_g);
       const delta = Math.round(read.delta_g);
       b.ingredients.push({
         name: read.ingredient_name, added_g: delta,
@@ -129,17 +135,18 @@ function attach(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); }
   });
 
-  // Calibrate scoop size — weighs one scoop, logs it as the first meal from this batch.
+  // Calibrate scoop size — multiple photos of the same weigh-in, logs it as
+  // the first meal from this batch.
   app.post('/batch/:slot/scoop-calibrate', async (req, res) => {
     if (!auth(req, res)) return;
     try {
       const slot = checkSlot(req.params.slot);
-      const { image_base64, media_type, meal } = req.body || {};
-      if (!image_base64) return res.status(400).json({ ok: false, error: 'missing image_base64' });
+      const { images, meal } = req.body || {};
+      if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
       const d = await db();
       const b = d[slot];
       if (!b.total_g) return res.status(400).json({ ok: false, error: 'batch has no ingredients yet' });
-      const read = await readScoopWeight(image_base64, media_type);
+      const read = await readScoopWeight(images);
       b.scoop_g = Math.round(read.scoop_g);
       b.remaining_g = b.total_g - b.scoop_g;
       b.status = 'active';
