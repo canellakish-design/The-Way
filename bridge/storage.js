@@ -8,7 +8,20 @@ const ON_NETLIFY = !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT |
 
 let storeP = null;
 function store() {
-  if (!storeP) storeP = import('@netlify/blobs').then(m => m.getStore('the-way'));
+  if (!storeP) {
+    storeP = import('@netlify/blobs').then(m => {
+      // Prefer auto-config; fall back to manual siteID + token from env.
+      try {
+        return m.getStore('the-way');
+      } catch (e) {
+        return m.getStore({
+          name: 'the-way',
+          siteID: process.env.SITE_ID || process.env.NETLIFY_SITE_ID,
+          token: process.env.NETLIFY_BLOBS_TOKEN || process.env.NETLIFY_API_TOKEN || process.env.NETLIFY_AUTH_TOKEN
+        });
+      }
+    });
+  }
   return storeP;
 }
 function file(key) { return path.join(__dirname, key + '.json'); }
@@ -26,8 +39,10 @@ async function getJSON(key, fallback) {
 }
 async function setJSON(key, val) {
   if (ON_NETLIFY) {
-    const s = await store();
-    await s.setJSON(key, val);
+    try {
+      const s = await store();
+      await s.setJSON(key, val);
+    } catch (e) { /* swallow so a write failure never 500s the request */ }
     return;
   }
   fs.writeFileSync(file(key), JSON.stringify(val, null, 2));
