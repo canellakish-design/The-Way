@@ -53,7 +53,7 @@ function attach(app) {
     u.searchParams.set('client_id', CID);
     u.searchParams.set('redirect_uri', BASE + '/whoop/callback');
     u.searchParams.set('scope', 'read:sleep read:recovery offline');
-    u.searchParams.set('state', 'the-way');
+    u.searchParams.set('state', 'the-way-2026');
     res.redirect(u.toString());
   });
   app.get('/whoop/callback', async (req, res) => {
