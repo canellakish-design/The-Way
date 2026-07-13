@@ -1,12 +1,9 @@
 {
-  "name": "The Way",
-  "short_name": "The Way",
+  "name": "THE WAY",
+  "short_name": "THE WAY",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAFAF8",
-  "theme_color": "#17181A",
-  "icons": [
-    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
-  ]
+  "background_color": "#F7F7F4",
+  "theme_color": "#141414",
+  "icons": []
 }
