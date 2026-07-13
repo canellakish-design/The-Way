@@ -39,10 +39,8 @@ async function getJSON(key, fallback) {
 }
 async function setJSON(key, val) {
   if (ON_NETLIFY) {
-    try {
-      const s = await store();
-      await s.setJSON(key, val);
-    } catch (e) { /* swallow so a write failure never 500s the request */ }
+    const s = await store();
+    await s.setJSON(key, val); // let it throw so callers surface real errors
     return;
   }
   fs.writeFileSync(file(key), JSON.stringify(val, null, 2));
