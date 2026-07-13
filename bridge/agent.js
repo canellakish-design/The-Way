@@ -130,7 +130,7 @@ function attach(app) {
       t.messages.push({ role: 'assistant', content: reply });
       await setJSON('agent-thread', t);
       res.json({ reply, mode });
-    } catch (e) { res.status(500).json({ error: e.message }); }
+    } catch (e) { console.error('[agent]', e); res.status(500).json({ error: String(e.message || e) }); }
   });
   app.post('/agent/closeout', async (req, res) => {
     if (!auth(req, res)) return;
