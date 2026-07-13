@@ -15,7 +15,10 @@ Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape
 "micronutrients":{"fiber_g":number,"sodium_mg":number,"iron_mg":number,"vitamin_c_mg":number},
 "confidence":"high|medium|low","notes":"one short sentence on any uncertainty"}`;
 
-async function analyze(image_base64, media_type) {
+async function analyze(images) {
+  const content = images.map(img => ({ type: 'image',
+    source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
+  content.push({ type: 'text', text: PROMPT });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -26,13 +29,7 @@ async function analyze(image_base64, media_type) {
     body: JSON.stringify({
       model: MODEL,
       max_tokens: 500,
-      messages: [{
-        role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: media_type || 'image/jpeg', data: image_base64 } },
-          { type: 'text', text: PROMPT }
-        ]
-      }]
+      messages: [{ role: 'user', content }]
     })
   });
   const j = await r.json();
@@ -49,9 +46,9 @@ function attach(app) {
   app.post('/kitchen/log', async (req, res) => {
     if (!auth(req, res)) return;
     try {
-      const { image_base64, media_type } = req.body || {};
-      if (!image_base64) return res.status(400).json({ ok: false, error: 'missing image_base64' });
-      const proposal = await analyze(image_base64, media_type);
+      const { images } = req.body || {};
+      if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
+      const proposal = await analyze(images);
       res.json({ ok: true, proposal });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
