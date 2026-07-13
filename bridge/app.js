@@ -13,6 +13,8 @@ require('./prescriptions').attach(app);
 require('./whoop').attach(app);
 require('./calendar').attach(app);
 require('./strava').attach(app);
+require('./kitchen').attach(app);
+require('./batches').attach(app);
 require('./agent').attach(app);
 // Local-only extras: static PWA + podcast cache need a real disk.
 if (!ON_NETLIFY) {
