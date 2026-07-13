@@ -109,16 +109,19 @@ V.morning = async function(){
   })();
 
   let announced = sessionStorage.getItem("wkg-announced");
+  let __ftp = 265; // default; overwritten by /profile fetch below
+  bridge("/profile").then(p=>{ if(p&&p.ftp) __ftp=p.ftp; }).catch(()=>{});
   const pollWeight = async ()=>{
     try{
       const t = await bridge("/weight/latest");
       if (t.latest){
-        const wkg = (265/(t.latest.lb/2.20462)).toFixed(2); // v1: set FTP; Signature eFTP replaces later
+        const wkg = (__ftp/(t.latest.lb/2.20462)).toFixed(2);
         document.getElementById("weigh").innerHTML =
           `<h4>${t.latest.lb} lb ${t.latest.logged_today?"· today ✓":"· yesterday"}</h4>
-           <div class="small">7-day trend ${t.ma7_lb ?? "—"} · ${t.week_change_lb ?? "—"} this week · <b>${wkg} W/kg</b></div>`;
+           <div class="small">7-day trend ${t.ma7_lb ?? "—"} · ${t.week_change_lb ?? "—"} this week</div>
+           <div class="small"><b>FTP ${__ftp}W · ${wkg} W/kg</b></div>`;
         if (t.latest.logged_today && !announced && S.role==="cockpit"){
-          speak(`${wkg} watts per kilo.` + (t.week_change_lb<0 ? " The weight is doing the work this week." : ""));
+          speak(`${wkg} watts per kilo. FTP ${__ftp}.` + (t.week_change_lb<0 ? " The weight is doing the work this week." : ""));
           sessionStorage.setItem("wkg-announced","1"); announced="1";
         }
       }
