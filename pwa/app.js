@@ -77,6 +77,12 @@ async function photoBridge(pathname, file, extra){
   return bridge(pathname, { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ image_base64, media_type: file.type || "image/jpeg", ...(extra||{}) }) });
 }
+async function multiPhotoBridge(pathname, files, extra){
+  const images = await Promise.all(Array.from(files).map(async f=> ({
+    image_base64: await fileToBase64(f), media_type: f.type || "image/jpeg" })));
+  return bridge(pathname, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ images, ...(extra||{}) }) });
+}
 
 /* ---------------- views ---------------- */
 const V = {};
@@ -363,12 +369,12 @@ V.day = async function(){
       <h4>Batch ${b.slot} · ${esc(b.status)} · ${b.total_g}g total</h4>
       <ul class="plain">${ingredRows}</ul>
       ${scoopLine}
-      <div class="small" style="margin-top:8px">Add ingredient (photo shows cumulative weight after adding it)</div>
-      <input class="ingredPhoto" type="file" accept="image/*" capture="environment">
+      <div class="small" style="margin-top:8px">Add ingredient — take 2 photos: one clear shot of the scale display, one of the food (cumulative weight after adding it)</div>
+      <input class="ingredPhoto" type="file" accept="image/*" capture="environment" multiple>
       <button class="ingredBtn" disabled>Add to Batch ${b.slot}</button>
       ${!b.scoop_g ? `
-      <div class="small" style="margin-top:8px">Calibrate scoop (weigh one scoop)</div>
-      <input class="scoopPhoto" type="file" accept="image/*" capture="environment">
+      <div class="small" style="margin-top:8px">Calibrate scoop — take 2 photos: scale display + the scoop itself</div>
+      <input class="scoopPhoto" type="file" accept="image/*" capture="environment" multiple>
       <button class="scoopCalBtn" disabled>Calibrate + log first scoop</button>` : `
       <button class="scoopBtn" style="margin-top:8px">Log one scoop</button>`}
       <button class="resetBtn" style="margin-top:8px">Reset batch</button>
@@ -395,10 +401,10 @@ V.day = async function(){
       const ingredBtn = card.querySelector(".ingredBtn");
       ingredInput.onchange = ()=>{ ingredBtn.disabled = !ingredInput.files.length; };
       ingredBtn.onclick = async ()=>{
-        const f = ingredInput.files[0]; if (!f) return;
+        const files = ingredInput.files; if (!files.length) return;
         ingredBtn.disabled = true; ingredBtn.textContent = "Reading scale…";
         try{
-          const r = await photoBridge(`/batch/${slot}/ingredient`, f);
+          const r = await multiPhotoBridge(`/batch/${slot}/ingredient`, files);
           msg.textContent = `Added ${r.added.name} · ${r.added.added_g}g (confidence: ${r.added.confidence})`;
           refreshBatches();
         }catch(e){ msg.textContent = "Failed: " + e.message; ingredBtn.disabled = false; ingredBtn.textContent = `Add to Batch ${slot}`; }
@@ -409,10 +415,10 @@ V.day = async function(){
       if (scoopCalInput && scoopCalBtn){
         scoopCalInput.onchange = ()=>{ scoopCalBtn.disabled = !scoopCalInput.files.length; };
         scoopCalBtn.onclick = async ()=>{
-          const f = scoopCalInput.files[0]; if (!f) return;
+          const files = scoopCalInput.files; if (!files.length) return;
           scoopCalBtn.disabled = true; scoopCalBtn.textContent = "Reading scale…";
           try{
-            const r = await photoBridge(`/batch/${slot}/scoop-calibrate`, f, { meal: "lunch" });
+            const r = await multiPhotoBridge(`/batch/${slot}/scoop-calibrate`, files, { meal: "lunch" });
             msg.textContent = `Scoop calibrated at ${r.batch.scoop_g}g — first scoop logged.`;
             refreshBatches(); refresh();
           }catch(e){ msg.textContent = "Failed: " + e.message; scoopCalBtn.disabled = false; scoopCalBtn.textContent = "Calibrate + log first scoop"; }
