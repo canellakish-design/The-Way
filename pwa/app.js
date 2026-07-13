@@ -39,7 +39,10 @@ const DEMO = {
   "/podcasts/list": { episodes:[] },
   "/plan": { ride:null, for_today:false },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
-  "/agent/closeout": { ok:true }, "/meals": { ok:true }
+  "/agent/closeout": { ok:true }, "/meals": { ok:true },
+  "/batches": { batches:[ {slot:1,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
+    {slot:2,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
+    {slot:3,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null} ] }
 };
 async function bridge(pathname, opts){
   const base = S.bridgeUrl || DEFAULT_API;
@@ -59,6 +62,21 @@ async function bridge(pathname, opts){
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.rate=1.03; speechSynthesis.speak(u);}catch(e){} }
 function bandColor(b){ if(b>=BAND[0]&&b<=BAND[1])return "var(--green)"; if(b>BAND[1])return "var(--amber)"; return "var(--red)"; }
+
+/* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
+function fileToBase64(file){
+  return new Promise((resolve, reject)=>{
+    const r = new FileReader();
+    r.onload = ()=> resolve(String(r.result).split(",")[1]);
+    r.onerror = ()=> reject(new Error("photo read failed"));
+    r.readAsDataURL(file);
+  });
+}
+async function photoBridge(pathname, file, extra){
+  const image_base64 = await fileToBase64(file);
+  return bridge(pathname, { method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ image_base64, media_type: file.type || "image/jpeg", ...(extra||{}) }) });
+}
 
 /* ---------------- views ---------------- */
 const V = {};
@@ -219,13 +237,21 @@ V.morning = async function(){
   };
 };
 
-/* ---------------- DAY (ledger + logging + Energy Bank) ---------------- */
+/* ---------------- DAY (ledger + logging + Energy Bank + Food Log + Batches) ---------------- */
 V.day = async function(){
   view.innerHTML = `<span class="eyebrow">The Ledger</span>
     <div class="card" id="band"><h4>Balance</h4><div class="small">reaching the bridge…</div></div>
     <div class="card"><h4>Prescriptions</h4>
       <button id="rxL">Lunch</button> <button id="rxD">Dinner</button>
       <div id="rxOut"></div></div>
+
+    <div class="card"><h4>Food Log · photo</h4>
+      <div class="small">One-off meal — not from a batch. Snap it, review, log it.</div>
+      <input id="foodPhoto" type="file" accept="image/*" capture="environment">
+      <button id="foodAnalyze" disabled>Analyze</button>
+      <div class="small" id="foodMsg"></div>
+      <div class="small" id="foodMicros"></div></div>
+
     <div class="card"><h4>Log a meal</h4>
       <div class="row2"><span><label>Name</label><input id="mName" placeholder="Post-ride bowl"></span>
       <span><label>Meal</label><select id="mMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
@@ -237,7 +263,11 @@ V.day = async function(){
       <button id="favSmoothie">Smoothie (520)</button>
       <button id="favBowl">Post-ride bowl (750)</button>
       <div class="small" id="mMsg"></div></div>
-    <div class="card"><h4>Today</h4><ul class="plain" id="meals"></ul></div>`;
+
+    <div class="card"><h4>Today</h4><ul class="plain" id="meals"></ul></div>
+
+    <span class="eyebrow">Batches</span>
+    <div id="batchWrap"></div>`;
 
   const refresh = async ()=>{
     try{
@@ -287,6 +317,128 @@ V.day = async function(){
   };
   document.getElementById("rxL").onclick = ()=>rx("lunch");
   document.getElementById("rxD").onclick = ()=>rx("dinner");
+
+  /* ---- Food Log: single ad-hoc photo -> proposal -> pre-fills the meal form ---- */
+  const foodInput = document.getElementById("foodPhoto");
+  const foodBtn = document.getElementById("foodAnalyze");
+  foodInput.onchange = ()=>{ foodBtn.disabled = !foodInput.files.length; };
+  foodBtn.onclick = async ()=>{
+    const f = foodInput.files[0];
+    if (!f) return;
+    foodBtn.disabled = true; foodBtn.textContent = "Analyzing…";
+    document.getElementById("foodMsg").textContent = "";
+    document.getElementById("foodMicros").innerHTML = "";
+    try{
+      const r = await photoBridge("/kitchen/log", f);
+      const p = r.proposal;
+      document.getElementById("mName").value = p.food_name || "meal";
+      if (p.meal_guess) document.getElementById("mMeal").value = p.meal_guess;
+      document.getElementById("mK").value = p.kcal ?? "";
+      document.getElementById("mP").value = p.protein_g ?? "";
+      document.getElementById("mC").value = p.carbs_g ?? "";
+      document.getElementById("mF").value = p.fat_g ?? "";
+      document.getElementById("foodMsg").textContent =
+        `Filled in below — check it, then hit Log. (confidence: ${p.confidence}${p.weight_g ? ", " + p.weight_g + "g" : ""})`;
+      if (p.micronutrients){
+        const mn = p.micronutrients;
+        document.getElementById("foodMicros").textContent =
+          `fiber ${mn.fiber_g ?? "—"}g · sodium ${mn.sodium_mg ?? "—"}mg · iron ${mn.iron_mg ?? "—"}mg · vit C ${mn.vitamin_c_mg ?? "—"}mg`;
+      }
+      if (p.notes) document.getElementById("foodMsg").textContent += " — " + p.notes;
+    }catch(e){
+      document.getElementById("foodMsg").textContent = "Vision call failed: " + e.message;
+    }
+    foodBtn.disabled = false; foodBtn.textContent = "Analyze";
+  };
+
+  /* ---- Batches: 3 fixed slots, cumulative ingredient photos + scoop calibration ---- */
+  const batchCard = (b)=>{
+    const ingredRows = b.ingredients.length
+      ? b.ingredients.map(i=>`<li><span>${esc(i.name)} · ${i.added_g}g</span><b>${i.kcal} kcal</b></li>`).join("")
+      : "<li><span>No ingredients yet</span></li>";
+    const scoopLine = b.scoop_g
+      ? `<div class="small"><b>Scoop ${b.scoop_g}g</b> · ${b.remaining_g}g left · ~${b.scoops_remaining ?? "—"} scoops remaining</div>`
+      : `<div class="small">Not calibrated yet — weigh one scoop once ingredients are in</div>`;
+    return `<div class="card" data-slot="${b.slot}">
+      <h4>Batch ${b.slot} · ${esc(b.status)} · ${b.total_g}g total</h4>
+      <ul class="plain">${ingredRows}</ul>
+      ${scoopLine}
+      <div class="small" style="margin-top:8px">Add ingredient (photo shows cumulative weight after adding it)</div>
+      <input class="ingredPhoto" type="file" accept="image/*" capture="environment">
+      <button class="ingredBtn" disabled>Add to Batch ${b.slot}</button>
+      ${!b.scoop_g ? `
+      <div class="small" style="margin-top:8px">Calibrate scoop (weigh one scoop)</div>
+      <input class="scoopPhoto" type="file" accept="image/*" capture="environment">
+      <button class="scoopCalBtn" disabled>Calibrate + log first scoop</button>` : `
+      <button class="scoopBtn" style="margin-top:8px">Log one scoop</button>`}
+      <button class="resetBtn" style="margin-top:8px">Reset batch</button>
+      <div class="small batchMsg"></div>
+    </div>`;
+  };
+
+  const refreshBatches = async ()=>{
+    try{
+      const r = await bridge("/batches");
+      document.getElementById("batchWrap").innerHTML = r.batches.map(batchCard).join("");
+      wireBatchCards();
+    }catch(e){
+      document.getElementById("batchWrap").innerHTML = `<div class="card"><div class="small">bridge unreachable</div></div>`;
+    }
+  };
+
+  const wireBatchCards = ()=>{
+    document.querySelectorAll("#batchWrap [data-slot]").forEach(card=>{
+      const slot = card.dataset.slot;
+      const msg = card.querySelector(".batchMsg");
+
+      const ingredInput = card.querySelector(".ingredPhoto");
+      const ingredBtn = card.querySelector(".ingredBtn");
+      ingredInput.onchange = ()=>{ ingredBtn.disabled = !ingredInput.files.length; };
+      ingredBtn.onclick = async ()=>{
+        const f = ingredInput.files[0]; if (!f) return;
+        ingredBtn.disabled = true; ingredBtn.textContent = "Reading scale…";
+        try{
+          const r = await photoBridge(`/batch/${slot}/ingredient`, f);
+          msg.textContent = `Added ${r.added.name} · ${r.added.added_g}g (confidence: ${r.added.confidence})`;
+          refreshBatches();
+        }catch(e){ msg.textContent = "Failed: " + e.message; ingredBtn.disabled = false; ingredBtn.textContent = `Add to Batch ${slot}`; }
+      };
+
+      const scoopCalInput = card.querySelector(".scoopPhoto");
+      const scoopCalBtn = card.querySelector(".scoopCalBtn");
+      if (scoopCalInput && scoopCalBtn){
+        scoopCalInput.onchange = ()=>{ scoopCalBtn.disabled = !scoopCalInput.files.length; };
+        scoopCalBtn.onclick = async ()=>{
+          const f = scoopCalInput.files[0]; if (!f) return;
+          scoopCalBtn.disabled = true; scoopCalBtn.textContent = "Reading scale…";
+          try{
+            const r = await photoBridge(`/batch/${slot}/scoop-calibrate`, f, { meal: "lunch" });
+            msg.textContent = `Scoop calibrated at ${r.batch.scoop_g}g — first scoop logged.`;
+            refreshBatches(); refresh();
+          }catch(e){ msg.textContent = "Failed: " + e.message; scoopCalBtn.disabled = false; scoopCalBtn.textContent = "Calibrate + log first scoop"; }
+        };
+      }
+
+      const scoopBtn = card.querySelector(".scoopBtn");
+      if (scoopBtn){
+        scoopBtn.onclick = async ()=>{
+          scoopBtn.disabled = true; scoopBtn.textContent = "Logging…";
+          try{
+            const r = await bridge(`/batch/${slot}/scoop`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({meal:"lunch"})});
+            msg.textContent = `Logged one scoop · ${r.batch.remaining_g}g left.`;
+            refreshBatches(); refresh();
+          }catch(e){ msg.textContent = "Failed: " + e.message; scoopBtn.disabled = false; scoopBtn.textContent = "Log one scoop"; }
+        };
+      }
+
+      card.querySelector(".resetBtn").onclick = async ()=>{
+        if (!confirm(`Reset Batch ${slot}? This clears all ingredients and scoop calibration.`)) return;
+        try{ await bridge(`/batch/${slot}/reset`, {method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); refreshBatches(); }
+        catch(e){ msg.textContent = "Failed: " + e.message; }
+      };
+    });
+  };
+  refreshBatches();
 };
 
 /* ---------------- NIGHT (routine, podcast, gear, close-out, alarm) ---------------- */
