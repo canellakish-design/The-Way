@@ -69,7 +69,7 @@ function nav(){
   (V[h] || V.settings)();
 }
 function defaultView(){
-  return { bedroom:"night", kitchen:"day", cockpit:"morning", phone:"day" }[S.role] || "settings";
+  return { bedroom:"bedroom", kitchen:"day", cockpit:"morning", phone:"day" }[S.role] || "settings";
 }
 
 /* ---------------- MORNING ---------------- */
@@ -412,6 +412,67 @@ V.agent = function(){
 };
 
 /* ---------------- SETTINGS ---------------- */
+V.bedroom = function(){
+  // Phase 1: full-screen clock, polling WHOOP every 60s.
+  // When recovery arrives (logged_today or fresh sync), transition to morning.
+  let __bedPoll = null;
+  let __transitioned = false;
+
+  view.innerHTML = `
+    <div id="bedClock" style="
+      position:fixed;inset:0;background:var(--ink);color:var(--paper);
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      gap:16px;font-family:var(--mono);">
+      <div id="bedTime" style="font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1"></div>
+      <div id="bedDate" style="font-size:18px;letter-spacing:3px;text-transform:uppercase;color:#888"></div>
+      <div id="bedStatus" style="font-size:13px;color:#666;letter-spacing:1px;margin-top:8px">waiting for whoop recovery...</div>
+    </div>`;
+
+  // tick the clock every second
+  const tick = ()=>{
+    const n = new Date();
+    let h = n.getHours(), mm = String(n.getMinutes()).padStart(2,'0');
+    const ap = h<12?'a':'p'; h=h%12; if(h===0)h=12;
+    const el = document.getElementById("bedTime");
+    if(el) el.textContent = h+':'+mm+ap;
+    const de = document.getElementById("bedDate");
+    if(de) de.textContent = n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  };
+  tick(); const clockInt = setInterval(tick, 1000);
+
+  const transition = (rec)=>{
+    if(__transitioned) return;
+    __transitioned = true;
+    clearInterval(clockInt);
+    clearInterval(__bedPoll);
+    // fade clock out
+    const c = document.getElementById("bedClock");
+    if(c){ c.style.transition='opacity 1.5s'; c.style.opacity='0';
+      setTimeout(()=>{ V.morning(); }, 1600); }
+    // speak the greeting
+    const score = rec && rec.score;
+    const color = score>=67?'green':score>=34?'yellow':'red';
+    if(score) speak(`Good morning. Recovery is ${color} — ${score}.`);
+    else speak('Good morning.');
+  };
+
+  const checkWhoop = async ()=>{
+    try{
+      const s = await bridge("/sleep/latest");
+      const status = document.getElementById("bedStatus");
+      if(s && s.recovery && s.recovery.score){
+        if(status) status.textContent = `recovery ${s.recovery.score} · transitioning...`;
+        setTimeout(()=>transition(s.recovery), 800);
+      } else {
+        if(status) status.textContent = 'waiting for whoop recovery...';
+      }
+    }catch(e){}
+  };
+
+  checkWhoop();
+  __bedPoll = setInterval(checkWhoop, 60000);
+};
+
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
     <div class="card"><h4>This device</h4>
