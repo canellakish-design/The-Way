@@ -49,7 +49,12 @@ async function bridge(pathname, opts){
   try{
     const sep = pathname.includes("?") ? "&" : "?";
     const r = await fetch(base + pathname + sep + "token=" + (S.token||""), opts);
-    if (!r.ok) throw new Error("bridge " + r.status);
+    if (!r.ok) {
+      let detail = "";
+      try{ const j = await r.clone().json(); detail = j.error ? " — " + j.error : ""; }
+      catch{ try{ detail = " — " + (await r.text()).slice(0,200); }catch{} }
+      throw new Error("bridge " + r.status + detail);
+    }
     const data = await r.json();
     markLive(true);
     return data;
@@ -64,17 +69,36 @@ function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.rate=1.03; sp
 function bandColor(b){ if(b>=BAND[0]&&b<=BAND[1])return "var(--green)"; if(b>BAND[1])return "var(--amber)"; return "var(--red)"; }
 
 /* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
-function fileToBase64(file){
+function fileToBase64(file, maxDim, quality){
+  maxDim = maxDim || 1280; quality = quality || 0.75;
   return new Promise((resolve, reject)=>{
-    const r = new FileReader();
-    r.onload = ()=> resolve(String(r.result).split(",")[1]);
-    r.onerror = ()=> reject(new Error("photo read failed"));
-    r.readAsDataURL(file);
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim){
+        const scale = maxDim / Math.max(width, height);
+        width = Math.round(width * scale); height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width; canvas.height = height;
+      canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(url);
+      canvas.toBlob(blob=>{
+        if (!blob){ reject(new Error("photo compression failed")); return; }
+        const r = new FileReader();
+        r.onload = ()=> resolve(String(r.result).split(",")[1]);
+        r.onerror = ()=> reject(new Error("photo read failed"));
+        r.readAsDataURL(blob);
+      }, "image/jpeg", quality);
+    };
+    img.onerror = ()=> { URL.revokeObjectURL(url); reject(new Error("photo load failed")); };
+    img.src = url;
   });
 }
 async function multiPhotoBridge(pathname, files, extra){
   const images = await Promise.all(Array.from(files).map(async f=> ({
-    image_base64: await fileToBase64(f), media_type: f.type || "image/jpeg" })));
+    image_base64: await fileToBase64(f), media_type: "image/jpeg" })));
   return bridge(pathname, { method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({ images, ...(extra||{}) }) });
 }
