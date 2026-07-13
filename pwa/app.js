@@ -1,6 +1,21 @@
 "use strict";
 /* THE WAY — PWA. Local-first; bridge sync when reachable. */
 
+
+/* connection status: flips header title color when the bridge answers real data */
+let __live = null;
+function markLive(isLive){
+  if (__live === isLive) return;
+  __live = isLive;
+  const h = document.querySelector("h1");
+  if (h) h.title = isLive ? "bridge live" : "demo / offline";
+  const dot = document.getElementById("__dot") || (()=>{ 
+    const d = document.createElement("span"); d.id="__dot";
+    d.style.cssText="display:inline-block;width:8px;height:8px;margin-left:8px;border:1px solid var(--ink);vertical-align:middle";
+    const hh = document.querySelector("h1"); if(hh) hh.appendChild(d); return d; })();
+  dot.style.background = isLive ? "var(--green)" : "transparent";
+}
+
 const S = JSON.parse(localStorage.getItem("way-settings") || "{}");
 function saveS(){ localStorage.setItem("way-settings", JSON.stringify(S)); }
 const BAND = [-600,-300], TARGET = -450, BASE_BURN = 2050, PROTEIN_GOAL = 190;
@@ -32,10 +47,12 @@ async function bridge(pathname, opts){
     const sep = pathname.includes("?") ? "&" : "?";
     const r = await fetch(base + pathname + sep + "token=" + (S.token||""), opts);
     if (!r.ok) throw new Error("bridge " + r.status);
-    return await r.json();
+    const data = await r.json();
+    markLive(true);
+    return data;
   }catch(e){
     const k = Object.keys(DEMO).find(k => pathname.startsWith(k));
-    if (k && (!opts || !opts.method || opts.method === "GET")) return JSON.parse(JSON.stringify(DEMO[k]));
+    if (k && (!opts || !opts.method || opts.method === "GET")){ markLive(false); return JSON.parse(JSON.stringify(DEMO[k])); }
     throw e;
   }
 }
@@ -111,11 +128,24 @@ V.morning = async function(){
   pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#morning") clearInterval(wp); else pollWeight(); }, 10000);
 
   bridge("/race").then(r=>{
+    const rem = r.remaining || {}, done = r.done || {};
+    const n = (v)=> (v==null ? 0 : v);
     document.getElementById("race").innerHTML =
-      `<h4>${r.race.name} · ${r.weeks_out} weeks out · ${r.phase}</h4>
-       <div class="small">This week still owes: <b>${r.remaining.aerobic_h}h</b> aerobic · <b>${r.remaining.hi_min}min</b> hard · <b>${r.remaining.strength}</b> strength
-       <br>(done: ${r.done.aerobic_h}h / ${r.done.hi_min}min / ${r.done.strength})</div>`;
+      `<h4>${(r.race&&r.race.name)||"Race"} · ${n(r.weeks_out)} weeks out · ${r.phase||""}</h4>
+       <div class="small">This week still owes: <b>${n(rem.aerobic_h)}h</b> aerobic · <b>${n(rem.hi_min)}min</b> hard · <b>${n(rem.strength)}</b> strength
+       <br>(done: ${n(done.aerobic_h)}h / ${n(done.hi_min)}min / ${n(done.strength)})</div>`;
   }).catch(()=>{ document.getElementById("race").innerHTML = `<h4>The race</h4><div class="small">bridge unreachable</div>`; });
+  bridge("/availability/today").then(a=>{
+    if (a && a.connected){
+      const wins = (a.windows||[]).map(w=>`${w.from}–${w.to} (${w.minutes}m)`).join(" · ") || "no windows";
+      const card = document.createElement("div"); card.className="card";
+      card.innerHTML = `<h4>Today's windows${a.recovery ? " · recovery "+a.recovery : ""}</h4>
+        <div class="small">${wins}</div>
+        <div class="small"><b>${a.recommendation||""}</b></div>`;
+      const raceEl = document.getElementById("race");
+      raceEl.parentNode.insertBefore(card, raceEl.nextSibling);
+    }
+  }).catch(()=>{});
   bridge("/sleep/latest").then(s=>{
     const el = document.getElementById("sleep");
     if (s.sleep) el.innerHTML = `<h4>Slept ${s.sleep.performance ?? "—"} · ${s.sleep.hours ?? "—"} h</h4>
@@ -138,7 +168,7 @@ V.morning = async function(){
     {n:"Deep squat hold", d:"Feet shoulder width, sink all the way down. Heels stay on the floor, chest tall, elbows can pry the knees out. 30 seconds — this is your bottom-bracket position insurance."}
   ];
   let mi = -1, mobRec = null;
-  const mobDone = ()=> LS.setItem("mob-am-"+new Date().toDateString(),"1");
+  const mobDone = ()=> localStorage.setItem("mob-am-"+new Date().toDateString(),"1");
   const drawMob = ()=>{
     document.getElementById("mob").innerHTML =
       moves.map((m,i)=>`<li class="${i<mi?"done":""}"><span>${i===mi?"<b>":""}${m.n}${i===mi?"</b>":""}</span><span>${i<mi?"✓":(i===mi?"now":"")}</span></li>`).join("");
