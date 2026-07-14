@@ -19,6 +19,21 @@ function markLive(isLive){
 const S = JSON.parse(localStorage.getItem("way-settings") || "{}");
 function saveS(){ localStorage.setItem("way-settings", JSON.stringify(S)); }
 const BAND = [-600,-300], TARGET = -450, BASE_BURN = 2050, PROTEIN_GOAL = 190;
+// Four zones across the balance spectrum. Left = more calories eaten (less
+// deficit or a surplus), right = fewer calories eaten (bigger deficit).
+// Weight Loss (-600 to -300) is the original target band, unchanged.
+function bandZone(b){
+  if (b >= 0) return { name: "Race Fueling", color: "#3b82f6" };
+  if (b > BAND[1]) return { name: "Maintenance", color: "var(--amber)" };
+  if (b >= BAND[0]) return { name: "Weight Loss", color: "var(--green)" };
+  return { name: "Below the Floor", color: "var(--red)" };
+}
+// Needle position: left = more calories eaten (surplus/small deficit),
+// right = fewer calories eaten (bigger deficit). Anchored so b=+150 -> x=3
+// (left edge) and b=-1050 -> x=97 (right edge), b=-450 (target) -> x=50 (center).
+function bandX(b){
+  return Math.max(3, Math.min(97, 3 + (150 - b) / 1200 * 94));
+}
 const DAY_TYPES = ["Day 1 · fasted Z2","Day 2 · HIIT","Day 3 · grocery + batch","Day 4 · fasted Z2","Day 5 · strength (kettlebell)","Commute · 35 mi evening"];
 
 /* API base auto-select:
@@ -40,7 +55,7 @@ const DEMO = {
   "/plan": { ride:null, for_today:false },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
-  "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kilojoules:480, at:new Date().toISOString()}] },
+  "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kcal:480, source:"strava", at:new Date().toISOString()}] },
   "/batches": { batches:[ {slot:1,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
     {slot:2,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
     {slot:3,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null} ] }
@@ -67,7 +82,7 @@ async function bridge(pathname, opts){
 }
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.rate=1.03; speechSynthesis.speak(u);}catch(e){} }
-function bandColor(b){ if(b>=BAND[0]&&b<=BAND[1])return "var(--green)"; if(b>BAND[1])return "var(--amber)"; return "var(--red)"; }
+// bandColor removed — replaced by bandZone() above, which returns both name and color.
 
 /* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
 function fileToBase64(file, maxDim, quality){
@@ -308,9 +323,10 @@ V.day = async function(){
     try{
       const st = await bridge("/fuel-state");
       const b = st.balance_kcal;
-      const x = Math.max(3, Math.min(97, 50 + b / -18));
+      const x = bandX(b);
+      const zone = bandZone(b);
       document.getElementById("band").innerHTML = `<h4>Balance
-        <span class="bandpill" style="background:${bandColor(b)}">${b>=BAND[0]&&b<=BAND[1]?"green":"off band"} · ${b}</span></h4>
+        <span class="bandpill" style="background:${zone.color}">${zone.name} · ${b}</span></h4>
         <div class="gauge"><div class="needle" style="left:${x}%"></div></div>
         <div class="small">on board ${st.carbs_g}g carbs · ${st.fasted?"fasted":"fed"} · meals today ${st.meals_today}${st.workout_kcal ? " · workout burn " + st.workout_kcal + " kcal" : ""}</div>`;
       const m = await bridge("/meals/today");
@@ -327,7 +343,7 @@ V.day = async function(){
     try{
       const w = await bridge("/workout-debt");
       const el = document.getElementById("workoutDebt");
-      const rows = w.count ? w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kilojoules} kcal</b></li>`).join("")
+      const rows = w.count ? w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kcal} kcal</b></li>`).join("")
         : "<li><span>No workouts synced today yet</span></li>";
       el.innerHTML = `<h4>Workout Debt${w.count ? ` · <b>${w.kcal} kcal</b>` : ""}</h4>
         <ul class="plain">${rows}</ul>
@@ -580,7 +596,7 @@ V.night = async function(){
   bridge("/fuel-state").then(st=>{
     const b = st.balance_kcal;
     document.getElementById("settle").innerHTML =
-      `Day at <span class="bandpill" style="background:${bandColor(b)}">${b}</span> · meals ${st.meals_today} · mobility ${localStorage.getItem("mob-am-"+new Date().toDateString())?"✓":"—"}`;
+      `Day at <span class="bandpill" style="background:${bandZone(b).color}">${bandZone(b).name} · ${b}</span> · meals ${st.meals_today} · mobility ${localStorage.getItem("mob-am-"+new Date().toDateString())?"✓":"—"}`;
   }).catch(()=>{ document.getElementById("settle").textContent = "bridge unreachable"; });
 
   document.getElementById("close").onclick = async ()=>{
