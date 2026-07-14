@@ -323,19 +323,28 @@ V.day = async function(){
   };
   refresh();
 
-  bridge("/workout-debt").then(w=>{
-    const el = document.getElementById("workoutDebt");
-    if (!w.count){
-      el.innerHTML = `<h4>Workout Debt</h4><div class="small">No workouts synced today yet</div>`;
-      return;
+  const refreshWorkoutDebt = async ()=>{
+    try{
+      const w = await bridge("/workout-debt");
+      const el = document.getElementById("workoutDebt");
+      const rows = w.count ? w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kilojoules} kcal</b></li>`).join("")
+        : "<li><span>No workouts synced today yet</span></li>";
+      el.innerHTML = `<h4>Workout Debt${w.count ? ` · <b>${w.kcal} kcal</b>` : ""}</h4>
+        <ul class="plain">${rows}</ul>
+        <div class="small">Estimated from Strava (kJ ≈ kcal) · already netted into the Balance above, not added again</div>
+        <button id="wdSync">Sync now</button>
+        <div class="small" id="wdSyncMsg"></div>`;
+      document.getElementById("wdSync").onclick = async ()=>{
+        const btn = document.getElementById("wdSync");
+        btn.disabled = true; btn.textContent = "Syncing…";
+        try{ await bridge("/strava/sync"); document.getElementById("wdSyncMsg").textContent = "Synced."; refreshWorkoutDebt(); }
+        catch(e){ document.getElementById("wdSyncMsg").textContent = "Sync failed: " + e.message; btn.disabled = false; btn.textContent = "Sync now"; }
+      };
+    }catch(e){
+      document.getElementById("workoutDebt").innerHTML = `<h4>Workout Debt</h4><div class="small">bridge unreachable</div>`;
     }
-    const rows = w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kilojoules} kcal</b></li>`).join("");
-    el.innerHTML = `<h4>Workout Debt · <b>${w.kcal} kcal</b></h4>
-      <ul class="plain">${rows}</ul>
-      <div class="small">Estimated from Strava (kJ ≈ kcal) · already netted into the Balance above, not added again</div>`;
-  }).catch(()=>{
-    document.getElementById("workoutDebt").innerHTML = `<h4>Workout Debt</h4><div class="small">bridge unreachable</div>`;
-  });
+  };
+  refreshWorkoutDebt();
 
   const logMeal = async (m, msgEl)=>{
     msgEl = msgEl || "mMsg";
