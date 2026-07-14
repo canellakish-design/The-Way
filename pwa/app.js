@@ -415,10 +415,14 @@ V.day = async function(){
       ${scoopLine}
       <div class="small" style="margin-top:8px">Add ingredient — take 2 photos: one clear shot of the scale display, one of the food (cumulative weight after adding it)</div>
       <input class="ingredPhoto" type="file" accept="image/*" multiple>
+      <label>Ingredient notes (optional)</label>
+      <textarea class="ingredNotes" rows="1" placeholder="e.g. 90/10 ground beef, raw"></textarea>
       <button class="ingredBtn" disabled>Add to Batch ${b.slot}</button>
       ${!b.scoop_g ? `
       <div class="small" style="margin-top:8px">Calibrate scoop — take 2 photos: scale display + the scoop itself</div>
       <input class="scoopPhoto" type="file" accept="image/*" multiple>
+      <label>Scoop notes (optional)</label>
+      <textarea class="scoopNotes" rows="1" placeholder="e.g. level scoop, packed"></textarea>
       <button class="scoopCalBtn" disabled>Calibrate + log first scoop</button>` : `
       <button class="scoopBtn" style="margin-top:8px">Log one scoop</button>`}
       <button class="resetBtn" style="margin-top:8px">Reset batch</button>
@@ -443,12 +447,13 @@ V.day = async function(){
 
       const ingredInput = card.querySelector(".ingredPhoto");
       const ingredBtn = card.querySelector(".ingredBtn");
+      const ingredNotes = card.querySelector(".ingredNotes");
       ingredInput.onchange = ()=>{ ingredBtn.disabled = !ingredInput.files.length; };
       ingredBtn.onclick = async ()=>{
         const files = ingredInput.files; if (!files.length) return;
         ingredBtn.disabled = true; ingredBtn.textContent = "Reading scale…";
         try{
-          const r = await multiPhotoBridge(`/batch/${slot}/ingredient`, files);
+          const r = await multiPhotoBridge(`/batch/${slot}/ingredient`, files, { user_notes: ingredNotes.value || undefined });
           msg.textContent = `Added ${r.added.name} · ${r.added.added_g}g (confidence: ${r.added.confidence})`;
           refreshBatches();
         }catch(e){ msg.textContent = "Failed: " + e.message; ingredBtn.disabled = false; ingredBtn.textContent = `Add to Batch ${slot}`; }
@@ -456,13 +461,14 @@ V.day = async function(){
 
       const scoopCalInput = card.querySelector(".scoopPhoto");
       const scoopCalBtn = card.querySelector(".scoopCalBtn");
+      const scoopNotes = card.querySelector(".scoopNotes");
       if (scoopCalInput && scoopCalBtn){
         scoopCalInput.onchange = ()=>{ scoopCalBtn.disabled = !scoopCalInput.files.length; };
         scoopCalBtn.onclick = async ()=>{
           const files = scoopCalInput.files; if (!files.length) return;
           scoopCalBtn.disabled = true; scoopCalBtn.textContent = "Reading scale…";
           try{
-            const r = await multiPhotoBridge(`/batch/${slot}/scoop-calibrate`, files, { meal: "lunch" });
+            const r = await multiPhotoBridge(`/batch/${slot}/scoop-calibrate`, files, { meal: "lunch", user_notes: scoopNotes.value || undefined });
             msg.textContent = `Scoop calibrated at ${r.batch.scoop_g}g — first scoop logged.`;
             refreshBatches(); refresh();
           }catch(e){ msg.textContent = "Failed: " + e.message; scoopCalBtn.disabled = false; scoopCalBtn.textContent = "Calibrate + log first scoop"; }
