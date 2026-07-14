@@ -40,6 +40,7 @@ const DEMO = {
   "/plan": { ride:null, for_today:false },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
+  "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kilojoules:480, at:new Date().toISOString()}] },
   "/batches": { batches:[ {slot:1,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
     {slot:2,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
     {slot:3,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null} ] }
@@ -266,6 +267,28 @@ V.morning = async function(){
 V.day = async function(){
   view.innerHTML = `<span class="eyebrow">The Ledger</span>
     <div class="card" id="band"><h4>Balance</h4><div class="small">reaching the bridge…</div></div>
+
+    <div class="card"><h4>Smoothie</h4>
+      <button class="primary" id="favSmoothie">Log Smoothie</button>
+      <div class="small" id="smoothieMsg"></div></div>
+
+    <div class="card" id="workoutDebt"><h4>Workout Debt</h4><div class="small">reaching the bridge…</div></div>
+
+    <div class="card"><h4>Log a meal</h4>
+      <div class="row2"><span><label>Name</label><input id="mName" placeholder="Post-ride bowl"></span>
+      <span><label>Meal</label><select id="mMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
+      <div class="row2"><span><label>kcal</label><input id="mK" type="number"></span>
+      <span><label>protein g</label><input id="mP" type="number"></span></div>
+      <div class="row2"><span><label>carbs g</label><input id="mC" type="number"></span>
+      <span><label>fat g</label><input id="mF" type="number"></span></div>
+      <button class="primary" id="mLog">Log</button>
+      <button id="favBowl">Post-ride bowl (750)</button>
+      <div class="small" id="mMsg"></div></div>
+
+    <span class="eyebrow">Batches</span>
+    <div id="batchWrap"></div>
+
+    <span class="eyebrow">More</span>
     <div class="card"><h4>Prescriptions</h4>
       <button id="rxL">Lunch</button> <button id="rxD">Dinner</button>
       <div id="rxOut"></div></div>
@@ -279,22 +302,7 @@ V.day = async function(){
       <div class="small" id="foodMsg"></div>
       <div class="small" id="foodMicros"></div></div>
 
-    <div class="card"><h4>Log a meal</h4>
-      <div class="row2"><span><label>Name</label><input id="mName" placeholder="Post-ride bowl"></span>
-      <span><label>Meal</label><select id="mMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
-      <div class="row2"><span><label>kcal</label><input id="mK" type="number"></span>
-      <span><label>protein g</label><input id="mP" type="number"></span></div>
-      <div class="row2"><span><label>carbs g</label><input id="mC" type="number"></span>
-      <span><label>fat g</label><input id="mF" type="number"></span></div>
-      <button class="primary" id="mLog">Log</button>
-      <button id="favSmoothie">Smoothie (520)</button>
-      <button id="favBowl">Post-ride bowl (750)</button>
-      <div class="small" id="mMsg"></div></div>
-
-    <div class="card"><h4>Today</h4><ul class="plain" id="meals"></ul></div>
-
-    <span class="eyebrow">Batches</span>
-    <div id="batchWrap"></div>`;
+    <div class="card"><h4>Today</h4><ul class="plain" id="meals"></ul></div>`;
 
   const refresh = async ()=>{
     try{
@@ -315,14 +323,29 @@ V.day = async function(){
   };
   refresh();
 
-  const logMeal = async (m)=>{
+  bridge("/workout-debt").then(w=>{
+    const el = document.getElementById("workoutDebt");
+    if (!w.count){
+      el.innerHTML = `<h4>Workout Debt</h4><div class="small">No workouts synced today yet</div>`;
+      return;
+    }
+    const rows = w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kilojoules} kcal</b></li>`).join("");
+    el.innerHTML = `<h4>Workout Debt · <b>${w.kcal} kcal</b></h4>
+      <ul class="plain">${rows}</ul>
+      <div class="small">Estimated from Strava (kJ ≈ kcal) · already netted into the Balance above, not added again</div>`;
+  }).catch(()=>{
+    document.getElementById("workoutDebt").innerHTML = `<h4>Workout Debt</h4><div class="small">bridge unreachable</div>`;
+  });
+
+  const logMeal = async (m, msgEl)=>{
+    msgEl = msgEl || "mMsg";
     try{ await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)});
-      document.getElementById("mMsg").textContent = "Logged.";
+      document.getElementById(msgEl).textContent = "Logged.";
       refresh();
     }catch(e){
       const q = JSON.parse(localStorage.getItem("way-queue")||"[]"); q.push(m);
       localStorage.setItem("way-queue", JSON.stringify(q));
-      document.getElementById("mMsg").textContent = "Bridge offline — queued locally (" + q.length + ").";
+      document.getElementById(msgEl).textContent = "Bridge offline — queued locally (" + q.length + ").";
     }
   };
   document.getElementById("mLog").onclick = ()=> logMeal({
@@ -332,7 +355,7 @@ V.day = async function(){
     protein_g: +document.getElementById("mP").value || 0,
     carbs_g: +document.getElementById("mC").value || 0,
     fat_g: +document.getElementById("mF").value || 0 });
-  document.getElementById("favSmoothie").onclick = ()=> logMeal({name:"Blueberry oatmeal smoothie",meal:"breakfast",kcal:520,protein_g:40,carbs_g:85,fat_g:8});
+  document.getElementById("favSmoothie").onclick = ()=> logMeal({name:"Blueberry oatmeal smoothie",meal:"breakfast",kcal:520,protein_g:40,carbs_g:85,fat_g:8}, "smoothieMsg");
   document.getElementById("favBowl").onclick = ()=> logMeal({name:"Post-ride bowl",meal:"lunch",kcal:750,protein_g:52,carbs_g:98,fat_g:16});
 
   const rx = async (meal)=>{
