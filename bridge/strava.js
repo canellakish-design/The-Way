@@ -61,7 +61,12 @@ async function syncLatest() {
   const list = await r.json();
   if (Array.isArray(list) && list[0]) {
     const full = await fetchActivity(list[0].id).catch(() => list[0]);
-    d.latest = shapeActivity(full);
+    const shaped = shapeActivity(full);
+    d.latest = shaped;
+    if (!d.rides.some(r => r.id === shaped.id)) {
+      d.rides.push({ ...shaped, aspect: 'create', at: shaped.start_date || new Date().toISOString() });
+      if (d.rides.length > 200) d.rides = d.rides.slice(-200);
+    }
     await setJSON('strava', d);
   }
   return d;
@@ -71,6 +76,20 @@ async function latestActivity() {
   let d;
   try { d = await syncLatest(); } catch { d = await db(); }
   return { connected: !!d.tokens, activity: d.latest || null };
+}
+
+const isToday = iso => new Date(iso).toDateString() === new Date().toDateString();
+
+// Sum of kilojoules across today's rides — the standard cycling rule of thumb
+// is kJ of mechanical work ≈ kcal burned (human muscular efficiency ~23-25%
+// happens to land within a few percent of the kJ->kcal conversion factor).
+// This is an estimate, not a lab measurement — good enough to net against
+// the day's balance, not precise to the calorie.
+async function workoutDebt() {
+  const d = await db();
+  const todays = d.rides.filter(r => r.at && isToday(r.at) && r.aspect !== 'delete' && r.kilojoules);
+  const kcal = Math.round(todays.reduce((a, r) => a + r.kilojoules, 0));
+  return { kcal, count: todays.length, rides: todays.map(r => ({ name: r.name, kilojoules: r.kilojoules, at: r.at })) };
 }
 
 async function ensureSubscription() {
@@ -143,8 +162,9 @@ function attach(app) {
       fetchActivity(body.object_id)
         .then(async (full) => {
           const d = await db();
-          d.latest = shapeActivity(full);
-          d.rides.push({ id: body.object_id, at: new Date().toISOString(), aspect: body.aspect_type });
+          const shaped = shapeActivity(full);
+          d.latest = shaped;
+          d.rides.push({ ...shaped, aspect: body.aspect_type, at: shaped.start_date || new Date().toISOString() });
           if (d.rides.length > 200) d.rides = d.rides.slice(-200);
           // TODO(Signature): pull /activities/{id}/streams (watts, heartrate) with this
           // athlete's token and update rolling eFTP / LTHR / EF trend from stream data.
@@ -171,10 +191,13 @@ function attach(app) {
   app.get('/activity/latest', async (req, res) => { if (!auth(req, res)) return;
     res.json(await latestActivity()); });
 
+  app.get('/workout-debt', async (req, res) => { if (!auth(req, res)) return;
+    res.json(await workoutDebt()); });
+
   app.get('/signature', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
     res.json({ eftp: d.eftp, lthr: d.lthr, ef_trend: d.ef_trend, ride_count: d.rides.length,
       confidence: d.eftp ? 'ok' : 'low — no analyzed efforts yet' }); });
 }
 
-module.exports = { attach, latestActivity };
+module.exports = { attach, latestActivity, workoutDebt };
