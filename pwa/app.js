@@ -34,6 +34,19 @@ function bandZone(b){
 function bandX(b){
   return Math.max(3, Math.min(97, 3 + (150 - b) / 1200 * 94));
 }
+// The visual background must use the exact same bandX() boundaries as the
+// needle, or the colored zones and the needle position can silently drift
+// apart (this happened before: a hardcoded 30/70 split didn't match the
+// true -300/-600 boundaries, so "Below the Floor" readings could still
+// render inside the green band).
+function gaugeBackground(){
+  const raceX = bandX(0), maintX = bandX(BAND[1]), lossX = bandX(BAND[0]);
+  return `linear-gradient(90deg,`
+    + `var(--blue-soft) 0% ${raceX}%,`
+    + `var(--amber-soft) ${raceX}% ${maintX}%,`
+    + `var(--green-soft) ${maintX}% ${lossX}%,`
+    + `var(--red-soft) ${lossX}% 100%)`;
+}
 const DAY_TYPES = ["Day 1 · fasted Z2","Day 2 · HIIT","Day 3 · grocery + batch","Day 4 · fasted Z2","Day 5 · strength (kettlebell)","Commute · 35 mi evening"];
 
 /* API base auto-select:
@@ -52,7 +65,7 @@ const DEMO = {
   "/prescription/lunch": { kcal:850, note:"carb-weighted recovery", units:{protein:2,carb:5,fat:1,greens:2} },
   "/prescription/dinner": { kcal:1140, note:"settles the day in the band", units:{protein:4,carb:4,fat:2,greens:2} },
   "/podcasts/list": { episodes:[] },
-  "/plan": { ride:null, for_today:false },
+  "/plan": { ride:null, for_today:false, intensity:"moderate", planned_hours:null, effective_hours:null, route:null },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
   "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kcal:480, source:"strava", at:new Date().toISOString()}] },
@@ -81,7 +94,17 @@ async function bridge(pathname, opts){
   }
 }
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
-function speak(t){ try{ const u=new SpeechSynthesisUtterance(t); u.rate=1.03; speechSynthesis.speak(u);}catch(e){} }
+let __ttsSpeaking = false, __lastSpoken = "";
+function speak(t){
+  try{
+    const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
+    __lastSpoken = t;
+    u.onstart = ()=>{ __ttsSpeaking = true; };
+    u.onend = ()=>{ __ttsSpeaking = false; };
+    u.onerror = ()=>{ __ttsSpeaking = false; };
+    speechSynthesis.speak(u);
+  }catch(e){}
+}
 // bandColor removed — replaced by bandZone() above, which returns both name and color.
 
 /* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
@@ -142,6 +165,7 @@ V.morning = async function(){
     <div class="card" id="weigh"><h4>Step on the scale</h4><div class="small">waiting for the weigh-in…</div></div>
     <div class="card" id="sleep"><h4>Sleep</h4><div class="small">waiting for WHOOP…</div></div>
     <div class="card"><h4>Mobility — 10 min</h4><ul class="plain" id="mob"></ul>
+      <div class="small" id="mobTimer"></div>
       <button id="mobNext">Next</button> <button id="mobRepeat" disabled>Repeat that</button></div>
     <div class="card"><h4>Then</h4><div class="small">30-min warm-up spin — the Agent is on the <a href="#agent">Agent tab</a>. Breakfast unlocks after weigh-in.</div></div>`;
 
@@ -218,24 +242,45 @@ V.morning = async function(){
   // Guided mobility, coach-paced: describe the move, then wait for you.
   // Advance by voice ("ready", "next", "done") or the button.
   const moves = [
-    {n:"Cat Cow", d:"On all fours. Arch your back up like an angry cat, then drop the belly and lift the chest. Move with your breath, about 15 slow reps."},
-    {n:"Cobra", d:"Lie face down, hands under shoulders. Press the chest up, hips stay heavy on the floor. Hold and breathe, about 30 seconds — this is the extension your spine wants after the bike."},
-    {n:"Deep lunge", d:"Big step forward, back knee down, sink the hips low and forward. 30 seconds, then switch legs. This is your hip flexors paying rent."},
-    {n:"World's greatest stretch", d:"From a lunge, drop the inside hand, rotate the other arm to the sky and follow it with your eyes. About 15 slow reps, alternating sides."},
-    {n:"Open books", d:"Lie on your side, knees bent, arms stacked in front. Open the top arm across your body like a book cover, eyes following the hand. 10 each side — this is the thoracic rotation cyclists lose first."},
-    {n:"Quad stretch", d:"Standing or side-lying, pull the heel to your glute, knee pointing down. 30 seconds each side, hips pressed forward."},
-    {n:"Downward dog", d:"Hands and feet on the floor, hips to the sky. Pedal the heels one at a time. 30 seconds, long spine."},
-    {n:"Pigeon", d:"One shin folded in front, back leg long behind. Square the hips and fold forward over the front leg. 30 seconds each side, breathe into it."},
-    {n:"90 90s", d:"Seated, both knees bent at right angles, one in front, one to the side. Rotate the knees over to the other side with control. 15 slow transitions."},
-    {n:"Deep squat hold", d:"Feet shoulder width, sink all the way down. Heels stay on the floor, chest tall, elbows can pry the knees out. 30 seconds — this is your bottom-bracket position insurance."}
+    {n:"Cat Cow", d:"On all fours. Arch your back up like an angry cat, then drop the belly and lift the chest. Move with your breath, about 15 slow reps.", s:30},
+    {n:"Cobra", d:"Lie face down, hands under shoulders. Press the chest up, hips stay heavy on the floor. Hold and breathe, about 30 seconds — this is the extension your spine wants after the bike.", s:30},
+    {n:"Deep lunge", d:"Big step forward, back knee down, sink the hips low and forward. 30 seconds, then switch legs. This is your hip flexors paying rent.", s:60},
+    {n:"World's greatest stretch", d:"From a lunge, drop the inside hand, rotate the other arm to the sky and follow it with your eyes. About 15 slow reps, alternating sides.", s:30},
+    {n:"Open books", d:"Lie on your side, knees bent, arms stacked in front. Open the top arm across your body like a book cover, eyes following the hand. 10 each side — this is the thoracic rotation cyclists lose first.", s:40},
+    {n:"Quad stretch", d:"Standing or side-lying, pull the heel to your glute, knee pointing down. 30 seconds each side, hips pressed forward.", s:60},
+    {n:"Downward dog", d:"Hands and feet on the floor, hips to the sky. Pedal the heels one at a time. 30 seconds, long spine.", s:30},
+    {n:"Pigeon", d:"One shin folded in front, back leg long behind. Square the hips and fold forward over the front leg. 30 seconds each side, breathe into it.", s:60},
+    {n:"90 90s", d:"Seated, both knees bent at right angles, one in front, one to the side. Rotate the knees over to the other side with control. 15 slow transitions.", s:30},
+    {n:"Deep squat hold", d:"Feet shoulder width, sink all the way down. Heels stay on the floor, chest tall, elbows can pry the knees out. 30 seconds — this is your bottom-bracket position insurance.", s:30}
   ];
-  let mi = -1, mobRec = null;
+  const TRANSITION_S = 30;
+  let mi = -1, mobRec = null, mobTimerId = null, mobRemaining = 0, mobPhase = "idle"; // idle | move | rest | done
   const mobDone = ()=> localStorage.setItem("mob-am-"+new Date().toDateString(),"1");
+  const clearMobTimer = ()=>{ if (mobTimerId){ clearInterval(mobTimerId); mobTimerId = null; }
+    const el = document.getElementById("mobTimer"); if (el) el.textContent = ""; };
+  const startMobTimer = (seconds, onDone)=>{
+    clearMobTimer();
+    mobRemaining = seconds;
+    const el = document.getElementById("mobTimer");
+    const label = mobPhase === "rest" ? "Rest — up next: " + (moves[mi] ? moves[mi].n : "") + " · " : "⏱ ";
+    const paint = ()=>{ if (el) el.textContent = mobRemaining > 0 ? `${label}${mobRemaining}s` : ""; };
+    paint();
+    mobTimerId = setInterval(()=>{
+      mobRemaining--; paint();
+      if (mobRemaining <= 0){ clearMobTimer(); onDone(); }
+    }, 1000);
+  };
   const drawMob = ()=>{
     document.getElementById("mob").innerHTML =
-      moves.map((m,i)=>`<li class="${i<mi?"done":""}"><span>${i===mi?"<b>":""}${m.n}${i===mi?"</b>":""}</span><span>${i<mi?"✓":(i===mi?"now":"")}</span></li>`).join("");
+      moves.map((m,i)=>{
+        const isCurrent = i === mi && mobPhase === "move";
+        const isUpNext = i === mi && mobPhase === "rest";
+        const isDone = i < mi;
+        const label = isCurrent ? "now" : isUpNext ? "up next" : (isDone ? "✓" : "");
+        return `<li class="${isDone?"done":""}"><span>${isCurrent?"<b>":""}${m.n}${isCurrent?"</b>":""}</span><span>${label}</span></li>`;
+      }).join("");
     const btn = document.getElementById("mobNext");
-    if (mi >= moves.length){ btn.textContent = "Done ✓"; btn.disabled = true; }
+    if (mobPhase === "done"){ btn.textContent = "Done ✓"; btn.disabled = true; }
     else btn.textContent = mi < 0 ? "Start guided flow" : "Ready — next";
   };
   const listenForReady = ()=>{
@@ -245,35 +290,53 @@ V.morning = async function(){
       mobRec = new SR(); mobRec.lang = "en-US"; mobRec.continuous = true; mobRec.interimResults = false;
       mobRec.onresult = e=>{
         const t = e.results[e.results.length-1][0].transcript.toLowerCase();
-        if (/\b(ready|next|done|go|continue)\b/.test(t)) nextMove();
-        else if (/\b(repeat|again)\b/.test(t) && mi >= 0) speak(moves[mi].d);
+        if (/\b(ready|next|done|go|continue)\b/.test(t)) advance();
+        else if (/\b(repeat|again)\b/.test(t) && mobPhase === "move") { speak(moves[mi].d); if (moves[mi].s) startMobTimer(moves[mi].s, ()=>startTransition()); }
       };
-      mobRec.onend = ()=>{ if (mi >= 0 && mi < moves.length) { try{ mobRec.start(); }catch(e){} } };
+      mobRec.onend = ()=>{ if (mobPhase === "move" || mobPhase === "rest") { try{ mobRec.start(); }catch(e){} } };
       mobRec.start();
     }catch(e){}
   };
   const stopListening = ()=>{ if (mobRec){ mobRec.onend = null; try{ mobRec.stop(); }catch(e){} mobRec = null; } };
-  const nextMove = ()=>{
+  const presentMove = ()=>{
+    mobPhase = "move";
+    const m = moves[mi];
+    speak(m.n + ". " + m.d + " ... Let me know when you're ready to move on.");
+    drawMob();
+    if (m.s) startMobTimer(m.s, ()=> startTransition());
+  };
+  const startTransition = ()=>{
     mi++;
     if (mi >= moves.length){
+      mobPhase = "done";
       stopListening(); mobDone(); drawMob();
       speak("That's the flow. Ten minutes well spent. Onto the bike.");
       return;
     }
-    const m = moves[mi];
-    speak(m.n + ". " + m.d + " ... Let me know when you're ready to move on.");
+    mobPhase = "rest";
     drawMob();
+    speak("Thirty second rest. Get set for " + moves[mi].n + ".");
+    startMobTimer(TRANSITION_S, presentMove);
+  };
+  // Manual/voice advance: skips whatever's currently running (a move's
+  // hold or a rest) and moves straight to the next stage.
+  const advance = ()=>{
+    clearMobTimer();
+    if (mi < 0){ mi = 0; presentMove(); return; }
+    if (mobPhase === "rest"){ presentMove(); return; } // rest already advanced mi — go straight to the move
+    startTransition();
   };
   drawMob();
   document.getElementById("mobNext").onclick = ()=>{
     if (mi < 0) listenForReady();
-    nextMove();
-    document.getElementById("mobRepeat").disabled = (mi < 0 || mi >= moves.length);
+    advance();
+    document.getElementById("mobRepeat").disabled = (mobPhase !== "move");
   };
   document.getElementById("mobRepeat").onclick = ()=>{
-    if (mi >= 0 && mi < moves.length){
+    if (mobPhase === "move"){
       const m = moves[mi];
       speak(m.n + ". " + m.d);
+      if (m.s) startMobTimer(m.s, ()=> startTransition());
     }
   };
 };
@@ -299,6 +362,19 @@ V.day = async function(){
       <button class="primary" id="mLog">Log</button>
       <button id="favBowl">Post-ride bowl (750)</button>
       <div class="small" id="mMsg"></div></div>
+
+    <div class="card" id="preRideCard"><h4>Pre-Ride Fueling</h4>
+      <div class="row2">
+        <span><label>Intensity</label>
+          <select id="prIntensity">
+            <option value="easy">Easy</option>
+            <option value="moderate">Moderate</option>
+            <option value="hard">Hard</option>
+          </select></span>
+        <span><label>Duration (hrs)</label>
+          <input id="prHours" type="number" step="0.25" min="0" placeholder="e.g. 2.5"></span></div>
+      <div class="small" id="prSource"></div>
+      <div id="prResult" style="margin-top:8px"></div></div>
 
     <span class="eyebrow">Batches</span>
     <div id="batchWrap"></div>
@@ -327,7 +403,7 @@ V.day = async function(){
       const zone = bandZone(b);
       document.getElementById("band").innerHTML = `<h4>Balance
         <span class="bandpill" style="background:${zone.color}">${zone.name} · ${b}</span></h4>
-        <div class="gauge"><div class="needle" style="left:${x}%"></div></div>
+        <div class="gauge" style="background:${gaugeBackground()}"><div class="needle" style="left:${x}%"></div></div>
         <div class="small">on board ${st.carbs_g}g carbs · ${st.fasted?"fasted":"fed"} · meals today ${st.meals_today}${st.workout_kcal ? " · workout burn " + st.workout_kcal + " kcal" : ""}</div>`;
       const m = await bridge("/meals/today");
       document.getElementById("meals").innerHTML = m.meals.length
@@ -425,6 +501,78 @@ V.day = async function(){
     }
     foodBtn.disabled = false; foodBtn.textContent = "Analyze";
   };
+
+  /* ---- Pre-Ride Fueling: rice balls needed from batches, by planned duration + intensity ----
+     Carb rates are on-bike fueling targets (g of carb per hour), not kcal —
+     carbs are what the body can actually absorb and use mid-ride. Ranges are
+     deliberately wide since "fuel the work" doctrine cares about matching
+     effort, not hitting one exact number. */
+  const CARB_RATE_G_PER_HR = { easy: [30, 40], moderate: [55, 70], hard: [75, 90] };
+  let __preRideBatches = [];
+
+  const preRideCompute = (hours, tier)=>{
+    const [lo, hi] = CARB_RATE_G_PER_HR[tier] || CARB_RATE_G_PER_HR.moderate;
+    const carbsLo = Math.round(hours * lo), carbsHi = Math.round(hours * hi);
+    const rows = __preRideBatches
+      .filter(b => b.scoop_g && b.total_g)
+      .map(b=>{
+        const frac = b.scoop_g / b.total_g;
+        const carbsPerBall = b.totals.carbs_g * frac;
+        const needLo = carbsPerBall > 0 ? Math.ceil(carbsLo / carbsPerBall) : null;
+        const needHi = carbsPerBall > 0 ? Math.ceil(carbsHi / carbsPerBall) : null;
+        return { slot: b.slot, needLo, needHi, carbsPerBall, available: b.scoops_remaining };
+      });
+    return { carbsLo, carbsHi, rows };
+  };
+
+  const renderPreRide = ()=>{
+    const hours = +document.getElementById("prHours").value || 0;
+    const tier = document.getElementById("prIntensity").value;
+    const out = document.getElementById("prResult");
+    if (!hours){ out.innerHTML = `<div class="small">Enter a duration to see rice balls needed.</div>`; return; }
+    const { carbsLo, carbsHi, rows } = preRideCompute(hours, tier);
+    if (!rows.length){
+      out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs for the ride. No calibrated batch yet \u2014 calibrate a scoop to convert this to a rice ball count.</div>`;
+      return;
+    }
+    out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs over ${hours}h at ${tier} intensity.</div>
+      <ul class="plain">${rows.map(r=>{
+        const short = r.available != null && r.needLo != null && r.available < r.needLo;
+        return `<li><span>Batch ${r.slot} \u00b7 ${r.carbsPerBall.toFixed(1)}g carbs/ball</span>
+          <b>${r.needLo}\u2013${r.needHi} balls${short ? " \u26a0 only " + r.available + " ready" : ""}</b></li>`;
+      }).join("")}</ul>`;
+  };
+
+  const saveFueling = async ()=>{
+    try{
+      await bridge("/plan/fueling", {method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          intensity: document.getElementById("prIntensity").value,
+          planned_hours: +document.getElementById("prHours").value || null
+        })});
+    }catch(e){ /* best effort \u2014 local calc still works if the bridge is unreachable */ }
+  };
+
+  const refreshPreRide = async ()=>{
+    const src = document.getElementById("prSource");
+    try{
+      const plan = await bridge("/plan");
+      const b = await bridge("/batches");
+      __preRideBatches = b.batches || [];
+      const intensitySel = document.getElementById("prIntensity");
+      const hoursInput = document.getElementById("prHours");
+      if (plan.intensity) intensitySel.value = plan.intensity;
+      if (!hoursInput.value && plan.effective_hours) hoursInput.value = plan.effective_hours;
+      if (plan.planned_hours) src.textContent = `Duration set manually: ${plan.planned_hours}h.`;
+      else if (plan.route && plan.route.estimated_hours) src.textContent = `Estimated from planned route "${plan.ride}" \u2014 ${plan.route.miles}mi, ${plan.route.climb_ft}ft climb (~${plan.route.estimated_hours}h, rough estimate \u2014 adjust freely).`;
+      else src.textContent = `No planned ride on file \u2014 enter hours manually.`;
+      renderPreRide();
+    }catch(e){ src.textContent = "bridge unreachable"; }
+  };
+  document.getElementById("prIntensity").onchange = ()=>{ renderPreRide(); saveFueling(); };
+  document.getElementById("prHours").oninput = renderPreRide;
+  document.getElementById("prHours").onchange = saveFueling;
+  refreshPreRide();
 
   /* ---- Batches: 3 fixed slots, cumulative ingredient photos + scoop calibration ---- */
   const batchCard = (b)=>{
@@ -613,11 +761,11 @@ V.night = async function(){
   };
 };
 
-/* ---------------- AGENT (push-to-talk) ---------------- */
+/* ---------------- AGENT (hands-free conversation) ---------------- */
 V.agent = function(){
   view.innerHTML = `<span class="eyebrow">The Way Agent</span>
-    <div class="card" id="agentLog"><div class="small">Hold the button, talk, release. The spin is the meeting.</div></div>
-    <button class="ptt" id="ptt">Hold to talk</button>
+    <div class="card" id="agentLog"><div class="small">Tap Start, then just talk — no need to hold anything. Talking cuts the coach off mid-sentence if you need to. Tap End when you're done.</div></div>
+    <button class="ptt" id="convBtn">Start conversation</button>
     <input id="typed" placeholder="…or type here and press Enter">`;
   const log = document.getElementById("agentLog");
   const add = (who, t)=>{ const d=document.createElement("div"); d.className="turn "+who;
@@ -632,16 +780,59 @@ V.agent = function(){
   };
   document.getElementById("typed").addEventListener("keydown",e=>{
     if(e.key==="Enter"&&e.target.value.trim()){ ask(e.target.value.trim()); e.target.value=""; }});
+
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const btn = document.getElementById("ptt");
+  const btn = document.getElementById("convBtn");
   if (!SR){ btn.textContent = "Voice unavailable here — type below"; btn.disabled = true; return; }
-  let rec=null;
-  const start=()=>{ rec = new SR(); rec.lang="en-US"; rec.interimResults=false;
-    rec.onresult=e=>{ const t=e.results[0][0].transcript; if(t.trim()) ask(t.trim()); };
-    rec.onend=()=>btn.classList.remove("listening");
-    btn.classList.add("listening"); btn.textContent="Listening…"; rec.start(); };
-  const stop=()=>{ if(rec) rec.stop(); btn.textContent="Hold to talk"; };
-  btn.addEventListener("pointerdown",start); btn.addEventListener("pointerup",stop);
+
+  let rec = null, convOn = false;
+
+  // No browser API gives real acoustic echo cancellation between
+  // SpeechSynthesis output and SpeechRecognition input, so the mic can
+  // hear the coach's own voice through a tablet/phone speaker and
+  // mistake it for a barge-in. A Bluetooth earpiece (e.g. Shokz) mostly
+  // sidesteps this since the coach's voice never reaches open air. This
+  // word-overlap check is a rough fallback filter for speaker playback —
+  // not perfect, but catches most self-hearing.
+  const wordOverlap = (a,b)=>{
+    const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
+    const wb = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
+    if (!wa.length) return 0;
+    return wa.filter(w=>wb.has(w)).length / wa.length;
+  };
+
+  const handleUtterance = (text)=>{
+    text = text.trim(); if (!text) return;
+    if (__ttsSpeaking){
+      if (wordOverlap(text, __lastSpoken) > 0.5) return; // looks like the mic hearing the coach — ignore
+      speechSynthesis.cancel(); __ttsSpeaking = false;   // real barge-in — cut the coach off
+    }
+    ask(text);
+  };
+
+  const startRec = ()=>{
+    rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = false;
+    rec.onresult = e=>{
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        if (e.results[i].isFinal) handleUtterance(e.results[i][0].transcript);
+      }
+    };
+    rec.onerror = ()=>{}; // e.g. no-speech timeouts — onend below restarts while convOn
+    rec.onend = ()=>{ if (convOn){ try{ rec.start(); }catch(e){} } };
+    try{ rec.start(); }catch(e){}
+  };
+
+  btn.onclick = ()=>{
+    convOn = !convOn;
+    if (convOn){
+      btn.textContent = "End conversation"; btn.classList.add("listening");
+      startRec();
+    } else {
+      btn.textContent = "Start conversation"; btn.classList.remove("listening");
+      if (rec){ rec.onend = null; try{ rec.stop(); }catch(e){} rec = null; }
+      speechSynthesis.cancel(); __ttsSpeaking = false;
+    }
+  };
 };
 
 /* ---------------- SETTINGS ---------------- */
