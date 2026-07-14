@@ -30,7 +30,7 @@ const DEMO = {
   "/route-weather": { now:{t:74,w:8,ride:"crosswind 8 mph"}, evening:{t:81,w:12,ride:"headwind 12 mph"}, stormAfterHour:16 },
   "/weight/latest": { latest:{ lb:176.4, logged_today:true }, ma7_lb:177.0, week_change_lb:-0.5 },
   "/sleep/latest": { sleep:{performance:87,hours:7.4}, recovery:{score:72,hrv:68,rhr:47} },
-  "/fuel-state": { carbs_g:62, fasted:false, meals_today:2, balance_kcal:-410, ball_carbs_g:19.4, fresh:true },
+  "/fuel-state": { carbs_g:62, fasted:false, meals_today:2, workout_kcal:480, balance_kcal:-410, ball_carbs_g:19.4, fresh:true },
   "/meals/today": { meals:[ {meal:"breakfast",name:"Blueberry oatmeal smoothie",kcal:520}, {meal:"lunch",name:"Post-ride bowl",kcal:750} ] },
   "/race": { race:{name:"Gran Fondo Maryland — Medio"}, weeks_out:10.1, phase:"build",
     need:{aerobic_h:6.2,hi_min:88,strength:2}, done:{aerobic_h:0,hi_min:0,strength:0}, remaining:{aerobic_h:6.2,hi_min:88,strength:2} },
@@ -312,7 +312,7 @@ V.day = async function(){
       document.getElementById("band").innerHTML = `<h4>Balance
         <span class="bandpill" style="background:${bandColor(b)}">${b>=BAND[0]&&b<=BAND[1]?"green":"off band"} · ${b}</span></h4>
         <div class="gauge"><div class="needle" style="left:${x}%"></div></div>
-        <div class="small">on board ${st.carbs_g}g carbs · ${st.fasted?"fasted":"fed"} · meals today ${st.meals_today}</div>`;
+        <div class="small">on board ${st.carbs_g}g carbs · ${st.fasted?"fasted":"fed"} · meals today ${st.meals_today}${st.workout_kcal ? " · workout burn " + st.workout_kcal + " kcal" : ""}</div>`;
       const m = await bridge("/meals/today");
       document.getElementById("meals").innerHTML = m.meals.length
         ? m.meals.map(x=>`<li><span>${esc(x.meal)} · ${esc(x.name)}</span><b>${x.kcal}</b></li>`).join("")
