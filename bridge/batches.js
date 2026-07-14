@@ -51,7 +51,7 @@ async function callVision(prompt, images) {
 // Multiple photos of the SAME addition (e.g. one clear shot of the scale
 // display, one of the food itself) — improves both weight-reading and
 // ingredient-identification accuracy over a single photo.
-async function readIngredientAddition(images, previous_total_g) {
+async function readIngredientAddition(images, previous_total_g, userNotes) {
   const prompt = `These ${images.length} photo(s) all show the SAME moment: a bowl
 of food on a kitchen scale, mid-batch-prep, immediately after one ingredient was
 added. Use whichever photo most clearly shows the scale display to read the
@@ -61,7 +61,7 @@ The scale previously read ${previous_total_g}g before this addition. Read the
 CURRENT total weight shown on the scale display. Identify the ingredient that
 was just added (the newest, top-most one). Estimate nutrition for ONLY the
 delta weight (current minus ${previous_total_g}g) of that ingredient — not the
-whole bowl.
+whole bowl.${userNotes ? `\nThe person logging this added this note — treat it as authoritative over what you can see: "${userNotes}"` : ''}
 Respond with ONLY raw JSON, no markdown fences, no preamble:
 {"current_total_g":number,"ingredient_name":"...","delta_g":number,
 "kcal":number,"protein_g":number,"carbs_g":number,"fat_g":number,
@@ -70,11 +70,11 @@ Respond with ONLY raw JSON, no markdown fences, no preamble:
 }
 
 // Multiple photos of the same scoop calibration (e.g. scale display + scoop itself).
-async function readScoopWeight(images) {
+async function readScoopWeight(images, userNotes) {
   const prompt = `These ${images.length} photo(s) all show the SAME moment: one
 scoop of prepared food on a kitchen scale, used to calibrate portion size for a
 batch. Use whichever photo most clearly shows the scale display. Read the exact
-weight shown.
+weight shown.${userNotes ? `\nThe person logging this added this note — treat it as authoritative over what you can see: "${userNotes}"` : ''}
 Respond with ONLY raw JSON, no markdown fences, no preamble:
 {"scoop_g":number,"confidence":"high|medium|low","notes":"one short sentence on any uncertainty"}`;
   return callVision(prompt, images);
@@ -114,11 +114,11 @@ function attach(app) {
     if (!auth(req, res)) return;
     try {
       const slot = checkSlot(req.params.slot);
-      const { images } = req.body || {};
+      const { images, user_notes } = req.body || {};
       if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
       const d = await db();
       const b = d[slot];
-      const read = await readIngredientAddition(images, b.last_reading_g);
+      const read = await readIngredientAddition(images, b.last_reading_g, user_notes);
       const delta = Math.round(read.delta_g);
       b.ingredients.push({
         name: read.ingredient_name, added_g: delta,
@@ -141,12 +141,12 @@ function attach(app) {
     if (!auth(req, res)) return;
     try {
       const slot = checkSlot(req.params.slot);
-      const { images, meal } = req.body || {};
+      const { images, meal, user_notes } = req.body || {};
       if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
       const d = await db();
       const b = d[slot];
       if (!b.total_g) return res.status(400).json({ ok: false, error: 'batch has no ingredients yet' });
-      const read = await readScoopWeight(images);
+      const read = await readScoopWeight(images, user_notes);
       b.scoop_g = Math.round(read.scoop_g);
       b.remaining_g = b.total_g - b.scoop_g;
       b.status = 'active';
