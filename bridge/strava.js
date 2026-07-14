@@ -40,6 +40,7 @@ function shapeActivity(a) {
     weighted_avg_watts: a.weighted_average_watts ? Math.round(a.weighted_average_watts) : null,
     max_watts: a.max_watts || null,
     kilojoules: a.kilojoules ? Math.round(a.kilojoules) : null,
+    calories: a.calories ? Math.round(a.calories) : null,
     avg_hr: a.average_heartrate ? Math.round(a.average_heartrate) : null,
     max_hr: a.max_heartrate || null,
     type: a.type || a.sport_type || null
@@ -85,11 +86,14 @@ const isToday = iso => new Date(iso).toDateString() === new Date().toDateString(
 // happens to land within a few percent of the kJ->kcal conversion factor).
 // This is an estimate, not a lab measurement — good enough to net against
 // the day's balance, not precise to the calorie.
+// Prefer Strava's own `calories` field (matches what's shown in the Strava
+// app exactly) — fall back to the kJ≈kcal rule of thumb only if Strava
+// didn't return calories for that activity.
 async function workoutDebt() {
   const d = await db();
-  const todays = d.rides.filter(r => r.at && isToday(r.at) && r.aspect !== 'delete' && r.kilojoules);
-  const kcal = Math.round(todays.reduce((a, r) => a + r.kilojoules, 0));
-  return { kcal, count: todays.length, rides: todays.map(r => ({ name: r.name, kilojoules: r.kilojoules, at: r.at })) };
+  const todays = d.rides.filter(r => r.at && isToday(r.at) && r.aspect !== 'delete' && (r.calories || r.kilojoules));
+  const kcal = Math.round(todays.reduce((a, r) => a + (r.calories || r.kilojoules), 0));
+  return { kcal, count: todays.length, rides: todays.map(r => ({ name: r.name, kcal: r.calories || r.kilojoules, source: r.calories ? 'strava' : 'kJ estimate', at: r.at })) };
 }
 
 async function ensureSubscription() {
