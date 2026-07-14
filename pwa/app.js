@@ -273,6 +273,8 @@ V.day = async function(){
     <div class="card"><h4>Food Log · photo</h4>
       <div class="small">One-off meal — not from a batch. Snap it, review, log it.</div>
       <input id="foodPhoto" type="file" accept="image/*" multiple>
+      <label>Ingredients / notes (optional — helps when the photo alone is ambiguous)</label>
+      <textarea id="foodNotes" rows="2" placeholder="e.g. grilled chicken thigh, jasmine rice, olive oil, no visible scale"></textarea>
       <button id="foodAnalyze" disabled>Analyze</button>
       <div class="small" id="foodMsg"></div>
       <div class="small" id="foodMicros"></div></div>
@@ -354,7 +356,7 @@ V.day = async function(){
     document.getElementById("foodMsg").textContent = "";
     document.getElementById("foodMicros").innerHTML = "";
     try{
-      const r = await multiPhotoBridge("/kitchen/log", files);
+      const r = await multiPhotoBridge("/kitchen/log", files, { user_notes: document.getElementById("foodNotes").value || undefined });
       const p = r.proposal;
       document.getElementById("mName").value = p.food_name || "meal";
       if (p.meal_guess) document.getElementById("mMeal").value = p.meal_guess;
