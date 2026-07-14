@@ -8,17 +8,20 @@ const MODEL = process.env.VISION_MODEL || 'claude-sonnet-4-6';
 const PROMPT = `You are looking at a photo of food, possibly on a kitchen scale.
 Identify the food and estimate a full nutrition breakdown for the portion shown.
 If a scale display is visible in the photo, read the exact weight and use it to
-scale your estimate; otherwise estimate portion size visually.
+scale your estimate; otherwise estimate portion size visually.{{NOTES}}
 Respond with ONLY raw JSON, no markdown fences, no preamble, in this exact shape:
 {"food_name":"...","meal_guess":"breakfast|lunch|dinner|snack","weight_g":number|null,
 "kcal":number,"protein_g":number,"carbs_g":number,"fat_g":number,
 "micronutrients":{"fiber_g":number,"sodium_mg":number,"iron_mg":number,"vitamin_c_mg":number},
 "confidence":"high|medium|low","notes":"one short sentence on any uncertainty"}`;
 
-async function analyze(images) {
+async function analyze(images, userNotes) {
+  const prompt = PROMPT.replace('{{NOTES}}', userNotes
+    ? `\nThe person logging this meal added this note — treat it as authoritative over what you can see: "${userNotes}"`
+    : '');
   const content = images.map(img => ({ type: 'image',
     source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
-  content.push({ type: 'text', text: PROMPT });
+  content.push({ type: 'text', text: prompt });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -46,9 +49,9 @@ function attach(app) {
   app.post('/kitchen/log', async (req, res) => {
     if (!auth(req, res)) return;
     try {
-      const { images } = req.body || {};
+      const { images, user_notes } = req.body || {};
       if (!images || !images.length) return res.status(400).json({ ok: false, error: 'missing images' });
-      const proposal = await analyze(images);
+      const proposal = await analyze(images, user_notes);
       res.json({ ok: true, proposal });
     } catch (e) {
       res.status(500).json({ ok: false, error: e.message });
