@@ -34,8 +34,78 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { name: { type: 'string' }, meal: { type: 'string' },
       kcal: { type: 'number' }, carbs_g: { type: 'number' }, protein_g: { type: 'number' }, fat_g: { type: 'number' } }, required: ['name', 'kcal'] } },
   { name: 'log_training', description: 'Drain week buckets after a session. CONFIRM first. aerobic_h = Z2 hours, hi_min = minutes at threshold+, strength = sessions.',
-    input_schema: { type: 'object', properties: { aerobic_h: { type: 'number' }, hi_min: { type: 'number' }, strength: { type: 'number' } } } }
+    input_schema: { type: 'object', properties: { aerobic_h: { type: 'number' }, hi_min: { type: 'number' }, strength: { type: 'number' } } } },
+  { name: 'get_research', description: 'Search PubMed for peer-reviewed sports science / nutrition / physiology literature. Use for "what does research say" questions — not general web queries. Returns article title/journal/year/abstract snippets, not full text.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' }, max_results: { type: 'number' } }, required: ['query'] } },
+  { name: 'get_nutrition', description: 'Look up calories, protein, carbs, and fat for a named food or branded product (USDA FoodData Central). Use whenever Harry names a food without giving its macros himself — never guess nutrition numbers from memory.',
+    input_schema: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } },
+  // Anthropic's server-side web search — executed by Anthropic, not by us.
+  // Good for current, general info (gear, software, news); not a literature
+  // database, so prefer get_research for training/nutrition science.
+  { type: 'web_search_20250305', name: 'web_search' }
 ];
+
+// NCBI E-utilities — public, no API key required for light personal use.
+// esearch finds matching PMIDs; efetch pulls plain-text abstracts. We don't
+// parse the text into structured fields (title/authors/etc separately) —
+// Claude reads the raw abstract chunk fine and it avoids a fragile XML
+// parser for a personal tool. Text is capped per result so the coach
+// paraphrases/summarizes rather than reading a dense abstract verbatim.
+async function pubmedSearch(query, maxResults) {
+  if (!query) return { error: 'query required' };
+  const n = Math.min(Math.max(Number(maxResults) || 5, 1), 8);
+
+  const esearchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&retmode=json&retmax=${n}&sort=relevance&term=${encodeURIComponent(query)}`;
+  const es = await fetch(esearchUrl).then(r => r.json());
+  const ids = (es.esearchresult && es.esearchresult.idlist) || [];
+  if (!ids.length) return { query, results: [] };
+
+  const efetchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pubmed&retmode=text&rettype=abstract&id=${ids.join(',')}`;
+  const text = await fetch(efetchUrl).then(r => r.text());
+
+  // NCBI's plain-text output separates records with a blank line before a
+  // numbered heading ("1. J Appl Physiol. 2020 ..."). Split on that.
+  const chunks = text.split(/\n(?=\d+\.\s)/).map(s => s.trim()).filter(Boolean);
+
+  return {
+    query,
+    results: chunks.map((c, i) => ({
+      pmid: ids[i] || null,
+      link: ids[i] ? `https://pubmed.ncbi.nlm.nih.gov/${ids[i]}/` : null,
+      text: c.slice(0, 1200)
+    }))
+  };
+}
+
+// USDA FoodData Central — free public nutrition database, structured
+// macros (not text to summarize, unlike get_research). Sign up for a free
+// key at https://fdc.nal.usda.gov/api-key-signup and set FDC_API_KEY; falls
+// back to the shared DEMO_KEY (30 req/hr, 50/day) if unset — fine to test
+// with, too rate-limited to lean on for daily coaching.
+async function nutritionLookup(query) {
+  if (!query) return { error: 'query required' };
+  const key = process.env.FDC_API_KEY || 'DEMO_KEY';
+  const url = `https://api.nal.usda.gov/fdc/v1/foods/search?api_key=${key}&query=${encodeURIComponent(query)}&pageSize=5`;
+  const d = await fetch(url).then(r => r.json());
+  if (d.error) return { error: d.error.message || 'FDC lookup failed' };
+
+  const pick = (nutrients, match) => {
+    const n = (nutrients || []).find(x => (x.nutrientName || '').toLowerCase().includes(match));
+    return n ? Math.round(n.value * 10) / 10 : null;
+  };
+
+  const results = (d.foods || []).slice(0, 5).map(f => ({
+    description: f.description,
+    brand: f.brandOwner || null,
+    serving: f.servingSize ? `${f.servingSize}${f.servingSizeUnit || ''}` : 'per 100g (no serving size on file)',
+    kcal: pick(f.foodNutrients, 'energy'),
+    protein_g: pick(f.foodNutrients, 'protein'),
+    carbs_g: pick(f.foodNutrients, 'carbohydrate'),
+    fat_g: pick(f.foodNutrients, 'total lipid')
+  }));
+
+  return { query, results };
+}
 
 async function runTool(name, input) {
   try {
@@ -59,6 +129,8 @@ async function runTool(name, input) {
     if (name === 'get_prescription') return await prescription(input.meal || 'dinner', 0);
     if (name === 'log_meal') return await logMeal(input);
     if (name === 'log_training') return await logTraining(input);
+    if (name === 'get_research') return await pubmedSearch(input.query, input.max_results);
+    if (name === 'get_nutrition') return await nutritionLookup(input.query);
   } catch (e) { return { error: e.message }; }
   return { error: 'unknown tool' };
 }
@@ -85,6 +157,14 @@ has. Answer "can I ride tomorrow?" by reading the calendar: name the
 blocks, name the window, check recovery, then recommend the session that
 pays what the week owes and fits the window.
 
+RESEARCH: get_research searches peer-reviewed literature (PubMed) — use it
+for training/nutrition/physiology science questions ("does carb periodization
+help," "what does research say about X"). web_search covers general current
+info (gear, software, races, anything else) — use it for that instead.
+get_nutrition looks up calories/protein/carbs/fat for a named food or
+product — use it whenever Harry names something to eat without giving you
+the macros himself, before logging it.
+
 DOCTRINE (never violate):
 - Fuel the work; take the deficit at the margins. Under-fueling is a bug.
 - The band (-300 to -600) refers to the DAY'S END settle, not a live
@@ -97,6 +177,9 @@ DOCTRINE (never violate):
 - Numbers come from tools, never memory. Round them (HRV 21, not
   21.267122); band language over false precision.
 - Confirm before any write (log_meal, log_training): once, briefly.
+- When citing get_research or web_search findings, paraphrase in your own
+  words and name the source briefly (journal + year is enough). Never read
+  a raw abstract verbatim — it's dense and this gets read aloud by TTS.
 
 FORMAT: Plain text only. No markdown, no asterisks, no ---, no emojis,
 no tables. Short paragraphs. This text is read aloud by TTS.
