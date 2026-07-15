@@ -11,8 +11,21 @@ const calendar = require('./calendar');
 
 const KEY = process.env.ANTHROPIC_API_KEY || '';
 
-async function loadThread() {
-  const t = await getJSON('agent-thread', null);
+// Seven coaches, one Way. Each persona is a lens on the same doctrine and
+// the same tools — a distinct voice and focus, separate conversation thread.
+const PERSONAS = {
+  plan:     'You are the PLANNING coach. Focus: the week ahead, training windows, tomorrow\'s ride, gear, the race countdown. You open the day with the wake report when asked.',
+  activate: 'You are the ACTIVATION coach. Focus: mobility, warm-ups, getting the body ready to work. Calm, unhurried cueing.',
+  train:    'You are the TRAINING coach (S&C and cycling). Focus: sessions, intervals, strength work, what the week\'s buckets still owe. After sessions, offer to log them.',
+  fuel:     'You are the FUEL coach. Focus: the ledger, meals, prescriptions, batches. The band judges the day\'s end, not the moment.',
+  recover:  'You are the RECOVERY coach. Focus: settling the day, wind-down, tomorrow\'s readiness. Lower the temperature; short sentences.',
+  sleep:    'You are the SLEEP coach. Focus: sleep quality, HRV, RHR, the morning readiness picture. Never alarmist about one bad night.',
+  analyze:  'You are the ANALYST — the sports scientist of the group. Focus: weight and W/kg trends, and (soon) ride analysis: session verdicts, power curve, FTP estimation. Numbers with meaning, never numbers alone.'
+};
+
+async function loadThread(persona) {
+  const key = persona ? 'agent-thread-' + persona : 'agent-thread';
+  const t = await getJSON(key, null);
   if (!t || t.day !== new Date().toDateString()) {
     return { day: new Date().toDateString(), messages: [], yesterday: t ? t.summary : null };
   }
@@ -135,11 +148,11 @@ async function runTool(name, input) {
   return { error: 'unknown tool' };
 }
 
-function systemPrompt(mode, yesterday) {
+function systemPrompt(mode, yesterday, persona) {
   return `You are The Way — Harry's coach. Not an assistant: a coach with a
 point of view, built into his training and fueling operating system.
 
-THE ATHLETE: Harry. Competitive cyclist, Cervelo R5, FTP 265. Green band:
+THE ATHLETE: Harry. Competitive cyclist, Cervelo R5, FTP ${process.env.FTP || 195}. Green band:
 the day settles -300 to -600 kcal (target -450). Protein goal 190g.
 Training ingredients: fasted Z2, HIIT, 70lb kettlebell strength, batch
 cooking day, 35-mile evening commute leg. Ride Fuel Unit = spicy anchovy
@@ -185,6 +198,7 @@ FORMAT: Plain text only. No markdown, no asterisks, no ---, no emojis,
 no tables. Short paragraphs. This text is read aloud by TTS.
 
 VOICE: Direct, warm, economical. A coach at the trainer, not a wellness app.
+${persona && PERSONAS[persona] ? PERSONAS[persona] + ' Stay in your lane: for questions clearly owned by another coach, answer briefly and point Harry to that tab.' : ''}
 ${mode === 'watch' ? 'WATCH MODE: ONE short sentence. No follow-up questions.'
                    : 'Two or three sentences unless asked to go deeper.'}
 ${yesterday ? 'Yesterday: ' + yesterday : ''}`;
@@ -195,7 +209,8 @@ function attach(app) {
     if (!auth(req, res)) return;
     if (!KEY) return res.status(500).json({ error: 'ANTHROPIC_API_KEY not set' });
     const mode = req.body.mode === 'watch' ? 'watch' : 'cockpit';
-    const t = await loadThread();
+    const persona = PERSONAS[req.body.persona] ? req.body.persona : null;
+    const t = await loadThread(persona);
     t.messages.push({ role: 'user', content: req.body.text || '' });
     try {
       let messages = t.messages.slice(-30);
@@ -206,7 +221,7 @@ function attach(app) {
           headers: { 'Content-Type': 'application/json', 'x-api-key': KEY,
                      'anthropic-version': '2023-06-01' },
           body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500,
-            system: systemPrompt(mode, t.yesterday), tools: TOOLS, messages })
+            system: systemPrompt(mode, t.yesterday, persona), tools: TOOLS, messages })
         });
         const d = await r.json();
         if (d.error) throw new Error(d.error.message);
@@ -228,15 +243,22 @@ function attach(app) {
                    .replace(/\n{3,}/g, '\n\n')          // excess newlines
                    .trim();
       t.messages.push({ role: 'assistant', content: reply });
-      await setJSON('agent-thread', t);
-      res.json({ reply, mode });
+      await setJSON(persona ? 'agent-thread-' + persona : 'agent-thread', t);
+      res.json({ reply, mode, persona });
     } catch (e) { console.error('[agent]', e); res.status(500).json({ error: String(e.message || e) }); }
   });
   app.post('/agent/closeout', async (req, res) => {
     if (!auth(req, res)) return;
+    const summary = String(req.body.summary || '').slice(0, 500);
     const t = await loadThread();
-    t.summary = String(req.body.summary || '').slice(0, 500);
+    t.summary = summary;
     await setJSON('agent-thread', t);
+    // every coach starts tomorrow knowing how today ended
+    for (const p of Object.keys(PERSONAS)) {
+      const pt = await loadThread(p);
+      pt.summary = summary;
+      await setJSON('agent-thread-' + p, pt);
+    }
     res.json({ ok: true });
   });
 }
