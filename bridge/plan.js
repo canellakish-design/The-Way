@@ -46,6 +46,17 @@ function calculateBearing(pointA, pointB) {
   ) % 360;
 }
 
+// Rough planning estimate only — seeds the Pre-Ride hours field, never
+// authoritative. ~16mph flat moving-time pace, plus ~12 min per 1000ft
+// of climbing. Always adjustable by hand on the Pre-Ride card.
+function estimateRideHours(distanceMeters, elevationGainMeters) {
+  if (!distanceMeters) return null;
+  const miles = distanceMeters / 1609.344;
+  const climbFt = elevationGainMeters ? elevationGainMeters * 3.28084 : 0;
+  const hours = miles / 16 + (climbFt / 1000) * 0.2;
+  return Math.round(hours * 10) / 10;
+}
+
 function extractRouteId(idOrUrl) {
   const input = String(idOrUrl || "").trim();
 
@@ -202,6 +213,7 @@ function normalizeRoute(route, routeId) {
 
     distance_meters: distanceMeters,
     elevation_gain_meters: elevationGainMeters,
+    estimated_hours: estimateRideHours(distanceMeters, elevationGainMeters),
 
     track_point_count: points.length,
 
@@ -327,13 +339,24 @@ async function getPlan() {
     return {
       ride: null,
       for_today: false,
+      intensity: "moderate",
+      planned_hours: null,
+      effective_hours: null,
     };
   }
+
+  const effective_hours =
+    plan.planned_hours ||
+    plan.route?.estimated_hours ||
+    null;
 
   return {
     ...plan,
     for_today:
       plan.for_date === new Date().toDateString(),
+    intensity: plan.intensity || "moderate",
+    planned_hours: plan.planned_hours || null,
+    effective_hours,
   };
 }
 
@@ -432,6 +455,39 @@ function attach(app) {
       ok: true,
       ...plan,
     });
+  });
+
+  // Pre-Ride fueling inputs — kept separate from POST /plan so saving an
+  // intensity/duration choice can never overwrite the planned ride or route.
+  app.post("/plan/fueling", async (req, res) => {
+    if (!auth(req, res)) return;
+
+    const existing =
+      (await getJSON("plan", null)) || {
+        ride: null,
+        for_date: null,
+        route: null,
+      };
+
+    const intensity = ["easy", "moderate", "hard"].includes(
+      req.body?.intensity
+    )
+      ? req.body.intensity
+      : existing.intensity || "moderate";
+
+    const rawHours = req.body?.planned_hours;
+    const planned_hours =
+      rawHours !== undefined && rawHours !== null && rawHours !== ""
+        ? Math.max(0, Number(rawHours)) || null
+        : existing.planned_hours || null;
+
+    existing.intensity = intensity;
+    existing.planned_hours = planned_hours;
+    existing.updated_at = new Date().toISOString();
+
+    await setJSON("plan", existing);
+
+    res.json({ ok: true, intensity, planned_hours });
   });
 
   app.get("/plan", async (req, res) => {
