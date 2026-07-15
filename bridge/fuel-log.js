@@ -90,4 +90,4 @@ function attach(app) {
   app.get('/fuel-state', async (req, res) => { if (!auth(req, res)) return;
     res.json(await fuelState()); });
 }
-module.exports = { attach, fuelState, mealsToday, logMeal, auth };
+module.exports = { attach, fuelState, mealsToday, logMeal, auth, todaysWorkoutKcal, BASE_BURN };
