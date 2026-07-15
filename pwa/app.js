@@ -145,29 +145,140 @@ async function multiPhotoBridge(pathname, files, extra){
 /* ---------------- views ---------------- */
 const V = {};
 const view = document.getElementById("view");
-function nav(){ 
-  const h = location.hash.replace("#","") || defaultView();
+/* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
+const REDIRECTS = { morning:"routine-am", day:"fuel", night:"routine-pm", agent:"plan" };
+function nav(){
+  let h = location.hash.replace("#","") || defaultView();
+  if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
   document.querySelectorAll("nav a").forEach(a=>a.classList.toggle("on", a.hash === "#"+h));
   (V[h] || V.settings)();
 }
 function defaultView(){
-  return { bedroom:"bedroom", kitchen:"day", cockpit:"morning", phone:"day" }[S.role] || "settings";
+  return { bedroom:"bedroom", kitchen:"fuel", cockpit:"plan", phone:"fuel" }[S.role] || "settings";
 }
 
-/* ---------------- MORNING ---------------- */
-V.morning = async function(){
+/* ---------------- COACH (shared conversation component) ----------------
+   Every group has its coach: same hands-free loop, different persona.
+   The persona rides in the POST body; the bridge keeps a separate thread
+   and voice for each. */
+const PERSONA_HINTS = {
+  plan:     "Planning coach — the week, the windows, tomorrow's ride.",
+  activate: "Activation coach — mobility, warm-ups, getting the body ready.",
+  train:    "Training coach — sessions, buckets, what the week owes.",
+  fuel:     "Fuel coach — the ledger, meals, prescriptions.",
+  recover:  "Recovery coach — settling the day, winding down.",
+  sleep:    "Sleep coach — sleep, HRV, the morning readiness picture.",
+  analyze:  "Analyst — weight, W/kg, trends. Ride analysis coming soon."
+};
+function coachCard(persona){
+  return `<span class="eyebrow" style="margin-top:16px;display:block">Coach</span>
+    <div class="card"><div class="small">${PERSONA_HINTS[persona]||""}</div>
+      <div class="coachLog" id="coachLog"></div>
+      <button class="ptt" id="convBtn">Start conversation</button>
+      <input id="coachTyped" placeholder="…or type here and press Enter"></div>`;
+}
+function wireCoach(persona){
+  const log = document.getElementById("coachLog");
+  const add = (who, t)=>{ const d=document.createElement("div"); d.className="turn "+who;
+    d.textContent = (who==="you"?"You: ":"Coach: ")+t; log.appendChild(d); log.scrollTop=1e6; };
+  const ask = async (text)=>{
+    add("you", text);
+    try{
+      const r = await bridge("/agent",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({text, persona})});
+      add("coach", r.reply); speak(r.reply);
+    }catch(e){ add("coach","(bridge unreachable — " + e.message + ")"); }
+  };
+  document.getElementById("coachTyped").addEventListener("keydown",e=>{
+    if(e.key==="Enter"&&e.target.value.trim()){ ask(e.target.value.trim()); e.target.value=""; }});
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = document.getElementById("convBtn");
+  if (!SR){ btn.textContent = "Voice unavailable here — type below"; btn.disabled = true; return; }
+  let rec = null, convOn = false;
+  // No browser API gives real acoustic echo cancellation between
+  // SpeechSynthesis output and SpeechRecognition input, so the mic can
+  // hear the coach's own voice through a tablet/phone speaker and
+  // mistake it for a barge-in. A Bluetooth earpiece (e.g. Shokz) mostly
+  // sidesteps this. This word-overlap check is a rough fallback filter.
+  const wordOverlap = (a,b)=>{
+    const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
+    const wb = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
+    if (!wa.length) return 0;
+    return wa.filter(w=>wb.has(w)).length / wa.length;
+  };
+  const handleUtterance = (text)=>{
+    text = text.trim(); if (!text) return;
+    if (__ttsSpeaking){
+      if (wordOverlap(text, __lastSpoken) > 0.5) return; // mic hearing the coach — ignore
+      speechSynthesis.cancel(); __ttsSpeaking = false;   // real barge-in
+    }
+    ask(text);
+  };
+  const startRec = ()=>{
+    rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = false;
+    rec.onresult = e=>{
+      for (let i = e.resultIndex; i < e.results.length; i++){
+        if (e.results[i].isFinal) handleUtterance(e.results[i][0].transcript);
+      }
+    };
+    rec.onerror = ()=>{};
+    rec.onend = ()=>{ if (convOn){ try{ rec.start(); }catch(e){} } };
+    try{ rec.start(); }catch(e){}
+  };
+  btn.onclick = ()=>{
+    convOn = !convOn;
+    if (convOn){
+      btn.textContent = "End conversation"; btn.classList.add("listening");
+      startRec();
+    } else {
+      btn.textContent = "Start conversation"; btn.classList.remove("listening");
+      if (rec){ rec.onend = null; try{ rec.stop(); }catch(e){} rec = null; }
+      speechSynthesis.cancel(); __ttsSpeaking = false;
+    }
+  };
+}
+
+function gearList(dayType, storm){
+  if (/fasted/.test(dayType)) return ["Kit laid out","Bottles filled (water only)","Edge charged","Lights charged","Tires checked","No rice balls — fasted by design"];
+  if (/Commute/.test(dayType)) return ["Car bag: work clothes + charger","Rice balls wrapped, at the door","Edge charged","Lights charged", storm?"Rain shell in the bag (storms tomorrow)":"Check sky at rollout","Tires checked"];
+  if (/HIIT/.test(dayType)) return ["Fan on desk","Towel","HR strap charged","Bottles on desk"];
+  if (/strength/.test(dayType)) return ["Nothing to pack — the bell is where it lives"];
+  return ["Bottles","Edge charged"];
+}
+
+/* ---------------- PLAN (race, weather, windows, pre-ride, tomorrow, gear) ---------------- */
+V.plan = async function(){
   const hr = new Date().getHours();
   const greet = hr<12 ? "Good morning, Harry" : hr<18 ? "Good afternoon, Harry" : "Good evening, Harry";
-  view.innerHTML = `<span class="eyebrow">Morning Mode · ${esc(S.dayType||DAY_TYPES[0])}</span>
+  const tomorrow = S.tomorrow || DAY_TYPES[0];
+  view.innerHTML = `<span class="eyebrow">Plan · ${esc(S.dayType||DAY_TYPES[0])}</span>
     <div class="greet">${greet}</div>
     <div class="card" id="race"><h4>The race</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="wx"><h4>Weather</h4><div class="small">reaching the bridge…</div></div>
-    <div class="card" id="weigh"><h4>Step on the scale</h4><div class="small">waiting for the weigh-in…</div></div>
-    <div class="card" id="sleep"><h4>Sleep</h4><div class="small">waiting for WHOOP…</div></div>
-    <div class="card"><h4>Mobility — 10 min</h4><ul class="plain" id="mob"></ul>
-      <div class="small" id="mobTimer"></div>
-      <button id="mobNext">Next</button> <button id="mobRepeat" disabled>Repeat that</button></div>
-    <div class="card"><h4>Then</h4><div class="small">30-min warm-up spin — the Agent is on the <a href="#agent">Agent tab</a>. Breakfast unlocks after weigh-in.</div></div>`;
+    <div class="card" id="preRideCard"><h4>Pre-Ride Fueling</h4>
+      <div class="row2">
+        <span><label>Intensity</label>
+          <select id="prIntensity">
+            <option value="easy">Easy</option>
+            <option value="moderate">Moderate</option>
+            <option value="hard">Hard</option>
+          </select></span>
+        <span><label>Duration (hrs)</label>
+          <input id="prHours" type="number" step="0.25" min="0" placeholder="e.g. 2.5"></span></div>
+      <div class="small" id="prSource"></div>
+      <div id="prResult" style="margin-top:8px"></div></div>
+    <div class="card"><h4>Tomorrow's ride</h4>
+      <div class="row2"><span><label>Ride</label><input id="planRide" placeholder="Woodlawn leg home"></span>
+      <span><label>Start time</label><input id="planTime" type="time" value="06:00"></span></div>
+      <label>Ride with GPS link (optional — pulls route, distance, wind bearings)</label>
+      <input id="planRwgps" placeholder="https://ridewithgps.com/routes/12345678">
+      <button class="primary" id="planSave">Save plan</button>
+      <div class="small" id="planMsg"></div></div>
+    <div class="card"><h4>Gear check — tomorrow:
+      <select id="tmw">${DAY_TYPES.map(d=>`<option ${d===tomorrow?"selected":""}>${d}</option>`).join("")}</select></h4>
+      <ul class="plain" id="gear"></ul></div>
+    ${coachCard("plan")}`;
 
   (async ()=>{
     try{
@@ -186,32 +297,10 @@ V.morning = async function(){
       } else {
         const w = await bridge("/route-weather");
         document.getElementById("wx").innerHTML = `<h4>${w.now.t}° · wind ${Math.round(w.now.w)} mph</h4>
-          <div class="small">${esc(w.now.ride)} now · evening: ${esc(w.evening.ride)}${w.stormAfterHour>0 ? " · storms possible after "+w.stormAfterHour+":00" : ""} · no ride planned — set one in Night</div>`;
+          <div class="small">${esc(w.now.ride)} now · evening: ${esc(w.evening.ride)}${w.stormAfterHour>0 ? " · storms possible after "+w.stormAfterHour+":00" : ""} · no ride planned — set one below</div>`;
       }
     }catch(e){ document.getElementById("wx").innerHTML = `<h4>Weather</h4><div class="small">bridge unreachable — check settings</div>`; }
   })();
-
-  let announced = sessionStorage.getItem("wkg-announced");
-  let __ftp = 265; // default; overwritten by /profile fetch below
-  bridge("/profile").then(p=>{ if(p&&p.ftp) __ftp=p.ftp; }).catch(()=>{});
-  const pollWeight = async ()=>{
-    try{
-      const t = await bridge("/weight/latest");
-      if (t.latest){
-        const wkg = (__ftp/(t.latest.lb/2.20462)).toFixed(2);
-        document.getElementById("weigh").innerHTML =
-          `<h4>${t.latest.lb} lb ${t.latest.logged_today?"· today ✓":"· yesterday"}</h4>
-           <div class="small">7-day trend ${t.ma7_lb ?? "—"} · ${t.week_change_lb ?? "—"} this week</div>
-           <div class="small"><b>FTP ${__ftp}W · ${wkg} W/kg</b></div>`;
-        if (t.latest.logged_today && !announced && S.role==="cockpit"){
-          speak(`${wkg} watts per kilo. FTP ${__ftp}.` + (t.week_change_lb<0 ? " The weight is doing the work this week." : ""));
-          sessionStorage.setItem("wkg-announced","1"); announced="1";
-        }
-      }
-    }catch(e){ document.getElementById("weigh").innerHTML =
-      `<h4>Weigh-in</h4><div class="small">bridge unreachable — <a href="#day">log manually</a></div>`; }
-  };
-  pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#morning") clearInterval(wp); else pollWeight(); }, 10000);
 
   bridge("/race").then(r=>{
     const rem = r.remaining || {}, done = r.done || {};
@@ -232,15 +321,120 @@ V.morning = async function(){
       raceEl.parentNode.insertBefore(card, raceEl.nextSibling);
     }
   }).catch(()=>{});
-  bridge("/sleep/latest").then(s=>{
-    const el = document.getElementById("sleep");
-    if (s.sleep) el.innerHTML = `<h4>Slept ${s.sleep.performance ?? "—"} · ${s.sleep.hours ?? "—"} h</h4>
-      <div class="small">recovery ${s.recovery?.score ?? "—"} · HRV ${s.recovery?.hrv ?? "—"} · RHR ${s.recovery?.rhr ?? "—"}</div>`;
-    else el.innerHTML = `<h4>Sleep</h4><div class="small">no WHOOP data yet — connect at /whoop/auth on the bridge</div>`;
-  }).catch(()=>{});
 
-  // Guided mobility, coach-paced: describe the move, then wait for you.
-  // Advance by voice ("ready", "next", "done") or the button.
+  /* ---- Pre-Ride Fueling: rice balls needed from batches, by planned duration + intensity ----
+     Carb rates are on-bike fueling targets (g of carb per hour), not kcal —
+     carbs are what the body can actually absorb and use mid-ride. Ranges are
+     deliberately wide since "fuel the work" doctrine cares about matching
+     effort, not hitting one exact number. */
+  const CARB_RATE_G_PER_HR = { easy: [30, 40], moderate: [55, 70], hard: [75, 90] };
+  let __preRideBatches = [];
+
+  const preRideCompute = (hours, tier)=>{
+    const [lo, hi] = CARB_RATE_G_PER_HR[tier] || CARB_RATE_G_PER_HR.moderate;
+    const carbsLo = Math.round(hours * lo), carbsHi = Math.round(hours * hi);
+    const rows = __preRideBatches
+      .filter(b => b.scoop_g && b.total_g)
+      .map(b=>{
+        const frac = b.scoop_g / b.total_g;
+        const carbsPerBall = b.totals.carbs_g * frac;
+        const needLo = carbsPerBall > 0 ? Math.ceil(carbsLo / carbsPerBall) : null;
+        const needHi = carbsPerBall > 0 ? Math.ceil(carbsHi / carbsPerBall) : null;
+        return { slot: b.slot, needLo, needHi, carbsPerBall, available: b.scoops_remaining };
+      });
+    return { carbsLo, carbsHi, rows };
+  };
+
+  const renderPreRide = ()=>{
+    const hours = +document.getElementById("prHours").value || 0;
+    const tier = document.getElementById("prIntensity").value;
+    const out = document.getElementById("prResult");
+    if (!hours){ out.innerHTML = `<div class="small">Enter a duration to see rice balls needed.</div>`; return; }
+    const { carbsLo, carbsHi, rows } = preRideCompute(hours, tier);
+    if (!rows.length){
+      out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs for the ride. No calibrated batch yet \u2014 calibrate a scoop to convert this to a rice ball count.</div>`;
+      return;
+    }
+    out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs over ${hours}h at ${tier} intensity.</div>
+      <ul class="plain">${rows.map(r=>{
+        const short = r.available != null && r.needLo != null && r.available < r.needLo;
+        return `<li><span>Batch ${r.slot} \u00b7 ${r.carbsPerBall.toFixed(1)}g carbs/ball</span>
+          <b>${r.needLo}\u2013${r.needHi} balls${short ? " \u26a0 only " + r.available + " ready" : ""}</b></li>`;
+      }).join("")}</ul>`;
+  };
+
+  const saveFueling = async ()=>{
+    try{
+      await bridge("/plan/fueling", {method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({
+          intensity: document.getElementById("prIntensity").value,
+          planned_hours: +document.getElementById("prHours").value || null
+        })});
+    }catch(e){ /* best effort \u2014 local calc still works if the bridge is unreachable */ }
+  };
+
+  const refreshPreRide = async ()=>{
+    const src = document.getElementById("prSource");
+    try{
+      const plan = await bridge("/plan");
+      const b = await bridge("/batches");
+      __preRideBatches = b.batches || [];
+      const intensitySel = document.getElementById("prIntensity");
+      const hoursInput = document.getElementById("prHours");
+      if (plan.intensity) intensitySel.value = plan.intensity;
+      if (!hoursInput.value && plan.effective_hours) hoursInput.value = plan.effective_hours;
+      if (plan.planned_hours) src.textContent = `Duration set manually: ${plan.planned_hours}h.`;
+      else if (plan.route && plan.route.estimated_hours) src.textContent = `Estimated from planned route "${plan.ride}" \u2014 ${plan.route.miles}mi, ${plan.route.climb_ft}ft climb (~${plan.route.estimated_hours}h, rough estimate \u2014 adjust freely).`;
+      else src.textContent = `No planned ride on file \u2014 enter hours manually.`;
+      renderPreRide();
+    }catch(e){ src.textContent = "bridge unreachable"; }
+  };
+  document.getElementById("prIntensity").onchange = ()=>{ renderPreRide(); saveFueling(); };
+  document.getElementById("prHours").oninput = renderPreRide;
+  document.getElementById("prHours").onchange = saveFueling;
+  refreshPreRide();
+
+  let storm = false;
+  bridge("/route-weather").then(w=>{ storm = w.stormAfterHour>0; drawGear(); }).catch(()=>{});
+  const drawGear = ()=>{
+    const done = JSON.parse(localStorage.getItem("gear-"+new Date().toDateString())||"[]");
+    const items = gearList(document.getElementById("tmw").value, storm);
+    document.getElementById("gear").innerHTML = items.map((g,i)=>
+      `<li class="${done.includes(i)?"done":""}" data-i="${i}"><span>${g}</span><span>${done.includes(i)?"✓":"tap"}</span></li>`).join("");
+    document.querySelectorAll("#gear li").forEach(li=>li.onclick=()=>{
+      const i=+li.dataset.i; const d=JSON.parse(localStorage.getItem("gear-"+new Date().toDateString())||"[]");
+      if(!d.includes(i)) d.push(i); localStorage.setItem("gear-"+new Date().toDateString(),JSON.stringify(d)); drawGear(); });
+  };
+  document.getElementById("tmw").onchange = e=>{ S.tomorrow=e.target.value; saveS(); drawGear(); };
+  drawGear();
+  bridge("/plan").then(p=>{ if(p.ride){ document.getElementById("planRide").value=p.ride;
+    document.getElementById("planTime").value=p.start; } }).catch(()=>{});
+  document.getElementById("planSave").onclick = async ()=>{
+    try{
+      const p = await bridge("/plan",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ride:document.getElementById("planRide").value||"Ride",
+                             start:document.getElementById("planTime").value,
+                             rwgps:document.getElementById("planRwgps").value||null})});
+      let msg = "Planned: "+p.ride+" at "+p.start;
+      if (p.route) msg += " · "+p.route.miles+" mi, "+p.route.climb_ft+" ft — wind will be read against the real route.";
+      else if (p.route_error) msg += " · route not pulled ("+p.route_error+") — plan saved anyway.";
+      else msg += " — Plan will brief it in the morning.";
+      document.getElementById("planMsg").textContent = msg;
+    }catch(e){ document.getElementById("planMsg").textContent = "bridge unreachable"; }
+  };
+  wireCoach("plan");
+};
+
+/* ---------------- ACTIVATE (guided mobility) ---------------- */
+V.activate = async function(){
+  view.innerHTML = `<span class="eyebrow">Activate</span>
+    <div class="card"><h4>Mobility — 10 min</h4>
+      <div class="small">Guided flow, coach-paced. Morning: normal pace. Evening: same flow, easy pace.</div>
+      <ul class="plain" id="mob"></ul>
+      <div class="small" id="mobTimer"></div>
+      <button id="mobNext">Next</button> <button id="mobRepeat" disabled>Repeat that</button></div>
+    ${coachCard("activate")}`;
+
   const moves = [
     {n:"Cat Cow", d:"On all fours. Arch your back up like an angry cat, then drop the belly and lift the chest. Move with your breath, about 15 slow reps.", s:30},
     {n:"Cobra", d:"Lie face down, hands under shoulders. Press the chest up, hips stay heavy on the floor. Hold and breathe, about 30 seconds — this is the extension your spine wants after the bike.", s:30},
@@ -255,7 +449,9 @@ V.morning = async function(){
   ];
   const TRANSITION_S = 30;
   let mi = -1, mobRec = null, mobTimerId = null, mobRemaining = 0, mobPhase = "idle"; // idle | move | rest | done
-  const mobDone = ()=> localStorage.setItem("mob-am-"+new Date().toDateString(),"1");
+  // Same flow serves both routines: before 3pm it checks off the Morning
+  // Routine's mobility step, after 3pm the Nighttime Routine's.
+  const mobDone = ()=> localStorage.setItem((new Date().getHours()<15?"mob-am-":"mob-pm-")+new Date().toDateString(),"1");
   const clearMobTimer = ()=>{ if (mobTimerId){ clearInterval(mobTimerId); mobTimerId = null; }
     const el = document.getElementById("mobTimer"); if (el) el.textContent = ""; };
   const startMobTimer = (seconds, onDone)=>{
@@ -339,10 +535,35 @@ V.morning = async function(){
       if (m.s) startMobTimer(m.s, ()=> startTransition());
     }
   };
+
+  wireCoach("activate");
 };
 
-/* ---------------- DAY (ledger + logging + Energy Bank + Food Log + Batches) ---------------- */
-V.day = async function(){
+/* ---------------- TRAIN (strength · ride · trainer ride) ---------------- */
+V.train = async function(){
+  view.innerHTML = `<span class="eyebrow">Train · ${esc(S.dayType||DAY_TYPES[0])}</span>
+    <div class="card" id="trainRace"><h4>This week</h4><div class="small">reaching the bridge…</div></div>
+    <div class="card"><h4>Strength</h4>
+      <div class="small">70 lb kettlebell · Bowflex 5–52.5. S&C programming lands here — for now, tell the coach below when a session is done and it drains the week's strength bucket.</div></div>
+    <div class="card"><h4>Ride — outdoor</h4>
+      <div class="small">The Garmin Edge 1050 owns the in-ride experience. Pre-flight lives in Plan; post-ride sync lands in Fuel (workout debt) and, soon, Analyze.</div></div>
+    <div class="card"><h4>Trainer ride — indoor</h4>
+      <div class="small">Zwift owns execution; this becomes the cockpit companion — live power/cadence/HR decoupling via ANT+ (COOSPO + Kickr + H10), time-based fuel prompts. Coming with the analysis build.</div></div>
+    ${coachCard("train")}`;
+  bridge("/race").then(r=>{
+    const rem = r.remaining || {}, done = r.done || {};
+    const n = (v)=> (v==null ? 0 : v);
+    document.getElementById("trainRace").innerHTML =
+      `<h4>${(r.race&&r.race.name)||"Race"} · ${n(r.weeks_out)} weeks out · ${r.phase||""}</h4>
+       <div class="small">Still owes: <b>${n(rem.aerobic_h)}h</b> aerobic · <b>${n(rem.hi_min)}min</b> hard · <b>${n(rem.strength)}</b> strength
+       <br>(done: ${n(done.aerobic_h)}h / ${n(done.hi_min)}min / ${n(done.strength)})</div>`;
+  }).catch(()=>{ document.getElementById("trainRace").innerHTML = `<h4>This week</h4><div class="small">bridge unreachable</div>`; });
+  wireCoach("train");
+};
+
+/* ---------------- FUEL (the ledger + all logging) ---------------- */
+V.fuel = async function(){
+
   view.innerHTML = `<span class="eyebrow">The Ledger</span>
     <div class="card" id="band"><h4>Balance</h4><div class="small">reaching the bridge…</div></div>
 
@@ -362,19 +583,6 @@ V.day = async function(){
       <button class="primary" id="mLog">Log</button>
       <button id="favBowl">Post-ride bowl (750)</button>
       <div class="small" id="mMsg"></div></div>
-
-    <div class="card" id="preRideCard"><h4>Pre-Ride Fueling</h4>
-      <div class="row2">
-        <span><label>Intensity</label>
-          <select id="prIntensity">
-            <option value="easy">Easy</option>
-            <option value="moderate">Moderate</option>
-            <option value="hard">Hard</option>
-          </select></span>
-        <span><label>Duration (hrs)</label>
-          <input id="prHours" type="number" step="0.25" min="0" placeholder="e.g. 2.5"></span></div>
-      <div class="small" id="prSource"></div>
-      <div id="prResult" style="margin-top:8px"></div></div>
 
     <span class="eyebrow">Batches</span>
     <div id="batchWrap"></div>
@@ -502,77 +710,7 @@ V.day = async function(){
     foodBtn.disabled = false; foodBtn.textContent = "Analyze";
   };
 
-  /* ---- Pre-Ride Fueling: rice balls needed from batches, by planned duration + intensity ----
-     Carb rates are on-bike fueling targets (g of carb per hour), not kcal —
-     carbs are what the body can actually absorb and use mid-ride. Ranges are
-     deliberately wide since "fuel the work" doctrine cares about matching
-     effort, not hitting one exact number. */
-  const CARB_RATE_G_PER_HR = { easy: [30, 40], moderate: [55, 70], hard: [75, 90] };
-  let __preRideBatches = [];
 
-  const preRideCompute = (hours, tier)=>{
-    const [lo, hi] = CARB_RATE_G_PER_HR[tier] || CARB_RATE_G_PER_HR.moderate;
-    const carbsLo = Math.round(hours * lo), carbsHi = Math.round(hours * hi);
-    const rows = __preRideBatches
-      .filter(b => b.scoop_g && b.total_g)
-      .map(b=>{
-        const frac = b.scoop_g / b.total_g;
-        const carbsPerBall = b.totals.carbs_g * frac;
-        const needLo = carbsPerBall > 0 ? Math.ceil(carbsLo / carbsPerBall) : null;
-        const needHi = carbsPerBall > 0 ? Math.ceil(carbsHi / carbsPerBall) : null;
-        return { slot: b.slot, needLo, needHi, carbsPerBall, available: b.scoops_remaining };
-      });
-    return { carbsLo, carbsHi, rows };
-  };
-
-  const renderPreRide = ()=>{
-    const hours = +document.getElementById("prHours").value || 0;
-    const tier = document.getElementById("prIntensity").value;
-    const out = document.getElementById("prResult");
-    if (!hours){ out.innerHTML = `<div class="small">Enter a duration to see rice balls needed.</div>`; return; }
-    const { carbsLo, carbsHi, rows } = preRideCompute(hours, tier);
-    if (!rows.length){
-      out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs for the ride. No calibrated batch yet \u2014 calibrate a scoop to convert this to a rice ball count.</div>`;
-      return;
-    }
-    out.innerHTML = `<div class="small">Target: ${carbsLo}\u2013${carbsHi}g carbs over ${hours}h at ${tier} intensity.</div>
-      <ul class="plain">${rows.map(r=>{
-        const short = r.available != null && r.needLo != null && r.available < r.needLo;
-        return `<li><span>Batch ${r.slot} \u00b7 ${r.carbsPerBall.toFixed(1)}g carbs/ball</span>
-          <b>${r.needLo}\u2013${r.needHi} balls${short ? " \u26a0 only " + r.available + " ready" : ""}</b></li>`;
-      }).join("")}</ul>`;
-  };
-
-  const saveFueling = async ()=>{
-    try{
-      await bridge("/plan/fueling", {method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({
-          intensity: document.getElementById("prIntensity").value,
-          planned_hours: +document.getElementById("prHours").value || null
-        })});
-    }catch(e){ /* best effort \u2014 local calc still works if the bridge is unreachable */ }
-  };
-
-  const refreshPreRide = async ()=>{
-    const src = document.getElementById("prSource");
-    try{
-      const plan = await bridge("/plan");
-      const b = await bridge("/batches");
-      __preRideBatches = b.batches || [];
-      const intensitySel = document.getElementById("prIntensity");
-      const hoursInput = document.getElementById("prHours");
-      if (plan.intensity) intensitySel.value = plan.intensity;
-      if (!hoursInput.value && plan.effective_hours) hoursInput.value = plan.effective_hours;
-      if (plan.planned_hours) src.textContent = `Duration set manually: ${plan.planned_hours}h.`;
-      else if (plan.route && plan.route.estimated_hours) src.textContent = `Estimated from planned route "${plan.ride}" \u2014 ${plan.route.miles}mi, ${plan.route.climb_ft}ft climb (~${plan.route.estimated_hours}h, rough estimate \u2014 adjust freely).`;
-      else src.textContent = `No planned ride on file \u2014 enter hours manually.`;
-      renderPreRide();
-    }catch(e){ src.textContent = "bridge unreachable"; }
-  };
-  document.getElementById("prIntensity").onchange = ()=>{ renderPreRide(); saveFueling(); };
-  document.getElementById("prHours").oninput = renderPreRide;
-  document.getElementById("prHours").onchange = saveFueling;
-  refreshPreRide();
 
   /* ---- Batches: 3 fixed slots, cumulative ingredient photos + scoop calibration ---- */
   const batchCard = (b)=>{
@@ -668,39 +806,22 @@ V.day = async function(){
     });
   };
   refreshBatches();
+
+  const coachWrap = document.createElement("div");
+  coachWrap.innerHTML = coachCard("fuel");
+  view.appendChild(coachWrap);
+  wireCoach("fuel");
 };
 
-/* ---------------- NIGHT (routine, podcast, gear, close-out, alarm) ---------------- */
-function gearList(dayType, storm){
-  if (/fasted/.test(dayType)) return ["Kit laid out","Bottles filled (water only)","Edge charged","Lights charged","Tires checked","No rice balls — fasted by design"];
-  if (/Commute/.test(dayType)) return ["Car bag: work clothes + charger","Rice balls wrapped, at the door","Edge charged","Lights charged", storm?"Rain shell in the bag (storms tomorrow)":"Check sky at rollout","Tires checked"];
-  if (/HIIT/.test(dayType)) return ["Fan on desk","Towel","HR strap charged","Bottles on desk"];
-  if (/strength/.test(dayType)) return ["Nothing to pack — the bell is where it lives"];
-  return ["Bottles","Edge charged"];
-}
-V.night = async function(){
-  const tomorrow = S.tomorrow || DAY_TYPES[0];
-  view.innerHTML = `<span class="eyebrow">Nighttime routine</span>
-    <div class="card"><h4>Evening mobility — 10 min</h4><div class="small">same flow, easy pace</div>
-      <h4 style="margin-top:10px">Podcast</h4><div id="pods" class="small">reaching the bridge…</div>
+/* ---------------- RECOVER (wind-down, settle) ---------------- */
+V.recover = async function(){
+  view.innerHTML = `<span class="eyebrow">Recover</span>
+    <div class="card"><h4>Podcast</h4><div id="pods" class="small">reaching the bridge…</div>
       <audio id="player" controls style="width:100%;margin-top:8px" hidden></audio></div>
     <div class="card"><h4>Shower</h4><div class="small">~90 min before bed helps sleep onset</div></div>
-    <div class="card"><h4>Tomorrow's ride</h4>
-      <div class="row2"><span><label>Ride</label><input id="planRide" placeholder="Woodlawn leg home"></span>
-      <span><label>Start time</label><input id="planTime" type="time" value="06:00"></span></div>
-      <label>Ride with GPS link (optional — pulls route, distance, wind bearings)</label>
-      <input id="planRwgps" placeholder="https://ridewithgps.com/routes/12345678">
-      <button class="primary" id="planSave">Save plan</button>
-      <div class="small" id="planMsg"></div></div>
-    <div class="card"><h4>Gear check — tomorrow: 
-      <select id="tmw">${DAY_TYPES.map(d=>`<option ${d===tomorrow?"selected":""}>${d}</option>`).join("")}</select></h4>
-      <ul class="plain" id="gear"></ul></div>
     <div class="card"><h4>Close out</h4><div id="settle" class="small">computing…</div>
       <button class="primary" id="close">Settle the day</button></div>
-    <div class="card"><h4>Alarm</h4>
-      <input id="alarmT" type="time" value="${S.alarm||"05:30"}">
-      <button id="alarmSet">Set</button>
-      <div class="small" id="alarmMsg">${S.alarm?("Armed for "+S.alarm+" (keep this tablet open — kiosk mode)"):""}</div></div>`;
+    ${coachCard("recover")}`;
 
   bridge("/podcasts/list").then(p=>{
     const el = document.getElementById("pods");
@@ -712,35 +833,6 @@ V.night = async function(){
     });
   }).catch(()=>{ document.getElementById("pods").textContent = "bridge unreachable"; });
 
-  let storm = false;
-  bridge("/route-weather").then(w=>{ storm = w.stormAfterHour>0; drawGear(); }).catch(()=>{});
-  const drawGear = ()=>{
-    const done = JSON.parse(localStorage.getItem("gear-"+new Date().toDateString())||"[]");
-    const items = gearList(document.getElementById("tmw").value, storm);
-    document.getElementById("gear").innerHTML = items.map((g,i)=>
-      `<li class="${done.includes(i)?"done":""}" data-i="${i}"><span>${g}</span><span>${done.includes(i)?"✓":"tap"}</span></li>`).join("");
-    document.querySelectorAll("#gear li").forEach(li=>li.onclick=()=>{
-      const i=+li.dataset.i; const d=JSON.parse(localStorage.getItem("gear-"+new Date().toDateString())||"[]");
-      if(!d.includes(i)) d.push(i); localStorage.setItem("gear-"+new Date().toDateString(),JSON.stringify(d)); drawGear(); });
-  };
-  document.getElementById("tmw").onchange = e=>{ S.tomorrow=e.target.value; saveS(); drawGear(); };
-  drawGear();
-  bridge("/plan").then(p=>{ if(p.ride){ document.getElementById("planRide").value=p.ride;
-    document.getElementById("planTime").value=p.start; } }).catch(()=>{});
-  document.getElementById("planSave").onclick = async ()=>{
-    try{
-      const p = await bridge("/plan",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({ride:document.getElementById("planRide").value||"Ride",
-                             start:document.getElementById("planTime").value,
-                             rwgps:document.getElementById("planRwgps").value||null})});
-      let msg = "Planned: "+p.ride+" at "+p.start;
-      if (p.route) msg += " · "+p.route.miles+" mi, "+p.route.climb_ft+" ft — wind will be read against the real route.";
-      else if (p.route_error) msg += " · route not pulled ("+p.route_error+") — plan saved anyway.";
-      else msg += " — Morning will brief it.";
-      document.getElementById("planMsg").textContent = msg;
-    }catch(e){ document.getElementById("planMsg").textContent = "bridge unreachable"; }
-  };
-
   bridge("/fuel-state").then(st=>{
     const b = st.balance_kcal;
     document.getElementById("settle").innerHTML =
@@ -751,92 +843,165 @@ V.night = async function(){
     try{
       const st = await bridge("/fuel-state");
       await bridge("/agent/closeout",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({summary:`Settled ${st.balance_kcal} kcal, ${st.meals_today} meals. Tomorrow: ${document.getElementById("tmw").value}.`})});
+        body:JSON.stringify({summary:`Settled ${st.balance_kcal} kcal, ${st.meals_today} meals. Tomorrow: ${S.tomorrow||DAY_TYPES[0]}.`})});
       document.getElementById("settle").innerHTML += " · <b>settled ✓</b>";
     }catch(e){}
   };
+  wireCoach("recover");
+};
+
+/* ---------------- SLEEP (WHOOP, alarm, bedside) ---------------- */
+V.sleep = async function(){
+  view.innerHTML = `<span class="eyebrow">Sleep</span>
+    <div class="card" id="sleepCard"><h4>Sleep</h4><div class="small">waiting for WHOOP…</div></div>
+    <div class="card"><h4>Alarm</h4>
+      <input id="alarmT" type="time" value="${S.alarm||"05:30"}">
+      <button id="alarmSet">Set</button>
+      <div class="small" id="alarmMsg">${S.alarm?("Armed for "+S.alarm+" (keep this tablet open — kiosk mode)"):""}</div></div>
+    <div class="card"><h4>Bedside clock</h4>
+      <div class="small">Full-screen clock that watches for the morning WHOOP sync, then rolls into the Morning Routine.</div>
+      <button id="toBedroom">Open bedside clock</button></div>
+    ${coachCard("sleep")}`;
+  bridge("/sleep/latest").then(s=>{
+    const el = document.getElementById("sleepCard");
+    if (s.sleep) el.innerHTML = `<h4>Slept ${s.sleep.performance ?? "—"} · ${s.sleep.hours ?? "—"} h</h4>
+      <div class="small">recovery ${s.recovery?.score ?? "—"} · HRV ${s.recovery?.hrv ?? "—"} · RHR ${s.recovery?.rhr ?? "—"}</div>`;
+    else el.innerHTML = `<h4>Sleep</h4><div class="small">no WHOOP data yet — connect at /whoop/auth on the bridge</div>`;
+  }).catch(()=>{});
   document.getElementById("alarmSet").onclick = ()=>{
     S.alarm = document.getElementById("alarmT").value; saveS();
     document.getElementById("alarmMsg").textContent = "Armed for " + S.alarm + " (keep this tablet open — kiosk mode)";
   };
+  document.getElementById("toBedroom").onclick = ()=>{ location.hash = "#bedroom"; };
+  wireCoach("sleep");
 };
 
-/* ---------------- AGENT (hands-free conversation) ---------------- */
-V.agent = function(){
-  view.innerHTML = `<span class="eyebrow">The Way Agent</span>
-    <div class="card" id="agentLog"><div class="small">Tap Start, then just talk — no need to hold anything. Talking cuts the coach off mid-sentence if you need to. Tap End when you're done.</div></div>
-    <button class="ptt" id="convBtn">Start conversation</button>
-    <input id="typed" placeholder="…or type here and press Enter">`;
-  const log = document.getElementById("agentLog");
-  const add = (who, t)=>{ const d=document.createElement("div"); d.className="turn "+who;
-    d.textContent = (who==="you"?"You: ":"Coach: ")+t; log.appendChild(d); log.scrollTop=1e6; };
-  const ask = async (text)=>{
-    add("you", text);
+/* ---------------- ANALYZE (weigh-in, W/kg — ride analysis coming) ---------------- */
+V.analyze = async function(){
+  view.innerHTML = `<span class="eyebrow">Analyze</span>
+    <div class="card" id="weigh"><h4>Step on the scale</h4><div class="small">waiting for the weigh-in…</div></div>
+    <div class="card"><h4>Ride analysis</h4>
+      <div class="small">Coming with the analysis build: post-ride session verdicts (NP · IF · TSS · decoupling · interval grading), power duration curve with "closest signature to a breakthrough," W&#8242; balance, efficiency trends, and FTP estimation. Strava streams in, coaching out.</div></div>
+    ${coachCard("analyze")}`;
+
+  let announced = sessionStorage.getItem("wkg-announced");
+  let __ftp = 195; // default; overwritten by /profile fetch below
+  bridge("/profile").then(p=>{ if(p&&p.ftp) __ftp=p.ftp; }).catch(()=>{});
+  const pollWeight = async ()=>{
+    try{
+      const t = await bridge("/weight/latest");
+      if (t.latest){
+        const wkg = (__ftp/(t.latest.lb/2.20462)).toFixed(2);
+        document.getElementById("weigh").innerHTML =
+          `<h4>${t.latest.lb} lb ${t.latest.logged_today?"· today ✓":"· yesterday"}</h4>
+           <div class="small">7-day trend ${t.ma7_lb ?? "—"} · ${t.week_change_lb ?? "—"} this week</div>
+           <div class="small"><b>FTP ${__ftp}W · ${wkg} W/kg</b></div>`;
+        if (t.latest.logged_today && !announced && S.role==="cockpit"){
+          speak(`${wkg} watts per kilo. FTP ${__ftp}.` + (t.week_change_lb<0 ? " The weight is doing the work this week." : ""));
+          sessionStorage.setItem("wkg-announced","1"); announced="1";
+        }
+      }
+    }catch(e){ document.getElementById("weigh").innerHTML =
+      `<h4>Weigh-in</h4><div class="small">bridge unreachable — <a href="#fuel">log manually</a></div>`; }
+  };
+  pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#analyze") clearInterval(wp); else pollWeight(); }, 10000);
+  wireCoach("analyze");
+};
+
+/* ---------------- ROUTINES (guided sequences across the groups) ----------------
+   Groups are the library; routines are the playlists. Progress is per-day.
+   Steps auto-check where a real signal exists (weigh-in, mobility);
+   the rest are tap-to-check. */
+function routineState(key){
+  return JSON.parse(localStorage.getItem(key+"-"+new Date().toDateString())||"{}");
+}
+function saveRoutine(key, st){
+  localStorage.setItem(key+"-"+new Date().toDateString(), JSON.stringify(st));
+}
+function drawRoutine(listEl, steps, st, onTap){
+  listEl.innerHTML = steps.map((s,i)=>{
+    const done = s.auto ? s.done : !!st[i];
+    const lock = s.locked ? ` <span class="lock">🔒 ${s.lockNote}</span>` : "";
+    const right = done ? "✓" : (s.auto ? "auto" : "tap");
+    return `<li class="${done?"done":""}" data-i="${i}">
+      <span>${s.label}${s.link?` — <a href="${s.link}">open</a>`:""}${lock}</span><span>${right}</span></li>`;
+  }).join("");
+  listEl.querySelectorAll("li").forEach(li=>li.onclick=(e)=>{
+    if (e.target.tagName === "A") return; // let links navigate
+    const i=+li.dataset.i;
+    if (steps[i].auto || steps[i].locked) return;
+    onTap(i);
+  });
+}
+
+V["routine-am"] = async function(){
+  view.innerHTML = `<span class="eyebrow">☀ Morning Routine</span>
+    <div class="greet">Good morning, Harry</div>
+    <div class="card"><h4>The sequence</h4><ul class="plain steps" id="amSteps"></ul></div>
+    <div class="card"><h4>Wake report</h4>
+      <div class="small">The all-agent daily briefing: sleep, the day's plan, what the week owes.</div>
+      <button class="primary" id="wakeBtn">Play wake report</button>
+      <div class="small" id="wakeOut"></div></div>`;
+
+  let weighDone = false;
+  const steps = [
+    { label:"Wake report", auto:false },
+    { label:"Weigh-in", auto:true, done:false, link:"#analyze" },
+    { label:"Mobility", auto:true, done: !!localStorage.getItem("mob-am-"+new Date().toDateString()), link:"#activate" },
+    { label:"30-min warm-up spin", auto:false, link:"#train" },
+    { label:"Breakfast", auto:false, link:"#fuel", locked:true, lockNote:"unlocks after weigh-in" }
+  ];
+  const st = routineState("routine-am");
+  const listEl = document.getElementById("amSteps");
+  const redraw = ()=>{
+    steps[4].locked = !weighDone;
+    drawRoutine(listEl, steps, st, (i)=>{ st[i] = !st[i]; saveRoutine("routine-am", st); redraw(); });
+  };
+  redraw();
+  bridge("/weight/latest").then(t=>{
+    weighDone = !!(t.latest && t.latest.logged_today);
+    steps[1].done = weighDone; redraw();
+  }).catch(()=>{});
+
+  document.getElementById("wakeBtn").onclick = async ()=>{
+    const btn = document.getElementById("wakeBtn");
+    btn.disabled = true; btn.textContent = "Thinking…";
     try{
       const r = await bridge("/agent",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text})});
-      add("coach", r.reply); speak(r.reply);
-    }catch(e){ add("coach","(bridge unreachable — " + e.message + ")"); }
-  };
-  document.getElementById("typed").addEventListener("keydown",e=>{
-    if(e.key==="Enter"&&e.target.value.trim()){ ask(e.target.value.trim()); e.target.value=""; }});
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const btn = document.getElementById("convBtn");
-  if (!SR){ btn.textContent = "Voice unavailable here — type below"; btn.disabled = true; return; }
-
-  let rec = null, convOn = false;
-
-  // No browser API gives real acoustic echo cancellation between
-  // SpeechSynthesis output and SpeechRecognition input, so the mic can
-  // hear the coach's own voice through a tablet/phone speaker and
-  // mistake it for a barge-in. A Bluetooth earpiece (e.g. Shokz) mostly
-  // sidesteps this since the coach's voice never reaches open air. This
-  // word-overlap check is a rough fallback filter for speaker playback —
-  // not perfect, but catches most self-hearing.
-  const wordOverlap = (a,b)=>{
-    const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
-    const wb = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
-    if (!wa.length) return 0;
-    return wa.filter(w=>wb.has(w)).length / wa.length;
-  };
-
-  const handleUtterance = (text)=>{
-    text = text.trim(); if (!text) return;
-    if (__ttsSpeaking){
-      if (wordOverlap(text, __lastSpoken) > 0.5) return; // looks like the mic hearing the coach — ignore
-      speechSynthesis.cancel(); __ttsSpeaking = false;   // real barge-in — cut the coach off
-    }
-    ask(text);
-  };
-
-  const startRec = ()=>{
-    rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = false;
-    rec.onresult = e=>{
-      for (let i = e.resultIndex; i < e.results.length; i++){
-        if (e.results[i].isFinal) handleUtterance(e.results[i][0].transcript);
-      }
-    };
-    rec.onerror = ()=>{}; // e.g. no-speech timeouts — onend below restarts while convOn
-    rec.onend = ()=>{ if (convOn){ try{ rec.start(); }catch(e){} } };
-    try{ rec.start(); }catch(e){}
-  };
-
-  btn.onclick = ()=>{
-    convOn = !convOn;
-    if (convOn){
-      btn.textContent = "End conversation"; btn.classList.add("listening");
-      startRec();
-    } else {
-      btn.textContent = "Start conversation"; btn.classList.remove("listening");
-      if (rec){ rec.onend = null; try{ rec.stop(); }catch(e){} rec = null; }
-      speechSynthesis.cancel(); __ttsSpeaking = false;
-    }
+        body:JSON.stringify({text:"Give me the morning wake report: sleep and recovery, today's plan and weather, what the week still owes, and the one thing to focus on. Keep it tight.", persona:"plan"})});
+      document.getElementById("wakeOut").textContent = r.reply; speak(r.reply);
+      st[0] = true; saveRoutine("routine-am", st); redraw();
+    }catch(e){ document.getElementById("wakeOut").textContent = "bridge unreachable — " + e.message; }
+    btn.disabled = false; btn.textContent = "Play wake report";
   };
 };
 
-/* ---------------- SETTINGS ---------------- */
+V["routine-pm"] = async function(){
+  view.innerHTML = `<span class="eyebrow">☾ Nighttime Routine</span>
+    <div class="card"><h4>The sequence</h4><ul class="plain steps" id="pmSteps"></ul></div>
+    <div class="card"><h4>Tonight's settle</h4><div id="pmSettle" class="small">computing…</div></div>`;
+  const steps = [
+    { label:"Evening mobility — easy pace", auto:true, done: !!localStorage.getItem("mob-pm-"+new Date().toDateString()), link:"#activate" },
+    { label:"Podcast + shower wind-down", auto:false, link:"#recover" },
+    { label:"Settle the day", auto:false, link:"#recover" },
+    { label:"Tomorrow's ride + gear check", auto:false, link:"#plan" },
+    { label:"Set the alarm", auto:false, link:"#sleep" },
+    { label:"Bedside clock on", auto:false, link:"#bedroom" }
+  ];
+  const st = routineState("routine-pm");
+  const listEl = document.getElementById("pmSteps");
+  const redraw = ()=> drawRoutine(listEl, steps, st, (i)=>{ st[i] = !st[i]; saveRoutine("routine-pm", st); redraw(); });
+  redraw();
+  bridge("/fuel-state").then(s=>{
+    const b = s.balance_kcal;
+    document.getElementById("pmSettle").innerHTML =
+      `Day at <span class="bandpill" style="background:${bandZone(b).color}">${bandZone(b).name} · ${b}</span> · meals ${s.meals_today}`;
+  }).catch(()=>{ document.getElementById("pmSettle").textContent = "bridge unreachable"; });
+};
+
+/* ---------------- BEDSIDE CLOCK ---------------- */
 V.bedroom = function(){
+
   // Phase 1: full-screen clock, polling WHOOP every 60s.
   // When recovery arrives (logged_today or fresh sync), transition to morning.
   let __bedPoll = null;
@@ -875,7 +1040,7 @@ V.bedroom = function(){
     // fade clock out
     const c = document.getElementById("bedClock");
     if(c){ c.style.transition='opacity 1.5s'; c.style.opacity='0';
-      setTimeout(()=>{ V.morning(); }, 1600); }
+      setTimeout(()=>{ location.hash="#routine-am"; nav(); }, 1600); }
     // speak the greeting
     const score = rec && rec.score;
     const color = score>=67?'green':score>=34?'yellow':'red';
@@ -900,6 +1065,7 @@ V.bedroom = function(){
   __bedPoll = setInterval(checkWhoop, 60000);
 };
 
+/* ---------------- SETTINGS ---------------- */
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
     <div class="card"><h4>This device</h4>
@@ -929,7 +1095,7 @@ setInterval(()=>{
 }, 5000);
 document.getElementById("alarmStop").onclick=()=>{
   document.getElementById("alarmOverlay").hidden=true;
-  location.hash="#morning"; nav();
+  location.hash="#routine-am"; nav();
 };
 
 /* ---------------- queue flush + boot ---------------- */
