@@ -1,5 +1,23 @@
 # The Way — changelog
 
+# The day refreshes itself
+
+## Added
+- Three cadences on the front page: clock every second, now/next markers
+  repainted every 30s from cache, a fetch every 5 minutes. Hidden tabs don't
+  fetch; visibilitychange/focus/online catch up if the data is over a minute
+  old. Crossing local midnight reloads the page so the week rebuilds from today
+- A freshness stamp ("updated 11:32a"), and "offline — showing the last good
+  copy" instead of wiping the schedule on a failed fetch
+
+## Fixed
+- The app booted its view twice: assigning `location.hash` fires `hashchange`,
+  which calls `nav()`, and `nav()` was then called again directly. Two copies
+  of the day raced — duplicate fetches, and one run's DOM wiring hitting
+  elements the other had already replaced (a null `onclick` crash)
+- Timers are tracked and cleared on view entry, so re-entering the day can't
+  stack intervals
+
 # WHOOP, the scale, and compliance
 
 ## Fixed

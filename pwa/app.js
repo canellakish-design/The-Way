@@ -1215,6 +1215,10 @@ function hhmmToMin(s){
   const m = /^(\d{1,2}):(\d{2})/.exec(String(s||""));
   return m ? (+m[1])*60 + (+m[2]) : null;
 }
+function localDateKey(){
+  const n = new Date();
+  return n.getFullYear()+"-"+String(n.getMonth()+1).padStart(2,"0")+"-"+String(n.getDate()).padStart(2,"0");
+}
 function fmtMinLocal(m){
   let h = Math.floor(m/60), mm = m%60, ap = h<12?"a":"p";
   h = h%12; if(h===0) h=12;
@@ -1280,13 +1284,26 @@ function dayCard(d, plan, nowMin, rec){
     <div class="small">${foot}</div></div>`;
 }
 
+/* The day runs unattended — a tablet on the counter, a phone left open on the
+   kitchen bench — so it keeps itself current instead of waiting for a reload.
+   Three cadences: the clock every second, the now/next markers every 30s off
+   cached data, and a real fetch every 5 minutes. Coming back to a backgrounded
+   tab syncs immediately, and crossing midnight reloads the page outright so
+   "today" is actually today (and any new deploy lands with it). */
+let __dayTimers = [];
+function clearDayTimers(){ __dayTimers.forEach(clearInterval); __dayTimers = []; }
+let __dayWake = false;
+const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
+
 V.today = async function(){
+  clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <div class="nowbar">
       <div class="nowtime" id="nowTime">--:--</div>
       <div class="nowmeta">
         <div class="nowdate" id="nowDate"></div>
-        <div class="small" id="nowNext">reaching the bridge…</div></div>
+        <div class="small" id="nowNext">reaching the bridge…</div>
+        <div class="small" id="nowFresh"></div></div>
     </div>
     <div class="card" id="readiness"><h4>Last night · this morning</h4>
       <div class="small">reaching the bridge…</div></div>
@@ -1306,7 +1323,7 @@ V.today = async function(){
     if (de) de.textContent = n.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
   };
   tick();
-  const clockInt = setInterval(()=>{ if(location.hash!=="#today") clearInterval(clockInt); else tick(); }, 1000);
+  __dayTimers.push(setInterval(()=>{ if(location.hash!=="#today") clearDayTimers(); else tick(); }, 1000));
   document.getElementById("toClock").onclick = ()=>{ location.hash = "#bedroom"; };
   // The day is the whole app now, but a device still has to be told its bridge
   // URL and token once — without a way back to Settings a fresh tablet is
@@ -1372,41 +1389,78 @@ V.today = async function(){
       }catch(e){ document.getElementById("wiMsg").textContent = "Failed: " + e.message; }
     };
   };
-  refreshReadiness();
 
-  try{
-    const [s, plan] = await Promise.all([
-      bridge("/schedule?days=7"),
-      bridge("/plan").catch(()=>({for_today:false}))
-    ]);
-    const days = s.days || [];
-    document.getElementById("dayList").innerHTML =
-      days.map(d=> dayCard(d, plan, nowMin(), s.recommendation)).join("");
+  // Last payload, so the now/next markers can be repainted without refetching.
+  let cached = { days: [], plan: null, recommendation: null, macros: null, dateKey: localDateKey() };
 
-    // "Next up" — the first thing today that hasn't happened yet.
-    const today = days[0];
-    const nm = nowMin();
-    const next = today ? dayRows(today, plan, true).find(r=> r.start > nm && !r.open) : null;
-    document.getElementById("nowNext").textContent = next
+  // Redraw from cache: moves the "now" band and the next-up line as time
+  // passes. Cheap, so it can run often; no network, no flicker of live data.
+  const repaint = ()=>{
+    if (!cached.days.length) return;
+    // Crossing midnight makes every card wrong. Reload rather than patch —
+    // it rebuilds the week from today and picks up any deploy at the same time.
+    if (localDateKey() !== cached.dateKey){ location.reload(); return; }
+    const list = document.getElementById("dayList");
+    if (list) list.innerHTML = cached.days.map(d=> dayCard(d, cached.plan, nowMin(), cached.recommendation)).join("");
+    const today = cached.days[0], nm = nowMin();
+    const next = today ? dayRows(today, cached.plan, true).find(r=> r.start > nm && !r.open) : null;
+    const el = document.getElementById("nowNext");
+    if (el) el.textContent = next
       ? "Next: " + next.title + " at " + next.from
       : (today && today.events && today.events.length ? "Nothing left on the calendar today" : "Day is clear");
+  };
 
-    // Say plainly which lanes are actually feeding this page.
-    const src = s.sources || {};
-    const missing = [];
-    if (!src.calendar_connected) missing.push("Google Calendar not connected (visit /gcal/auth on the bridge)");
-    if (!src.classes_configured) missing.push("no class schedule yet (bridge/schedule-classes.json)");
-    if (!src.intervals_configured) missing.push("intervals.icu not configured (INTERVALS_ICU_API_KEY + INTERVALS_ICU_ATHLETE_ID)");
-    if (src.intervals_error) missing.push("intervals.icu: " + src.intervals_error);
-    // ---- food log: additive through the day, against today's Hexis targets ----
-    const macrosToday = today ? today.macros : null;
+  const stamp = ()=>{
+    const el = document.getElementById("nowFresh");
+    if (!el) return;
+    const n = new Date();
+    let h=n.getHours(); const mm=String(n.getMinutes()).padStart(2,"0"); const ap=h<12?"a":"p";
+    h=h%12; if(h===0)h=12;
+    el.textContent = "updated " + h + ":" + mm + ap;
+  };
+
+  const loadDay = async ()=>{
+    try{
+      const [s, plan] = await Promise.all([
+        bridge("/schedule?days=7"),
+        bridge("/plan").catch(()=>({for_today:false}))
+      ]);
+      const days = s.days || [];
+      cached = { days, plan, recommendation: s.recommendation,
+        macros: days[0] ? days[0].macros : null, dateKey: localDateKey() };
+      repaint();
+      stamp();
+
+      // Say plainly which lanes are actually feeding this page.
+      const src = s.sources || {};
+      const missing = [];
+      if (!src.calendar_connected) missing.push("Google Calendar not connected (visit /gcal/auth on the bridge)");
+      if (!src.classes_configured) missing.push("no class schedule yet (bridge/schedule-classes.json)");
+      if (!src.intervals_configured) missing.push("intervals.icu not configured (INTERVALS_ICU_API_KEY + INTERVALS_ICU_ATHLETE_ID)");
+      if (src.intervals_error) missing.push("intervals.icu: " + src.intervals_error);
+      document.getElementById("daySources").innerHTML = missing.length
+        ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet")
+          + "<br>Missing — " + missing.map(esc).join("; ")
+        : "Feeding this page: " + (src.calendars||[]).join(" · ") + " · classes · intervals.icu";
+    }catch(e){
+      const list = document.getElementById("dayList");
+      // Keep the last good day on screen if there is one — a passing network
+      // blip shouldn't wipe the schedule off a wall-mounted tablet.
+      if (list && !cached.days.length)
+        list.innerHTML = `<div class="card"><h4>The day</h4><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`;
+      const fresh = document.getElementById("nowFresh");
+      if (fresh) fresh.textContent = "offline — showing the last good copy";
+    }
+  };
+
+  {
     const refreshFood = async ()=>{
       const el = document.getElementById("foodLog");
       if (!el) return;
       let meals = [];
       try{ meals = (await bridge("/meals/today")).meals || []; }
       catch(e){ el.innerHTML = `<h4>Food log · today</h4><div class="small">bridge unreachable — entries queue locally</div>`; return; }
-      el.innerHTML = foodLogHTML(meals, macrosToday);
+      el.innerHTML = foodLogHTML(meals, cached.macros);
       // Compliance is its own call: it reconciles the Hexis target with Alma's
       // tracking, which may have landed after the day payload was built.
       bridge("/compliance").then(c=>{
@@ -1423,7 +1477,9 @@ V.today = async function(){
         if (r.ok){ refreshFood(); }
         else if (msg) msg.textContent = "Bridge offline — queued locally (" + r.queued + ").";
       };
-      document.getElementById("flAdd").onclick = ()=> add({
+      const addBtn = document.getElementById("flAdd");
+      if (!addBtn) return;                    // view swapped mid-render
+      addBtn.onclick = ()=> add({
         name: document.getElementById("flName").value || "meal",
         meal: document.getElementById("flMeal").value,
         kcal: +document.getElementById("flK").value || 0,
@@ -1435,15 +1491,43 @@ V.today = async function(){
       document.getElementById("flBowl").onclick = ()=> add(
         {name:"Post-ride bowl",meal:"lunch",kcal:750,protein_g:52,carbs_g:98,fat_g:16});
     };
-    refreshFood();
 
-    document.getElementById("daySources").innerHTML = missing.length
-      ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet")
-        + "<br>Missing — " + missing.map(esc).join("; ")
-      : "Feeding this page: " + (src.calendars||[]).join(" · ") + " · classes · intervals.icu";
-  }catch(e){
-    document.getElementById("dayList").innerHTML =
-      `<div class="card"><h4>The day</h4><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`;
+    /* ---- keeping it current ---- */
+    let syncing = false, lastSync = 0;
+    const syncAll = async (why)=>{
+      if (syncing) return;                       // never stack fetches
+      syncing = true;
+      try{
+        await Promise.all([loadDay(), refreshReadiness(), refreshFood()]);
+        lastSync = Date.now();
+      } finally { syncing = false; }
+    };
+
+    syncAll("first load");
+    __dayTimers.push(setInterval(()=>{
+      if (location.hash !== "#today") return clearDayTimers();
+      // Don't fetch into a screen nobody is looking at; the visibility handler
+      // catches up the moment it comes back.
+      if (document.visibilityState === "visible") syncAll("interval");
+    }, DAY_SYNC_MS));
+    __dayTimers.push(setInterval(()=>{
+      if (location.hash !== "#today") return clearDayTimers();
+      repaint();
+    }, DAY_PAINT_MS));
+
+    // Phones suspend timers in a backgrounded tab, so waking up is the moment
+    // that matters most — the day could be hours stale.
+    if (!__dayWake){
+      __dayWake = true;
+      const wake = ()=>{
+        if (location.hash !== "#today" || document.visibilityState !== "visible") return;
+        repaint();
+        if (Date.now() - lastSync > DAY_STALE_MS) syncAll("woke up");
+      };
+      document.addEventListener("visibilitychange", wake);
+      window.addEventListener("focus", wake);
+      window.addEventListener("online", wake);
+    }
   }
 };
 
@@ -1619,5 +1703,7 @@ setInterval(async ()=>{
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
 window.addEventListener("hashchange", nav);
-if(!location.hash) location.hash = "#" + defaultView();
-nav();
+// Setting the hash fires hashchange, which calls nav() — calling it here too
+// booted the view twice, racing two copies of the day against each other.
+if (!location.hash) location.hash = "#" + defaultView();
+else nav();

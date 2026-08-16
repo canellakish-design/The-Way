@@ -24,6 +24,13 @@ calories, carbs, protein and fat. Above it, the compliance block puts Hexis's
 recommendation next to Alma's tracking, scores each macro on its own, and
 names the snack that would raise the score most without overshooting calories.
 
+The page keeps itself current: the clock ticks every second, the now/next
+markers repaint every 30s off cached data, and a real fetch runs every 5
+minutes — skipped while the tab is hidden, and caught up the moment it comes
+back. Crossing midnight reloads outright, so "today" is today and any new
+deploy lands with it. A network blip leaves the last good day on screen and
+says so rather than blanking the schedule.
+
 The bedside clock did not go anywhere — it is a button on the day, it is the
 Sleep tab, and it is still where the alarm lands.
 
