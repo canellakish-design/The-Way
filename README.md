@@ -124,6 +124,10 @@ across noise levels, it is either right within 30W or it declines.
 - Withings is storage-backed and mounted in production now, but until
   `/withings/auth` is visited the weigh-in is whatever gets typed into the top
   strip. Both paths write to the same store.
+- WHOOP's refresh grant must carry `scope=offline` or it returns an access
+  token with **no replacement refresh token**, while retiring the one just
+  used — the connection dies about an hour after every authorization. That was
+  the long-standing "WHOOP keeps dropping out".
 - WHOOP rotates its refresh token on every use, so concurrent refreshes fail.
   Syncs are single-flighted and cached for 10 minutes; passive readers (the
   day, availability, the training log) read stored data and never trigger a

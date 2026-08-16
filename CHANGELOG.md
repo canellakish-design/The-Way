@@ -1,5 +1,27 @@
 # The Way — changelog
 
+# WHOOP, properly
+
+## Fixed
+- **The refresh grant was missing `scope=offline`.** WHOOP only issues a
+  replacement refresh token when the refresh request asks for offline access —
+  without it you get an access token, the refresh token you just spent is
+  retired, and nothing replaces it. The connection dies roughly an hour after
+  every authorization. Demonstrated against a WHOOP stub that rotates the way
+  the real one does: old code, refresh #1 succeeds and leaves a token WHOOP no
+  longer accepts; new code keeps a valid token across refreshes. This bug
+  predates the concurrency fix and is the likely root cause of "it was working"
+- **The webhook had become a no-op.** The 10-minute sync cache applied to it
+  too, so WHOOP saying "there is new data" was ignored if anything had synced
+  recently. It forces now
+- A 401 mid-sync (token revoked or reissued elsewhere, before its clock expiry)
+  refreshes once and retries instead of returning nothing
+
+## Added
+- `/whoop/status` reports `configured` (client id/secret present), whether
+  BASE_URL is set, and a `fix` field naming the next action — missing env vars
+  are invisible otherwise
+
 # More than one Google account
 
 ## Added

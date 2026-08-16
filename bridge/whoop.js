@@ -36,7 +36,12 @@ async function tok(d) {
   const r = await fetch(API + '/oauth/oauth2/token', { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: d.tokens.refresh_token,
-      client_id: CID, client_secret: SEC }) });
+      client_id: CID, client_secret: SEC,
+      // Required: WHOOP only returns a replacement refresh token when the
+      // refresh request asks for offline access. Without it the token it just
+      // retired is never replaced, and the connection dies an hour after it
+      // was made — which is exactly what "it was working" looks like.
+      scope: 'offline' }) });
   const j = await r.json();
   if (!j.access_token) {
     // Record it rather than failing silently — a dead refresh token needs a
@@ -61,10 +66,20 @@ async function syncLatest(force) {
   if (!force && d.synced_at && Date.now() - new Date(d.synced_at).getTime() < SYNC_TTL_MS) return d;
   if (inflight) return inflight;
   inflight = (async () => {
-    const t = await tok(d);
-    const h = { Authorization: 'Bearer ' + t };
-    const s = await (await fetch(API + '/developer/v2/activity/sleep?limit=1', { headers: h })).json();
-    const rec = await (await fetch(API + '/developer/v2/recovery?limit=1', { headers: h })).json();
+    let t = await tok(d);
+    const get = async (path, retried) => {
+      const r = await fetch(API + path, { headers: { Authorization: 'Bearer ' + t } });
+      if (r.status === 401 && !retried) {
+        // Rejected before its clock expiry — revoked, or reissued elsewhere.
+        d.tokens.expires_at = 0;
+        t = await tok(d);
+        return get(path, true);
+      }
+      if (!r.ok) throw new Error('whoop ' + r.status + ' on ' + path.split('?')[0]);
+      return r.json();
+    };
+    const s = await get('/developer/v2/activity/sleep?limit=1');
+    const rec = await get('/developer/v2/recovery?limit=1');
     const cur = await db();
     if (s.records && s.records[0]) cur.sleep = s.records[0];
     if (rec.records && rec.records[0]) cur.recovery = rec.records[0];
@@ -128,14 +143,20 @@ function attach(app) {
   });
   app.post('/whoop/webhook', (req, res) => {
     res.sendStatus(200);
-    syncLatest().catch(e => console.error('[whoop]', e.message));
+    // force: the cache exists to stop page loads hammering WHOOP, but a
+    // webhook is WHOOP telling us there is something new to fetch.
+    syncLatest(true).catch(e => console.error('[whoop]', e.message));
   });
   app.get('/whoop/status', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
-    res.json({ connected: !!d.tokens, has_sleep: !!d.sleep, has_recovery: !!d.recovery,
+    res.json({ configured: !!(CID && SEC), base_url_set: !!BASE,
+      connected: !!d.tokens, has_sleep: !!d.sleep, has_recovery: !!d.recovery,
       synced_at: d.synced_at || null, auth_error: d.auth_error || null,
       token_expires_in_s: d.tokens ? Math.round((d.tokens.expires_at - Date.now()) / 1000) : null,
-      reauthorize: !!(d.auth_error) || !d.tokens }); });
+      reauthorize: !!(d.auth_error) || !d.tokens,
+      fix: !(CID && SEC) ? 'set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET'
+        : !BASE ? 'set BASE_URL so the OAuth callback resolves'
+        : (!d.tokens || d.auth_error) ? 'visit /whoop/auth to reconnect' : null }); });
   app.get('/whoop/sync', async (req, res) => { if (!auth(req, res)) return;
     try { await syncLatest(true); res.json({ ok: true, ...(await sleepLatest({ sync: false })) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
