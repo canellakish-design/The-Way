@@ -1496,13 +1496,17 @@ V.today = async function(){
       const src = s.sources || {};
       const missing = [];
       if (!src.calendar_connected) missing.push("Google Calendar not connected (visit /gcal/auth on the bridge)");
+      // Name the account that failed — "calendar not working" is useless when
+      // more than one account feeds the day.
+      (src.account_errors || []).forEach(e => missing.push("Google account " + e + " — reconnect at /gcal/auth"));
       if (!src.classes_configured) missing.push("no class schedule yet (bridge/schedule-classes.json)");
       if (!src.intervals_configured) missing.push("intervals.icu not configured (INTERVALS_ICU_API_KEY + INTERVALS_ICU_ATHLETE_ID)");
       if (src.intervals_error) missing.push("intervals.icu: " + src.intervals_error);
+      const accounts = (src.accounts||[]).length ? " (" + (src.accounts||[]).join(", ") + ")" : "";
       document.getElementById("daySources").innerHTML = missing.length
-        ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet")
+        ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet") + esc(accounts)
           + "<br>Missing — " + missing.map(esc).join("; ")
-        : "Feeding this page: " + (src.calendars||[]).join(" · ") + " · classes · intervals.icu";
+        : "Feeding this page: " + (src.calendars||[]).join(" · ") + esc(accounts) + " · classes · intervals.icu";
     }catch(e){
       const list = document.getElementById("dayList");
       // Keep the last good day on screen if there is one — a passing network

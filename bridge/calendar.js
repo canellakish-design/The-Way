@@ -62,20 +62,38 @@ const CAL_SKIP = /holidays?\b|birthdays|week numbers|contacts/i;
 const BLOCKS = new Set(['work', 'coaching', 'commute', 'family', 'sleep', 'travel', 'busy']);
 
 // ---- google oauth + sync --------------------------------------------
-async function db() { return getJSON('gcal', { tokens: null, events: [], synced_at: null, manual: {} }); }
+// The day is spread across more than one Google account: teaching lives on the
+// school account, the club's coaching calendar on another. So this holds a
+// list of accounts, not one token pair, and merges every one of them into the
+// same day. Visiting /gcal/auth adds an account; it never replaces one.
+async function db() {
+  const d = await getJSON('gcal', { accounts: [], events: [], synced_at: null, manual: {} });
+  if (!Array.isArray(d.accounts)) d.accounts = [];
+  // Migrate the single-account shape this used to have.
+  if (d.tokens) {
+    d.accounts.push({ id: d.account_email || 'google', tokens: d.tokens,
+      calendar_list: d.calendar_list || [], calendars: d.calendars || null });
+    delete d.tokens; delete d.calendars; delete d.calendar_list;
+    await setJSON('gcal', d);
+  }
+  return d;
+}
 
-async function tok(d) {
-  if (!d.tokens) throw new Error('calendar not connected — visit /gcal/auth');
-  if (Date.now() < d.tokens.expires_at - 60000) return d.tokens.access_token;
+async function tok(acct) {
+  if (!acct || !acct.tokens) throw new Error('calendar not connected — visit /gcal/auth');
+  if (Date.now() < acct.tokens.expires_at - 60000) return acct.tokens.access_token;
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: d.tokens.refresh_token,
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: acct.tokens.refresh_token,
       client_id: CID, client_secret: SEC }) });
   const j = await r.json();
-  if (!j.access_token) throw new Error('google token refresh failed');
-  d.tokens.access_token = j.access_token;
-  d.tokens.expires_at = Date.now() + j.expires_in * 1000;
-  await setJSON('gcal', d);
+  if (!j.access_token) {
+    acct.auth_error = j.error_description || j.error || 'token refresh failed';
+    throw new Error('google token refresh failed for ' + acct.id + ': ' + acct.auth_error);
+  }
+  acct.tokens.access_token = j.access_token;
+  acct.tokens.expires_at = Date.now() + j.expires_in * 1000;
+  acct.auth_error = null;
   return j.access_token;
 }
 
@@ -115,37 +133,66 @@ async function eventsFrom(t, cal, timeMin, timeMax) {
 
 async function sync() {
   const d = await db();
-  const t = await tok(d);
+  if (!d.accounts.length) throw new Error('calendar not connected — visit /gcal/auth');
   // Reach back a week as well as forward: the day page can step back to
   // yesterday, and a sync window starting at midnight today would make every
   // past day look empty rather than unsynced.
   const timeMin = new Date(); timeMin.setHours(0, 0, 0, 0); timeMin.setDate(timeMin.getDate() - 7);
   const timeMax = new Date(); timeMax.setHours(0, 0, 0, 0); timeMax.setDate(timeMax.getDate() + 15);
-  const all = await calendarList(t);
-  d.calendar_list = all;
-  const cals = chooseCalendars(all, d.calendars);
   const collected = [];
-  for (const cal of cals) {
-    const calDefault = cal.primary ? null : calendarCategory(cal.name);
-    for (const e of await eventsFrom(t, cal, timeMin, timeMax)) {
-      if (e.status === 'cancelled' || !e.start) continue;
-      collected.push({
-        summary: e.summary || '(untitled)',
-        start: e.start.dateTime || e.start.date,
-        end: (e.end && (e.end.dateTime || e.end.date)) || e.start.dateTime || e.start.date,
-        allDay: !e.start.dateTime,
-        location: e.location || null,
-        calendar: cal.name,
-        source: calDefault === 'coaching' ? 'coaching' : 'calendar',
-        category: classify(e.summary, d.manual, calDefault)
-      });
+  let anyOk = false;
+  for (const acct of d.accounts) {
+    // One account failing (revoked access, a school domain pulling the plug)
+    // must not empty the day of everything the others hold.
+    try {
+      const t = await tok(acct);
+      const all = await calendarList(t);
+      acct.calendar_list = all;
+      // An account migrated from the old single-account store has no email on
+      // it. Adopt the real one from its primary calendar so the UI and
+      // /gcal/disconnect can name it.
+      if (!String(acct.id).includes('@')) {
+        const primary = all.find(c => c.primary);
+        if (primary) acct.id = primary.id;
+      }
+      for (const cal of chooseCalendars(all, acct.calendars)) {
+        const calDefault = cal.primary ? null : calendarCategory(cal.name);
+        for (const e of await eventsFrom(t, cal, timeMin, timeMax)) {
+          if (e.status === 'cancelled' || !e.start) continue;
+          collected.push({
+            summary: e.summary || '(untitled)',
+            start: e.start.dateTime || e.start.date,
+            end: (e.end && (e.end.dateTime || e.end.date)) || e.start.dateTime || e.start.date,
+            allDay: !e.start.dateTime,
+            location: e.location || null,
+            calendar: cal.name,
+            account: acct.id,
+            source: calDefault === 'coaching' ? 'coaching' : 'calendar',
+            category: classify(e.summary, d.manual, calDefault)
+          });
+        }
+      }
+      acct.synced_at = new Date().toISOString();
+      anyOk = true;
+    } catch (e) {
+      acct.auth_error = acct.auth_error || e.message;
+      console.error('[gcal]', acct.id, e.message);
     }
   }
+  if (!anyOk) { await setJSON('gcal', d); throw new Error('no Google account could be synced'); }
   collected.sort((a, b) => String(a.start).localeCompare(String(b.start)));
   d.events = collected;
   d.synced_at = new Date().toISOString();
   await setJSON('gcal', d);
   return d;
+}
+
+// The account's own email is the id of its primary calendar — no extra scope
+// needed to find out which account just connected.
+async function accountEmail(t) {
+  const all = await calendarList(t).catch(() => []);
+  const primary = all.find(c => c.primary);
+  return primary ? primary.id : null;
 }
 
 // ---- availability math (pure, testable) ------------------------------
@@ -276,10 +323,10 @@ function weekAvailability(events, recovery) {
       : recovery >= 67 ? 'recovery green' : recovery >= 34 ? 'recovery yellow — trimmed' : 'recovery red — minimal' };
 }
 
-async function connected() { return !!(await db()).tokens; }
+async function connected() { return (await db()).accounts.length > 0; }
 async function trainingHours(recovery) {
   const d = await db();
-  if (!d.tokens || !d.events.length) return null;
+  if (!d.accounts.length || !d.events.length) return null;
   return weekAvailability(d.events, recovery).recommended_h;
 }
 
@@ -293,6 +340,10 @@ function attach(app) {
     u.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
     u.searchParams.set('access_type', 'offline');
     u.searchParams.set('prompt', 'consent');
+    // ?email= preselects the account in Google's chooser. The schedule lives on
+    // a specific account, and signing in with the wrong one silently connects
+    // an empty calendar.
+    if (req.query.email) u.searchParams.set('login_hint', String(req.query.email));
     res.redirect(u.toString());
   });
   app.get('/gcal/callback', async (req, res) => {
@@ -304,21 +355,42 @@ function attach(app) {
       const j = await r.json();
       if (!j.access_token) throw new Error(JSON.stringify(j));
       const d = await db();
-      d.tokens = { access_token: j.access_token,
-        refresh_token: j.refresh_token || (d.tokens && d.tokens.refresh_token),
+      const email = await accountEmail(j.access_token);
+      const id = email || ('account-' + (d.accounts.length + 1));
+      const existing = d.accounts.find(a => a.id === id);
+      const tokens = { access_token: j.access_token,
+        // Google only returns a refresh token on first consent for an account;
+        // reconnecting must not wipe the one already held.
+        refresh_token: j.refresh_token || (existing && existing.tokens && existing.tokens.refresh_token),
         expires_at: Date.now() + j.expires_in * 1000 };
+      if (existing) { existing.tokens = tokens; existing.auth_error = null; }
+      else d.accounts.push({ id, tokens, calendar_list: [], calendars: null });
       await setJSON('gcal', d);
-      await sync().catch(() => {});
-      res.send('Google Calendar connected (read-only). You can close this tab.');
+      const after = await sync().catch(() => null);
+      const cals = ((after || d).accounts.find(a => a.id === id) || {}).calendar_list || [];
+      res.send(`Connected ${id} (read-only). ${cals.length} calendar(s): `
+        + cals.map(c => c.name).join(', ')
+        + `. ${d.accounts.length} account(s) now feeding the day. You can close this tab.`);
     } catch (e) { res.status(500).send('Calendar auth failed: ' + e.message); }
   });
   app.get('/gcal/status', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
-    res.json({ connected: !!d.tokens, events: d.events.length, synced_at: d.synced_at }); });
+    res.json({ connected: d.accounts.length > 0, events: d.events.length, synced_at: d.synced_at,
+      accounts: d.accounts.map(a => ({ id: a.id, calendars: (a.calendar_list || []).map(c => c.name),
+        synced_at: a.synced_at || null, auth_error: a.auth_error || null })) }); });
+  app.get('/gcal/disconnect', async (req, res) => { if (!auth(req, res)) return;
+    const id = req.query.account;
+    if (!id) return res.status(400).json({ error: 'account required' });
+    const d = await db();
+    const before = d.accounts.length;
+    d.accounts = d.accounts.filter(a => a.id !== id);
+    d.events = d.events.filter(e => e.account !== id);
+    await setJSON('gcal', d);
+    res.json({ ok: true, removed: before - d.accounts.length, accounts: d.accounts.map(a => a.id) }); });
   app.get('/availability', async (req, res) => { if (!auth(req, res)) return;
     try {
       const d = await sync().catch(async () => await db());
-      if (!d.tokens) return res.json({ connected: false });
+      if (!d.accounts.length) return res.json({ connected: false });
       const { sleepLatest } = require('./whoop');
       const s = await sleepLatest({ sync: false }).catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
@@ -343,15 +415,17 @@ function attach(app) {
       const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
       for (const day of days) day.macros = macros[day.date] || null;
       const sources = {
-        calendars: (d.calendar_list || []).map(c => c.name),
-        calendar_connected: !!d.tokens,
+        calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name)),
+        accounts: d.accounts.map(a => a.id),
+        account_errors: d.accounts.filter(a => a.auth_error).map(a => a.id + ': ' + a.auth_error),
+        calendar_connected: d.accounts.length > 0,
         classes_configured: classes.configured(),
         intervals_configured: !!iv.configured,
         intervals_error: iv.error || null,
         macros_today: !!((days.find(x => x.today) || {}).macros)
       };
       const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
-      if (!d.tokens) return res.json({ connected: false, days, sources, today_index: todayIdx0 });
+      if (!d.accounts.length) return res.json({ connected: false, days, sources, today_index: todayIdx0 });
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');
       const s = await sleepLatest({ sync: false }).catch(() => null);
@@ -365,26 +439,36 @@ function attach(app) {
   app.get('/gcal/calendars', async (req, res) => { if (!auth(req, res)) return;
     try {
       const d = await db();
-      if (!d.tokens) return res.json({ connected: false, calendars: [] });
-      const all = await calendarList(await tok(d));
-      d.calendar_list = all; await setJSON('gcal', d);
-      const on = chooseCalendars(all, d.calendars).map(c => c.id);
-      res.json({ connected: true, picked: d.calendars || null,
-        calendars: all.map(c => ({ ...c, on: on.includes(c.id) })) });
+      if (!d.accounts.length) return res.json({ connected: false, calendars: [] });
+      const out = [];
+      for (const acct of d.accounts) {
+        try {
+          const all = await calendarList(await tok(acct));
+          acct.calendar_list = all;
+          const on = chooseCalendars(all, acct.calendars).map(c => c.id);
+          out.push(...all.map(c => ({ ...c, account: acct.id, on: on.includes(c.id) })));
+        } catch (e) { out.push({ account: acct.id, error: e.message }); }
+      }
+      await setJSON('gcal', d);
+      res.json({ connected: true, accounts: d.accounts.map(a => ({ id: a.id, picked: a.calendars || null })),
+        calendars: out });
     } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/gcal/calendars', async (req, res) => { if (!auth(req, res)) return;
     try {
       const ids = (req.body && req.body.calendars) || null;
+      const acctId = req.body && req.body.account;
       const d = await db();
-      d.calendars = Array.isArray(ids) && ids.length ? ids : null;  // null = auto
+      const targets = acctId ? d.accounts.filter(a => a.id === acctId) : d.accounts;
+      if (!targets.length) return res.status(404).json({ error: 'no such account' });
+      for (const a of targets) a.calendars = Array.isArray(ids) && ids.length ? ids : null;  // null = auto
       await setJSON('gcal', d);
       await sync().catch(() => {});
-      res.json({ ok: true, picked: d.calendars });
+      res.json({ ok: true, accounts: targets.map(a => ({ id: a.id, picked: a.calendars })) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/availability/today', async (req, res) => { if (!auth(req, res)) return;
     try {
       const d = await sync().catch(async () => await db());
-      if (!d.tokens) return res.json({ connected: false });
+      if (!d.accounts.length) return res.json({ connected: false });
       const key = dateKey(new Date());
       const day = windowsForDate(d.events, key);
       const { sleepLatest } = require('./whoop');

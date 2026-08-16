@@ -1,5 +1,19 @@
 # The Way — changelog
 
+# More than one Google account
+
+## Added
+- The calendar store holds a list of accounts rather than one token pair, and
+  merges every account's calendars into the same day. `/gcal/auth` adds an
+  account instead of replacing the one already connected; `?email=` sets
+  Google's `login_hint` so the right account is preselected
+- `/gcal/status` reports per-account calendars, sync time and auth errors;
+  `/gcal/disconnect?account=` removes one; `/gcal/calendars` spans accounts
+- An account that can't refresh is named on the page, and the day still renders
+  from the accounts that work
+- Legacy single-account stores migrate on read, and adopt their real email
+  address from the primary calendar on the next sync
+
 # One day at a time
 
 ## Changed

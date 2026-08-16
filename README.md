@@ -89,9 +89,17 @@ disagree by more than 25W all return a reason instead of a number. Tested
 across noise levels, it is either right within 30W or it declines.
 
 ## Feeding the day
-1. **Google Calendar** — visit `/gcal/auth` once. Every calendar the account
-   can read is synced (holidays/birthdays skipped). `GET /gcal/calendars`
-   lists them; `POST /gcal/calendars {"calendars":[ids]}` pins an explicit set.
+1. **Google Calendar** — visit `/gcal/auth?email=you@example.com` once *per
+   account*. The day spans more than one Google identity (teaching on one,
+   the club's coaching calendar on another), so accounts accumulate: each visit
+   adds one, never replaces. `?email=` preselects it in Google's chooser —
+   signing in with the wrong account otherwise connects an empty calendar and
+   looks like success. Every calendar an account can read is synced
+   (holidays/birthdays skipped). `GET /gcal/status` lists the accounts and any
+   that need reconnecting; `GET /gcal/calendars` lists calendars across all of
+   them; `POST /gcal/calendars {"calendars":[ids],"account":"…"}` pins a set;
+   `GET /gcal/disconnect?account=…` removes one. An account that fails to
+   refresh is named on the page — the others keep feeding the day.
 2. **Classes** — edit `bridge/schedule-classes.json`: one array per weekday,
    `{ "from": "08:00", "to": "08:45", "name": "…", "room": "…" }`. Class time
    blocks training windows exactly like a calendar event does.
