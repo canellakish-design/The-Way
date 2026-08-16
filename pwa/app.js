@@ -169,7 +169,11 @@ const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent
 function nav(){
   let h = location.hash.replace("#","") || defaultView();
   if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
-  document.querySelectorAll("nav a").forEach(a=>a.classList.toggle("on", a.hash === "#"+h));
+  // No tab bar: the day is the app. Everything else still exists at its hash
+  // (the alarm lands on the morning routine, the routines link to their
+  // groups), so those views get one way back rather than being dead ends.
+  const navEl = document.querySelector("nav");
+  if (navEl) navEl.innerHTML = (h === "today" || h === "bedroom") ? "" : `<a href="#today" class="on">← The day</a>`;
   (V[h] || V.settings)();
 }
 /* The front page is the day, on every device. The bedside clock is still a
@@ -1290,7 +1294,8 @@ V.today = async function(){
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
-    <button id="toClock">Bedside clock</button>`;
+    <button id="toClock">Bedside clock</button>
+    <button id="toSettings">Settings</button>`;
 
   const tick = ()=>{
     const n = new Date();
@@ -1304,6 +1309,10 @@ V.today = async function(){
   tick();
   const clockInt = setInterval(()=>{ if(location.hash!=="#today") clearInterval(clockInt); else tick(); }, 1000);
   document.getElementById("toClock").onclick = ()=>{ location.hash = "#bedroom"; };
+  // The day is the whole app now, but a device still has to be told its bridge
+  // URL and token once — without a way back to Settings a fresh tablet is
+  // stranded on demo data with no way to fix it.
+  document.getElementById("toSettings").onclick = ()=>{ location.hash = "#settings"; };
 
   const nowMin = ()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes(); };
 
