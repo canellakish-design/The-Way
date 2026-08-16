@@ -46,6 +46,36 @@ label{font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--
 .turn.coach{font-weight:700}
 .ptt{width:100%; padding:20px; font-size:15px; border-radius:0}
 .ptt.listening{background:var(--green); color:#fff; border-color:var(--green)}
+/* ---- the day (front page) ---- */
+.nowbar{display:flex; align-items:center; gap:14px; padding:10px 0 2px}
+.nowtime{font-weight:700; font-size:38px; letter-spacing:-1px; line-height:1}
+.nowdate{font-weight:700; font-size:14px; letter-spacing:1px; text-transform:uppercase}
+.card.day.is-today{box-shadow:3px 3px 0 var(--ink)}
+.readyrow{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px}
+.readyrow .rblock{min-width:0}
+@media (max-width:520px){.readyrow{grid-template-columns:1fr}}
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 2px}
+.chip{border:1px solid var(--ink); padding:3px 8px; font-size:12px; background:#fff}
+.macros{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:8px 0 4px}
+.macros .mfuel{border:1px solid var(--ink); background:var(--ink); color:var(--paper); padding:3px 9px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase}
+ul.agenda{margin-top:8px}
+ul.agenda li{list-style:none; display:grid; grid-template-columns:62px 1fr auto; gap:10px; align-items:baseline;
+  padding:7px 0 7px 9px; border-bottom:1px dashed var(--line); border-left:4px solid var(--line); font-size:14px;}
+ul.agenda li:last-child{border-bottom:none}
+ul.agenda .t{font-size:11px; color:var(--muted); line-height:1.25}
+ul.agenda .n{overflow-wrap:anywhere}
+ul.agenda .tag{font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); text-align:right; line-height:1.25}
+ul.agenda li.past{opacity:.42}
+ul.agenda li.now{background:var(--green-soft)}
+ul.agenda li.now .tag,ul.agenda li.next .tag{color:var(--ink); font-weight:700}
+.lane-class{border-left-color:var(--fat)}
+.lane-coach{border-left-color:var(--carb)}
+.lane-icu{border-left-color:var(--green)}
+.lane-cal{border-left-color:var(--ink)}
+.lane-open{border-left-color:var(--line); color:var(--muted)}
+ul.agenda.totals li{grid-template-columns:1fr auto; border-left-color:var(--ink); padding-left:9px}
+ul.agenda.totals .tag{font-size:12px; letter-spacing:0; text-transform:none}
+ul.agenda.foodlog li{border-left-color:var(--amber)}
 #alarmOverlay[hidden]{display:none}
 #alarmOverlay{position:fixed; inset:0; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50;}
 #alarmOverlay .bignum{font-size:72px}

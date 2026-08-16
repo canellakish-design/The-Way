@@ -66,6 +66,11 @@ const DEMO = {
   "/prescription/dinner": { kcal:1140, note:"settles the day in the band", units:{protein:4,carb:4,fat:2,greens:2} },
   "/podcasts/list": { episodes:[] },
   "/plan": { ride:null, for_today:false, intensity:"moderate", planned_hours:null, effective_hours:null, route:null },
+  "/schedule": demoSchedule(),
+  "/weigh-in": { latest:{ lb:176.4, at:new Date().toISOString(), logged_today:true, source:"manual" },
+    ma7_lb:177.0, week_change_lb:-0.5, entries:9, withings_connected:false },
+  "/macros/today": { have:true, date:new Date().toISOString().slice(0,10), kcal:2950,
+    carbs_g:420, protein_g:185, fat_g:75, fuel_day:"high carb", source:"hexis" },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
   "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kcal:480, source:"strava", at:new Date().toISOString()}] },
@@ -146,15 +151,18 @@ async function multiPhotoBridge(pathname, files, extra){
 const V = {};
 const view = document.getElementById("view");
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { morning:"routine-am", day:"fuel", night:"routine-pm", agent:"plan" };
+const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan" };
 function nav(){
   let h = location.hash.replace("#","") || defaultView();
   if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
   document.querySelectorAll("nav a").forEach(a=>a.classList.toggle("on", a.hash === "#"+h));
   (V[h] || V.settings)();
 }
+/* The front page is the day, on every device. The bedside clock is still a
+   tap away (button on the day, or the Sleep tab) and the alarm still lands
+   on the Morning Routine, so the bedroom kiosk keeps working. */
 function defaultView(){
-  return { bedroom:"bedroom", kitchen:"fuel", cockpit:"plan", phone:"fuel" }[S.role] || "settings";
+  return "today";
 }
 
 /* ---------------- COACH (shared conversation component) ----------------
@@ -1064,6 +1072,327 @@ V.bedroom = function(){
   checkWhoop();
   __bedPoll = setInterval(checkWhoop, 60000);
 };
+
+/* ---------------- TODAY — the front page ----------------
+   One timeline per day, every day starting with today. Four lanes feed it:
+   the Google calendars (life + 16 ECNL coaching), the teaching timetable,
+   the planned intervals and lifting from intervals.icu, and the free windows
+   the availability engine finds between them. */
+const LANE = {
+  class:     { tag:"class",   cls:"lane-class" },
+  coaching:  { tag:"coach",   cls:"lane-coach" },
+  intervals: { tag:"icu",     cls:"lane-icu"   },
+  calendar:  { tag:"cal",     cls:"lane-cal"   },
+  ride:      { tag:"ride",    cls:"lane-icu"   },
+  open:      { tag:"open",    cls:"lane-open"  }
+};
+function durLabel(min){
+  if (min == null) return "";
+  const h = Math.floor(min/60), m = Math.round(min%60);
+  return h ? (m ? h+"h "+m+"m" : h+"h") : m+"m";
+}
+function hhmmToMin(s){
+  const m = /^(\d{1,2}):(\d{2})/.exec(String(s||""));
+  return m ? (+m[1])*60 + (+m[2]) : null;
+}
+function fmtMinLocal(m){
+  let h = Math.floor(m/60), mm = m%60, ap = h<12?"a":"p";
+  h = h%12; if(h===0) h=12;
+  return h+":"+String(mm).padStart(2,"0")+ap;
+}
+
+function dayRows(d, plan, isToday){
+  const rows = (d.events||[]).map(e=>({
+    start: e.start_min, end: e.end_min, from: e.from, to: e.to,
+    title: e.summary, detail: e.detail || e.location || "",
+    lane: LANE[e.source] || LANE.calendar
+  }));
+  (d.windows||[]).forEach(w=> rows.push({
+    start: w.start_min, end: w.end_min, from: w.from, to: w.to,
+    title: "Open — " + durLabel(w.minutes), detail: w.slot || "",
+    lane: LANE.open, open: true
+  }));
+  if (isToday && plan && plan.for_today && plan.start){
+    const s = hhmmToMin(plan.start);
+    if (s != null){
+      const mins = Math.round((plan.effective_hours || 1) * 60);
+      rows.push({ start:s, end:s+mins, from:fmtMinLocal(s), to:fmtMinLocal(s+mins),
+        title: plan.ride || "Planned ride",
+        detail: plan.route ? plan.route.miles+" mi · "+plan.route.climb_ft+" ft" : durLabel(mins),
+        lane: LANE.ride });
+    }
+  }
+  return rows.sort((a,b)=> (a.start-b.start) || (a.end-b.end));
+}
+
+function dayCard(d, plan, nowMin, rec){
+  const isToday = !!d.today;
+  const rows = dayRows(d, plan, isToday);
+  const chips = (d.all_day||[]).map(e=>
+    `<span class="chip ${(LANE[e.source]||LANE.calendar).cls}">${esc(e.summary)}${e.detail?" · "+esc(e.detail):""}</span>`).join("");
+  let markedNext = false;
+  const items = rows.map(r=>{
+    let state = "";
+    if (isToday){
+      if (r.end <= nowMin) state = "past";
+      else if (r.start <= nowMin && nowMin < r.end) state = "now";
+      else if (!markedNext && !r.open){ state = "next"; markedNext = true; }
+    }
+    return `<li class="${r.lane.cls} ${state}">
+      <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
+      <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}</span></li>`;
+  }).join("");
+  const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
+  const foot = isToday && rec ? `${open} · <b>${esc(rec)}</b>` : open;
+  const m = d.macros;
+  const macroRow = m
+    ? `<div class="macros">${m.fuel_day?`<span class="mfuel">${esc(m.fuel_day)}</span>`:""}
+        <span class="unit">${m.kcal ?? "—"} kcal</span><span class="unit c">${m.carbs_g ?? "—"}C</span>
+        <span class="unit p">${m.protein_g ?? "—"}P</span><span class="unit f">${m.fat_g ?? "—"}F</span>
+        <span class="small">Hexis</span></div>`
+    : (isToday ? `<div class="macros"><span class="small">No Hexis macros yet — run the morning fetch</span></div>` : "");
+  return `<div class="card day${isToday?" is-today":""}">
+    <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
+    ${macroRow}
+    ${chips?`<div class="chips">${chips}</div>`:""}
+    <ul class="agenda">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
+    <div class="small">${foot}</div></div>`;
+}
+
+V.today = async function(){
+  view.innerHTML = `
+    <div class="nowbar">
+      <div class="nowtime" id="nowTime">--:--</div>
+      <div class="nowmeta">
+        <div class="nowdate" id="nowDate"></div>
+        <div class="small" id="nowNext">reaching the bridge…</div></div>
+    </div>
+    <div class="card" id="readiness"><h4>Last night · this morning</h4>
+      <div class="small">reaching the bridge…</div></div>
+    <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
+    <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
+    <div class="small" id="daySources" style="margin-top:12px"></div>
+    <button id="toClock">Bedside clock</button>`;
+
+  const tick = ()=>{
+    const n = new Date();
+    let h = n.getHours(); const mm = String(n.getMinutes()).padStart(2,"0");
+    const ap = h<12?"AM":"PM"; h = h%12; if(h===0) h=12;
+    const el = document.getElementById("nowTime");
+    if (el) el.textContent = h+":"+mm+" "+ap;
+    const de = document.getElementById("nowDate");
+    if (de) de.textContent = n.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+  };
+  tick();
+  const clockInt = setInterval(()=>{ if(location.hash!=="#today") clearInterval(clockInt); else tick(); }, 1000);
+  document.getElementById("toClock").onclick = ()=>{ location.hash = "#bedroom"; };
+
+  const nowMin = ()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes(); };
+
+  /* ---- the top strip: how the night went, what the scale said ----
+     WHOOP is connected and pushes on its own. Withings is not wired up yet,
+     so the weigh-in is entered here by hand and says so. */
+  const recBand = s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
+  const refreshReadiness = async ()=>{
+    const el = document.getElementById("readiness");
+    if (!el) return;
+    const [s, w] = await Promise.all([
+      bridge("/sleep/latest").catch(()=>null),
+      bridge("/weigh-in").catch(()=>null)
+    ]);
+    let sleepHTML;
+    if (s && s.recovery && s.recovery.score != null){
+      const b = recBand(s.recovery.score);
+      sleepHTML = `<div class="rblock">
+        <span class="bandpill" style="background:${b.c}">Recovery ${s.recovery.score} · ${b.name}</span>
+        <div class="small">slept ${s.sleep?.hours ?? "—"} h · performance ${s.sleep?.performance ?? "—"}
+          · HRV ${s.recovery.hrv ?? "—"} · RHR ${s.recovery.rhr ?? "—"}</div></div>`;
+    } else {
+      sleepHTML = `<div class="rblock"><span class="bandpill" style="background:var(--muted)">Recovery —</span>
+        <div class="small">no WHOOP sync yet this morning</div></div>`;
+    }
+    const t = w && w.latest;
+    const weighHTML = (t && t.logged_today)
+      ? `<div class="rblock"><div class="bignum" style="font-size:30px">${t.lb} lb</div>
+          <div class="small">7-day ${w.ma7_lb ?? "—"}${w.week_change_lb!=null?` · ${w.week_change_lb>0?"+":""}${w.week_change_lb} this week`:""} · ${esc(t.source)}</div></div>`
+      : `<div class="rblock"><div class="small">${t?`Last: ${t.lb} lb (${new Date(t.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})})`:"No weigh-in on file"}
+            — Withings isn't connected yet, so enter this morning's number:</div>
+          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="176.4"></span>
+            <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
+          <div class="small" id="wiMsg"></div></div>`;
+    el.innerHTML = `<h4>Last night · this morning</h4>
+      <div class="readyrow">${sleepHTML}${weighHTML}</div>`;
+    const btn = document.getElementById("wiSave");
+    if (btn) btn.onclick = async ()=>{
+      const lb = +document.getElementById("wiLb").value;
+      if (!lb) return;
+      try{
+        await bridge("/weigh-in",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lb})});
+        refreshReadiness();
+      }catch(e){ document.getElementById("wiMsg").textContent = "Failed: " + e.message; }
+    };
+  };
+  refreshReadiness();
+
+  try{
+    const [s, plan] = await Promise.all([
+      bridge("/schedule?days=7"),
+      bridge("/plan").catch(()=>({for_today:false}))
+    ]);
+    const days = s.days || [];
+    document.getElementById("dayList").innerHTML =
+      days.map(d=> dayCard(d, plan, nowMin(), s.recommendation)).join("");
+
+    // "Next up" — the first thing today that hasn't happened yet.
+    const today = days[0];
+    const nm = nowMin();
+    const next = today ? dayRows(today, plan, true).find(r=> r.start > nm && !r.open) : null;
+    document.getElementById("nowNext").textContent = next
+      ? "Next: " + next.title + " at " + next.from
+      : (today && today.events && today.events.length ? "Nothing left on the calendar today" : "Day is clear");
+
+    // Say plainly which lanes are actually feeding this page.
+    const src = s.sources || {};
+    const missing = [];
+    if (!src.calendar_connected) missing.push("Google Calendar not connected (visit /gcal/auth on the bridge)");
+    if (!src.classes_configured) missing.push("no class schedule yet (bridge/schedule-classes.json)");
+    if (!src.intervals_configured) missing.push("intervals.icu not configured (INTERVALS_ICU_API_KEY + INTERVALS_ICU_ATHLETE_ID)");
+    if (src.intervals_error) missing.push("intervals.icu: " + src.intervals_error);
+    // ---- food log: additive through the day, against today's Hexis targets ----
+    const macrosToday = today ? today.macros : null;
+    const refreshFood = async ()=>{
+      const el = document.getElementById("foodLog");
+      if (!el) return;
+      let meals = [];
+      try{ meals = (await bridge("/meals/today")).meals || []; }
+      catch(e){ el.innerHTML = `<h4>Food log · today</h4><div class="small">bridge unreachable — entries queue locally</div>`; return; }
+      el.innerHTML = foodLogHTML(meals, macrosToday);
+      const add = async (m)=>{
+        const r = await logMealQueued(m);
+        const msg = document.getElementById("flMsg");
+        if (r.ok){ refreshFood(); }
+        else if (msg) msg.textContent = "Bridge offline — queued locally (" + r.queued + ").";
+      };
+      document.getElementById("flAdd").onclick = ()=> add({
+        name: document.getElementById("flName").value || "meal",
+        meal: document.getElementById("flMeal").value,
+        kcal: +document.getElementById("flK").value || 0,
+        carbs_g: +document.getElementById("flC").value || 0,
+        protein_g: +document.getElementById("flP").value || 0,
+        fat_g: +document.getElementById("flF").value || 0 });
+      document.getElementById("flSmoothie").onclick = ()=> add(
+        {name:"Blueberry oatmeal smoothie",meal:"breakfast",kcal:520,protein_g:40,carbs_g:85,fat_g:8});
+      document.getElementById("flBowl").onclick = ()=> add(
+        {name:"Post-ride bowl",meal:"lunch",kcal:750,protein_g:52,carbs_g:98,fat_g:16});
+    };
+    refreshFood();
+
+    document.getElementById("daySources").innerHTML = missing.length
+      ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet")
+        + "<br>Missing — " + missing.map(esc).join("; ")
+      : "Feeding this page: " + (src.calendars||[]).join(" · ") + " · classes · intervals.icu";
+  }catch(e){
+    document.getElementById("dayList").innerHTML =
+      `<div class="card"><h4>The day</h4><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`;
+  }
+};
+
+/* ---------------- FOOD LOG (front page) ----------------
+   Additive: every entry adds to a running total that is carried down the
+   list, so the day reads as an accumulation, not a pile of separate meals.
+   When Hexis macros are in, the same totals are shown as what's left. */
+async function logMealQueued(m){
+  try{
+    await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)});
+    return { ok:true };
+  }catch(e){
+    const q = JSON.parse(localStorage.getItem("way-queue")||"[]"); q.push(m);
+    localStorage.setItem("way-queue", JSON.stringify(q));
+    return { ok:false, queued:q.length };
+  }
+}
+function mealTime(m){
+  if (!m.logged_at) return "";
+  const d = new Date(m.logged_at);
+  if (isNaN(d)) return "";
+  let h=d.getHours(); const mm=String(d.getMinutes()).padStart(2,"0"); const ap=h<12?"a":"p";
+  h=h%12; if(h===0)h=12; return h+":"+mm+ap;
+}
+function foodLogHTML(meals, macros){
+  const run = { kcal:0, carbs_g:0, protein_g:0, fat_g:0 };
+  const rows = meals.map(m=>{
+    run.kcal += m.kcal||0; run.carbs_g += m.carbs_g||0;
+    run.protein_g += m.protein_g||0; run.fat_g += m.fat_g||0;
+    return `<li><span class="t">${esc(mealTime(m))}</span>
+      <span class="n">${esc(m.name)}<span class="small"> ${esc(m.meal||"")}${m.carbs_g?` · ${Math.round(m.carbs_g)}C`:""}${m.protein_g?` · ${Math.round(m.protein_g)}P`:""}${m.fat_g?` · ${Math.round(m.fat_g)}F`:""}</span></span>
+      <span class="tag">+${m.kcal||0}<br><b>${Math.round(run.kcal)}</b></span></li>`;
+  }).join("");
+  const line = (label, got, target)=>{
+    const left = target != null ? Math.round(target - got) : null;
+    return `<li><span class="n">${label}</span><span class="tag">${Math.round(got)}${target!=null?` / ${target}`:""}${
+      left!=null?` <b>${left>=0?left+" left":Math.abs(left)+" over"}</b>`:""}</span></li>`;
+  };
+  const totals = `<ul class="agenda totals">
+    ${line("kcal", run.kcal, macros?macros.kcal:null)}
+    ${line("carbs g", run.carbs_g, macros?macros.carbs_g:null)}
+    ${line("protein g", run.protein_g, macros?macros.protein_g:null)}
+    ${line("fat g", run.fat_g, macros?macros.fat_g:null)}</ul>`;
+  return `<h4>Food log · today${meals.length?` · ${meals.length} entries`:""}</h4>
+    <ul class="agenda foodlog">${rows || `<li><span class="t"></span><span class="n">Nothing logged yet</span><span class="tag">0</span></li>`}</ul>
+    ${totals}
+    ${macros ? "" : `<div class="small">No Hexis targets today — totals only.</div>`}
+    <div class="row2"><span><label>What</label><input id="flName" placeholder="Rice balls"></span>
+      <span><label>Meal</label><select id="flMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
+    <div class="row2"><span><label>kcal</label><input id="flK" type="number"></span>
+      <span><label>carbs g</label><input id="flC" type="number"></span></div>
+    <div class="row2"><span><label>protein g</label><input id="flP" type="number"></span>
+      <span><label>fat g</label><input id="flF" type="number"></span></div>
+    <button class="primary" id="flAdd">Add to the day</button>
+    <button id="flSmoothie">Smoothie (520)</button>
+    <button id="flBowl">Post-ride bowl (750)</button>
+    <div class="small" id="flMsg"></div>`;
+}
+
+/* Demo payload: same shape as /schedule, generated from today so the front
+   page still reads as a real week when the bridge is unreachable. */
+function demoSchedule(){
+  const f = m=>{ let h=Math.floor(m/60), mm=m%60, ap=h<12?"a":"p"; h=h%12; if(h===0)h=12;
+    return h+":"+String(mm).padStart(2,"0")+ap; };
+  const ev = (s,e,summary,category,source,detail)=>({ summary, category, source, detail:detail||null,
+    allDay:false, blocking:category!=="training", from:f(s), to:f(e), start_min:s, end_min:e, minutes:e-s });
+  const DAY_START=5*60, DAY_END=21.5*60;
+  const days=[];
+  for (let i=0;i<7;i++){
+    const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+i);
+    const key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+    const dow=d.getDay(), events=[];
+    if (dow>=1 && dow<=5){
+      events.push(ev(8*60,8*60+45,"AP World History · Rm 114","work","class"));
+      events.push(ev(10*60,10*60+45,"World History 9 · Rm 114","work","class"));
+      events.push(ev(13*60,13*60+45,"Section meeting · Rm 114","work","class"));
+    }
+    if (dow===1||dow===3||dow===5) events.push(ev(6*60,7*60+15,"Z2 endurance","training","intervals","75 min · 62 TSS · Ride"));
+    if (dow===2||dow===4) events.push(ev(6*60,6*60+50,"Lifting — kettlebell + Bowflex","training","intervals","50 min · WeightTraining"));
+    if (dow===2||dow===4) events.push(ev(18*60,19*60+30,"U16 ECNL training · Seminary Park","coaching","coaching"));
+    if (dow===6) events.push(ev(9*60,11*60,"U16 ECNL match day","coaching","coaching"));
+    events.sort((a,b)=>a.start_min-b.start_min);
+    const busy=events.filter(e=>e.blocking).map(e=>[e.start_min,e.end_min]);
+    const windows=[]; let cursor=DAY_START;
+    for (const [s,e] of busy){ if (s-cursor>=30) windows.push([cursor,Math.min(s,DAY_END)]); cursor=Math.max(cursor,e); if(cursor>=DAY_END) break; }
+    if (DAY_END-cursor>=30) windows.push([cursor,DAY_END]);
+    days.push({ date:key, today:i===0,
+      dow:d.toLocaleDateString("en-US",{weekday:"short"}),
+      label:d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"}),
+      events, all_day:[],
+      windows: windows.map(([s,e])=>({from:f(s),to:f(e),start_min:s,end_min:e,minutes:e-s,
+        slot: s<12*60?"morning":(s>=15*60?"evening":"midday")})),
+      available_min: windows.reduce((a,[s,e])=>a+(e-s),0), travel:false,
+      macros: i===0 ? { kcal:2950, carbs_g:420, protein_g:185, fat_g:75, fuel_day:"high carb", source:"hexis" } : null });
+  }
+  return { connected:false, days, recommendation:"demo — connect the bridge for the real day",
+    sources:{ calendars:["demo"], calendar_connected:false, classes_configured:false, intervals_configured:false } };
+}
 
 /* ---------------- SETTINGS ---------------- */
 V.settings = function(){

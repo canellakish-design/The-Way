@@ -1,0 +1,19 @@
+node_modules/
+package-lock.json
+
+# Local storage. bridge/storage.js writes one file per key when running on the
+# PC; production uses Netlify Blobs. seed-recipes.json and schedule-classes.json
+# are real tracked data, not storage — they stay in git.
+bridge/agent-thread*.json
+bridge/batches.json
+bridge/fuel-log.json
+bridge/gcal.json
+bridge/intervals-cache.json
+bridge/macros.json
+bridge/plan.json
+bridge/race-week.json
+bridge/strava.json
+bridge/weigh-in.json
+bridge/whoop.json
+bridge/withings.json
+bridge/withings-trend.json

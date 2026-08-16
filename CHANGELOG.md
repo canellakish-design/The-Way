@@ -1,4 +1,39 @@
-# The Way — Netlify Function migration (changelog)
+# The Way — changelog
+
+# The day (front page)
+
+## Added
+- `GET /schedule?days=N` — N days starting today, every source merged into one
+  timeline per day: Google calendars, classes, intervals.icu, Hexis macros,
+  and the free windows between them
+- bridge/classes.js + bridge/schedule-classes.json — the weekly teaching
+  timetable, expanded onto dates; class time blocks training windows
+- bridge/intervals.js — planned intervals and lifting from intervals.icu
+  (`/intervals/status`, `/intervals/day`), 10-minute cache
+- bridge/macros.js — Hexis targets inbox (`POST /macros`, `GET /macros/today`),
+  filled by the morning Claude-in-Chrome run (deploy/hexis-morning-run.md)
+- bridge/weighin.js — storage-backed weigh-in (`GET`/`POST /weigh-in`) that
+  works hosted, since Withings is not connected yet
+- `GET`/`POST /gcal/calendars` — see and pin which calendars feed the day
+- pwa `#today` view: live clock, recovery + weigh-in strip, day-by-day
+  timeline, additive food log with running totals against the Hexis targets
+- .gitignore — node_modules and the local storage files (seed-recipes.json and
+  schedule-classes.json are real data and stay tracked)
+
+## Changed
+- Google sync now covers **every readable calendar**, not just primary, so the
+  16 ECNL coaching calendar lands on the day; events carry their calendar and a
+  source, and a coaching calendar sets the category for everything on it
+- Day keys are local dates — `toISOString()` rolled "today" over at 8pm Eastern
+- Sync horizon 8 → 15 days; `defaultView()` is the day on every role
+
+## Still open
+- Classes: schedule-classes.json is empty until the real timetable goes in
+- intervals.icu + Hexis need their credentials / morning run before those lanes
+  show anything
+- Withings still not connected — weigh-in is manual by design for now
+
+# Netlify Function migration
 
 ## Added
 - netlify/functions/api.js — the entire bridge as one serverless function
