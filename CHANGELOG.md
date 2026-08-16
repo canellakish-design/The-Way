@@ -1,5 +1,17 @@
 # The Way — changelog
 
+# One day at a time
+
+## Changed
+- The front page shows a single day, not the week. Large type — readable from
+  across a kitchen — with `‹`/`›`, arrow keys, Home, and swipe to step days
+- `/schedule?back=N` returns days before today, and the Google sync window
+  reaches 7 days back; it started at midnight today, so yesterday would have
+  rendered as an empty day rather than an unsynced one
+- Recovery, weigh-in and food log hide on any day but today
+- The demo payload spans the same window as the real one, so demo mode can
+  step days too
+
 # The day refreshes itself
 
 ## Added

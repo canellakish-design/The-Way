@@ -81,3 +81,22 @@ ul.agenda.foodlog li{border-left-color:var(--amber)}
 #alarmOverlay .bignum{font-size:72px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 .snack{border-top:1px dashed var(--line); margin-top:10px; padding-top:10px}
+
+/* ---- one day at a time ---- */
+.daystep{display:flex; align-items:center; gap:10px; margin:10px 0 2px}
+.daystep button{font-size:22px; line-height:1; padding:6px 16px; margin:0}
+.daystep-label{flex:1; text-align:center; font-weight:700; font-size:15px; letter-spacing:2px; text-transform:uppercase}
+.daystep button:disabled{opacity:.25}
+/* The focused day is the whole page, so it gets room to breathe: bigger rows,
+   bigger times, readable from across a kitchen. */
+.card.day-solo h4{font-size:17px}
+ul.agenda-big li{grid-template-columns:78px 1fr auto; padding:12px 0 12px 11px; font-size:19px; line-height:1.35}
+ul.agenda-big .t{font-size:14px; line-height:1.3}
+ul.agenda-big .n .small{font-size:15px}
+ul.agenda-big .tag{font-size:11px}
+.card.day-solo .macros .unit{font-size:14px; padding:5px 12px}
+.card.day-solo .macros .mfuel{font-size:14px; padding:5px 12px}
+@media (min-width:560px){
+  ul.agenda-big li{font-size:21px; grid-template-columns:92px 1fr auto}
+  ul.agenda-big .t{font-size:15px}
+}

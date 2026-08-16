@@ -5,8 +5,12 @@ Spec: see the-way-master-spec.md (v1.1). Doctrine: fuel the work; take
 the deficit at the margins; settle the day in the green band.
 
 ## The front page — the day
-Every device opens on **the day**: a live clock, last night and this morning
-at the top, then one timeline per day starting with today. Five lanes feed
+Every device opens on **today** — one day at a time, in large type: a live
+clock, last night and this morning, then today's timeline. `‹` and `›` (or the
+arrow keys, or a swipe) step back to yesterday and forward through the week;
+a fortnight either side of today is already loaded, so stepping is instant.
+Recovery, the weigh-in and the food log belong to today and hide themselves on
+any other day rather than showing today's numbers under another date. Five lanes feed
 each day, and the page says plainly which of them are actually connected:
 
 | Lane | Source | Notes |

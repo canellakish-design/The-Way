@@ -1249,7 +1249,7 @@ function dayRows(d, plan, isToday){
   return rows.sort((a,b)=> (a.start-b.start) || (a.end-b.end));
 }
 
-function dayCard(d, plan, nowMin, rec){
+function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
   const chips = (d.all_day||[]).map(e=>
@@ -1276,11 +1276,11 @@ function dayCard(d, plan, nowMin, rec){
         <span class="unit p">${m.protein_g ?? "—"}P</span><span class="unit f">${m.fat_g ?? "—"}F</span>
         <span class="small">Hexis</span></div>`
     : (isToday ? `<div class="macros"><span class="small">No Hexis macros yet — run the morning fetch</span></div>` : "");
-  return `<div class="card day${isToday?" is-today":""}">
+  return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
     ${macroRow}
     ${chips?`<div class="chips">${chips}</div>`:""}
-    <ul class="agenda">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
+    <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div></div>`;
 }
 
@@ -1291,8 +1291,11 @@ function dayCard(d, plan, nowMin, rec){
    tab syncs immediately, and crossing midnight reloads the page outright so
    "today" is actually today (and any new deploy lands with it). */
 let __dayTimers = [];
-function clearDayTimers(){ __dayTimers.forEach(clearInterval); __dayTimers = []; }
-let __dayWake = false;
+function clearDayTimers(){
+  __dayTimers.forEach(clearInterval); __dayTimers = [];
+  if (__dayKeys){ document.removeEventListener("keydown", __dayKeys); __dayKeys = null; }
+}
+let __dayWake = false, __dayKeys = null;
 const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 
 V.today = async function(){
@@ -1304,6 +1307,11 @@ V.today = async function(){
         <div class="nowdate" id="nowDate"></div>
         <div class="small" id="nowNext">reaching the bridge…</div>
         <div class="small" id="nowFresh"></div></div>
+    </div>
+    <div class="daystep">
+      <button id="dayPrev" aria-label="Previous day">‹</button>
+      <div class="daystep-label" id="dayLabel"></div>
+      <button id="dayNext" aria-label="Next day">›</button>
     </div>
     <div class="card" id="readiness"><h4>Last night · this morning</h4>
       <div class="small">reaching the bridge…</div></div>
@@ -1395,20 +1403,69 @@ V.today = async function(){
 
   // Redraw from cache: moves the "now" band and the next-up line as time
   // passes. Cheap, so it can run often; no network, no flicker of live data.
+  // Which day is on screen, as an offset from today. 0 = today.
+  let offset = 0;
+  const dayAt = (off)=>{
+    const i = (cached.todayIndex || 0) + off;
+    return (i >= 0 && i < cached.days.length) ? cached.days[i] : null;
+  };
+
   const repaint = ()=>{
     if (!cached.days.length) return;
     // Crossing midnight makes every card wrong. Reload rather than patch —
     // it rebuilds the week from today and picks up any deploy at the same time.
     if (localDateKey() !== cached.dateKey){ location.reload(); return; }
+    const day = dayAt(offset);
     const list = document.getElementById("dayList");
-    if (list) list.innerHTML = cached.days.map(d=> dayCard(d, cached.plan, nowMin(), cached.recommendation)).join("");
-    const today = cached.days[0], nm = nowMin();
-    const next = today ? dayRows(today, cached.plan, true).find(r=> r.start > nm && !r.open) : null;
+    // Only today gets the live now-marker; on any other day a "now" band would
+    // be pointing at a time that already passed or hasn't arrived.
+    if (list) list.innerHTML = day
+      ? dayCard(day, cached.plan, nowMin(), cached.recommendation, true)
+      : `<div class="card"><div class="small">No data for that day — the schedule reaches
+          ${cached.days.length} days from ${esc(cached.days[0].date)}.</div></div>`;
+
+    const lab = document.getElementById("dayLabel");
+    if (lab) lab.textContent = offset === 0 ? "Today"
+      : offset === -1 ? "Yesterday" : offset === 1 ? "Tomorrow"
+      : (day ? day.label : "—");
+    const prev = document.getElementById("dayPrev"), next2 = document.getElementById("dayNext");
+    if (prev) prev.disabled = !dayAt(offset-1);
+    if (next2) next2.disabled = !dayAt(offset+1);
+
+    // The strips below the schedule are about today: last night's recovery,
+    // this morning's weight, today's eating. Hide them rather than show
+    // today's numbers under yesterday's date.
+    const isToday = offset === 0;
+    const rd = document.getElementById("readiness"), fl = document.getElementById("foodLog");
+    if (rd) rd.style.display = isToday ? "" : "none";
+    if (fl) fl.style.display = isToday ? "" : "none";
+
+    const today = dayAt(0), nm = nowMin();
+    const nx = today ? dayRows(today, cached.plan, true).find(r=> r.start > nm && !r.open) : null;
     const el = document.getElementById("nowNext");
-    if (el) el.textContent = next
-      ? "Next: " + next.title + " at " + next.from
+    if (el) el.textContent = nx
+      ? "Next: " + nx.title + " at " + nx.from
       : (today && today.events && today.events.length ? "Nothing left on the calendar today" : "Day is clear");
   };
+
+  const step = (n)=>{ if (dayAt(offset+n)){ offset += n; repaint(); } };
+  document.getElementById("dayPrev").onclick = ()=> step(-1);
+  document.getElementById("dayNext").onclick = ()=> step(1);
+  // Arrow keys on the tablet's keyboard, and a swipe on the phone.
+  __dayKeys = (e)=>{
+    if (location.hash !== "#today") return;
+    if (e.key === "ArrowLeft") step(-1);
+    if (e.key === "ArrowRight") step(1);
+    if (e.key === "Home") { offset = 0; repaint(); }
+  };
+  document.addEventListener("keydown", __dayKeys);
+  let touchX = null;
+  view.addEventListener("touchstart", e=>{ touchX = e.changedTouches[0].clientX; }, {passive:true});
+  view.addEventListener("touchend", e=>{
+    if (touchX == null) return;
+    const dx = e.changedTouches[0].clientX - touchX; touchX = null;
+    if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1);
+  }, {passive:true});
 
   const stamp = ()=>{
     const el = document.getElementById("nowFresh");
@@ -1421,13 +1478,17 @@ V.today = async function(){
 
   const loadDay = async ()=>{
     try{
+      // A week either side, so stepping back to yesterday (or forward) is
+      // instant and needs no second round trip.
       const [s, plan] = await Promise.all([
-        bridge("/schedule?days=7"),
+        bridge("/schedule?days=15&back=7"),
         bridge("/plan").catch(()=>({for_today:false}))
       ]);
       const days = s.days || [];
-      cached = { days, plan, recommendation: s.recommendation,
-        macros: days[0] ? days[0].macros : null, dateKey: localDateKey() };
+      const ti = Number.isInteger(s.today_index) ? s.today_index
+        : Math.max(0, days.findIndex(d=>d.today));
+      cached = { days, plan, recommendation: s.recommendation, todayIndex: ti,
+        macros: days[ti] ? days[ti].macros : null, dateKey: localDateKey() };
       repaint();
       stamp();
 
@@ -1629,7 +1690,8 @@ function demoSchedule(){
     allDay:false, blocking:category!=="training", from:f(s), to:f(e), start_min:s, end_min:e, minutes:e-s });
   const DAY_START=5*60, DAY_END=21.5*60;
   const days=[];
-  for (let i=0;i<7;i++){
+  const BACK = 7, FWD = 7;          // same window the real /schedule returns
+  for (let i=-BACK;i<=FWD;i++){
     const d=new Date(); d.setHours(12,0,0,0); d.setDate(d.getDate()+i);
     const key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
     const dow=d.getDay(), events=[];
@@ -1656,7 +1718,8 @@ function demoSchedule(){
       available_min: windows.reduce((a,[s,e])=>a+(e-s),0), travel:false,
       macros: null });   // never fake a macro target — Hexis numbers are only ever real
   }
-  return { connected:false, days, recommendation:"demo — connect the bridge for the real day",
+  return { connected:false, days, today_index:BACK,
+    recommendation:"demo — connect the bridge for the real day",
     sources:{ calendars:["demo"], calendar_connected:false, classes_configured:false, intervals_configured:false } };
 }
 

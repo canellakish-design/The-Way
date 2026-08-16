@@ -116,8 +116,11 @@ async function eventsFrom(t, cal, timeMin, timeMax) {
 async function sync() {
   const d = await db();
   const t = await tok(d);
-  const timeMin = new Date(); timeMin.setHours(0, 0, 0, 0);
-  const timeMax = new Date(timeMin); timeMax.setDate(timeMax.getDate() + 15);
+  // Reach back a week as well as forward: the day page can step back to
+  // yesterday, and a sync window starting at midnight today would make every
+  // past day look empty rather than unsynced.
+  const timeMin = new Date(); timeMin.setHours(0, 0, 0, 0); timeMin.setDate(timeMin.getDate() - 7);
+  const timeMax = new Date(); timeMax.setHours(0, 0, 0, 0); timeMax.setDate(timeMax.getDate() + 15);
   const all = await calendarList(t);
   d.calendar_list = all;
   const cals = chooseCalendars(all, d.calendars);
@@ -225,11 +228,14 @@ function scheduleForDate(events, dateStr) {
 
 // One day, every source: Google calendars (life + coaching), the teaching
 // timetable, and the planned work from intervals.icu.
-function scheduleDays(events, n, plannedByDate) {
+// back: days before today to include, so the page can step back to yesterday.
+// Day 0 of the returned array is (today - back).
+function scheduleDays(events, n, plannedByDate, back) {
   const { classesForDate } = require('./classes');
   const today = dateKey(new Date());
   const days = [];
-  for (let i = 0; i < n; i++) {
+  const first = -(back || 0);
+  for (let i = first; i < first + n; i++) {
     const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + i);
     const key = dateKey(d);
     const classes = classesForDate(key);
@@ -322,15 +328,17 @@ function attach(app) {
   // day skeleton even when Google isn't connected, so the page still renders.
   app.get('/schedule', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const n = Math.min(14, Math.max(1, parseInt(req.query.days, 10) || 7));
+      const n = Math.min(21, Math.max(1, parseInt(req.query.days, 10) || 7));
+      const back = Math.min(7, Math.max(0, parseInt(req.query.back, 10) || 0));
       const d = await sync().catch(async () => await db());
-      const last = new Date(); last.setDate(last.getDate() + n - 1);
+      const first = new Date(); first.setDate(first.getDate() - back);
+      const last = new Date(); last.setDate(last.getDate() + n - back - 1);
       const intervals = require('./intervals');
       const classes = require('./classes');
       // A dead source dims one lane of the day; it never blanks the page.
-      const iv = await intervals.plannedRange(dateKey(new Date()), dateKey(last))
+      const iv = await intervals.plannedRange(dateKey(first), dateKey(last))
         .catch(e => ({ configured: intervals.configured(), days: {}, error: e.message }));
-      const days = scheduleDays(d.events || [], n, iv.days);
+      const days = scheduleDays(d.events || [], n, iv.days, back);
       // Hexis macros, posted each morning by the Chrome run.
       const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
       for (const day of days) day.macros = macros[day.date] || null;
@@ -340,16 +348,18 @@ function attach(app) {
         classes_configured: classes.configured(),
         intervals_configured: !!iv.configured,
         intervals_error: iv.error || null,
-        macros_today: !!(days[0] && days[0].macros)
+        macros_today: !!((days.find(x => x.today) || {}).macros)
       };
-      if (!d.tokens) return res.json({ connected: false, days, sources });
+      const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
+      if (!d.tokens) return res.json({ connected: false, days, sources, today_index: todayIdx0 });
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');
       const s = await sleepLatest({ sync: false }).catch(() => null);
       const w = await weekState().catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
       res.json({ connected: true, synced_at: d.synced_at, days, sources,
-        ...recommendToday(days[0], rec, w ? w.remaining : null) });
+        today_index: todayIdx0,
+        ...recommendToday(days[todayIdx0], rec, w ? w.remaining : null) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
   // Which Google calendars feed the day (the coaching one included).
   app.get('/gcal/calendars', async (req, res) => { if (!auth(req, res)) return;
