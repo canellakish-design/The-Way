@@ -15,5 +15,7 @@ bridge/race-week.json
 bridge/strava.json
 bridge/weigh-in.json
 bridge/whoop.json
+bridge/whoop-old.json
+bridge/intake.json
 bridge/withings.json
 bridge/withings-trend.json
