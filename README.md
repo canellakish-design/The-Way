@@ -44,6 +44,36 @@ Sleep tab, and it is still where the alarm lands.
 4. OAuth visits: Withings, WHOOP, Strava; ANTHROPIC_API_KEY for the Agent
 5. Batch-cook the rice balls; weigh; update seed-recipes.json perUnit
 
+## The Signature — FTP, threshold HR, zones
+`bridge/zones.js` is the math (pure, tested: `node bridge/zones.test.js`);
+`bridge/fitness.js` holds the state, the ingestion and the audit log. Three
+signals, reconciled rather than trusted individually:
+
+| Signal | Where from | Weight |
+| --- | --- | --- |
+| Dedicated test | Tymewear ramp, typed in — FTP = VT2 × 0.925 | authoritative for 60 days |
+| eFTP | best 20–60 min effort in the last 90 days, from Strava power streams | primary when no fresh test |
+| Ventilatory | VE-vs-power breakpoints from breathing data | cross-check |
+
+- The 20-minute best gets ×0.95, a genuine 45–60 minute effort none, and
+  durations between the two interpolate. Ragged efforts (NP/avg > 1.2) don't
+  count — that's an interval session, not a threshold.
+- Old efforts decay ~1%/week rather than standing forever, so FTP tracks
+  current fitness instead of a lifetime peak.
+- If eFTP and the ventilatory curve agree with each other but drift >5% from
+  the last test, the app says "consider retesting" — it never silently
+  overwrites a measured test.
+- Threshold HR is VT2 HR, undiscounted. On a power-only signal there is no
+  VT2 HR, so the HR held during the best effort stands in **and is labelled
+  as a stand-in**. HR zones anchor to threshold, never to a max-HR guess.
+- Every change is logged with what caused it: `GET /fitness/log`, or the
+  "Why FTP changed" card in Analyze.
+
+The ventilatory fit refuses more often than it guesses: too few segments, no
+steady work above 85% of FTP, only one inflection, or two split-half fits that
+disagree by more than 25W all return a reason instead of a number. Tested
+across noise levels, it is either right within 30W or it declines.
+
 ## Feeding the day
 1. **Google Calendar** — visit `/gcal/auth` once. Every calendar the account
    can read is synced (holidays/birthdays skipped). `GET /gcal/calendars`
@@ -58,6 +88,13 @@ Sleep tab, and it is still where the alarm lands.
 5. **Weigh-in** — `POST /weigh-in {"lb":176.4}`, or type it into the top strip.
 
 ## Honest v1 seams (by design, all flagged in code)
+- Tymewear has no API — ramp tests are typed into Analyze (spec §7).
+- Breathing streams have no automatic feed yet: `POST /fitness/breathing`
+  takes segments or raw streams, but nothing parses FIT files into it. Until
+  something does, the ventilatory signal stays empty and says so.
+- The §2c confound filter needs a trailing HRV/RHR baseline, and WHOOP only
+  stores its latest reading — so the baseline accumulates from the day this
+  shipped, and the filter is inert until there are enough days.
 - Withings is **not connected**: the morning weigh-in is entered by hand on
   the front page and stored via `/weigh-in`. When the scale is wired up it can
   write to the same store and nothing downstream changes.

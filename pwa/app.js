@@ -73,6 +73,20 @@ const DEMO = {
     carbs_g:420, protein_g:185, fat_g:75, fuel_day:"high carb", source:"hexis" },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
+  "/fitness": { ftp:271, threshold_hr:168, source:"eFTP — best 20 min effort", confidence:"medium",
+    threshold_hr_source:"average HR during the best qualifying effort (not a measured VT2)",
+    notes:["Demo data — connect the bridge and scan a ride for the real Signature."],
+    power_zones:[{zone:"Z1",name:"Active Recovery",pct:"0–55%",from:0,to:149},{zone:"Z2",name:"Endurance",pct:"55–75%",from:149,to:203},
+      {zone:"Z3",name:"Tempo",pct:"75–90%",from:203,to:244},{zone:"Z4",name:"Threshold",pct:"90–105%",from:244,to:285},
+      {zone:"Z5",name:"VO2max",pct:"105–120%",from:285,to:325},{zone:"Z6",name:"Anaerobic Capacity",pct:"120–150%",from:325,to:407},
+      {zone:"Z7",name:"Neuromuscular",pct:"150%+",from:407,to:null}],
+    hr_zones:[{zone:"Z1",name:"Recovery",pct:"0–80%",from:0,to:134},{zone:"Z2",name:"Aerobic",pct:"80–89%",from:134,to:150},
+      {zone:"Z3",name:"Tempo",pct:"89–95%",from:150,to:160},{zone:"Z4",name:"SubThreshold",pct:"95–100%",from:160,to:168},
+      {zone:"Z5",name:"SuperThreshold",pct:"100–103%",from:168,to:173},{zone:"Z6",name:"Aerobic Capacity",pct:"103–106%",from:173,to:178},
+      {zone:"Z7",name:"Anaerobic",pct:"106%+",from:178,to:null}],
+    signals:{ test:null, eftp:{ftp:271, from:{minutes:20}, decay:1}, ventilatory:null, override:null },
+    counts:{ efforts:3, segments:0, wellness_days:0, rides_scanned:1 } },
+  "/fitness/log": { log:[] },
   "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kcal:480, source:"strava", at:new Date().toISOString()}] },
   "/batches": { batches:[ {slot:1,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
     {slot:2,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
@@ -888,16 +902,119 @@ V.sleep = async function(){
 V.analyze = async function(){
   view.innerHTML = `<span class="eyebrow">Analyze</span>
     <div class="card" id="weigh"><h4>Step on the scale</h4><div class="small">waiting for the weigh-in…</div></div>
+    <div class="card" id="sig"><h4>The Signature</h4><div class="small">reaching the bridge…</div></div>
+    <div class="card" id="zonesCard"><h4>Zones</h4><div class="small">waiting for an FTP…</div></div>
+    <div class="card" id="signals"><h4>Signals</h4><div class="small">reaching the bridge…</div></div>
+    <div class="card"><h4>Log a Tymewear ramp test</h4>
+      <div class="small">Tymewear has no API, so the test goes in by hand. FTP is taken as VT2 × 0.925 — the ramp's 3-minute stages overstate sustainable power by 5–10%. A test sets FTP for 60 days.</div>
+      <div class="row2"><span><label>VT2 power (W)</label><input id="tVt2P" type="number"></span>
+        <span><label>VT2 HR (bpm)</label><input id="tVt2H" type="number"></span></div>
+      <div class="row2"><span><label>VT1 power (W)</label><input id="tVt1P" type="number"></span>
+        <span><label>VT1 HR (bpm)</label><input id="tVt1H" type="number"></span></div>
+      <button class="primary" id="tSave">Save test</button>
+      <div class="small" id="tMsg"></div></div>
+    <div class="card"><h4>Pin FTP by hand</h4>
+      <div class="small">For a real-world effort the app didn't see. A pin outranks every signal until you clear it.</div>
+      <div class="row2"><span><label>FTP (W)</label><input id="ovFtp" type="number"></span>
+        <span><label>Threshold HR</label><input id="ovHr" type="number"></span></div>
+      <button id="ovSave">Pin</button> <button id="ovClear">Clear pin</button>
+      <div class="small" id="ovMsg"></div></div>
+    <div class="card" id="ftpLog"><h4>Why FTP changed</h4><div class="small">reaching the bridge…</div></div>
     <div class="card"><h4>Ride analysis</h4>
-      <div class="small">Coming with the analysis build: post-ride session verdicts (NP · IF · TSS · decoupling · interval grading), power duration curve with "closest signature to a breakthrough," W&#8242; balance, efficiency trends, and FTP estimation. Strava streams in, coaching out.</div></div>
+      <div class="small">Still to come: post-ride session verdicts (NP · IF · TSS · decoupling · interval grading), power duration curve with "closest signature to a breakthrough," and W&#8242; balance.</div></div>
     ${coachCard("analyze")}`;
 
+  const zoneTable = (rows, unit)=> `<ul class="agenda totals">${rows.map(z=>
+    `<li><span class="n"><b>${z.zone}</b> ${esc(z.name)} <span class="small">${esc(z.pct)}</span></span>
+      <span class="tag">${z.from}${z.to?"–"+z.to:"+"} ${unit}</span></li>`).join("")}</ul>`;
+
+  const refreshSig = async ()=>{
+    try{
+      const f = await bridge("/fitness");
+      document.getElementById("sig").innerHTML = f.ftp
+        ? `<h4>The Signature</h4>
+           <div class="bignum">${f.ftp} W</div>
+           <div class="small">${esc(f.source||"")} · confidence ${esc(f.confidence||"")}${
+             f.threshold_hr?` · threshold HR <b>${f.threshold_hr}</b>`:""}</div>
+           ${f.threshold_hr_source?`<div class="small">HR basis: ${esc(f.threshold_hr_source)}</div>`:""}
+           ${(f.notes||[]).map(n=>`<div class="small">• ${esc(n)}</div>`).join("")}
+           <button id="sigScan">Re-read recent rides</button>
+           <div class="small" id="sigMsg">${f.counts?`${f.counts.efforts} efforts · ${f.counts.rides_scanned} rides scanned · ${f.counts.segments} breathing segments`:""}</div>`
+        : `<h4>The Signature</h4><div class="small">No FTP yet. ${(f.notes||[]).map(esc).join(" ")}</div>
+           <button id="sigScan">Scan recent rides</button><div class="small" id="sigMsg"></div>`;
+      document.getElementById("zonesCard").innerHTML = f.power_zones
+        ? `<h4>Power zones · FTP ${f.ftp} W</h4>${zoneTable(f.power_zones,"W")}
+           ${f.hr_zones ? `<h4 style="margin-top:14px">HR zones · threshold ${f.threshold_hr} bpm</h4>${zoneTable(f.hr_zones,"bpm")}
+             <div class="small">Anchored to threshold HR, never to a max-HR guess.</div>`
+             : `<div class="small">No threshold HR yet — HR zones need a test or a qualifying effort with HR.</div>`}`
+        : `<h4>Zones</h4><div class="small">Zones appear once there's an FTP.</div>`;
+      const s = f.signals || {};
+      const vent = s.ventilatory;
+      document.getElementById("signals").innerHTML = `<h4>Signals</h4>
+        <ul class="agenda totals">
+          <li><span class="n">Dedicated test <span class="small">VT2 × 0.925</span></span><span class="tag">${
+            s.test ? s.test.ftp+" W" : "none"}</span></li>
+          <li><span class="n">eFTP <span class="small">${s.eftp?`best ${s.eftp.from.minutes} min, decay ${s.eftp.decay}`:"no qualifying effort"}</span></span>
+            <span class="tag">${s.eftp ? s.eftp.ftp+" W" : "—"}</span></li>
+          <li><span class="n">Ventilatory <span class="small">${
+            vent ? (vent.ok ? esc(vent.stability||"") : esc(vent.reason||"")) : "no breathing data"}</span></span>
+            <span class="tag">${vent && vent.ok ? vent.ftp+" W" : "—"}</span></li>
+        </ul>
+        <div class="small">Breathing data posts to /fitness/breathing — no automatic feed until FIT ingestion exists.</div>`;
+      const scan = document.getElementById("sigScan");
+      if (scan) scan.onclick = async ()=>{
+        scan.disabled = true; scan.textContent = "Reading streams…";
+        try{
+          const r = await bridge("/fitness/backfill?n=20");
+          document.getElementById("sigMsg").textContent = `Scanned ${r.scanned} rides.`;
+          refreshSig();
+        }catch(e){ document.getElementById("sigMsg").textContent = "Failed: " + e.message;
+          scan.disabled = false; scan.textContent = "Re-read recent rides"; }
+      };
+      const lg = await bridge("/fitness/log").catch(()=>({log:[]}));
+      document.getElementById("ftpLog").innerHTML = `<h4>Why FTP changed</h4>` + ((lg.log||[]).length
+        ? `<ul class="agenda totals">${lg.log.slice(0,8).map(l=>
+            `<li><span class="n">${new Date(l.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}
+              <span class="small">${esc(l.reason)} · ${esc(l.source||"")}</span></span>
+             <span class="tag">${l.ftp} W${l.delta!=null?` <b>${l.delta>0?"+":""}${l.delta}</b>`:""}</span></li>`).join("")}</ul>`
+        : `<div class="small">Nothing yet — every change lands here with what caused it.</div>`);
+    }catch(e){
+      document.getElementById("sig").innerHTML = `<h4>The Signature</h4><div class="small">bridge unreachable — ${esc(e.message)}</div>`;
+    }
+  };
+  refreshSig();
+
+  document.getElementById("tSave").onclick = async ()=>{
+    const vt2 = +document.getElementById("tVt2P").value;
+    if (!vt2){ document.getElementById("tMsg").textContent = "VT2 power is required."; return; }
+    try{
+      const r = await bridge("/fitness/test",{method:"POST",headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({ vt2_power:vt2, vt2_hr:+document.getElementById("tVt2H").value||null,
+          vt1_power:+document.getElementById("tVt1P").value||null, vt1_hr:+document.getElementById("tVt1H").value||null })});
+      document.getElementById("tMsg").textContent = `Saved — FTP ${r.ftp} W from VT2 ${vt2} W.`;
+      refreshSig();
+    }catch(e){ document.getElementById("tMsg").textContent = "Failed: " + e.message; }
+  };
+  const override = async (body, msg)=>{
+    try{
+      const r = await bridge("/fitness/override",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+      document.getElementById("ovMsg").textContent = msg + " — now " + r.ftp + " W (" + r.source + ").";
+      refreshSig();
+    }catch(e){ document.getElementById("ovMsg").textContent = "Failed: " + e.message; }
+  };
+  document.getElementById("ovSave").onclick = ()=> override(
+    { ftp:+document.getElementById("ovFtp").value, threshold_hr:+document.getElementById("ovHr").value||null }, "Pinned");
+  document.getElementById("ovClear").onclick = ()=> override({clear:true}, "Pin cleared");
+
   let announced = sessionStorage.getItem("wkg-announced");
-  let __ftp = 195; // default; overwritten by /profile fetch below
-  bridge("/profile").then(p=>{ if(p&&p.ftp) __ftp=p.ftp; }).catch(()=>{});
+  // W/kg must quote the same FTP the Signature above is showing — the
+  // Signature is the source of truth, /profile only the fallback.
+  let __ftp = 195;
+  bridge("/fitness").then(f=>{ if (f && f.ftp) __ftp = f.ftp; })
+    .catch(()=> bridge("/profile").then(p=>{ if(p&&p.ftp) __ftp=p.ftp; }).catch(()=>{}));
   const pollWeight = async ()=>{
     try{
-      const t = await bridge("/weight/latest");
+      const t = await bridge("/weigh-in");
       if (t.latest){
         const wkg = (__ftp/(t.latest.lb/2.20462)).toFixed(2);
         document.getElementById("weigh").innerHTML =

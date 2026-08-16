@@ -47,12 +47,18 @@ function shapeActivity(a) {
   };
 }
 
-async function fetchActivity(id) {
+// Authenticated GET against the Strava API. fitness.js reads power/HR streams
+// through this rather than duplicating the token refresh.
+async function apiFetch(pathname) {
   const d = await db();
   const t = await tok(d);
-  const r = await fetch(`${API}/activities/${id}`, { headers: { Authorization: 'Bearer ' + t } });
-  if (!r.ok) throw new Error('activity fetch failed: ' + r.status);
+  const r = await fetch(API + pathname, { headers: { Authorization: 'Bearer ' + t } });
+  if (!r.ok) throw new Error('strava ' + r.status + ' on ' + pathname.split('?')[0]);
   return r.json();
+}
+
+async function fetchActivity(id) {
+  return apiFetch(`/activities/${id}`);
 }
 
 async function syncLatest() {
@@ -170,11 +176,13 @@ function attach(app) {
           d.latest = shaped;
           d.rides.push({ ...shaped, aspect: body.aspect_type, at: shaped.start_date || new Date().toISOString() });
           if (d.rides.length > 200) d.rides = d.rides.slice(-200);
-          // TODO(Signature): pull /activities/{id}/streams (watts, heartrate) with this
-          // athlete's token and update rolling eFTP / LTHR / EF trend from stream data.
-          // Summary-level fields (avg/weighted watts, avg HR) are already in d.latest;
-          // real power-curve analysis needs the stream endpoint, not yet built.
           await setJSON('strava', d);
+          // §6 trigger: a new ride with a qualifying sustained effort re-reads
+          // eFTP. Required lazily — fitness.js reads streams back through here.
+          if (shaped && shaped.avg_watts) {
+            require('./fitness').ingestActivity(shaped.id, { at: shaped.at || shaped.start_date, name: shaped.name })
+              .catch(e => console.error('[fitness]', e.message));
+          }
         })
         .catch(e => console.error('[strava]', e.message));
     }
@@ -204,4 +212,4 @@ function attach(app) {
       confidence: d.eftp ? 'ok' : 'low — no analyzed efforts yet' }); });
 }
 
-module.exports = { attach, latestActivity, workoutDebt };
+module.exports = { attach, latestActivity, workoutDebt, apiFetch };

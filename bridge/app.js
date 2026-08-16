@@ -15,6 +15,7 @@ require('./calendar').attach(app);
 require('./intervals').attach(app);
 require('./macros').attach(app);
 require('./weighin').attach(app);
+require('./fitness').attach(app);
 require('./strava').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);

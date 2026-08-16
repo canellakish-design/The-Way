@@ -74,10 +74,17 @@ function auth(req, res) {
 function attach(app) {
   // Athlete profile — single source of truth for FTP and other constants.
   // Set FTP env var in Netlify when it changes; everything reads from here.
-  app.get('/profile', (req, res) => {
+  app.get('/profile', async (req, res) => {
     if (!auth(req, res)) return;
-    const ftp = parseInt(process.env.FTP || '265', 10);
-    res.json({ ftp, athlete: 'Harry', units: 'imperial' });
+    const fallback = parseInt(process.env.FTP || '265', 10);
+    // The Signature owns FTP once it has a signal; the env var is the floor
+    // for a fresh install with no rides analysed yet.
+    let ftp = fallback, source = 'FTP env var';
+    try {
+      const s = await require('./fitness').compute('profile read');
+      if (s.ftp) { ftp = s.ftp; source = s.source; }
+    } catch (e) { /* fall back to the env value */ }
+    res.json({ ftp, ftp_source: source, athlete: 'Harry', units: 'imperial' });
   });
   app.post('/meals', async (req, res) => { if (!auth(req, res)) return;
     res.json(await logMeal(req.body || {})); });

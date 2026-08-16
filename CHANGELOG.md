@@ -1,5 +1,39 @@
 # The Way — changelog
 
+# The Signature — FTP, threshold HR, zones
+
+Implements the FTP / HR Zone / Power Zone spec.
+
+## Added
+- bridge/zones.js — the math, pure and testable: normalized power, best-effort
+  scan, §2b eFTP with duration correction and recency decay, §2c ventilatory
+  breakpoint detection, §2d reconciliation, §4 power zones, §5 HR zones
+- bridge/zones.test.js — 40+ assertions against synthetic streams, including a
+  noise sweep. Run `node bridge/zones.test.js`
+- bridge/fitness.js — state, Strava stream ingestion, §6 recalculation
+  triggers, audit log. `/fitness`, `/fitness/zones`, `/fitness/log`,
+  `/fitness/test`, `/fitness/override`, `/fitness/breathing`,
+  `/fitness/scan`, `/fitness/backfill`
+- Analyze view rebuilt: the Signature, both zone tables, per-signal breakdown,
+  Tymewear test entry, manual pin, and a "why FTP changed" log
+
+## Changed
+- strava.js — the Signature TODO is done: a new ride with power now pulls its
+  streams and re-reads eFTP. `apiFetch` exported for stream access
+- /profile serves the computed FTP, falling back to the FTP env var
+- Analyze's weigh-in card reads /weigh-in (works hosted) and quotes the same
+  FTP the Signature shows, rather than a hardcoded 195W
+
+## Deliberately conservative
+- The ventilatory fit refuses rather than guesses: too few segments, no steady
+  work above 85% FTP, a single inflection, or split-half fits disagreeing by
+  >25W each return a reason instead of a number. Across a noise sweep it is
+  either within 30W of the true VT2 or it declines — never confidently wrong
+- A fresh dedicated test is never silently overwritten; divergence raises a
+  retest prompt instead
+- Threshold HR derived from a power-only effort is labelled as a stand-in for
+  a measured VT2, not presented as one
+
 # The day (front page)
 
 ## Added
