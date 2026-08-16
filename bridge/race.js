@@ -29,7 +29,7 @@ async function weeklyHours() {
   try {
     const { trainingHours } = require('./calendar');
     const { sleepLatest } = require('./whoop');
-    const s = await sleepLatest().catch(() => null);
+    const s = await sleepLatest({ sync: false }).catch(() => null);
     const rec = s && s.recovery ? s.recovery.score : null;
     const h = await trainingHours(rec);
     if (h != null && h > 0) return { hours: h, source: 'calendar' };

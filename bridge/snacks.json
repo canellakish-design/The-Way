@@ -1,0 +1,18 @@
+{
+  "note": "Candidates the compliance suggester draws from. One serving each, as eaten. Add or edit freely — the suggester only ever proposes what's in here.",
+  "snacks": [
+    { "name": "Greek yogurt, nonfat (170 g)",    "kcal": 100, "carbs_g": 6,  "protein_g": 17, "fat_g": 0 },
+    { "name": "Whey shake (1 scoop)",            "kcal": 120, "carbs_g": 3,  "protein_g": 25, "fat_g": 1 },
+    { "name": "Cottage cheese (1 cup)",          "kcal": 180, "carbs_g": 8,  "protein_g": 24, "fat_g": 5 },
+    { "name": "Turkey slices (85 g)",            "kcal": 90,  "carbs_g": 1,  "protein_g": 19, "fat_g": 1 },
+    { "name": "Banana",                          "kcal": 105, "carbs_g": 27, "protein_g": 1,  "fat_g": 0.4 },
+    { "name": "Rice ball (batch unit)",          "kcal": 113, "carbs_g": 19.4, "protein_g": 3.3, "fat_g": 2.2 },
+    { "name": "Rice cakes + honey (2)",          "kcal": 130, "carbs_g": 30, "protein_g": 2,  "fat_g": 0.5 },
+    { "name": "Oatmeal (1/2 cup dry)",           "kcal": 150, "carbs_g": 27, "protein_g": 5,  "fat_g": 3 },
+    { "name": "Chocolate milk (16 oz)",          "kcal": 260, "carbs_g": 42, "protein_g": 16, "fat_g": 5 },
+    { "name": "Almonds (28 g)",                  "kcal": 164, "carbs_g": 6,  "protein_g": 6,  "fat_g": 14 },
+    { "name": "Peanut butter (2 tbsp)",          "kcal": 190, "carbs_g": 7,  "protein_g": 8,  "fat_g": 16 },
+    { "name": "Olive oil (1 tbsp)",              "kcal": 119, "carbs_g": 0,  "protein_g": 0,  "fat_g": 13.5 },
+    { "name": "Avocado (half)",                  "kcal": 160, "carbs_g": 9,  "protein_g": 2,  "fat_g": 15 }
+  ]
+}

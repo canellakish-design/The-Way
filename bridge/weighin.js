@@ -9,20 +9,23 @@
 //   GET  /weigh-in     today's weigh-in + 7-day trend
 //   POST /weigh-in     { lb }
 // ============================================================
-const { getJSON, setJSON, ON_NETLIFY } = require('./storage');
+const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 
-const KEEP = 90 * 864e5;
+const KEEP = 365 * 864e5;
+// Where the program starts. The scale readings tell you where you are; this is
+// what "down 12 lb" is measured against. Override per-deployment with the env
+// var, or once at runtime with POST /weigh-in/start.
+const START_LB = Number(process.env.START_WEIGHT_LB || 210);
 const isToday = ts => new Date(ts).toDateString() === new Date().toDateString();
 
 async function db() { return getJSON('weigh-in', { entries: [] }); }
 
-// Local dev may already have real scale data sitting next door; read it so the
-// two paths agree instead of showing different numbers on the same morning.
-function withingsLocal() {
-  if (ON_NETLIFY) return [];
+// The scale writes into this same store (see withings-weight.js), so nothing
+// downstream has to care whether a number was weighed or typed.
+async function withingsEntries() {
   try {
-    const w = require('./withings.json');
+    const w = await getJSON('withings', { weights: [] });
     return (w.weights || []).map(x => ({ ts: x.ts, lb: x.kg * 2.20462, source: 'withings' }));
   } catch { return []; }
 }
@@ -52,14 +55,36 @@ function trend(entries) {
 
 async function state() {
   const d = await db();
-  const merged = d.entries.concat(withingsLocal());
-  return { ...trend(merged), withings_connected: false };
+  // Dedupe: Withings mirrors its readings into this store, so the same weigh-in
+  // can appear on both sides. Same source within a minute is the same reading.
+  const mirrored = await withingsEntries();
+  const merged = d.entries.concat(
+    mirrored.filter(m => !d.entries.some(e => e.source === 'withings' && Math.abs(e.ts - m.ts) < 60000)));
+  const t = trend(merged);
+  const start = d.start_lb || START_LB;
+  let withings_connected = false;
+  try { withings_connected = await require('./withings-weight').connected(); } catch (e) { /* not configured */ }
+  return {
+    ...t,
+    start_lb: start,
+    change_since_start_lb: t.latest ? Math.round((t.latest.lb - start) * 10) / 10 : null,
+    withings_connected
+  };
 }
 
 function attach(app) {
   app.get('/weigh-in', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await state()); }
     catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post('/weigh-in/start', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const lb = Number((req.body || {}).lb);
+      if (!lb || lb < 50 || lb > 500) return res.status(400).json({ error: 'lb required (50–500)' });
+      const d = await db();
+      d.start_lb = lb;
+      await setJSON('weigh-in', d);
+      res.json({ ok: true, ...(await state()) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/weigh-in', async (req, res) => { if (!auth(req, res)) return;
     try {
       const lb = Number((req.body || {}).lb);

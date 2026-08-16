@@ -80,3 +80,4 @@ ul.agenda.foodlog li{border-left-color:var(--amber)}
 #alarmOverlay{position:fixed; inset:0; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50;}
 #alarmOverlay .bignum{font-size:72px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
+.snack{border-top:1px dashed var(--line); margin-top:10px; padding-top:10px}

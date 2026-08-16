@@ -1,5 +1,36 @@
 # The Way — changelog
 
+# WHOOP, the scale, and compliance
+
+## Fixed
+- **WHOOP kept dropping out.** The day page asks three routes for recovery at
+  once and each refreshed the token independently — but WHOOP rotates the
+  refresh token on use, so the first refresh retires the token the other two
+  are spending. Measured: 3 refresh attempts, 2 rejected, 1 of 3 readers got
+  data; the rest fell back to demo numbers. Refresh/sync is now single-flighted
+  with a 10-minute cache, token writes never overwrite a newer pair, and a dead
+  refresh token surfaces as `auth_error` + `reauthorize` on /whoop/status
+  instead of failing silently
+- Passive readers (`/schedule`, `/availability*`, the fitness wellness
+  snapshot, race week) call `sleepLatest({sync:false})` — stored data, no
+  WHOOP round trip
+- **Withings could never be connected on the hosted site**: the module was
+  filesystem-backed and mounted only when not on Netlify, so `/withings/auth`
+  was a 404 there. Ported to the storage layer and always mounted; scale
+  readings mirror into the same `weigh-in` store a typed number goes to
+- Demo data no longer fabricates anything measured about the athlete. A fake
+  recovery score is indistinguishable from a real one on screen, and it hid
+  this outage behind plausible numbers
+
+## Added
+- Starting weight (210 lb, `START_WEIGHT_LB` or `POST /weigh-in/start`), with
+  change-since-start on the day
+- bridge/intake.js — Alma's tracked intake (`POST /intake`), scored against the
+  Hexis target per macro, with a suggested snack chosen from bridge/snacks.json
+  to close the biggest gap without overshooting calories (`GET /compliance`)
+- deploy/alma-sync.md — the sync run, the scoring rules, and what the score
+  does and doesn't mean mid-day
+
 # The Signature — FTP, threshold HR, zones
 
 Implements the FTP / HR Zone / Power Zone spec.

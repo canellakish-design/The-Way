@@ -314,7 +314,7 @@ function attach(app) {
       const d = await sync().catch(async () => await db());
       if (!d.tokens) return res.json({ connected: false });
       const { sleepLatest } = require('./whoop');
-      const s = await sleepLatest().catch(() => null);
+      const s = await sleepLatest({ sync: false }).catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
       res.json({ connected: true, ...weekAvailability(d.events, rec) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
@@ -345,7 +345,7 @@ function attach(app) {
       if (!d.tokens) return res.json({ connected: false, days, sources });
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');
-      const s = await sleepLatest().catch(() => null);
+      const s = await sleepLatest({ sync: false }).catch(() => null);
       const w = await weekState().catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
       res.json({ connected: true, synced_at: d.synced_at, days, sources,
@@ -379,7 +379,7 @@ function attach(app) {
       const day = windowsForDate(d.events, key);
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');
-      const s = await sleepLatest().catch(() => null);
+      const s = await sleepLatest({ sync: false }).catch(() => null);
       const w = await weekState().catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
       res.json({ connected: true, ...day,

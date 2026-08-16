@@ -54,10 +54,13 @@ const DAY_TYPES = ["Day 1 · fasted Z2","Day 2 · HIIT","Day 3 · grocery + batc
    - PWA served by the local bridge (port 8420) -> same-origin ""
    - hosted (Netlify) -> /.netlify/functions/api                     */
 const DEFAULT_API = (location.port === "8420") ? "" : "/.netlify/functions/api";
+/* Demo data covers layout-only endpoints. Anything measured about Harry —
+   WHOOP recovery, the scale, Hexis macros — is deliberately absent: a fake
+   recovery score is indistinguishable from a real one on screen, and it hid a
+   broken WHOOP connection behind plausible numbers. Those now read as "not
+   connected" when the bridge can't answer. */
 const DEMO = {
   "/route-weather": { now:{t:74,w:8,ride:"crosswind 8 mph"}, evening:{t:81,w:12,ride:"headwind 12 mph"}, stormAfterHour:16 },
-  "/weight/latest": { latest:{ lb:176.4, logged_today:true }, ma7_lb:177.0, week_change_lb:-0.5 },
-  "/sleep/latest": { sleep:{performance:87,hours:7.4}, recovery:{score:72,hrv:68,rhr:47} },
   "/fuel-state": { carbs_g:62, fasted:false, meals_today:2, workout_kcal:480, balance_kcal:-410, ball_carbs_g:19.4, fresh:true },
   "/meals/today": { meals:[ {meal:"breakfast",name:"Blueberry oatmeal smoothie",kcal:520}, {meal:"lunch",name:"Post-ride bowl",kcal:750} ] },
   "/race": { race:{name:"Gran Fondo Maryland — Medio"}, weeks_out:10.1, phase:"build",
@@ -67,10 +70,6 @@ const DEMO = {
   "/podcasts/list": { episodes:[] },
   "/plan": { ride:null, for_today:false, intensity:"moderate", planned_hours:null, effective_hours:null, route:null },
   "/schedule": demoSchedule(),
-  "/weigh-in": { latest:{ lb:176.4, at:new Date().toISOString(), logged_today:true, source:"manual" },
-    ma7_lb:177.0, week_change_lb:-0.5, entries:9, withings_connected:false },
-  "/macros/today": { have:true, date:new Date().toISOString().slice(0,10), kcal:2950,
-    carbs_g:420, protein_g:185, fat_g:75, fuel_day:"high carb", source:"hexis" },
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
   "/agent/closeout": { ok:true }, "/meals": { ok:true },
   "/fitness": { ftp:271, threshold_hr:168, source:"eFTP — best 20 min effort", confidence:"medium",
@@ -1330,21 +1329,35 @@ V.today = async function(){
     let sleepHTML;
     if (s && s.recovery && s.recovery.score != null){
       const b = recBand(s.recovery.score);
+      // Say when it last synced. A stale reading looks identical to a fresh
+      // one otherwise, and this is the number the day gets planned around.
+      const age = s.synced_at ? (Date.now() - new Date(s.synced_at).getTime())/3.6e6 : null;
+      const when = age == null ? "" : age < 1 ? " · just synced"
+        : age < 24 ? ` · synced ${Math.round(age)}h ago` : ` · synced ${Math.round(age/24)}d ago`;
       sleepHTML = `<div class="rblock">
         <span class="bandpill" style="background:${b.c}">Recovery ${s.recovery.score} · ${b.name}</span>
         <div class="small">slept ${s.sleep?.hours ?? "—"} h · performance ${s.sleep?.performance ?? "—"}
-          · HRV ${s.recovery.hrv ?? "—"} · RHR ${s.recovery.rhr ?? "—"}</div></div>`;
+          · HRV ${s.recovery.hrv ?? "—"} · RHR ${s.recovery.rhr ?? "—"}${when}</div>
+        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> — visit /whoop/auth on the bridge (${esc(s.auth_error.detail||"")})</div>`:""}</div>`;
     } else {
+      const why = !s ? "bridge unreachable" : s.auth_error ? "WHOOP needs reconnecting — visit /whoop/auth on the bridge"
+        : s.connected ? "connected, but no sleep record yet" : "WHOOP not connected — visit /whoop/auth on the bridge";
       sleepHTML = `<div class="rblock"><span class="bandpill" style="background:var(--muted)">Recovery —</span>
-        <div class="small">no WHOOP sync yet this morning</div></div>`;
+        <div class="small">${esc(why)}</div></div>`;
     }
     const t = w && w.latest;
-    const weighHTML = (t && t.logged_today)
+    const startLine = w && w.start_lb
+      ? `start ${w.start_lb} lb${w.change_since_start_lb!=null?` · <b>${w.change_since_start_lb>0?"+":""}${w.change_since_start_lb} lb</b> since`:""}`
+      : "";
+    const weighHTML = !w
+      ? `<div class="rblock"><div class="small">Weigh-in unavailable — bridge unreachable</div></div>`
+      : (t && t.logged_today)
       ? `<div class="rblock"><div class="bignum" style="font-size:30px">${t.lb} lb</div>
+          <div class="small">${startLine}</div>
           <div class="small">7-day ${w.ma7_lb ?? "—"}${w.week_change_lb!=null?` · ${w.week_change_lb>0?"+":""}${w.week_change_lb} this week`:""} · ${esc(t.source)}</div></div>`
-      : `<div class="rblock"><div class="small">${t?`Last: ${t.lb} lb (${new Date(t.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})})`:"No weigh-in on file"}
-            — Withings isn't connected yet, so enter this morning's number:</div>
-          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="176.4"></span>
+      : `<div class="rblock"><div class="small">${t?`Last: ${t.lb} lb (${new Date(t.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})})`:"No weigh-in yet"}${startLine?" · "+startLine:""}</div>
+          <div class="small">${w.withings_connected?"Withings is connected — this fills in when you step on the scale. Or enter it:":"Withings isn't connected yet — enter this morning's number:"}</div>
+          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="${w.start_lb||210}"></span>
             <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
           <div class="small" id="wiMsg"></div></div>`;
     el.innerHTML = `<h4>Last night · this morning</h4>
@@ -1394,6 +1407,16 @@ V.today = async function(){
       try{ meals = (await bridge("/meals/today")).meals || []; }
       catch(e){ el.innerHTML = `<h4>Food log · today</h4><div class="small">bridge unreachable — entries queue locally</div>`; return; }
       el.innerHTML = foodLogHTML(meals, macrosToday);
+      // Compliance is its own call: it reconciles the Hexis target with Alma's
+      // tracking, which may have landed after the day payload was built.
+      bridge("/compliance").then(c=>{
+        const box = document.getElementById("complianceBlock");
+        if (!box) return;
+        box.innerHTML = complianceHTML(c);
+        const sb = document.getElementById("snackLog");
+        if (sb) sb.onclick = ()=> add({ name: sb.dataset.name, meal:"snack",
+          kcal:+sb.dataset.k, carbs_g:+sb.dataset.c, protein_g:+sb.dataset.p, fat_g:+sb.dataset.f });
+      }).catch(()=>{});
       const add = async (m)=>{
         const r = await logMealQueued(m);
         const msg = document.getElementById("flMsg");
@@ -1465,6 +1488,7 @@ function foodLogHTML(meals, macros){
     ${line("protein g", run.protein_g, macros?macros.protein_g:null)}
     ${line("fat g", run.fat_g, macros?macros.fat_g:null)}</ul>`;
   return `<h4>Food log · today${meals.length?` · ${meals.length} entries`:""}</h4>
+    <div id="complianceBlock"></div>
     <ul class="agenda foodlog">${rows || `<li><span class="t"></span><span class="n">Nothing logged yet</span><span class="tag">0</span></li>`}</ul>
     ${totals}
     ${macros ? "" : `<div class="small">No Hexis targets today — totals only.</div>`}
@@ -1478,6 +1502,38 @@ function foodLogHTML(meals, macros){
     <button id="flSmoothie">Smoothie (520)</button>
     <button id="flBowl">Post-ride bowl (750)</button>
     <div class="small" id="flMsg"></div>`;
+}
+
+/* ---- compliance: Hexis asked, Alma tracked, how close ----
+   Scored per macro so a good calorie total can't paper over a protein miss,
+   with the snack that would move the number most. */
+function complianceHTML(c){
+  if (!c || !c.target) return `<div class="small">No Hexis target today — nothing to score against.</div>`;
+  const p = c.compliance && c.compliance.per_macro;
+  if (!p) return "";
+  const band = s => s >= 90 ? "var(--green)" : s >= 70 ? "var(--amber)" : "var(--red)";
+  const row = (label, key)=>{
+    const m = p[key];
+    if (!m) return "";
+    return `<li><span class="n">${label}
+        <span class="small">${m.actual} of ${m.target} · ${esc(m.direction)}${
+          m.direction!=="on target"?` ${Math.abs(m.deviation_pct)}%`:""}</span></span>
+      <span class="tag"><b style="color:${band(m.score)}">${m.score}</b></span></li>`;
+  };
+  const s = c.suggestion;
+  const snack = !s ? ""
+    : s.none ? `<div class="small">No snack improves the score without going over on calories.</div>`
+    : `<div class="snack"><b>Suggested snack</b> — ${esc(s.name)}${s.servings>1?` ×${s.servings}`:""}
+        <div class="small">${s.kcal} kcal · ${s.carbs_g}C · ${s.protein_g}P · ${s.fat_g}F —
+          ${esc(s.why)}, compliance ${s.score_before} → <b>${s.score_after}</b></div>
+        <button id="snackLog" data-name="${esc(s.name)}" data-k="${s.kcal}" data-c="${s.carbs_g}" data-p="${s.protein_g}" data-f="${s.fat_g}">Log this snack</button></div>`;
+  return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall}</span>
+      <span class="small">${esc(c.source||"")} vs Hexis${c.target.fuel_day?` · ${esc(c.target.fuel_day)}`:""}</span></div>
+    <ul class="agenda totals">
+      ${row("carbs","carbs_g")}${row("protein","protein_g")}${row("fat","fat_g")}${row("kcal","kcal")}
+    </ul>
+    <div class="small">${esc(c.basis)}.</div>
+    ${snack}`;
 }
 
 /* Demo payload: same shape as /schedule, generated from today so the front
@@ -1514,7 +1570,7 @@ function demoSchedule(){
       windows: windows.map(([s,e])=>({from:f(s),to:f(e),start_min:s,end_min:e,minutes:e-s,
         slot: s<12*60?"morning":(s>=15*60?"evening":"midday")})),
       available_min: windows.reduce((a,[s,e])=>a+(e-s),0), travel:false,
-      macros: i===0 ? { kcal:2950, carbs_g:420, protein_g:185, fat_g:75, fuel_day:"high carb", source:"hexis" } : null });
+      macros: null });   // never fake a macro target — Hexis numbers are only ever real
   }
   return { connected:false, days, recommendation:"demo — connect the bridge for the real day",
     sources:{ calendars:["demo"], calendar_connected:false, classes_configured:false, intervals_configured:false } };

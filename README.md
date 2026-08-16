@@ -15,11 +15,14 @@ each day, and the page says plainly which of them are actually connected:
 | Classes | `bridge/schedule-classes.json` | the fixed weekly timetable, expanded onto each date |
 | Intervals + lifting | intervals.icu | planned sessions only; completed rides still come from Strava |
 | Macros | Hexis | posted each morning by the Chrome run — see `deploy/hexis-morning-run.md` |
+| Compliance | Hexis target vs Alma intake | scored per macro, with the snack that closes the gap — `deploy/alma-sync.md` |
 | Open | the availability engine | what is left between the blocking ones |
 
 Under the day sits the **food log**, additive: every entry carries a running
 total down the list and, when Hexis has landed, what is left of the day's
-calories, carbs, protein and fat.
+calories, carbs, protein and fat. Above it, the compliance block puts Hexis's
+recommendation next to Alma's tracking, scores each macro on its own, and
+names the snack that would raise the score most without overshooting calories.
 
 The bedside clock did not go anywhere — it is a button on the day, it is the
 Sleep tab, and it is still where the alarm lands.
@@ -85,7 +88,11 @@ across noise levels, it is either right within 30W or it declines.
    `INTERVALS_ICU_ATHLETE_ID`. Rides and lifting are separated by workout
    type; a session with no time on it shows as planned-today rather than 12am.
 4. **Hexis macros** — `deploy/hexis-morning-run.md`.
-5. **Weigh-in** — `POST /weigh-in {"lb":176.4}`, or type it into the top strip.
+5. **Weigh-in** — the Withings scale pushes automatically once `/withings/auth`
+   is visited (it runs hosted now, not just on the PC), and writes into the
+   same store as a hand-typed `POST /weigh-in {"lb":208.6}`. Starting weight is
+   210 lb — `START_WEIGHT_LB`, or `POST /weigh-in/start`.
+6. **Alma intake** — `deploy/alma-sync.md`.
 
 ## Honest v1 seams (by design, all flagged in code)
 - Tymewear has no API — ramp tests are typed into Analyze (spec §7).
@@ -95,9 +102,13 @@ across noise levels, it is either right within 30W or it declines.
 - The §2c confound filter needs a trailing HRV/RHR baseline, and WHOOP only
   stores its latest reading — so the baseline accumulates from the day this
   shipped, and the filter is inert until there are enough days.
-- Withings is **not connected**: the morning weigh-in is entered by hand on
-  the front page and stored via `/weigh-in`. When the scale is wired up it can
-  write to the same store and nothing downstream changes.
+- Withings is storage-backed and mounted in production now, but until
+  `/withings/auth` is visited the weigh-in is whatever gets typed into the top
+  strip. Both paths write to the same store.
+- WHOOP rotates its refresh token on every use, so concurrent refreshes fail.
+  Syncs are single-flighted and cached for 10 minutes; passive readers (the
+  day, availability, the training log) read stored data and never trigger a
+  pull. Only the Sleep card, the webhook and `/whoop/sync` go to WHOOP.
 - intervals.icu field names follow the current API — verify on the first live
   run; the front page names the lane as unconfigured or errored rather than
   rendering an empty day as if it were a rest day.

@@ -32,7 +32,7 @@ async function db() {
 async function noteWellness(d) {
   try {
     const { sleepLatest } = require('./whoop');
-    const s = await sleepLatest();
+    const s = await sleepLatest({ sync: false });
     const rec = s && s.recovery;
     if (!rec || rec.score == null) return false;
     const date = new Date().toISOString().slice(0, 10);
