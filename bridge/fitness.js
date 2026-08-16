@@ -34,12 +34,13 @@ async function noteWellness(d) {
     const { sleepLatest } = require('./whoop');
     const s = await sleepLatest();
     const rec = s && s.recovery;
-    if (!rec || rec.score == null) return;
+    if (!rec || rec.score == null) return false;
     const date = new Date().toISOString().slice(0, 10);
-    if (d.wellness.some(w => w.date === date)) return;
+    if (d.wellness.some(w => w.date === date)) return false;
     d.wellness.push({ date, hrv: rec.hrv ?? null, rhr: rec.rhr ?? null, recovery: rec.score });
     if (d.wellness.length > MAX_WELLNESS) d.wellness = d.wellness.slice(-MAX_WELLNESS);
-  } catch (e) { /* WHOOP unreachable — confound filter stays inert */ }
+    return true;
+  } catch (e) { return false; /* WHOOP unreachable — confound filter stays inert */ }
 }
 
 /* ---- the signals ---- */
@@ -54,7 +55,7 @@ function signalsFrom(d) {
 
 async function compute(reason) {
   const d = await db();
-  await noteWellness(d);
+  let dirty = await noteWellness(d);
   const signals = signalsFrom(d);
   const accepted = Z.reconcile(signals);
 
@@ -69,11 +70,20 @@ async function compute(reason) {
       threshold_hr: accepted.threshold_hr, source: accepted.source
     });
     if (d.log.length > MAX_LOG) d.log = d.log.slice(-MAX_LOG);
+    dirty = true;
   }
   d.accepted = accepted;
-  await setJSON('fitness', d);
+  // Reading the Signature is a read: only write when something actually
+  // changed, and never let a storage hiccup turn a read into a 500 — the
+  // numbers are recomputed from the efforts each time anyway.
+  let persisted = true;
+  if (dirty) {
+    try { await setJSON('fitness', d); }
+    catch (e) { persisted = false; console.error('[fitness] could not persist:', e.message); }
+  }
 
   return {
+    persisted,
     ftp: accepted.ftp, threshold_hr: accepted.threshold_hr,
     source: accepted.source, confidence: accepted.confidence, notes: accepted.notes || [],
     power_zones: Z.powerZones(accepted.ftp),
