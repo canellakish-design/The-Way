@@ -88,6 +88,12 @@ steady work above 85% of FTP, only one inflection, or two split-half fits that
 disagree by more than 25W all return a reason instead of a number. Tested
 across noise levels, it is either right within 30W or it declines.
 
+## Connecting it
+`deploy/connect.md` — what each source needs and how to tell what's live.
+`deploy/chrome-setup-run.md` — the same thing as prompts for a Claude-in-Chrome
+session, since every step needs a browser signed in as you. The app's own
+Settings screen reports the live state of all nine sources.
+
 ## Feeding the day
 1. **Google Calendar** — visit `/gcal/auth?email=you@example.com` once *per
    account*. The day spans more than one Google identity (teaching on one,
