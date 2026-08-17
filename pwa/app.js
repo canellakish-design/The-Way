@@ -1333,10 +1333,10 @@ V.today = async function(){
     </div>
     <div class="card" id="readiness"><h4>Recovery · last night</h4>
       <div class="small">reaching the bridge…</div></div>
-    <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
-    <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="body"><h4>The scale</h4>
       <div class="small">reaching the bridge…</div></div>
+    <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
+    <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
     <button id="toClock">Bedside clock</button>
     <button id="toSettings">Settings</button>`;
@@ -1374,11 +1374,13 @@ V.today = async function(){
   };
 
   /* ---- the top strip: how the night went ----
-     Recovery only. The scale reads into its own card further down the page —
-     what the morning is decided on is how the night went, and a weight next
-     to it competes with that for the same glance. */
+     Recovery only — the morning is still decided on how the night went, so it
+     keeps the first card to itself. The scale follows immediately below. */
 
-  /* ---- the scale, below the day ----
+  /* ---- the scale, directly under recovery ----
+     It used to sit below the schedule, on the reasoning that a weight next to
+     a recovery score competes for the same glance. Moved up on request: the
+     two morning numbers now read together, above the day.
      One arrow per number Withings reports, coloured by one rule: down green,
      up red, unchanged neither. The tones come from the bridge, which owns the
      flat band each metric gets — a scale that reads 0.1 lb of bone loss has
@@ -1548,9 +1550,9 @@ credentials — if Hexis isn't already signed in, stop and say so.`;
     if (prev) prev.disabled = !dayAt(offset-1);
     if (next2) next2.disabled = !dayAt(offset+1);
 
-    // The strips below the schedule are about today: last night's recovery,
-    // today's eating. Hide them rather than show
-    // today's numbers under yesterday's date.
+    // These cards are about today wherever they sit on the page: last night's
+    // recovery, this morning's weight, today's eating. Hide them rather than
+    // show today's numbers under yesterday's date.
     const isToday = offset === 0;
     const rd = document.getElementById("readiness"), fl = document.getElementById("foodLog");
     const bd = document.getElementById("body");
