@@ -163,6 +163,7 @@ async function multiPhotoBridge(pathname, files, extra){
 /* ---------------- views ---------------- */
 const V = {};
 const view = document.getElementById("view");
+view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
 const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan" };
 function nav(){

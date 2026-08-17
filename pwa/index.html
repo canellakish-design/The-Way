@@ -13,11 +13,39 @@
   <h1>THE <span>WAY</span></h1>
   <nav></nav>
 </header>
-<main id="view" aria-live="polite"></main>
+<main id="view" aria-live="polite"><div class="card"><h4>Loading the day…</h4>
+  <div class="small">If this message stays, the app script didn't run.
+  <a href="?reset=1">Tap here to clear the cached copy and reload.</a></div></div></main>
 <div id="alarmOverlay" hidden>
   <div class="bignum" id="alarmClock"></div>
   <button class="primary big" id="alarmStop">Good morning</button>
 </div>
+<script>
+// Runs before app.js: a syntax error or a bad cached copy of app.js otherwise
+// leaves a blank page with nothing to act on.
+window.addEventListener("error", function(e){
+  var v = document.getElementById("view");
+  if (!v || v.dataset.booted) return;
+  v.innerHTML = '<div class="card"><h4>The app did not start</h4>'
+    + '<div class="small">' + String((e && e.message) || "unknown error").slice(0,300) + '</div>'
+    + '<div class="small">Usually a stale cached copy. '
+    + '<a href="?reset=1">Clear it and reload</a>.</div></div>';
+});
+// ?reset=1 — unregister the service worker and drop every cache, then reload
+// clean. The only self-service fix for a poisoned cache.
+if (location.search.indexOf("reset=1") > -1) {
+  (async function(){
+    try {
+      if (navigator.serviceWorker) {
+        var rs = await navigator.serviceWorker.getRegistrations();
+        for (var i=0;i<rs.length;i++) await rs[i].unregister();
+      }
+      if (window.caches) { var ks = await caches.keys(); for (var j=0;j<ks.length;j++) await caches.delete(ks[j]); }
+    } catch(e){}
+    location.replace(location.pathname);
+  })();
+}
+</script>
 <script src="app.js"></script>
 </body>
 </html>

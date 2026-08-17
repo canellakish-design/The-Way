@@ -1,5 +1,6 @@
-// The Way — service worker v2. Network-first: updates always land.
-const SHELL = "the-way-shell-v2";
+// The Way — service worker v3. Network-first, and it only caches genuine
+// successes of the right content type.
+const SHELL = "the-way-shell-v3";   // v3: never cache a non-success
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys =>
@@ -11,8 +12,15 @@ self.addEventListener("fetch", e => {
   const shellPaths = ["/", "/index.html", "/app.js", "/styles.css"];
   if (shellPaths.includes(u.pathname)) {
     e.respondWith(fetch(e.request).then(r => {
-      const copy = r.clone();
-      caches.open(SHELL).then(c => c.put(e.request, copy));
+      // Only cache a real success. A 404 page, or the API function answering
+      // for /app.js during a bad deploy, would otherwise be cached and served
+      // as the app itself — a blank page that survives reloads.
+      const type = r.headers.get("content-type") || "";
+      const cacheable = r.ok && r.status === 200
+        && (u.pathname === "/styles.css" ? type.includes("css")
+          : u.pathname === "/app.js" ? type.includes("javascript")
+          : type.includes("html"));
+      if (cacheable) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
       return r;
     }).catch(() => caches.match(e.request)));
   }
