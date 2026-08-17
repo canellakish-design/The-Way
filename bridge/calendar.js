@@ -429,7 +429,18 @@ function attach(app) {
           account: 'ical:' + e.calendar,
           category: classify(e.summary, d.manual, calDefault) };
       });
-      const days = scheduleDays((d.events || []).concat(icsEvents), n, iv.days, back);
+      // The written-down copy of the calendar fills only the days no live
+      // source reached. See snapshot.js for why it exists and how it retires.
+      const snapshot = require('./snapshot');
+      const liveEvents = (d.events || []).concat(icsEvents);
+      const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
+      const snapEvents = snapshot.eventsInRange(firstKey, lastKey, covered).map(e => {
+        const calDefault = calendarCategory(e.calendar);
+        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
+          account: 'snapshot:' + e.calendar,
+          category: classify(e.summary, d.manual, calDefault) };
+      });
+      const days = scheduleDays(liveEvents.concat(snapEvents), n, iv.days, back);
       // Hexis macros, posted each morning by the Chrome run.
       const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
       for (const day of days) day.macros = macros[day.date] || null;
@@ -442,6 +453,7 @@ function attach(app) {
         accounts: d.accounts.map(a => a.id),
         account_errors: d.accounts.filter(a => a.auth_error).map(a => a.id + ': ' + a.auth_error),
         calendar_connected: d.accounts.length > 0,
+        snapshot: snapEvents.length ? { ...snapshot.meta(), used: snapEvents.length } : null,
         classes_configured: classes.configured(),
         intervals_configured: !!iv.configured,
         intervals_error: iv.error || null,
@@ -449,11 +461,14 @@ function attach(app) {
       };
       const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
       sources.calendar_connected = d.accounts.length > 0 || icsEvents.length > 0 || icsMod.configured();
-      if (!d.accounts.length && !icsMod.configured()) {
+      const icsFeeds = await icsMod.feedsAsync().catch(() => []);
+      if (!d.accounts.length && !icsFeeds.length && !snapEvents.length) {
         return res.json({ connected: false, days, sources, today_index: todayIdx0 });
       }
       if (!d.accounts.length) {
-        // feeds only, no OAuth account: still a real day
+        // Feeds or the snapshot, no OAuth account: still a real day. The page
+        // draws the whole thing; sources.snapshot is what tells it the events
+        // came from a copy rather than from Google.
         const { sleepLatest } = require('./whoop');
         const { weekState } = require('./race');
         const s0 = await sleepLatest({ sync: false }).catch(() => null);

@@ -62,6 +62,64 @@ function direction(ma7, prev7) {
     : { arrow: '↑', word: 'gaining', tone: 'bad', delta };
 }
 
+// Every number the scale reports, each with the band inside which a change is
+// just water and posture rather than a trend. Bone barely moves, so its band
+// is tighter; the pound-denominated masses share the weight's band.
+const TREND_FIELDS = [
+  { key: 'lb',          label: 'weight',   unit: ' lb', band: 0.3 },
+  { key: 'fat_pct',     label: 'body fat', unit: '%',   band: 0.2 },
+  { key: 'fat_mass_lb', label: 'fat mass', unit: ' lb', band: 0.3 },
+  { key: 'fat_free_lb', label: 'lean',     unit: ' lb', band: 0.3 },
+  { key: 'muscle_lb',   label: 'muscle',   unit: ' lb', band: 0.3 },
+  { key: 'water_lb',    label: 'water',    unit: ' lb', band: 0.3 },
+  { key: 'bone_lb',     label: 'bone',     unit: ' lb', band: 0.1 }
+];
+
+// One rule for every row, the way Harry asked for it: down is green, up is red,
+// flat is neither. Worth knowing it reads oddly on lean and muscle — losing
+// muscle colours green here — but a single rule you can read at a glance beats
+// seven rules you have to remember which way round each one goes.
+function fieldDirection(cur, prev, band) {
+  if (cur == null || prev == null) return { arrow: '·', tone: 'flat', delta: null };
+  const delta = cur - prev;
+  if (Math.abs(delta) < band) return { arrow: '→', tone: 'flat', delta: 0 };
+  return delta < 0 ? { arrow: '↓', tone: 'good', delta } : { arrow: '↑', tone: 'bad', delta };
+}
+
+// Same comparison the weight uses — this week's average against last week's —
+// applied to each field independently, because the scale doesn't report every
+// number on every reading. Where there's no week to compare against, fall back
+// to the last two readings that carried the field so a new scale still shows
+// a direction instead of a row of dots.
+function fieldTrends(entries) {
+  const all = entries.slice().sort((a, b) => a.ts - b.ts);
+  const now = Date.now();
+  const meanOf = (key, from, to) => {
+    const xs = all.filter(e => e[key] != null && now - e.ts >= from && now - e.ts < to)
+      .map(e => e[key]);
+    return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+  };
+  const round = v => v == null ? null : Math.round(v * 10) / 10;
+  return TREND_FIELDS.map(f => {
+    const withField = all.filter(e => e[f.key] != null);
+    const latest = withField.length ? withField[withField.length - 1] : null;
+    let cur = meanOf(f.key, 0, 7 * 864e5);
+    let prev = meanOf(f.key, 7 * 864e5, 14 * 864e5);
+    let basis = 'week over week';
+    if (cur == null || prev == null) {
+      if (withField.length < 2) return { ...f, value: round(latest && latest[f.key]),
+        arrow: '·', tone: 'flat', delta: null, basis: 'not enough readings' };
+      cur = withField[withField.length - 1][f.key];
+      prev = withField[withField.length - 2][f.key];
+      basis = 'since the last reading';
+    }
+    const d = fieldDirection(cur, prev, f.band);
+    return { ...f, value: round(latest && latest[f.key]), arrow: d.arrow, tone: d.tone,
+      delta: round(d.delta), basis,
+      at: latest ? new Date(latest.ts).toISOString() : null };
+  }).filter(f => f.value != null);
+}
+
 const COMP_FIELDS = ['fat_pct', 'fat_mass_lb', 'fat_free_lb', 'muscle_lb', 'water_lb', 'bone_lb'];
 // The latest reading that actually carried body composition — a hand-typed
 // weight has none, and shouldn't blank out what the scale last reported.
@@ -97,6 +155,7 @@ function trend(entries) {
     ma7_lb: ma7 == null ? null : Math.round(ma7 * 10) / 10,
     week_change_lb: (ma7 == null || prev7 == null) ? null : Math.round((ma7 - prev7) * 10) / 10,
     direction: direction(ma7, prev7),
+    trends: fieldTrends(all),
     composition: latestComposition(all),
     readings_7d: since(7 * 864e5).length,
     entries: all.length
@@ -164,4 +223,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, state, direction, trend };
+module.exports = { attach, state, direction, trend, fieldTrends, fieldDirection };

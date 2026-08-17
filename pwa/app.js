@@ -1290,7 +1290,8 @@ function dayCard(d, plan, nowMin, rec, solo){
         <span class="unit">${m.kcal ?? "—"} kcal</span><span class="unit c">${m.carbs_g ?? "—"}C</span>
         <span class="unit p">${m.protein_g ?? "—"}P</span><span class="unit f">${m.fat_g ?? "—"}F</span>
         <span class="small">Hexis</span></div>`
-    : (isToday ? `<div class="macros"><span class="small">No Hexis macros yet — run the morning fetch</span></div>` : "");
+    : (isToday ? `<div class="macros"><span class="small">No Hexis macros yet —
+        <button class="linkish" id="hexisRun">copy the morning run</button></span></div>` : "");
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
     ${macroRow}
@@ -1330,12 +1331,12 @@ V.today = async function(){
       <div class="daystep-label" id="dayLabel"></div>
       <button id="dayNext" aria-label="Next day">›</button>
     </div>
-    <div class="card" id="readiness"><h4>Last night · this morning</h4>
-      <div class="small">reaching the bridge…</div></div>
-    <div class="card" id="body"><h4>Weight · body composition</h4>
+    <div class="card" id="readiness"><h4>Recovery · last night</h4>
       <div class="small">reaching the bridge…</div></div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
+    <div class="card" id="body"><h4>The scale</h4>
+      <div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
     <button id="toClock">Bedside clock</button>
     <button id="toSettings">Settings</button>`;
@@ -1372,53 +1373,48 @@ V.today = async function(){
     return h*60 + m;
   };
 
-  /* ---- the top strip: how the night went, what the scale said ----
-     WHOOP is connected and pushes on its own. Withings is not wired up yet,
-     so the weigh-in is entered here by hand and says so. */
-  // The scale's own box: where the weight is going, and what it's made of.
+  /* ---- the top strip: how the night went ----
+     Recovery only. The scale reads into its own card further down the page —
+     what the morning is decided on is how the night went, and a weight next
+     to it competes with that for the same glance. */
+
+  /* ---- the scale, below the day ----
+     One arrow per number Withings reports, coloured by one rule: down green,
+     up red, unchanged neither. The tones come from the bridge, which owns the
+     flat band each metric gets — a scale that reads 0.1 lb of bone loss has
+     not told you anything. */
+  const trendTone = t => t === "good" ? "var(--green)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const drawBody = (w)=>{
     const el = document.getElementById("body");
     if (!el) return;
-    if (!w){ el.innerHTML = `<h4>Weight · body composition</h4>
-      <div class="small">bridge unreachable</div>`; return; }
-    const d = w.direction || {};
-    const tone = d.tone === "good" ? "var(--green)" : d.tone === "bad" ? "var(--red)" : "var(--muted)";
-    const lb = w.latest ? w.latest.lb : null;
+    if (!w){ el.innerHTML = `<h4>The scale</h4><div class="small">bridge unreachable</div>`; return; }
+    const rows = (w.trends || []).map(t=>{
+      const c = trendTone(t.tone);
+      const move = t.delta == null ? ""
+        : t.delta === 0 ? "no change"
+        : `${t.delta > 0 ? "+" : ""}${t.delta}${t.unit}`;
+      return `<li><span class="n">${esc(t.label)}</span>
+        <span class="tag"><span class="mono">${t.value}${esc(t.unit)}</span>
+          <span class="arrow" style="color:${c}">${t.arrow}</span>
+          <span class="small" style="color:${c}">${esc(move)}</span></span></li>`;
+    }).join("");
     const since = w.change_since_start_lb;
-    const c = w.composition;
-    const chip = (label, val, unit)=> val==null ? "" :
-      `<span class="unit">${val}${unit} ${label}</span>`;
-    const comp = c ? `<div class="unitrow">
-        ${chip("body fat", c.fat_pct, "%")}
-        ${chip("fat mass", c.fat_mass_lb, " lb")}
-        ${chip("lean", c.fat_free_lb, " lb")}
-        ${chip("muscle", c.muscle_lb, " lb")}
-        ${chip("water", c.water_lb, " lb")}
-        ${chip("bone", c.bone_lb, " lb")}
-      </div>
-      <div class="small">composition from ${new Date(c.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>`
-      : `<div class="small">${w.withings_connected
-          ? "No body composition yet — it arrives with the next scale reading."
-          : "Body composition needs the Withings scale connected."}</div>`;
     const demo = w.demo || (w.latest && /demo/.test(w.latest.source || ""));
-    el.innerHTML = `<h4>Weight · body composition</h4>
+    const basis = (w.trends || []).length ? (w.trends[0].basis || "") : "";
+    el.innerHTML = `<h4>The scale</h4>
       ${demo ? `<div class="macros"><span class="mfuel" style="background:var(--red)">Demo data — not your readings</span></div>` : ""}
-      ${lb == null ? `<div class="small">No reading yet. Starting weight ${w.start_lb} lb.</div>` : `
-      <div class="bodyrow">
-        <span class="arrow" style="color:${tone}">${d.arrow || "·"}</span>
-        <span><span class="bignum" style="font-size:34px">${lb} lb</span>
-          <div class="small"><b style="color:${tone}">${esc(d.word || "")}</b>${
-            w.week_change_lb != null ? ` · ${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb} lb this week` : ""}</div></span>
-      </div>
-      <div class="small">7-day average ${w.ma7_lb ?? "—"} lb${
-        since != null ? ` · <b>${since > 0 ? "+" : ""}${since} lb</b> since ${w.start_lb}` : ""}${
-        w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}</div>`}
-      ${comp}
+      ${rows ? `<ul class="agenda totals">${rows}</ul>
+        <div class="small">arrows compare ${esc(basis)}${
+          since != null ? ` · <b>${since > 0 ? "+" : ""}${since} lb</b> since ${w.start_lb}` : ""}${
+          w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}</div>`
+        : `<div class="small">${w.withings_connected
+            ? "Connected — the numbers land here with your next reading."
+            : "Withings isn't connected. Starting weight " + (w.start_lb || 210) + " lb."}</div>`}
       ${(w.latest && w.latest.logged_today) ? "" : `
         <div class="weighin">
           <div class="small">${w.withings_connected
             ? "Nothing from the scale today — it fills in when you step on, or enter it:"
-            : "Withings isn't connected — enter this morning's number:"}</div>
+            : "Enter this morning's number:"}</div>
           <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="${w.start_lb || 210}"></span>
             <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
           <div class="small" id="wiMsg"></div></div>`}`;
@@ -1428,19 +1424,17 @@ V.today = async function(){
       if (!lb) return;
       try{
         await bridge("/weigh-in",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lb})});
-        refreshReadiness();
+        refreshBody();
       }catch(e){ const m=document.getElementById("wiMsg"); if(m) m.textContent = "Failed: " + e.message; }
     };
   };
+  const refreshBody = async ()=> drawBody(await bridge("/weigh-in").catch(()=>null));
 
-  const recBand = s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
+  const recBand =s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
   const refreshReadiness = async ()=>{
     const el = document.getElementById("readiness");
     if (!el) return;
-    const [s, w] = await Promise.all([
-      bridge("/sleep/latest").catch(()=>null),
-      bridge("/weigh-in").catch(()=>null)
-    ]);
+    const s = await bridge("/sleep/latest").catch(()=>null);
     let sleepHTML;
     if (s && s.recovery && s.recovery.score != null){
       const b = recBand(s.recovery.score);
@@ -1470,7 +1464,6 @@ V.today = async function(){
         <span class="recmeta"><div class="small">${esc(why)}</div></span></div>`;
     }
     el.innerHTML = `<h4>Recovery · last night</h4>${sleepHTML}`;
-    drawBody(w);
   };
 
 
@@ -1500,6 +1493,34 @@ V.today = async function(){
       : `<div class="card"><div class="small">No data for that day — the schedule reaches
           ${cached.days.length} days from ${esc(cached.days[0].date)}.</div></div>`;
 
+    // The morning Hexis run, ready to hand to Claude in Chrome. Hexis has no
+    // API, so a browser that is already signed in is the only way in. The
+    // instruction deliberately posts from The Way's own tab: same origin, so
+    // it needs no token and nothing has to invent one.
+    const hx = document.getElementById("hexisRun");
+    if (hx) hx.onclick = async ()=>{
+      const day = (cached.days[cached.todayIndex || 0] || {}).date || "";
+      const text =
+`In Hexis (hexis.live), open today — ${day} — and read the day's macro targets:
+kcal, carbs (g), protein (g), fat (g), and the fuelling label if there is one.
+
+Then open ${location.origin} in a tab and run this from that tab's console,
+filling in the numbers you read. It is same-origin, so no key is needed:
+
+fetch("/.netlify/functions/api/macros", {
+  method: "POST",
+  headers: { "Content-Type": "application/json", "x-the-way-app": "1" },
+  body: JSON.stringify({ date: "${day}", kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, fuelling: "" })
+}).then(r => r.json()).then(console.log)
+
+Report the numbers back to me. Don't log into anything I'm not already signed
+into, and don't create any credentials.`;
+      try{
+        await navigator.clipboard.writeText(text);
+        hx.textContent = "copied — paste it to Claude in Chrome";
+      }catch(e){ hx.textContent = "copy failed — " + e.message; }
+    };
+
     const lab = document.getElementById("dayLabel");
     if (lab) lab.textContent = offset === 0 ? "Today"
       : offset === -1 ? "Yesterday" : offset === 1 ? "Tomorrow"
@@ -1509,12 +1530,14 @@ V.today = async function(){
     if (next2) next2.disabled = !dayAt(offset+1);
 
     // The strips below the schedule are about today: last night's recovery,
-    // this morning's weight, today's eating. Hide them rather than show
+    // today's eating. Hide them rather than show
     // today's numbers under yesterday's date.
     const isToday = offset === 0;
     const rd = document.getElementById("readiness"), fl = document.getElementById("foodLog");
+    const bd = document.getElementById("body");
     if (rd) rd.style.display = isToday ? "" : "none";
     if (fl) fl.style.display = isToday ? "" : "none";
+    if (bd) bd.style.display = isToday ? "" : "none";
 
     const today = dayAt(0), nm = nowMin();
     const rows = today ? dayRows(today, cached.plan, true).filter(r => !r.open) : [];
@@ -1599,10 +1622,21 @@ V.today = async function(){
       if (!src.intervals_configured) missing.push("intervals.icu not configured (INTERVALS_ICU_API_KEY + INTERVALS_ICU_ATHLETE_ID)");
       if (src.intervals_error) missing.push("intervals.icu: " + src.intervals_error);
       const accounts = (src.accounts||[]).length ? " (" + (src.accounts||[]).join(", ") + ")" : "";
-      document.getElementById("daySources").innerHTML = missing.length
-        ? "Feeding this page: " + ((src.calendars||[]).join(" · ") || "nothing yet") + esc(accounts)
+      // A copied calendar must never read as a live one. Say where it came
+      // from, when it was taken, and how far it still reaches.
+      const snap = src.snapshot;
+      const feeding = (src.calendars||[]).slice();
+      if (snap) feeding.push(...snap.calendars.map(c => c + " (snapshot)"));
+      const snapNote = snap
+        ? `<br>${snap.used} ${snap.used === 1 ? "entry" : "entries"} on this page come from a calendar snapshot taken
+           ${esc(snap.captured_at)}, good through ${esc(snap.covers.to)} — connect a
+           calendar in Settings to replace it with the live one.`
+        : "";
+      document.getElementById("daySources").innerHTML = (missing.length
+        ? "Feeding this page: " + (feeding.join(" · ") || "nothing yet") + esc(accounts)
           + "<br>Missing — " + missing.map(esc).join("; ")
-        : "Feeding this page: " + (src.calendars||[]).join(" · ") + esc(accounts) + " · classes · intervals.icu";
+        : "Feeding this page: " + feeding.join(" · ") + esc(accounts) + " · classes · intervals.icu")
+        + snapNote;
     }catch(e){
       const list = document.getElementById("dayList");
       // Keep the last good day on screen if there is one — a passing network
@@ -1664,7 +1698,7 @@ V.today = async function(){
       if (syncing) return;                       // never stack fetches
       syncing = true;
       try{
-        await Promise.all([loadDay(), refreshReadiness(), refreshFood()]);
+        await Promise.all([loadDay(), refreshReadiness(), refreshFood(), refreshBody()]);
         lastSync = Date.now();
       } finally { syncing = false; }
     };

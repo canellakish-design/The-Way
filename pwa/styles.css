@@ -202,3 +202,11 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 .recmeta{min-width:0}
 .recword{font-family:var(--mono); font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase}
 .weighin{border-top:1px dashed var(--line); margin-top:12px; padding-top:10px}
+
+/* an action worded as prose — it belongs in a sentence, not in a button box */
+.linkish{background:none; border:0; padding:0; font:inherit; color:var(--ink);
+  text-decoration:underline; text-underline-offset:3px; cursor:pointer;}
+.linkish:hover{opacity:.8}
+/* the scale's rows: value, arrow and move sit together on the right */
+#body .tag{display:inline-flex; align-items:baseline; gap:8px}
+#body .arrow{font-family:var(--mono); font-size:18px; line-height:1}

@@ -20,10 +20,9 @@ const tz = require('./tz');
 
 const TTL_MS = 15 * 60 * 1000;   // these feeds are hours stale at source anyway
 
-function feeds() {
-  const raw = (process.env.ICS_FEEDS || '').trim();
+function parseFeedList(raw) {
   if (!raw) return [];
-  return raw.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(entry => {
+  return String(raw).split(/[\n,]+/).map(s => s.trim()).filter(Boolean).map(entry => {
     const eq = entry.indexOf('=');
     // Only treat '=' as a name separator when it comes before the URL — the
     // URLs themselves contain '=' in query strings.
@@ -32,6 +31,29 @@ function feeds() {
     }
     return { name: null, url: entry };
   }).filter(f => /^https?:\/\//i.test(f.url));
+}
+
+// Feeds come from two places: the environment, and feeds added in the app.
+// The stored ones matter more — adding a calendar shouldn't mean editing
+// hosting configuration and waiting for a redeploy.
+let STORED = null;
+async function storedFeeds() {
+  if (STORED) return STORED;
+  STORED = (await getJSON('ics-feeds', { feeds: [] })).feeds || [];
+  return STORED;
+}
+function envFeeds() { return parseFeedList(process.env.ICS_FEEDS); }
+
+// Synchronous view, for the paths that can't await (status rows, config checks).
+let CACHED_ALL = null;
+function feeds() { return CACHED_ALL || envFeeds(); }
+async function feedsAsync() {
+  const all = envFeeds().concat(await storedFeeds());
+  // last one wins on duplicate URLs
+  const seen = new Map();
+  for (const f of all) seen.set(f.url, f);
+  CACHED_ALL = [...seen.values()];
+  return CACHED_ALL;
 }
 const configured = () => feeds().length > 0;
 
@@ -244,7 +266,7 @@ function eventsFromFeed(text, feedName, fromKey, toKey) {
 /* ---------------- fetch + cache ---------------- */
 
 async function fetchAll(fromKey, toKey, force) {
-  const list = feeds();
+  const list = await feedsAsync();
   if (!list.length) return { configured: false, events: [], feeds: [] };
   const cache = await getJSON('ics-cache', null);
   if (!force && cache && cache.from === fromKey && cache.to === toKey
@@ -273,8 +295,50 @@ async function fetchAll(fromKey, toKey, force) {
 }
 
 function attach(app) {
+  // Add a calendar from the app itself: paste the secret iCal address, done.
+  // No hosting dashboard, no redeploy.
+  app.post('/ics/feeds', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const b = req.body || {};
+      const url = String(b.url || '').trim();
+      if (!/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'a http(s) iCal URL is required' });
+      // Prove it is a calendar before storing it, so a wrong paste is caught
+      // here rather than showing up as an empty day.
+      let name = (b.name || '').trim() || null, events = 0;
+      try {
+        const r = await fetch(url, { headers: { 'User-Agent': 'the-way/1.0' } });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const text = await r.text();
+        if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error('that URL did not return an iCal feed');
+        const parsed = parseICS(text);
+        if (!name) name = parsed.calName || 'calendar';
+        events = parsed.events.length;
+      } catch (e) { return res.status(400).json({ error: 'could not read that feed — ' + e.message }); }
+      const d = await getJSON('ics-feeds', { feeds: [] });
+      d.feeds = (d.feeds || []).filter(f => f.url !== url).concat([{ name, url, added_at: new Date().toISOString() }]);
+      await setJSON('ics-feeds', d);
+      STORED = d.feeds; CACHED_ALL = null;
+      await setJSON('ics-cache', null).catch(() => {});   // force a refetch
+      res.json({ ok: true, name, events_in_feed: events, feeds: d.feeds.map(f => f.name) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+
+  app.get('/ics/feeds', async (req, res) => { if (!auth(req, res)) return;
+    const stored = await storedFeeds();
+    res.json({ feeds: stored.map(f => ({ name: f.name, added_at: f.added_at })),
+      from_env: envFeeds().map(f => f.name || 'unnamed') }); });
+
+  app.post('/ics/feeds/remove', async (req, res) => { if (!auth(req, res)) return;
+    const name = String((req.body || {}).name || '');
+    const d = await getJSON('ics-feeds', { feeds: [] });
+    const before = (d.feeds || []).length;
+    d.feeds = (d.feeds || []).filter(f => f.name !== name);
+    await setJSON('ics-feeds', d);
+    STORED = d.feeds; CACHED_ALL = null;
+    await setJSON('ics-cache', null).catch(() => {});
+    res.json({ ok: true, removed: before - d.feeds.length }); });
+
   app.get('/ics/status', async (req, res) => { if (!auth(req, res)) return;
-    const list = feeds();
+    const list = await feedsAsync();
     if (!list.length) return res.json({ configured: false, feeds: [] });
     const from = tz.shiftKey(tz.todayKey(), -7), to = tz.shiftKey(tz.todayKey(), 14);
     try {
@@ -283,4 +347,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, fetchAll, configured, feeds, parseICS, eventsFromFeed, expand };
+module.exports = { attach, fetchAll, configured, feeds, feedsAsync, parseICS, eventsFromFeed, expand };
