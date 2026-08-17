@@ -6,6 +6,7 @@
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
+const tz = require('./tz');
 const CID = process.env.GOOGLE_CLIENT_ID || '';
 const SEC = process.env.GOOGLE_CLIENT_SECRET || '';
 const BASE = process.env.BASE_URL || '';
@@ -14,18 +15,11 @@ const BASE = process.env.BASE_URL || '';
 const DAY_START = 5 * 60, DAY_END = 21.5 * 60;  // minutes from midnight
 const MIN_WINDOW = 30;                            // ignore slivers
 
-// Day keys are LOCAL dates. toISOString() would key off UTC, which rolls the
-// day over at 8pm Eastern — "today" on the schedule would jump to tomorrow
-// while Harry is still eating dinner.
-function dateKey(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-    + '-' + String(d.getDate()).padStart(2, '0');
-}
-function fmtMin(m) {
-  let h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? 'a' : 'p';
-  h = h % 12; if (h === 0) h = 12;
-  return h + ':' + String(mm).padStart(2, '0') + ap;
-}
+// Day keys and clock times are read in the app's timezone (tz.js). Using the
+// server's local time looked right on a laptop and was hours out in
+// production, where the function runs in UTC.
+const dateKey = d => tz.keyOf(d);
+const fmtMin = m => tz.fmtMin(m);
 
 // ---- classification -------------------------------------------------
 const RULES = [
@@ -199,7 +193,7 @@ async function accountEmail(t) {
 function dayEventsFor(events, dateStr) {
   return events.filter(e => {
     if (e.allDay) return e.start <= dateStr && dateStr < e.end;
-    return new Date(e.start).toDateString() === new Date(dateStr + 'T12:00:00').toDateString();
+    return tz.keyOf(new Date(e.start)) === dateStr;
   });
 }
 
@@ -212,10 +206,8 @@ function windowsForDate(events, dateStr, extraBusy) {
   if (dayEvents.some(e => e.allDay)) {
     return { windows: [], available_min: 0, travel: dayEvents.some(e => e.category === 'travel') };
   }
-  const busy = dayEvents.map(e => {
-    const s = new Date(e.start), en = new Date(e.end);
-    return [s.getHours() * 60 + s.getMinutes(), en.getHours() * 60 + en.getMinutes()];
-  }).concat(extraBusy || []).sort((a, b) => a[0] - b[0]);
+  const busy = dayEvents.map(e => [tz.minutesOf(new Date(e.start)), tz.minutesOf(new Date(e.end))])
+    .concat(extraBusy || []).sort((a, b) => a[0] - b[0]);
 
   const windows = [];
   let cursor = DAY_START;
@@ -261,8 +253,7 @@ function scheduleForDate(events, dateStr) {
     source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null
   }));
   const timed = all.filter(e => !e.allDay).map(e => {
-    const s = new Date(e.start), en = new Date(e.end);
-    const sm = s.getHours() * 60 + s.getMinutes(), em = en.getHours() * 60 + en.getMinutes();
+    const sm = tz.minutesOf(new Date(e.start)), em = tz.minutesOf(new Date(e.end));
     return {
       summary: e.summary, category: e.category, allDay: false,
       source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null,
@@ -279,20 +270,19 @@ function scheduleForDate(events, dateStr) {
 // Day 0 of the returned array is (today - back).
 function scheduleDays(events, n, plannedByDate, back) {
   const { classesForDate } = require('./classes');
-  const today = dateKey(new Date());
+  const today = tz.todayKey();
   const days = [];
   const first = -(back || 0);
   for (let i = first; i < first + n; i++) {
-    const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + i);
-    const key = dateKey(d);
+    const key = tz.shiftKey(today, i);
     const classes = classesForDate(key);
     const day = windowsForDate(events, key, classes.map(c => [c.start_min, c.end_min]));
     const base = scheduleForDate(events, key);
     const planned = (plannedByDate && plannedByDate[key]) || [];
     days.push({
       date: key,
-      dow: d.toLocaleDateString('en-US', { weekday: 'short' }),
-      label: d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }),
+      dow: tz.dowOf(key),
+      label: tz.labelOf(key),
       today: key === today,
       events: base.events.concat(classes, planned.filter(p => !p.allDay))
         .sort((a, b) => a.start_min - b.start_min),
@@ -308,11 +298,10 @@ function weekAvailability(events, recovery) {
   const days = [];
   let totalMin = 0;
   for (let i = 0; i < 7; i++) {
-    const d = new Date(); d.setDate(d.getDate() + i);
-    const key = dateKey(d);
+    const key = tz.shiftKey(tz.todayKey(), i);
     const day = windowsForDate(events, key);
     totalMin += day.available_min;
-    days.push({ date: key, dow: d.toLocaleDateString('en-US', { weekday: 'short' }), ...day });
+    days.push({ date: key, dow: tz.dowOf(key), ...day });
   }
   const availableH = Math.round(totalMin / 6) / 10;
   // realistic trainable share of raw free time, modulated by recovery
@@ -403,19 +392,32 @@ function attach(app) {
       const n = Math.min(21, Math.max(1, parseInt(req.query.days, 10) || 7));
       const back = Math.min(7, Math.max(0, parseInt(req.query.back, 10) || 0));
       const d = await sync().catch(async () => await db());
-      const first = new Date(); first.setDate(first.getDate() - back);
-      const last = new Date(); last.setDate(last.getDate() + n - back - 1);
+      const firstKey = tz.shiftKey(tz.todayKey(), -back);
+      const lastKey = tz.shiftKey(tz.todayKey(), n - back - 1);
       const intervals = require('./intervals');
       const classes = require('./classes');
       // A dead source dims one lane of the day; it never blanks the page.
-      const iv = await intervals.plannedRange(dateKey(first), dateKey(last))
+      const iv = await intervals.plannedRange(firstKey, lastKey)
         .catch(e => ({ configured: intervals.configured(), days: {}, error: e.message }));
-      const days = scheduleDays(d.events || [], n, iv.days, back);
+      // iCal feeds sit alongside the OAuth accounts — same day, same shape.
+      const icsMod = require('./ics');
+      const ics = await icsMod.fetchAll(firstKey, lastKey)
+        .catch(e => ({ configured: icsMod.configured(), events: [], feeds: [], error: e.message }));
+      const icsEvents = (ics.events || []).map(e => {
+        const calDefault = calendarCategory(e.calendar);
+        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
+          account: 'ical:' + e.calendar,
+          category: classify(e.summary, d.manual, calDefault) };
+      });
+      const days = scheduleDays((d.events || []).concat(icsEvents), n, iv.days, back);
       // Hexis macros, posted each morning by the Chrome run.
       const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
       for (const day of days) day.macros = macros[day.date] || null;
       const sources = {
-        calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name)),
+        calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))
+          .concat((ics.feeds || []).filter(f => f.ok).map(f => f.name)),
+        ical_feeds: (ics.feeds || []),
+        ical_errors: (ics.feeds || []).filter(f => !f.ok).map(f => f.name + ': ' + f.error),
         accounts: d.accounts.map(a => a.id),
         account_errors: d.accounts.filter(a => a.auth_error).map(a => a.id + ': ' + a.auth_error),
         calendar_connected: d.accounts.length > 0,
@@ -425,7 +427,22 @@ function attach(app) {
         macros_today: !!((days.find(x => x.today) || {}).macros)
       };
       const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
-      if (!d.accounts.length) return res.json({ connected: false, days, sources, today_index: todayIdx0 });
+      sources.calendar_connected = d.accounts.length > 0 || icsEvents.length > 0 || icsMod.configured();
+      if (!d.accounts.length && !icsMod.configured()) {
+        return res.json({ connected: false, days, sources, today_index: todayIdx0 });
+      }
+      if (!d.accounts.length) {
+        // feeds only, no OAuth account: still a real day
+        const { sleepLatest } = require('./whoop');
+        const { weekState } = require('./race');
+        const s0 = await sleepLatest({ sync: false }).catch(() => null);
+        const w0 = await weekState().catch(() => null);
+        const macros0 = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
+        for (const day of days) day.macros = macros0[day.date] || null;
+        return res.json({ connected: true, synced_at: null, days, sources, today_index: todayIdx0,
+          ...recommendToday(days[todayIdx0], s0 && s0.recovery ? s0.recovery.score : null,
+            w0 ? w0.remaining : null) });
+      }
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');
       const s = await sleepLatest({ sync: false }).catch(() => null);
@@ -469,7 +486,7 @@ function attach(app) {
     try {
       const d = await sync().catch(async () => await db());
       if (!d.accounts.length) return res.json({ connected: false });
-      const key = dateKey(new Date());
+      const key = tz.todayKey();
       const day = windowsForDate(d.events, key);
       const { sleepLatest } = require('./whoop');
       const { weekState } = require('./race');

@@ -12,6 +12,7 @@ require('./race').attach(app);
 require('./prescriptions').attach(app);
 require('./whoop').attach(app);
 require('./calendar').attach(app);
+require('./ics').attach(app);
 require('./intervals').attach(app);
 require('./macros').attach(app);
 require('./intake').attach(app);

@@ -124,6 +124,27 @@ async function report() {
     });
   } catch (e) { push({ key: 'intervals', name: 'intervals.icu', error: e.message }); }
 
+  // ---- iCal feeds (the no-OAuth calendar path) ----
+  try {
+    const icsMod = require('./ics');
+    const list = icsMod.feeds();
+    const cache = await getJSON('ics-cache', null);
+    const bad = (cache && cache.feeds || []).filter(f => !f.ok);
+    push({
+      key: 'ical', name: 'Calendar feeds (iCal)', role: 'calendars without a Google OAuth app',
+      configured: list.length > 0,
+      connected: list.length > 0 && bad.length < list.length,
+      has_data: !!(cache && (cache.events || []).length),
+      detail: !list.length ? 'no feeds set'
+        : (cache ? `${(cache.events || []).length} events from ${list.length} feed(s)`
+            + (bad.length ? ' · failing: ' + bad.map(f => f.name).join(', ') : '')
+          : `${list.length} feed(s), not fetched yet`),
+      auth_url: null,
+      fix: !list.length ? 'set ICS_FEEDS (one per line: Name=secret iCal URL)'
+        : bad.length ? 'check the failing feed URL' : null
+    });
+  } catch (e) { push({ key: 'ical', name: 'Calendar feeds (iCal)', error: e.message }); }
+
   // ---- Hexis (pushed in by the morning run) ----
   try {
     const m = await getJSON('macros', { days: {} });

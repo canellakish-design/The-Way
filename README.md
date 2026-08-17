@@ -99,7 +99,15 @@ and changing hosting configuration are decisions taken in the moment, with the
 owner present, not standing instructions left in a file.
 
 ## Feeding the day
-1. **Google Calendar** — visit `/gcal/auth?email=you@example.com` once *per
+1. **Calendars, the short way** — set `ICS_FEEDS` to your calendars' *secret
+   iCal addresses* (Google Calendar → calendar settings → "Secret address in
+   iCal format"), one per line as `Name=URL`. No Google Cloud project, no
+   client id, no consent screen, nothing to expire. Recurring events, EXDATE
+   cancellations, all-day spans and TZID times are all handled
+   (`node bridge/ics.test.js`). The cost is freshness: Google refreshes these
+   feeds for outside fetchers on its own schedule, often hours behind. The
+   URLs are credentials — anyone holding one can read that calendar.
+2. **Google Calendar, the live way** — visit `/gcal/auth?email=you@example.com` once *per
    account*. The day spans more than one Google identity (teaching on one,
    the club's coaching calendar on another), so accounts accumulate: each visit
    adds one, never replaces. `?email=` preselects it in Google's chooser —
@@ -110,18 +118,22 @@ owner present, not standing instructions left in a file.
    them; `POST /gcal/calendars {"calendars":[ids],"account":"…"}` pins a set;
    `GET /gcal/disconnect?account=…` removes one. An account that fails to
    refresh is named on the page — the others keep feeding the day.
-2. **Classes** — edit `bridge/schedule-classes.json`: one array per weekday,
+3. **Classes** — edit `bridge/schedule-classes.json`: one array per weekday,
    `{ "from": "08:00", "to": "08:45", "name": "…", "room": "…" }`. Class time
    blocks training windows exactly like a calendar event does.
-3. **intervals.icu** — set `INTERVALS_ICU_API_KEY` and
+4. **intervals.icu** — set `INTERVALS_ICU_API_KEY` and
    `INTERVALS_ICU_ATHLETE_ID`. Rides and lifting are separated by workout
    type; a session with no time on it shows as planned-today rather than 12am.
-4. **Hexis macros** — `deploy/hexis-morning-run.md`.
-5. **Weigh-in** — the Withings scale pushes automatically once `/withings/auth`
+5. **Hexis macros** — `deploy/hexis-morning-run.md`.
+6. **Weigh-in** — the Withings scale pushes automatically once `/withings/auth`
    is visited (it runs hosted now, not just on the PC), and writes into the
    same store as a hand-typed `POST /weigh-in {"lb":208.6}`. Starting weight is
    210 lb — `START_WEIGHT_LB`, or `POST /weigh-in/start`.
-6. **Alma intake** — `deploy/alma-sync.md`.
+7. **Alma intake** — `deploy/alma-sync.md`.
+
+**Times are read in one timezone** — `TIMEZONE`, default `America/New_York` —
+never the server's. A Netlify function runs in UTC, so anything derived from
+server-local time renders hours out in production while looking right locally.
 
 ## Honest v1 seams (by design, all flagged in code)
 - Tymewear has no API — ramp tests are typed into Analyze (spec §7).
