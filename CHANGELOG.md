@@ -1,5 +1,81 @@
 # The Way — changelog
 
+# The scale connected to the wrong account
+
+## Fixed
+- **`/withings/disconnect` could not clean up after a demo account.** The demo
+  label is only set when the connect went through `/withings/auth?demo=1` — it
+  rides along in the OAuth state. Sign into a demo or test account through the
+  ordinary flow and the readings arrive labelled as real, are mirrored into the
+  shared weigh-in store as real, and nothing downstream can tell: a scale that
+  reported 143 lb and 249 lb on consecutive days is stored exactly like a
+  person. Disconnect only ever removed entries flagged demo, so those readings
+  survived the disconnect and stayed in the trend after reconnecting.
+  `?purge=1` now removes everything the scale mirrored, flagged or not
+- Not the default, deliberately: disconnecting a real scale must not delete a
+  true history, and it would be gone for good — the same call clears the
+  scale's own store, which is the other place those readings live
+- Disconnect now reports `readings_removed` and `purged`, so it is possible to
+  tell what it actually did
+
+## Notes
+- The app still cannot detect a demo account connected through the ordinary
+  flow. The only signal is the OAuth state round-trip. A plausibility check on
+  the readings themselves — no one loses 79 lb overnight — would catch it, and
+  is not written
+
+# The scale moves up
+
+## Changed
+- The scale card sits directly below recovery, above the day. It was below the
+  schedule and the food log, on the reasoning that a weight next to a recovery
+  score competes for the same glance; Harry wants the two morning numbers read
+  together. Markup order only — the logic that hides today-only cards when the
+  day stepper is on another date works off IDs
+
+# Tests for WHOOP, the weigh-in, the calendar and Hexis
+
+## Added
+- `bridge/whoop.test.js`, `bridge/weighin.test.js`, `bridge/calendar.test.js`,
+  `bridge/macros.test.js` — 372 assertions across the six suites, `npm test`
+  runs the lot and exits non-zero on the first failure. Same shape as the zones
+  and ics tests already here: plain node, no framework
+- The Hexis path: what the morning run's POST will accept (the `carbs`/
+  `protein`/`fat` aliases the doc promises, `day_type` for `fuel_day`, a scrape's
+  strings coerced, junk stored as null rather than NaN, a date the wrong way
+  round falling back to today), the periodized week posting in one call, a
+  second run correcting the day rather than doubling it, the 60-day prune, and
+  `have:false` rather than yesterday's targets dressed as today's
+- The compliance scoring underneath it: over and under costing the same, the
+  score flooring at zero, calories shown but not double-counted in the overall,
+  an empty day scoring zero rather than perfect, Alma as tracker of record with
+  The Way's own food log standing in when it hasn't posted, and the snack
+  suggester refusing to close a macro gap by pushing calories past the ceiling
+- `bridge/test-helpers.js` — an in-memory `./storage`, a real Express app on an
+  ephemeral port, and a scriptable stand-in for the outbound `fetch`. Route
+  behaviour is tested through real routing and real status codes rather than a
+  hand-rolled req/res double
+- The WHOOP fixes in the section below now have tests holding them down: the
+  `scope=offline` refresh grant, the webhook bypassing the sync cache, the
+  401-mid-sync retry, the last-write-wins token guard, and `/whoop/status`
+  naming the next action when a refresh token has died
+- Pinned regressions with a cost attached: "slept" reporting time asleep rather
+  than time in bed; yesterday's nap clearing instead of sitting on this
+  morning's card; clock times read in Harry's zone rather than the server's UTC;
+  the Withings dedupe matching on "came from the scale" rather than an exact
+  label; a hand-typed weight not blanking the last scale reading; credentials
+  trimmed of the quotes and newlines a hosting dashboard adds
+
+## Notes
+- `classify()` does not recognise an intervals.icu-style session title ("VO2 6x4
+  (dawn)") as training — it falls through to `busy`. Harmless today, because
+  planned work arrives already categorised from `intervals.js`, but a Google
+  event titled that way blocks the window it describes. Pinned as current
+  behaviour rather than changed
+- `whoop.js` now exports `syncLatest` and `storeTokens`. No behaviour change —
+  the night-vs-nap pick and the token race guard are not reachable through the
+  routes on their own
+
 # WHOOP, properly
 
 ## Fixed

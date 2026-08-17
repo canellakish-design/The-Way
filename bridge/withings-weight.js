@@ -291,15 +291,29 @@ function attach(app) {
     await save(d);
     // Demo readings were mirrored into the shared weigh-in store; take them
     // back out, or they stay in the trend as if they were real.
+    //
+    // ?purge=1 takes out everything this scale mirrored, flagged demo or not.
+    // It exists because the demo flag is only set when the connect went through
+    // /withings/auth?demo=1 — the label rides along in the OAuth state. Sign
+    // into a demo or test account through the ordinary flow and the readings
+    // arrive labelled as real, and nothing downstream can tell the difference:
+    // a scale that reported 143 lb and 249 lb on consecutive days is not a
+    // person, but it is stored exactly like one.
+    //
+    // Not the default, deliberately. Disconnecting a real scale must not delete
+    // a true history — and it would be gone for good, since this clears the
+    // scale's own store in the same breath.
+    const purge = req.query.purge === '1';
+    const fromScale = e => String(e.source || '').startsWith('withings');
+    let removed = 0;
     try {
       const w = await getJSON('weigh-in', { entries: [] });
       const before = w.entries.length;
-      w.entries = w.entries.filter(e => !e.demo);
-      if (w.entries.length !== before) await setJSON('weigh-in', w);
-    } catch (e) { console.error('[withings] could not clear demo readings:', e.message); }
-    // leave the mirrored readings alone — clearing the scale's own store is
-    // enough to reconnect cleanly, and the weigh-in history is still true
-    res.json({ ok: true, disconnected: true }); });
+      w.entries = w.entries.filter(e => (purge ? !fromScale(e) : !e.demo));
+      removed = before - w.entries.length;
+      if (removed) await setJSON('weigh-in', w);
+    } catch (e) { console.error('[withings] could not clear mirrored readings:', e.message); }
+    res.json({ ok: true, disconnected: true, purged: purge, readings_removed: removed }); });
   app.get('/withings/sync', async (req, res) => { if (!auth(req, res)) return;
     // ?full=1 re-pulls everything; by default sync asks only for what changed.
     try { res.json({ ok: true, ...(await syncMeasures(req.query.full === '1' ? 0 : null)) }); }

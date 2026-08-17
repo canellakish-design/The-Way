@@ -214,4 +214,7 @@ function attach(app) {
   app.get('/sleep/latest', async (req, res) => { if (!auth(req, res)) return;
     res.json(await sleepLatest()); });
 }
-module.exports = { attach, sleepLatest };
+// storeTokens and syncLatest are exported for whoop.test.js: the last-write
+// guard and the night-vs-nap pick are the two things most worth pinning down,
+// and neither is reachable through the routes on its own.
+module.exports = { attach, sleepLatest, syncLatest, storeTokens };
