@@ -5,7 +5,9 @@ const { auth } = require('./fuel-log');
 const API = 'https://api.prod.whoop.com';
 const CID = process.env.WHOOP_CLIENT_ID || '';
 const SEC = process.env.WHOOP_CLIENT_SECRET || '';
-const BASE = process.env.BASE_URL || '';
+// Trailing slashes are silently fatal: they make every redirect_uri a double
+// slash, which no OAuth provider matches against its registered value.
+const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
 
 async function db() { return getJSON('whoop', { tokens: null, sleep: null, nap: null, recovery: null }); }
 

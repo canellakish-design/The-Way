@@ -8,7 +8,9 @@ const OAUTH = 'https://www.strava.com/oauth';
 const CID = process.env.STRAVA_CLIENT_ID || '';
 const SEC = process.env.STRAVA_CLIENT_SECRET || '';
 const VERIFY = process.env.STRAVA_VERIFY_TOKEN || 'the-way-2026';
-const BASE = process.env.BASE_URL || '';
+// Trailing slashes are silently fatal: they make every redirect_uri a double
+// slash, which no OAuth provider matches against its registered value.
+const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
 
 async function db() { return getJSON('strava', { tokens: null, athlete_id: null, latest: null, subscription_id: null,
   rides: [], eftp: null, lthr: null, ef_trend: 'flat' }); }

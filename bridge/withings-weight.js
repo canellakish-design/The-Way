@@ -30,7 +30,9 @@ const { auth } = require('./fuel-log');
 const API = 'https://wbsapi.withings.net';
 const CLIENT_ID = process.env.WITHINGS_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.WITHINGS_CLIENT_SECRET || '';
-const BASE_URL = process.env.BASE_URL || '';
+// Trailing slashes are silently fatal: they make every redirect_uri a double
+// slash, which no OAuth provider matches against its registered value.
+const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
 
 async function db() { return getJSON('withings', { tokens: null, weights: [] }); }
 async function save(d) { return setJSON('withings', d); }
@@ -229,6 +231,19 @@ function attach(app) {
       last_updatetime: d.updatetime || null,
       configured: !!(CLIENT_ID && CLIENT_SECRET && BASE_URL) }); });
 
+  // What this app will send, character for character, so it can be compared
+  // against what's registered at Withings. No secrets in the response.
+  app.get('/withings/debug', async (req, res) => { if (!auth(req, res)) return;
+    const d = await db();
+    res.json({
+      base_url: BASE_URL || '(BASE_URL not set)',
+      redirect_uri_sent: BASE_URL + '/withings/callback',
+      webhook_url_sent: BASE_URL + '/withings/webhook',
+      register_both_of_these_at_withings: [BASE_URL + '/withings/callback', BASE_URL + '/withings/webhook'],
+      client_id_set: !!CLIENT_ID, client_secret_set: !!CLIENT_SECRET,
+      client_id_tail: CLIENT_ID ? '…' + CLIENT_ID.slice(-6) : null,
+      connected: !!d.tokens, weigh_ins: (d.weights || []).length
+    }); });
   app.get('/withings/disconnect', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
     d.tokens = null; d.weights = []; d.updatetime = null;

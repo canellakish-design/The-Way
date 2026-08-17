@@ -9,7 +9,9 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 const CID = process.env.GOOGLE_CLIENT_ID || '';
 const SEC = process.env.GOOGLE_CLIENT_SECRET || '';
-const BASE = process.env.BASE_URL || '';
+// Trailing slashes are silently fatal: they make every redirect_uri a double
+// slash, which no OAuth provider matches against its registered value.
+const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
 
 // waking window the engine searches inside
 const DAY_START = 5 * 60, DAY_END = 21.5 * 60;  // minutes from midnight

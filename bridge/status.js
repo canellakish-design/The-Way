@@ -10,7 +10,9 @@ const { getJSON } = require('./storage');
 const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
-const BASE = process.env.BASE_URL || '';
+// Trailing slashes are silently fatal: they make every redirect_uri a double
+// slash, which no OAuth provider matches against its registered value.
+const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
 const env = k => !!(process.env[k] || '').trim();
 
 // Auth links must be absolute for the phone to follow them. BASE_URL is what
