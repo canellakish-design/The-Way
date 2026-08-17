@@ -17,6 +17,12 @@ function markLive(isLive){
 }
 
 const S = JSON.parse(localStorage.getItem("way-settings") || "{}");
+// Retired per-device config. Clear it so an old phone doesn't keep a stale
+// bridge URL around in storage where it can confuse the next debugging session.
+if (S.bridgeUrl !== undefined || S.token !== undefined || S.role !== undefined) {
+  delete S.bridgeUrl; delete S.token; delete S.role;
+  localStorage.setItem("way-settings", JSON.stringify(S));
+}
 function saveS(){ localStorage.setItem("way-settings", JSON.stringify(S)); }
 const BAND = [-600,-300], TARGET = -450, BASE_BURN = 2050, PROTEIN_GOAL = 190;
 // Four zones across the balance spectrum. Left = more calories eaten (less
@@ -92,10 +98,16 @@ const DEMO = {
     {slot:3,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null} ] }
 };
 async function bridge(pathname, opts){
-  const base = S.bridgeUrl || DEFAULT_API;
   try{
-    const sep = pathname.includes("?") ? "&" : "?";
-    const r = await fetch(base + pathname + sep + "token=" + (S.token||""), opts);
+    // Always same-origin. This used to take a per-device Bridge URL and token
+    // out of localStorage, which meant a phone with a stale or empty value
+    // failed while the desktop worked — the same page, "bridge unreachable" on
+    // one device only. There is nothing to get wrong now.
+    // The header is how the bridge recognises its own page now that no token
+    // is stored per device.
+    const o = Object.assign({}, opts);
+    o.headers = Object.assign({ "x-the-way-app": "1" }, (opts && opts.headers) || {});
+    const r = await fetch(DEFAULT_API + pathname, o);
     if (!r.ok) {
       let detail = "";
       try{ const j = await r.clone().json(); detail = j.error ? " — " + j.error : ""; }
@@ -855,7 +867,7 @@ V.recover = async function(){
     el.innerHTML = p.episodes.map(e=>`<button data-e="${esc(e)}">${esc(e.replace(/-/g," ").replace(".mp3",""))}</button>`).join(" ");
     el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
       const a = document.getElementById("player"); a.hidden=false;
-      a.src = S.bridgeUrl + "/podcasts/file/" + b.dataset.e; a.play();
+      a.src = DEFAULT_API + "/podcasts/file/" + b.dataset.e; a.play();
     });
   }).catch(()=>{ document.getElementById("pods").textContent = "bridge unreachable"; });
 
@@ -1025,10 +1037,8 @@ V.analyze = async function(){
           `<h4>${t.latest.lb} lb ${t.latest.logged_today?"· today ✓":"· yesterday"}</h4>
            <div class="small">7-day trend ${t.ma7_lb ?? "—"} · ${t.week_change_lb ?? "—"} this week</div>
            <div class="small"><b>FTP ${__ftp}W · ${wkg} W/kg</b></div>`;
-        if (t.latest.logged_today && !announced && S.role==="cockpit"){
-          speak(`${wkg} watts per kilo. FTP ${__ftp}.` + (t.week_change_lb<0 ? " The weight is doing the work this week." : ""));
-          sessionStorage.setItem("wkg-announced","1"); announced="1";
-        }
+        // (this used to speak the number aloud on the cockpit device; device
+        // roles are gone, and unprompted speech on a phone is not wanted)
       }
     }catch(e){ document.getElementById("weigh").innerHTML =
       `<h4>Weigh-in</h4><div class="small">bridge unreachable — <a href="#fuel">log manually</a></div>`; }
@@ -1734,20 +1744,7 @@ function demoSchedule(){
    which, per source, with the link that fixes it. */
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
-    <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>
-    <div class="card"><h4>This device</h4>
-      <label>Role</label><select id="role">
-        ${["cockpit","kitchen","bedroom","phone"].map(r=>`<option ${S.role===r?"selected":""}>${r}</option>`).join("")}</select>
-      <label>Bridge URL (blank on the hosted site)</label><input id="burl" value="${esc(S.bridgeUrl||"")}">
-      <label>Token (FUEL_TOKEN)</label><input id="btok" value="${esc(S.token||"")}">
-      <button class="primary" id="save">Save</button><div class="small" id="sMsg"></div></div>`;
-  document.getElementById("save").onclick=()=>{
-    S.role=document.getElementById("role").value;
-    S.bridgeUrl=document.getElementById("burl").value.replace(/\/$/,"");
-    S.token=document.getElementById("btok").value.trim(); saveS();
-    document.getElementById("sMsg").textContent="Saved.";
-    drawConnections();
-  };
+    <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
 
   const drawConnections = async ()=>{
     const el = document.getElementById("conn");
@@ -1800,7 +1797,7 @@ document.getElementById("alarmStop").onclick=()=>{
 /* ---------------- queue flush + boot ---------------- */
 setInterval(async ()=>{
   const q=JSON.parse(localStorage.getItem("way-queue")||"[]");
-  if(!q.length||!S.bridgeUrl) return;
+  if(!q.length) return;
   try{ for(const m of q){ await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)}); }
     localStorage.setItem("way-queue","[]"); }catch(e){}
 }, 30000);

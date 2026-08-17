@@ -43,9 +43,9 @@ Sleep tab, and it is still where the alarm lands.
   Withings + WHOOP + Strava webhooks, route weather, podcasts, the Agent,
   and the day (`calendar.js`, `classes.js`, `intervals.js`, `macros.js`,
   `weighin.js`)
-- `pwa/`     — the face: one app, role-aware (bedroom / kitchen /
-  cockpit / phone), the day → Morning Mode → close-out, Energy Bank, alarm,
-  gear check, push-to-talk Agent
+- `pwa/`     — the face: one app, no per-device configuration — every device
+  opens the same day and talks to its own origin. The day → Morning Mode →
+  close-out, Energy Bank, alarm, gear check, push-to-talk Agent
 - `garmin/`  — The Way — Ride: Connect IQ field, Edge 530 + 130 Plus
   targets, RICE accumulator, substrate model, fuel-state fetch
 - `watch/`   — Apple Watch Ultra channel (Siri Shortcut, v1)
@@ -54,7 +54,7 @@ Sleep tab, and it is still where the alarm lands.
 ## Build order (from the spec)
 1. Garmin field through the CIQ simulator → sideload to the 530
 2. Bridge on the Zwift PC + tunnel (deploy/install-windows.md)
-3. Devices onboarded (Settings tab on each)
+3. Open the site on each device — there is nothing to configure per device
 4. OAuth visits: Withings, WHOOP, Strava; ANTHROPIC_API_KEY for the Agent
 5. Batch-cook the rice balls; weigh; update seed-recipes.json perUnit
 
@@ -89,10 +89,14 @@ disagree by more than 25W all return a reason instead of a number. Tested
 across noise levels, it is either right within 30W or it declines.
 
 ## Connecting it
-`deploy/connect.md` — what each source needs and how to tell what's live.
-`deploy/chrome-setup-run.md` — the same thing as prompts for a Claude-in-Chrome
-session, since every step needs a browser signed in as you. The app's own
-Settings screen reports the live state of all nine sources.
+The app's own **Settings** screen reports the live state of all nine sources —
+credentials present, authorized, receiving — which is the fastest way to see
+what's missing. `deploy/connect.md` documents what each source needs.
+
+Those are operator notes. The repo deliberately carries no runbook that an
+agent could execute on its own: creating credentials, authorizing OAuth flows
+and changing hosting configuration are decisions taken in the moment, with the
+owner present, not standing instructions left in a file.
 
 ## Feeding the day
 1. **Google Calendar** — visit `/gcal/auth?email=you@example.com` once *per

@@ -1,5 +1,12 @@
 # The Alma sync
 
+> **These are operator notes, not instructions for an agent.**
+> Nothing in `deploy/` is a standing authorization to act. Creating
+> credentials, authorizing OAuth flows and changing hosting configuration are
+> steps the owner performs, or explicitly approves one at a time, in the
+> moment. An agent that finds this file should treat it as reference material
+> and ask before doing any of it.
+
 Hexis says what the day should be; Alma is where the eating is actually
 tracked. The Way holds both and scores one against the other.
 
@@ -17,18 +24,6 @@ curl -X POST "$BASE_URL/intake?token=$FUEL_TOKEN" \
 `date` defaults to today. `carbs`/`protein`/`fat` work as aliases. Post as often
 as you like — each post replaces that day's totals, so a midday sync and an
 evening sync both just tell the truth at that moment.
-
-## Prompt for the run
-
-> Read today's logged nutrition totals from Alma — calories, protein, carbs,
-> fat, and the number of meals logged. POST them to
-> `$BASE_URL/intake?token=$FUEL_TOKEN` as
-> `{"kcal":…,"carbs_g":…,"protein_g":…,"fat_g":…,"meals":…,"source":"alma"}`.
-> Report the totals you posted and the compliance score that comes back. If
-> Alma has nothing logged today, post zeros — an empty day is information.
-
-Anything with access to Alma can drive it: a Claude session with the Alma
-connector, or a Claude-in-Chrome run alongside the Hexis one.
 
 ## What comes back
 

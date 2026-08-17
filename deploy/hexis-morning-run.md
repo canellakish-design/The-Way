@@ -1,5 +1,12 @@
 # The morning Hexis run
 
+> **These are operator notes, not instructions for an agent.**
+> Nothing in `deploy/` is a standing authorization to act. Creating
+> credentials, authorizing OAuth flows and changing hosting configuration are
+> steps the owner performs, or explicitly approves one at a time, in the
+> moment. An agent that finds this file should treat it as reference material
+> and ask before doing any of it.
+
 Hexis has no public API, so the macros do not arrive on their own. Once each
 morning a Claude-in-Chrome run reads the day's targets out of Hexis and POSTs
 them to the bridge. Everything downstream — the front page, the food log's
@@ -36,16 +43,6 @@ curl -X POST "$BASE_URL/macros?token=$FUEL_TOKEN" \
         {"date":"2026-08-17","kcal":2400,"carbs_g":300,"protein_g":190,"fat_g":70,"fuel_day":"low carb"}
       ]}'
 ```
-
-## Prompt for the run
-
-> Open app.hexis.live. Read today's macro targets — calories, carbs (g),
-> protein (g), fat (g) — and the fuel day label shown for today. If the
-> upcoming days are visible, read those too. Then POST them to
-> `$BASE_URL/macros?token=$FUEL_TOKEN` as JSON in the shape
-> `{"days":[{"date":"YYYY-MM-DD","kcal":…,"carbs_g":…,"protein_g":…,"fat_g":…,"fuel_day":"…"}]}`.
-> Report the numbers you posted. If Hexis has not published today's targets
-> yet, post nothing and say so.
 
 ## Checking it landed
 

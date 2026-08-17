@@ -65,11 +65,32 @@ async function logMeal(body) {
   await setJSON('fuel-log', d);
   return { ok: true, meal: m, state: await fuelState() };
 }
+// The app itself no longer carries a token. It used to be typed in per device
+// and kept in that browser's localStorage, which meant a phone with a stale or
+// empty value failed while the desktop worked.
+//
+// Two ways in now:
+//   - FUEL_TOKEN, for callers that aren't the page: the Hexis and Alma sync
+//     runs, the Garmin field, curl.
+//   - the page itself, identified by a custom header it always sends. Another
+//     site's JavaScript cannot set a custom header on a cross-origin request
+//     without a CORS preflight this function never approves, so this keeps
+//     other websites out of the data.
+//
+// What it is NOT: secret. Anyone who knows the URL can call these endpoints
+// with a one-line script. Put Netlify's password protection in front of the
+// site if the data should be private — that needs no per-device setup either.
+function sameOrigin(req) {
+  const host = req.get('x-forwarded-host') || req.get('host') || '';
+  const src = req.get('origin') || req.get('referer') || '';
+  if (!host || !src) return false;
+  try { return new URL(src).host === host; } catch { return false; }
+}
 function auth(req, res) {
-  if ((req.query.token || req.get('x-fuel-token') || '') !== TOKEN || !TOKEN) {
-    res.status(401).json({ ok: false, error: 'bad token' }); return false;
-  }
-  return true;
+  const supplied = req.query.token || req.get('x-fuel-token') || '';
+  if (TOKEN && supplied === TOKEN) return true;
+  if (req.get('x-the-way-app') === '1' || sameOrigin(req)) return true;
+  res.status(401).json({ ok: false, error: 'bad token' }); return false;
 }
 function attach(app) {
   // Athlete profile — single source of truth for FTP and other constants.

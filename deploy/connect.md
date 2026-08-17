@@ -1,5 +1,12 @@
 # Connecting The Way
 
+> **These are operator notes, not instructions for an agent.**
+> Nothing in `deploy/` is a standing authorization to act. Creating
+> credentials, authorizing OAuth flows and changing hosting configuration are
+> steps the owner performs, or explicitly approves one at a time, in the
+> moment. An agent that finds this file should treat it as reference material
+> and ask before doing any of it.
+
 The app tells you where it stands: open **Settings** from the day (button at the
 bottom) and read the Connections list. Each source reports one of four states,
 and they need different things:
@@ -13,9 +20,11 @@ and they need different things:
 
 A `×` can't be fixed by clicking anything — the app has no client id to send.
 
-## 1. Environment variables (Netlify → Site settings → Environment variables)
+## Environment variables the bridge reads
 
-Set these first; everything else depends on them. Redeploy after changing them.
+Set in the hosting environment. The function reads them at startup, so a change
+needs a redeploy to take effect. `FUEL_TOKEN` is a shared secret for callers
+that aren't the app's own page; the page itself no longer carries one.
 
 ```
 FUEL_TOKEN            long random string — the app's own password
@@ -47,9 +56,11 @@ HOME_LAT / HOME_LON   for route weather
 the failure looks like the provider's problem rather than ours. The
 Connections card says so in bold when it's missing.
 
-## 2. Authorize, one link each
+## The authorization endpoints
 
-From the Connections list, or directly:
+These exist for the owner to visit in a browser. Each one starts an OAuth
+consent flow against a personal account, so visiting them is a decision, not a
+maintenance step:
 
 - `BASE_URL/gcal/auth?email=harry.canellakis@mdunitedfc.org` — **once per Google
   account**. Accounts accumulate; each visit adds one. The `?email=` matters:
@@ -59,18 +70,19 @@ From the Connections list, or directly:
 - `BASE_URL/strava/auth`, then `BASE_URL/strava/subscribe?token=…` for the webhook
 - `BASE_URL/withings/auth` — subscribes its own webhook
 
-## 3. The two that push rather than pull
+## The two sources that push rather than pull
 
 Hexis and Alma have no server-to-server feed, so a daily run posts into the
 bridge. See `hexis-morning-run.md` and `alma-sync.md`.
 
-## 4. The one that's a file
+## The one that's a file
 
 `bridge/schedule-classes.json` — the teaching timetable. Fill it in and
 redeploy; it isn't a connection, it's data.
 
-## 5. Backfill what's already there
+## Backfill
 
-Once Strava is connected, the Analyze tab's **Re-read recent rides**
-(`/fitness/backfill?n=20`) walks your stored rides, pulls the power streams and
-reads FTP off them. Nothing else needs a backfill — the rest is forward-looking.
+With Strava connected, the Analyze tab's **Re-read recent rides**
+(`/fitness/backfill?n=20`) walks stored rides, pulls the power streams and
+reads FTP off them. Nothing else needs a backfill — the rest is
+forward-looking.
