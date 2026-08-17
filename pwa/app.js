@@ -1430,6 +1430,12 @@ V.today = async function(){
   };
   const refreshBody = async ()=> drawBody(await bridge("/weigh-in").catch(()=>null));
 
+  // WHOOP's authorization lives on the bridge, not in the page, so this has to
+  // be a real navigation rather than a fetch — the consent screen redirects
+  // back to /whoop/callback and stores the tokens server-side.
+  const reconnectLink = ()=>
+    `<a href="${DEFAULT_API}/whoop/auth"><b>reconnect WHOOP</b></a>`;
+
   const recBand =s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
   const refreshReadiness = async ()=>{
     const el = document.getElementById("readiness");
@@ -1455,15 +1461,32 @@ V.today = async function(){
             s.sleep?.performance != null ? s.sleep.performance + "%" : "—"}</span></li>
           ${s.nap && s.nap.hours ? `<li><span class="n">nap</span><span class="tag">${s.nap.hours} h</span></li>` : ""}
         </ul>
-        <div class="small">${esc(when)}</div>
-        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> — visit /whoop/auth on the bridge (${esc(s.auth_error.detail||"")})</div>`:""}`;
+        <div class="small">${esc(when)}${
+          age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}</div>
+        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> —
+          ${reconnectLink()} (${esc(s.auth_error.detail||"")})</div>`:""}`;
     } else {
-      const why = !s ? "bridge unreachable" : s.auth_error ? "WHOOP needs reconnecting — visit /whoop/auth on the bridge"
-        : s.connected ? "connected, but no sleep record yet" : "WHOOP not connected — visit /whoop/auth on the bridge";
+      // "visit /whoop/auth on the bridge" was a path, not a way in — there was
+      // no way to act on it from the phone the message was on. It's a link now.
+      const why = !s ? "bridge unreachable"
+        : s.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()}
+            <div class="small">${esc(s.auth_error.detail || "")}${
+              s.auth_error.at ? " · since " + new Date(s.auth_error.at).toLocaleString() : ""}</div>`
+        : s.connected ? `connected, but no sleep record yet —
+            <button class="linkish" id="whoopSync">sync now</button>`
+        : `WHOOP not connected — ${reconnectLink()}`;
       sleepHTML = `<div class="recovery"><span class="recscore" style="color:var(--muted)">—</span>
-        <span class="recmeta"><div class="small">${esc(why)}</div></span></div>`;
+        <span class="recmeta"><div class="small">${why}</div></span></div>`;
     }
     el.innerHTML = `<h4>Recovery · last night</h4>${sleepHTML}`;
+    // A forced pull, for when the webhook didn't arrive. The passive read is
+    // cached for ten minutes, so without this the only cure was waiting.
+    const sync = document.getElementById("whoopSync");
+    if (sync) sync.onclick = async ()=>{
+      sync.textContent = "syncing…"; sync.disabled = true;
+      try{ await bridge("/whoop/sync"); await refreshReadiness(); }
+      catch(e){ sync.disabled = false; sync.textContent = "sync failed — " + e.message; }
+    };
   };
 
 
