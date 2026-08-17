@@ -134,10 +134,22 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/weigh-in', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const lb = Number((req.body || {}).lb);
+      const b = req.body || {};
+      const lb = Number(b.lb);
       if (!lb || lb < 50 || lb > 500) return res.status(400).json({ error: 'lb required (50–500)' });
+      // Composition is optional, and any source can supply it — an Apple
+      // Shortcut reading Health, a sync run, or the scale via Withings. The
+      // box doesn't care which; it only needs the numbers.
+      const num = (v, max) => {
+        const n = Number(v);
+        return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n * 10) / 10 : null;
+      };
       const d = await db();
-      d.entries.push({ ts: Date.now(), lb, source: 'manual' });
+      d.entries.push({ ts: b.at ? Date.parse(b.at) || Date.now() : Date.now(), lb,
+        source: b.source || 'manual',
+        fat_pct: num(b.fat_pct, 75), fat_mass_lb: num(b.fat_mass_lb, 300),
+        fat_free_lb: num(b.fat_free_lb, 400), muscle_lb: num(b.muscle_lb, 400),
+        water_lb: num(b.water_lb, 400), bone_lb: num(b.bone_lb, 50) });
       d.entries = d.entries.filter(e => Date.now() - e.ts < KEEP);
       await setJSON('weigh-in', d);
       res.json({ ok: true, ...(await state()) });
