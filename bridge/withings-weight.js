@@ -183,6 +183,10 @@ function attach(app) {
     u.searchParams.set('scope', 'user.metrics');
     u.searchParams.set('redirect_uri', BASE_URL + '/withings/callback');
     u.searchParams.set('state', 'the-way');
+    // ?demo=1 — Withings' documented demo account, so the whole path (consent,
+    // token exchange, webhook subscribe, backfill, the body box) can be proved
+    // before a real scale reading exists. Disconnect and re-auth for real data.
+    if (req.query.demo === '1') u.searchParams.set('mode', 'demo');
     res.redirect(u.toString());
   });
 
@@ -225,6 +229,13 @@ function attach(app) {
       last_updatetime: d.updatetime || null,
       configured: !!(CLIENT_ID && CLIENT_SECRET && BASE_URL) }); });
 
+  app.get('/withings/disconnect', async (req, res) => { if (!auth(req, res)) return;
+    const d = await db();
+    d.tokens = null; d.weights = []; d.updatetime = null;
+    await save(d);
+    // leave the mirrored readings alone — clearing the scale's own store is
+    // enough to reconnect cleanly, and the weigh-in history is still true
+    res.json({ ok: true, disconnected: true }); });
   app.get('/withings/sync', async (req, res) => { if (!auth(req, res)) return;
     // ?full=1 re-pulls everything; by default sync asks only for what changed.
     try { res.json({ ok: true, ...(await syncMeasures(req.query.full === '1' ? 0 : null)) }); }
