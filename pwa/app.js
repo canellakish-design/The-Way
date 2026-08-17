@@ -1727,21 +1727,57 @@ function demoSchedule(){
     sources:{ calendars:["demo"], calendar_connected:false, classes_configured:false, intervals_configured:false } };
 }
 
-/* ---------------- SETTINGS ---------------- */
+/* ---------------- SETTINGS + CONNECTIONS ----------------
+   Every integration fails in three different places — no credentials, no
+   authorization, no data yet — and each needs a different move. The list says
+   which, per source, with the link that fixes it. */
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
+    <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>
     <div class="card"><h4>This device</h4>
       <label>Role</label><select id="role">
         ${["cockpit","kitchen","bedroom","phone"].map(r=>`<option ${S.role===r?"selected":""}>${r}</option>`).join("")}</select>
-      <label>Bridge URL (https tunnel or http://LAN-IP:8420)</label><input id="burl" value="${esc(S.bridgeUrl||"")}">
+      <label>Bridge URL (blank on the hosted site)</label><input id="burl" value="${esc(S.bridgeUrl||"")}">
       <label>Token (FUEL_TOKEN)</label><input id="btok" value="${esc(S.token||"")}">
       <button class="primary" id="save">Save</button><div class="small" id="sMsg"></div></div>`;
   document.getElementById("save").onclick=()=>{
     S.role=document.getElementById("role").value;
     S.bridgeUrl=document.getElementById("burl").value.replace(/\/$/,"");
     S.token=document.getElementById("btok").value.trim(); saveS();
-    document.getElementById("sMsg").textContent="Saved. Default view: "+defaultView();
+    document.getElementById("sMsg").textContent="Saved.";
+    drawConnections();
   };
+
+  const drawConnections = async ()=>{
+    const el = document.getElementById("conn");
+    if (!el) return;
+    let st;
+    try{ st = await bridge("/status"); }
+    catch(e){
+      // Error bodies can be a whole HTML page; show the gist, not the markup.
+      const why = String(e.message||"").replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim().slice(0,90);
+      el.innerHTML = `<h4>Connections</h4><div class="small">Can't reach the bridge — ${esc(why)}.
+        On the hosted site leave Bridge URL blank; the token below must match FUEL_TOKEN.</div>`;
+      return;
+    }
+    const mark = s => s.error ? "!" : (s.connected && s.has_data) ? "✓" : s.connected ? "◐" : s.configured ? "○" : "×";
+    const rows = (st.integrations||[]).map(s=>`
+      <li class="${(s.connected&&s.has_data)?"done":""}">
+        <span class="n"><b>${mark(s)} ${esc(s.name)}</b>
+          <span class="small">${esc(s.role||"")}</span>
+          <span class="small">${esc(s.error||s.detail||"")}</span>
+          ${s.fix?`<span class="small"><b>→ ${esc(s.fix)}</b></span>`:""}</span>
+        <span class="tag">${(s.auth_url && s.configured && s.fix)
+          ? `<a href="${esc(s.auth_url)}">connect</a>` : ""}</span></li>`).join("");
+    el.innerHTML = `<h4>Connections · ${st.ready} of ${st.total} live</h4>
+      ${st.base_url_note?`<div class="small"><b>${esc(st.base_url_note)}</b></div>`:""}
+      <ul class="agenda totals">${rows}</ul>
+      <div class="small">✓ live and receiving · ◐ authorized, no data yet · ○ credentials set, not authorized · × not configured</div>
+      <button id="recheck">Re-check</button>`;
+    const rc = document.getElementById("recheck");
+    if (rc) rc.onclick = ()=>{ el.innerHTML = `<h4>Connections</h4><div class="small">checking…</div>`; drawConnections(); };
+  };
+  drawConnections();
 };
 
 /* ---------------- alarm loop (kiosk) ---------------- */
