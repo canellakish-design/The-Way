@@ -21,7 +21,13 @@ const SEC = envStr('GOOGLE_CLIENT_SECRET');
 // Trailing slashes are stripped: they turn every redirect into a double slash.
 function siteUrl() {
   const v = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '';
-  return v.replace(/\/+$/, '');
+  return v.replace(/\/+$/, '')
+    // BASE_URL is naturally set to the API base — that is where the endpoints
+    // live — but an OAuth redirect must be a site path. The catch-all redirect
+    // in netlify.toml routes /withings/callback to the function anyway, so the
+    // short form works and is what gets registered with providers. Strip the
+    // function mount so both spellings produce the same redirect_uri.
+    .replace(/\/\.netlify\/functions\/[^/]+$/, '');
 }
 const BASE = siteUrl();
 
