@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "test": "node bridge/zones.test.js && node bridge/ics.test.js && node bridge/whoop.test.js && node bridge/weighin.test.js && node bridge/calendar.test.js"
+    "test": "node bridge/zones.test.js && node bridge/ics.test.js && node bridge/whoop.test.js && node bridge/weighin.test.js && node bridge/calendar.test.js && node bridge/macros.test.js"
   },
   "dependencies": {
     "@netlify/blobs": "^8.1.0",

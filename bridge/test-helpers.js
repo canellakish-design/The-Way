@@ -18,25 +18,33 @@ const REAL_FETCH = globalThis.fetch;
 // it never wrote, and the whoop token-race guard would test nothing.
 const clone = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
 
+// Put a fake in the module cache under a real module's resolved path, so the
+// module under test picks it up when it requires it. Works for JSON too —
+// snacks.json is loaded at require time by intake.js.
+function stubModule(request, exports) {
+  const id = require.resolve(request);
+  const m = new Module(id, null);
+  m.filename = id;
+  m.path = path.dirname(id);
+  m.loaded = true;
+  m.exports = exports;
+  require.cache[id] = m;
+  return exports;
+}
+
 // Everything that stores anything requires ./storage at load time, so the fake
 // has to be in the module cache before the module under test is required.
 // Returns the raw backing object, for asserting on what was actually written.
 function stubStorage(seed) {
   const data = clone(seed) || {};
-  const id = require.resolve('./storage');
-  const m = new Module(id, null);
-  m.filename = id;
-  m.path = path.dirname(id);
-  m.loaded = true;
-  m.exports = {
+  stubModule('./storage', {
     ON_NETLIFY: false,
     getJSON: async (key, fallback) => (key in data ? clone(data[key]) : fallback),
     setJSON: async (key, val) => {
       if (data.__failWrites) throw new Error('blob store unavailable');
       data[key] = clone(val);
     }
-  };
-  require.cache[id] = m;
+  });
   return data;
 }
 
@@ -113,4 +121,4 @@ function checker() {
   return ok;
 }
 
-module.exports = { stubStorage, serve, stubFetch, checker, REAL_FETCH };
+module.exports = { stubStorage, stubModule, serve, stubFetch, checker, REAL_FETCH };

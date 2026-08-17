@@ -1,12 +1,32 @@
 # The Way — changelog
 
-# Tests for WHOOP, the weigh-in and the calendar
+# The scale moves up
+
+## Changed
+- The scale card sits directly below recovery, above the day. It was below the
+  schedule and the food log, on the reasoning that a weight next to a recovery
+  score competes for the same glance; Harry wants the two morning numbers read
+  together. Markup order only — the logic that hides today-only cards when the
+  day stepper is on another date works off IDs
+
+# Tests for WHOOP, the weigh-in, the calendar and Hexis
 
 ## Added
-- `bridge/whoop.test.js`, `bridge/weighin.test.js`, `bridge/calendar.test.js` —
-  293 assertions across the five suites, `npm test` runs the lot and exits
-  non-zero on the first failure. Same shape as the zones and ics tests already
-  here: plain node, no framework
+- `bridge/whoop.test.js`, `bridge/weighin.test.js`, `bridge/calendar.test.js`,
+  `bridge/macros.test.js` — 372 assertions across the six suites, `npm test`
+  runs the lot and exits non-zero on the first failure. Same shape as the zones
+  and ics tests already here: plain node, no framework
+- The Hexis path: what the morning run's POST will accept (the `carbs`/
+  `protein`/`fat` aliases the doc promises, `day_type` for `fuel_day`, a scrape's
+  strings coerced, junk stored as null rather than NaN, a date the wrong way
+  round falling back to today), the periodized week posting in one call, a
+  second run correcting the day rather than doubling it, the 60-day prune, and
+  `have:false` rather than yesterday's targets dressed as today's
+- The compliance scoring underneath it: over and under costing the same, the
+  score flooring at zero, calories shown but not double-counted in the overall,
+  an empty day scoring zero rather than perfect, Alma as tracker of record with
+  The Way's own food log standing in when it hasn't posted, and the snack
+  suggester refusing to close a macro gap by pushing calories past the ceiling
 - `bridge/test-helpers.js` — an in-memory `./storage`, a real Express app on an
   ephemeral port, and a scriptable stand-in for the outbound `fetch`. Route
   behaviour is tested through real routing and real status codes rather than a
