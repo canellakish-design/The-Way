@@ -1,104 +1,204 @@
+/* ============================================================
+   THE WAY — one screen you glance at.
+   Two typefaces: mono for anything you read as a value (times, weights,
+   watts, labels), a system face for anything you read as language. The old
+   sheet set Courier on everything, which made prose work to read and gave
+   numbers no distinction at all.
+   Colour lives entirely in tokens so the dark theme is a token swap, not a
+   second stylesheet.
+   ============================================================ */
 :root{
-  --paper:#F7F7F4; --ink:#141414; --muted:#767570; --line:#DEDDD6;
-  --green:#2F6B41; --green-soft:#DDEBE0; --amber:#B07D22; --amber-soft:#F0E6D0; --red:#A63F33; --red-soft:#F3DEDA; --blue-soft:#DCE8FB;
-  --carb:#C9701F; --fat:#2F5F9E;
-  --mono:"Courier New",Courier,monospace;
+  --paper:#F7F7F4; --card:#FFFFFF; --ink:#141414;
+  --muted:#5F5E59;              /* was #767570 — that failed contrast on paper */
+  --line:#DEDDD6; --line-soft:#EBEAE4;
+  --green:#2F6B41; --green-soft:#DDEBE0;
+  --amber:#8A6115; --amber-soft:#F0E6D0;
+  --red:#A63F33;   --red-soft:#F3DEDA;
+  --blue-soft:#DCE8FB;
+  --carb:#B4620F; --fat:#2F5F9E;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --shadow:3px 3px 0 var(--line);
+  --radius:0px;
+}
+/* The bedside tablet and the 5am kitchen. Follows the device rather than
+   adding a setting nobody would find. */
+@media (prefers-color-scheme: dark){
+  :root{
+    --paper:#121311; --card:#1B1D1A; --ink:#F2F1EC;
+    --muted:#A8A69E; --line:#33352F; --line-soft:#26281F;
+    --green:#7BC48E; --green-soft:#1F3327;
+    --amber:#D8A945; --amber-soft:#332A16;
+    --red:#E58273;   --red-soft:#33201C;
+    --blue-soft:#1C2942;
+    --carb:#E29A5A; --fat:#8FB4E8;
+    --shadow:3px 3px 0 #000;
+  }
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--paper); color:var(--ink); font-family:var(--mono); font-size:15px; line-height:1.5; -webkit-font-smoothing:antialiased;}
-header{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:2px solid var(--ink); position:sticky; top:0; background:var(--paper); z-index:10;}
-h1{font-family:var(--mono); font-weight:700; font-size:20px; letter-spacing:3px; text-transform:uppercase}
+body{background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:16px;
+  line-height:1.5; -webkit-font-smoothing:antialiased; -webkit-text-size-adjust:100%;}
+
+header{display:flex; justify-content:space-between; align-items:center; padding:12px 16px;
+  border-bottom:2px solid var(--ink); position:sticky; top:0; background:var(--paper); z-index:10;}
+h1{font-family:var(--mono); font-weight:700; font-size:18px; letter-spacing:3px; text-transform:uppercase}
 h1 span{color:var(--green)}
 nav{display:flex; gap:4px; flex-wrap:wrap}
-nav a{color:var(--muted); text-decoration:none; font-size:11px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; padding:3px 6px; border:1px solid transparent;}
-nav a.ritual{color:var(--green)}
-nav a.on{color:var(--ink); border:1px solid var(--ink)}
-main{max-width:660px; margin:0 auto; padding:16px 14px 72px}
-.eyebrow{font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted)}
-.greet{font-weight:700; font-size:26px; letter-spacing:1px; margin:8px 0 2px}
-.small{font-size:13px; color:var(--muted); line-height:1.5}
-.bignum{font-weight:700; font-size:52px; line-height:1; letter-spacing:-1px}
-.card{background:#fff; border:1px solid var(--ink); border-radius:0; padding:14px 16px; margin-top:12px; box-shadow:3px 3px 0 var(--line);}
-.card h4{font-size:14px; font-weight:700; letter-spacing:.5px; margin-bottom:5px; text-transform:uppercase}
-button,.btn{font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border:1px solid var(--ink); background:#fff; color:var(--ink); padding:9px 16px; border-radius:0; cursor:pointer; margin-top:8px; margin-right:6px; box-shadow:2px 2px 0 var(--line); transition:transform .04s, box-shadow .04s;}
+nav a{font-family:var(--mono); color:var(--muted); text-decoration:none; font-size:12px; font-weight:700;
+  letter-spacing:.5px; text-transform:uppercase; padding:4px 8px; border:1px solid transparent;}
+nav a.on{color:var(--ink); border-color:var(--ink)}
+main{max-width:660px; margin:0 auto; padding:14px 14px 80px}
+
+/* ---- shared ---- */
+.eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted)}
+.greet{font-weight:700; font-size:26px; letter-spacing:.4px; margin:8px 0 2px}
+.small{font-size:14px; color:var(--muted); line-height:1.45}
+.bignum{font-family:var(--mono); font-weight:700; font-size:48px; line-height:1; letter-spacing:-1px;
+  font-variant-numeric:tabular-nums;}
+
+/* Cards carry weight by importance now, not all the same. `.card` is the
+   quiet default; the day gets `.card.day` and keeps the hard shadow. */
+.card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius);
+  padding:14px 16px; margin-top:12px;}
+.card h4{font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1.5px;
+  margin-bottom:6px; text-transform:uppercase; color:var(--muted)}
+.card.day{border-color:var(--ink); box-shadow:var(--shadow)}
+.card.day h4{color:var(--ink); font-size:13px}
+
+button,.btn{font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+  border:1px solid var(--ink); background:var(--card); color:var(--ink); padding:10px 16px; border-radius:var(--radius);
+  cursor:pointer; margin-top:8px; margin-right:6px; box-shadow:2px 2px 0 var(--line);
+  transition:transform .04s, box-shadow .04s; min-height:44px;}
 button:active{transform:translate(2px,2px); box-shadow:0 0 0 var(--line)}
 button.primary{background:var(--ink); color:var(--paper)}
 button.big{font-size:16px; padding:14px 26px}
 button:focus-visible{outline:2px solid var(--green); outline-offset:2px}
 button:disabled{opacity:.35; box-shadow:none; cursor:default}
-.bandpill{display:inline-block; padding:2px 10px; font-weight:700; font-size:13px; letter-spacing:.5px; color:#fff; border:1px solid var(--ink);}
+
+.bandpill{display:inline-block; font-family:var(--mono); padding:3px 10px; font-weight:700; font-size:13px;
+  letter-spacing:.5px; color:#fff; border:1px solid rgba(0,0,0,.25);}
 .gauge{position:relative; height:24px; border:1px solid var(--ink); margin:12px 0 4px;}
 .gauge .needle{position:absolute; top:-4px; width:3px; height:32px; background:var(--ink)}
 .unitrow{display:flex; gap:6px; flex-wrap:wrap; margin-top:10px}
-.unit{border:1px solid var(--ink); padding:4px 10px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase; background:#fff}
+.unit{font-family:var(--mono); border:1px solid var(--line); padding:5px 10px; font-size:12px; font-weight:700;
+  letter-spacing:.5px; text-transform:uppercase; background:var(--card); font-variant-numeric:tabular-nums;}
 .unit.p{color:var(--red)} .unit.c{color:var(--carb)} .unit.f{color:var(--fat)} .unit.g{color:var(--green)}
-ul.plain li{list-style:none; display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px dashed var(--line); font-size:14px;}
+
+ul.plain li{list-style:none; display:flex; justify-content:space-between; align-items:center;
+  padding:8px 0; border-bottom:1px dashed var(--line); font-size:15px;}
 ul.plain li:last-child{border-bottom:none}
 ul.plain li.done{color:var(--muted); text-decoration:line-through}
-input,select{font-family:var(--mono); font-size:14px; border:1px solid var(--ink); border-radius:0; padding:9px 10px; margin-top:6px; width:100%; background:var(--paper); color:var(--ink);}
-input:focus,select:focus{outline:2px solid var(--green); outline-offset:-1px}
-label{font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); display:block; margin-top:10px}
+
+input,select,textarea{font-family:var(--sans); font-size:16px; border:1px solid var(--line); border-radius:var(--radius);
+  padding:11px 10px; margin-top:6px; width:100%; background:var(--paper); color:var(--ink); min-height:44px;}
+input[type=number]{font-family:var(--mono); font-variant-numeric:tabular-nums}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--green); outline-offset:-1px}
+label{font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted);
+  display:block; margin-top:10px}
 .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 .coachLog{min-height:120px}
 .steps li .lock{color:var(--muted); font-size:12px}
-.turn{margin-top:10px; font-size:14px}
+.turn{margin-top:10px; font-size:15px}
 .turn.you{color:var(--muted)}
-.turn.coach{font-weight:700}
-.ptt{width:100%; padding:20px; font-size:15px; border-radius:0}
-.ptt.listening{background:var(--green); color:#fff; border-color:var(--green)}
-/* ---- the day (front page) ---- */
-.nowbar{display:flex; align-items:center; gap:14px; padding:10px 0 2px}
-.nowtime{font-weight:700; font-size:38px; letter-spacing:-1px; line-height:1}
-.nowdate{font-weight:700; font-size:14px; letter-spacing:1px; text-transform:uppercase}
-.card.day.is-today{box-shadow:3px 3px 0 var(--ink)}
-.readyrow{display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:6px}
-.readyrow .rblock{min-width:0}
-@media (max-width:520px){.readyrow{grid-template-columns:1fr}}
-.chips{display:flex; gap:6px; flex-wrap:wrap; margin:6px 0 2px}
-.chip{border:1px solid var(--ink); padding:3px 8px; font-size:12px; background:#fff}
-.macros{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:8px 0 4px}
-.macros .mfuel{border:1px solid var(--ink); background:var(--ink); color:var(--paper); padding:3px 9px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase}
-ul.agenda{margin-top:8px}
-ul.agenda li{list-style:none; display:grid; grid-template-columns:62px 1fr auto; gap:10px; align-items:baseline;
-  padding:7px 0 7px 9px; border-bottom:1px dashed var(--line); border-left:4px solid var(--line); font-size:14px;}
+.turn.coach{font-weight:600}
+.ptt{width:100%; padding:20px; font-size:15px}
+.ptt.listening{background:var(--green); color:var(--paper); border-color:var(--green)}
+
+/* ---- the hero: the clock, and the one thing that matters next ---- */
+.nowbar{display:flex; align-items:baseline; gap:14px; padding:6px 0 0; flex-wrap:wrap}
+.nowtime{font-family:var(--mono); font-weight:700; font-size:40px; letter-spacing:-1.5px; line-height:1;
+  font-variant-numeric:tabular-nums;}
+.nowdate{font-family:var(--mono); font-weight:700; font-size:13px; letter-spacing:2px; text-transform:uppercase;
+  color:var(--muted)}
+.nowmeta{min-width:0}
+/* What's happening now, or next. The reason to look at the page at all, so it
+   is the largest thing after the clock rather than a line of grey text. */
+.upnext{margin:10px 0 2px; padding:12px 14px; border:1px solid var(--ink); background:var(--card);
+  box-shadow:var(--shadow);}
+.upnext.is-now{background:var(--green-soft); border-color:var(--green)}
+.upnext .label{font-family:var(--mono); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted)}
+.upnext .what{font-size:21px; font-weight:600; line-height:1.25; margin-top:3px; overflow-wrap:anywhere}
+.upnext .when{font-family:var(--mono); font-size:14px; color:var(--muted); margin-top:3px;
+  font-variant-numeric:tabular-nums;}
+.upnext.clear .what{font-weight:400; color:var(--muted)}
+
+/* ---- the day, stepped one at a time ---- */
+.daystep{display:flex; align-items:center; gap:10px; margin:14px 0 2px}
+.daystep button{font-size:20px; line-height:1; padding:8px 18px; margin:0; min-height:40px}
+.daystep-label{flex:1; text-align:center; font-family:var(--mono); font-weight:700; font-size:13px;
+  letter-spacing:2px; text-transform:uppercase}
+.daystep button:disabled{opacity:.25}
+
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px}
+.chip{font-family:var(--mono); border:1px solid var(--line); padding:4px 9px; font-size:12px; background:var(--card)}
+.macros{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:10px 0 4px}
+.macros .mfuel{font-family:var(--mono); border:1px solid var(--ink); background:var(--ink); color:var(--paper);
+  padding:4px 10px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase}
+
+/* the timeline */
+ul.agenda{margin-top:10px}
+ul.agenda li{list-style:none; display:grid; grid-template-columns:64px 1fr auto; gap:12px; align-items:baseline;
+  padding:10px 0 10px 11px; border-bottom:1px solid var(--line-soft); border-left:4px solid var(--line);
+  font-size:16px;}
 ul.agenda li:last-child{border-bottom:none}
-ul.agenda .t{font-size:11px; color:var(--muted); line-height:1.25}
-ul.agenda .n{overflow-wrap:anywhere}
-ul.agenda .tag{font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); text-align:right; line-height:1.25}
-ul.agenda li.past{opacity:.42}
-ul.agenda li.now{background:var(--green-soft)}
+ul.agenda .t{font-family:var(--mono); font-size:12px; color:var(--muted); line-height:1.3;
+  font-variant-numeric:tabular-nums;}
+ul.agenda .n{overflow-wrap:anywhere; font-weight:500}
+ul.agenda .tag{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--muted); text-align:right; line-height:1.3}
+ul.agenda li.past{opacity:.4}
+ul.agenda li.now{background:var(--green-soft); border-left-color:var(--green)}
 ul.agenda li.now .tag,ul.agenda li.next .tag{color:var(--ink); font-weight:700}
+
+/* Free time is the space between things, not an entry of its own. It used to
+   be a full row styled like an event, so an empty day looked packed. */
+ul.agenda li.gap{grid-template-columns:1fr; padding:5px 0 5px 11px; border-left-color:transparent;
+  border-bottom:1px dashed var(--line); font-family:var(--mono); font-size:11px; letter-spacing:1px;
+  text-transform:uppercase; color:var(--muted); opacity:.75}
+ul.agenda li.gap .n{font-weight:400}
+
 .lane-class{border-left-color:var(--fat)}
 .lane-coach{border-left-color:var(--carb)}
 .lane-icu{border-left-color:var(--green)}
 .lane-cal{border-left-color:var(--ink)}
-.lane-open{border-left-color:var(--line); color:var(--muted)}
-ul.agenda.totals li{grid-template-columns:1fr auto; border-left-color:var(--ink); padding-left:9px}
-ul.agenda.totals .tag{font-size:12px; letter-spacing:0; text-transform:none}
-ul.agenda.foodlog li{border-left-color:var(--amber)}
-#alarmOverlay[hidden]{display:none}
-#alarmOverlay{position:fixed; inset:0; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50;}
-#alarmOverlay .bignum{font-size:72px}
-@media (prefers-reduced-motion: reduce){*{transition:none!important}}
-.snack{border-top:1px dashed var(--line); margin-top:10px; padding-top:10px}
+.lane-open{border-left-color:transparent; color:var(--muted)}
 
-/* ---- one day at a time ---- */
-.daystep{display:flex; align-items:center; gap:10px; margin:10px 0 2px}
-.daystep button{font-size:22px; line-height:1; padding:6px 16px; margin:0}
-.daystep-label{flex:1; text-align:center; font-weight:700; font-size:15px; letter-spacing:2px; text-transform:uppercase}
-.daystep button:disabled{opacity:.25}
-/* The focused day is the whole page, so it gets room to breathe: bigger rows,
-   bigger times, readable from across a kitchen. */
-.card.day-solo h4{font-size:17px}
-ul.agenda-big li{grid-template-columns:78px 1fr auto; padding:12px 0 12px 11px; font-size:19px; line-height:1.35}
-ul.agenda-big .t{font-size:14px; line-height:1.3}
+ul.agenda.totals li{grid-template-columns:1fr auto; border-left-color:var(--line); padding-left:11px}
+ul.agenda.totals .tag{font-size:13px; letter-spacing:0; text-transform:none; font-variant-numeric:tabular-nums}
+ul.agenda.foodlog li{border-left-color:var(--amber)}
+
+/* the focused day gets room: readable from across a kitchen */
+.card.day-solo h4{font-size:14px}
+ul.agenda-big li{grid-template-columns:74px 1fr auto; padding:13px 0 13px 12px; font-size:19px; line-height:1.35}
+ul.agenda-big .t{font-size:13px; line-height:1.3}
 ul.agenda-big .n .small{font-size:15px}
 ul.agenda-big .tag{font-size:11px}
-.card.day-solo .macros .unit{font-size:14px; padding:5px 12px}
-.card.day-solo .macros .mfuel{font-size:14px; padding:5px 12px}
+ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
+.card.day-solo .macros .unit,.card.day-solo .macros .mfuel{font-size:13px; padding:5px 11px}
 @media (min-width:560px){
-  ul.agenda-big li{font-size:21px; grid-template-columns:92px 1fr auto}
-  ul.agenda-big .t{font-size:15px}
+  ul.agenda-big li{font-size:20px; grid-template-columns:84px 1fr auto}
+  ul.agenda-big .t{font-size:14px}
 }
-.bodyrow{display:flex; align-items:center; gap:14px; margin:6px 0 2px}
-.bodyrow .arrow{font-size:40px; line-height:1; font-weight:700}
+
+/* ---- readiness + body ---- */
+.readyrow{display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:6px}
+.readyrow .rblock{min-width:0}
+@media (max-width:520px){.readyrow{grid-template-columns:1fr; gap:12px}}
+.bodyrow{display:flex; align-items:center; gap:14px; margin:8px 0 2px}
+.bodyrow .arrow{font-size:38px; line-height:1; font-weight:700}
+.snack{border-top:1px dashed var(--line); margin-top:12px; padding-top:12px}
+
+/* ---- alarm overlay ---- */
+#alarmOverlay[hidden]{display:none}
+#alarmOverlay{position:fixed; inset:0; background:var(--ink); color:var(--paper); display:flex;
+  flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50;}
+#alarmOverlay .bignum{font-size:72px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+
+/* recovery, given the room the first card used to share with the scale */
+.recovery{display:flex; align-items:center; gap:16px; margin:6px 0 4px}
+.recscore{font-family:var(--mono); font-size:52px; font-weight:700; line-height:1; letter-spacing:-2px;
+  font-variant-numeric:tabular-nums;}
+.recmeta{min-width:0}
+.recword{font-family:var(--mono); font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase}
+.weighin{border-top:1px dashed var(--line); margin-top:12px; padding-top:10px}

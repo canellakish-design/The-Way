@@ -434,6 +434,7 @@ function attach(app) {
       const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
       for (const day of days) day.macros = macros[day.date] || null;
       const sources = {
+        timezone: tz.ZONE,
         calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))
           .concat((ics.feeds || []).filter(f => f.ok).map(f => f.name)),
         ical_feeds: (ics.feeds || []),

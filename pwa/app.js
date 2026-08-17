@@ -1157,6 +1157,7 @@ V.bedroom = function(){
     </div>`;
 
   // tick the clock every second
+
   const tick = ()=>{
     const n = new Date();
     let h = n.getHours(), mm = String(n.getMinutes()).padStart(2,'0');
@@ -1273,6 +1274,9 @@ function dayCard(d, plan, nowMin, rec, solo){
       else if (r.start <= nowMin && nowMin < r.end) state = "now";
       else if (!markedNext && !r.open){ state = "next"; markedNext = true; }
     }
+    // A free window is the space between things. Rendered as a full row it
+    // read as an appointment, and an empty day looked packed.
+    if (r.open) return `<li class="gap ${state}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     return `<li class="${r.lane.cls} ${state}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
@@ -1319,6 +1323,8 @@ V.today = async function(){
         <div class="small" id="nowNext">reaching the bridge…</div>
         <div class="small" id="nowFresh"></div></div>
     </div>
+    <div class="upnext" id="upnext"><div class="label">Next</div>
+      <div class="what">reaching the bridge…</div></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
       <div class="daystep-label" id="dayLabel"></div>
@@ -1334,14 +1340,22 @@ V.today = async function(){
     <button id="toClock">Bedside clock</button>
     <button id="toSettings">Settings</button>`;
 
+  // Last payload, so the now/next markers can be repainted without refetching.
+  let cached = { days: [], plan: null, recommendation: null, macros: null,
+    timezone: null, dateKey: localDateKey() };
+
+  // The schedule is built in the athlete's timezone, so the clock has to read
+  // in the same one. Left on the device's zone they disagree the moment a
+  // phone is in another timezone — the header saying Monday over a day card
+  // headed Sunday.
+  const zoned = (opts)=> new Intl.DateTimeFormat("en-US",
+    Object.assign({ timeZone: cached.timezone || undefined }, opts));
   const tick = ()=>{
     const n = new Date();
-    let h = n.getHours(); const mm = String(n.getMinutes()).padStart(2,"0");
-    const ap = h<12?"AM":"PM"; h = h%12; if(h===0) h=12;
     const el = document.getElementById("nowTime");
-    if (el) el.textContent = h+":"+mm+" "+ap;
+    if (el) el.textContent = zoned({ hour:"numeric", minute:"2-digit" }).format(n);
     const de = document.getElementById("nowDate");
-    if (de) de.textContent = n.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"});
+    if (de) de.textContent = zoned({ weekday:"long", month:"long", day:"numeric" }).format(n);
   };
   tick();
   __dayTimers.push(setInterval(()=>{ if(location.hash!=="#today") clearDayTimers(); else tick(); }, 1000));
@@ -1351,7 +1365,12 @@ V.today = async function(){
   // stranded on demo data with no way to fix it.
   document.getElementById("toSettings").onclick = ()=>{ location.hash = "#settings"; };
 
-  const nowMin = ()=>{ const n=new Date(); return n.getHours()*60+n.getMinutes(); };
+  const nowMin = ()=>{
+    const p = new Intl.DateTimeFormat("en-US", { timeZone: cached.timezone || undefined,
+      hour12:false, hour:"2-digit", minute:"2-digit" }).formatToParts(new Date());
+    const h = +p.find(x=>x.type==="hour").value % 24, m = +p.find(x=>x.type==="minute").value;
+    return h*60 + m;
+  };
 
   /* ---- the top strip: how the night went, what the scale said ----
      WHOOP is connected and pushes on its own. Withings is not wired up yet,
@@ -1394,7 +1413,24 @@ V.today = async function(){
       <div class="small">7-day average ${w.ma7_lb ?? "—"} lb${
         since != null ? ` · <b>${since > 0 ? "+" : ""}${since} lb</b> since ${w.start_lb}` : ""}${
         w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}</div>`}
-      ${comp}`;
+      ${comp}
+      ${(w.latest && w.latest.logged_today) ? "" : `
+        <div class="weighin">
+          <div class="small">${w.withings_connected
+            ? "Nothing from the scale today — it fills in when you step on, or enter it:"
+            : "Withings isn't connected — enter this morning's number:"}</div>
+          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="${w.start_lb || 210}"></span>
+            <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
+          <div class="small" id="wiMsg"></div></div>`}`;
+    const btn = document.getElementById("wiSave");
+    if (btn) btn.onclick = async ()=>{
+      const lb = +document.getElementById("wiLb").value;
+      if (!lb) return;
+      try{
+        await bridge("/weigh-in",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lb})});
+        refreshReadiness();
+      }catch(e){ const m=document.getElementById("wiMsg"); if(m) m.textContent = "Failed: " + e.message; }
+    };
   };
 
   const recBand = s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
@@ -1411,53 +1447,32 @@ V.today = async function(){
       // Say when it last synced. A stale reading looks identical to a fresh
       // one otherwise, and this is the number the day gets planned around.
       const age = s.synced_at ? (Date.now() - new Date(s.synced_at).getTime())/3.6e6 : null;
-      const when = age == null ? "" : age < 1 ? " · just synced"
-        : age < 24 ? ` · synced ${Math.round(age)}h ago` : ` · synced ${Math.round(age/24)}d ago`;
-      sleepHTML = `<div class="rblock">
-        <span class="bandpill" style="background:${b.c}">Recovery ${s.recovery.score} · ${b.name}</span>
-        <div class="small">slept ${s.sleep?.hours ?? "—"} h${
-            s.sleep?.in_bed ? ` <span title="time in bed">(${s.sleep.in_bed} in bed)</span>` : ""}
-          · sleep performance ${s.sleep?.performance != null ? s.sleep.performance + "%" : "—"}
-          · HRV ${s.recovery.hrv ?? "—"} ms · resting HR ${s.recovery.rhr ?? "—"}${when}</div>
-        ${s.nap && s.nap.hours ? `<div class="small">plus a ${s.nap.hours} h nap</div>` : ""}
-        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> — visit /whoop/auth on the bridge (${esc(s.auth_error.detail||"")})</div>`:""}</div>`;
+      const when = age == null ? "" : age < 1 ? "just synced"
+        : age < 24 ? `synced ${Math.round(age)}h ago` : `synced ${Math.round(age/24)}d ago`;
+      sleepHTML = `<div class="recovery">
+          <span class="recscore" style="color:${b.c}">${s.recovery.score}</span>
+          <span class="recmeta"><span class="recword" style="color:${b.c}">${b.name}</span>
+            <div class="small">HRV ${s.recovery.hrv ?? "—"} ms · resting HR ${s.recovery.rhr ?? "—"}</div></span>
+        </div>
+        <ul class="agenda totals">
+          <li><span class="n">slept</span><span class="tag">${s.sleep?.hours ?? "—"} h${
+            s.sleep?.in_bed ? ` <span class="small">(${s.sleep.in_bed} in bed)</span>` : ""}</span></li>
+          <li><span class="n">sleep performance</span><span class="tag">${
+            s.sleep?.performance != null ? s.sleep.performance + "%" : "—"}</span></li>
+          ${s.nap && s.nap.hours ? `<li><span class="n">nap</span><span class="tag">${s.nap.hours} h</span></li>` : ""}
+        </ul>
+        <div class="small">${esc(when)}</div>
+        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> — visit /whoop/auth on the bridge (${esc(s.auth_error.detail||"")})</div>`:""}`;
     } else {
       const why = !s ? "bridge unreachable" : s.auth_error ? "WHOOP needs reconnecting — visit /whoop/auth on the bridge"
         : s.connected ? "connected, but no sleep record yet" : "WHOOP not connected — visit /whoop/auth on the bridge";
-      sleepHTML = `<div class="rblock"><span class="bandpill" style="background:var(--muted)">Recovery —</span>
-        <div class="small">${esc(why)}</div></div>`;
+      sleepHTML = `<div class="recovery"><span class="recscore" style="color:var(--muted)">—</span>
+        <span class="recmeta"><div class="small">${esc(why)}</div></span></div>`;
     }
-    const t = w && w.latest;
-    const startLine = w && w.start_lb
-      ? `start ${w.start_lb} lb${w.change_since_start_lb!=null?` · <b>${w.change_since_start_lb>0?"+":""}${w.change_since_start_lb} lb</b> since`:""}`
-      : "";
-    const weighHTML = !w
-      ? `<div class="rblock"><div class="small">Weigh-in unavailable — bridge unreachable</div></div>`
-      : (t && t.logged_today)
-      ? `<div class="rblock"><div class="bignum" style="font-size:30px">${t.lb} lb</div>
-          <div class="small">${startLine}</div>
-          <div class="small">7-day ${w.ma7_lb ?? "—"}${w.week_change_lb!=null?` · ${w.week_change_lb>0?"+":""}${w.week_change_lb} this week`:""} · ${esc(t.source)}</div></div>`
-      : `<div class="rblock"><div class="small">${t?`Last: ${t.lb} lb (${new Date(t.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})})`:"No weigh-in yet"}${startLine?" · "+startLine:""}</div>
-          <div class="small">${w.withings_connected?"Withings is connected — this fills in when you step on the scale. Or enter it:":"Withings isn't connected yet — enter this morning's number:"}</div>
-          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="${w.start_lb||210}"></span>
-            <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
-          <div class="small" id="wiMsg"></div></div>`;
-    el.innerHTML = `<h4>Last night · this morning</h4>
-      <div class="readyrow">${sleepHTML}${weighHTML}</div>`;
+    el.innerHTML = `<h4>Recovery · last night</h4>${sleepHTML}`;
     drawBody(w);
-    const btn = document.getElementById("wiSave");
-    if (btn) btn.onclick = async ()=>{
-      const lb = +document.getElementById("wiLb").value;
-      if (!lb) return;
-      try{
-        await bridge("/weigh-in",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lb})});
-        refreshReadiness();
-      }catch(e){ document.getElementById("wiMsg").textContent = "Failed: " + e.message; }
-    };
   };
 
-  // Last payload, so the now/next markers can be repainted without refetching.
-  let cached = { days: [], plan: null, recommendation: null, macros: null, dateKey: localDateKey() };
 
   // Redraw from cache: moves the "now" band and the next-up line as time
   // passes. Cheap, so it can run often; no network, no flicker of live data.
@@ -1472,7 +1487,10 @@ V.today = async function(){
     if (!cached.days.length) return;
     // Crossing midnight makes every card wrong. Reload rather than patch —
     // it rebuilds the week from today and picks up any deploy at the same time.
-    if (localDateKey() !== cached.dateKey){ location.reload(); return; }
+    // Compare against the day the bridge called today, in its zone.
+    const todayThere = cached.days.length && cached.days[cached.todayIndex || 0]
+      ? cached.days[cached.todayIndex || 0].date : null;
+    if (todayThere && cached.dateKey && todayThere !== cached.dateKey){ location.reload(); return; }
     const day = dayAt(offset);
     const list = document.getElementById("dayList");
     // Only today gets the live now-marker; on any other day a "now" band would
@@ -1499,11 +1517,29 @@ V.today = async function(){
     if (fl) fl.style.display = isToday ? "" : "none";
 
     const today = dayAt(0), nm = nowMin();
-    const nx = today ? dayRows(today, cached.plan, true).find(r=> r.start > nm && !r.open) : null;
+    const rows = today ? dayRows(today, cached.plan, true).filter(r => !r.open) : [];
+    const onNow = rows.find(r => r.start <= nm && nm < r.end);
+    const nx = rows.find(r => r.start > nm);
+    const hero = document.getElementById("upnext");
+    if (hero){
+      if (onNow){
+        hero.className = "upnext is-now";
+        hero.innerHTML = `<div class="label">Now</div><div class="what">${esc(onNow.title)}</div>
+          <div class="when">until ${esc(onNow.to)}${nx ? ` · then ${esc(nx.title)} at ${esc(nx.from)}` : ""}</div>`;
+      } else if (nx){
+        const mins = nx.start - nm;
+        const away = mins < 60 ? `in ${mins} min` : `in ${Math.floor(mins/60)}h ${mins%60 ? (mins%60)+"m" : ""}`.trim();
+        hero.className = "upnext";
+        hero.innerHTML = `<div class="label">Next</div><div class="what">${esc(nx.title)}</div>
+          <div class="when">${esc(nx.from)} · ${esc(away)}</div>`;
+      } else {
+        hero.className = "upnext clear";
+        hero.innerHTML = `<div class="label">${rows.length ? "Done for the day" : "Today"}</div>
+          <div class="what">${rows.length ? "Nothing left on the calendar" : "Nothing scheduled"}</div>`;
+      }
+    }
     const el = document.getElementById("nowNext");
-    if (el) el.textContent = nx
-      ? "Next: " + nx.title + " at " + nx.from
-      : (today && today.events && today.events.length ? "Nothing left on the calendar today" : "Day is clear");
+    if (el) el.textContent = "";
   };
 
   const step = (n)=>{ if (dayAt(offset+n)){ offset += n; repaint(); } };
@@ -1546,7 +1582,9 @@ V.today = async function(){
       const ti = Number.isInteger(s.today_index) ? s.today_index
         : Math.max(0, days.findIndex(d=>d.today));
       cached = { days, plan, recommendation: s.recommendation, todayIndex: ti,
-        macros: days[ti] ? days[ti].macros : null, dateKey: localDateKey() };
+        macros: days[ti] ? days[ti].macros : null,
+        timezone: (s.sources && s.sources.timezone) || cached.timezone,
+        dateKey: (days[ti] && days[ti].date) || localDateKey() };
       repaint();
       stamp();
 
@@ -1599,6 +1637,11 @@ V.today = async function(){
         const msg = document.getElementById("flMsg");
         if (r.ok){ refreshFood(); }
         else if (msg) msg.textContent = "Bridge offline — queued locally (" + r.queued + ").";
+      };
+      const tog = document.getElementById("flToggle");
+      if (tog) tog.onclick = ()=>{
+        const f = document.getElementById("flForm");
+        if (f) { f.hidden = !f.hidden; tog.textContent = f.hidden ? "Log something" : "Close"; }
       };
       const addBtn = document.getElementById("flAdd");
       if (!addBtn) return;                    // view swapped mid-render
@@ -1699,6 +1742,8 @@ function foodLogHTML(meals, macros){
     <ul class="agenda foodlog">${rows || `<li><span class="t"></span><span class="n">Nothing logged yet</span><span class="tag">0</span></li>`}</ul>
     ${totals}
     ${macros ? "" : `<div class="small">No Hexis targets today — totals only.</div>`}
+    <button id="flToggle">Log something</button>
+    <div id="flForm" hidden>
     <div class="row2"><span><label>What</label><input id="flName" placeholder="Rice balls"></span>
       <span><label>Meal</label><select id="flMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
     <div class="row2"><span><label>kcal</label><input id="flK" type="number"></span>
@@ -1708,7 +1753,7 @@ function foodLogHTML(meals, macros){
     <button class="primary" id="flAdd">Add to the day</button>
     <button id="flSmoothie">Smoothie (520)</button>
     <button id="flBowl">Post-ride bowl (750)</button>
-    <div class="small" id="flMsg"></div>`;
+    <div class="small" id="flMsg"></div></div>`;
 }
 
 /* ---- compliance: Hexis asked, Alma tracked, how close ----
