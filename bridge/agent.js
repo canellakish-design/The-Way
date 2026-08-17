@@ -1,6 +1,7 @@
 // The Way Coach. Tools call module functions directly (no self-HTTP —
 // required for serverless). Daily thread persisted in storage.
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth, fuelState, logMeal } = require('./fuel-log');
 const { getPlan } = require('./plan');
 const { routeWeather } = require('./weather');
@@ -26,8 +27,8 @@ const PERSONAS = {
 async function loadThread(persona) {
   const key = persona ? 'agent-thread-' + persona : 'agent-thread';
   const t = await getJSON(key, null);
-  if (!t || t.day !== new Date().toDateString()) {
-    return { day: new Date().toDateString(), messages: [], yesterday: t ? t.summary : null };
+  if (!t || t.day !== tz.todayKey()) {
+    return { day: tz.todayKey(), messages: [], yesterday: t ? t.summary : null };
   }
   return t;
 }
@@ -134,7 +135,7 @@ async function runTool(name, input) {
       const s = await sleepLatest().catch(() => null);
       const rec = s && s.recovery ? s.recovery.score : null;
       if ((input.scope || 'today') === 'week') return calendar.weekAvailability(d.events, rec);
-      const key = new Date().toISOString().slice(0, 10);
+      const key = tz.todayKey();
       const day = calendar.windowsForDate(d.events, key);
       const w = await weekState().catch(() => null);
       return { ...day, ...calendar.recommendToday(day, rec, w ? w.remaining : null) };

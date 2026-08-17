@@ -9,14 +9,12 @@
 // See deploy/hexis-morning-run.md for the run itself.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
 const KEEP_DAYS = 60;
 
-function dateKey(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-    + '-' + String(d.getDate()).padStart(2, '0');
-}
+const dateKey = d => tz.keyOf(d);
 async function db() { return getJSON('macros', { days: {} }); }
 
 const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Math.round(Number(v));

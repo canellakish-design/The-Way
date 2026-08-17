@@ -7,6 +7,7 @@
 // from the outside, and only one of them is fixed by clicking a link.
 // ============================================================
 const { getJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
 const BASE = process.env.BASE_URL || '';
@@ -149,8 +150,7 @@ async function report() {
   try {
     const m = await getJSON('macros', { days: {} });
     const keys = Object.keys(m.days || {});
-    const today = new Date(); const key = today.getFullYear() + '-'
-      + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+    const key = tz.todayKey();
     push({
       key: 'hexis', name: 'Hexis macros', role: 'the day\'s macro targets',
       configured: true,                       // nothing to configure — it's an inbox

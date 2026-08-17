@@ -10,6 +10,7 @@
 //   POST /weigh-in     { lb }
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
 const KEEP = 365 * 864e5;
@@ -17,7 +18,7 @@ const KEEP = 365 * 864e5;
 // what "down 12 lb" is measured against. Override per-deployment with the env
 // var, or once at runtime with POST /weigh-in/start.
 const START_LB = Number(process.env.START_WEIGHT_LB || 210);
-const isToday = ts => new Date(ts).toDateString() === new Date().toDateString();
+const isToday = ts => tz.isToday(new Date(ts));
 
 async function db() { return getJSON('weigh-in', { entries: [] }); }
 

@@ -14,6 +14,7 @@
 // See deploy/alma-sync.md.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
 const MACROS = ['carbs_g', 'protein_g', 'fat_g'];
@@ -23,10 +24,7 @@ let SNACKS = { snacks: [] };
 try { SNACKS = require('./snacks.json'); }
 catch (e) { console.error('[intake] snacks.json unreadable:', e.message); }
 
-function dateKey(d) {
-  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
-    + '-' + String(d.getDate()).padStart(2, '0');
-}
+const dateKey = d => tz.keyOf(d);
 const num = v => (v == null || v === '' || isNaN(Number(v))) ? null : Math.round(Number(v) * 10) / 10;
 
 async function db() { return getJSON('intake', { days: {} }); }

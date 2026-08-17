@@ -1,6 +1,7 @@
 // Strava: OAuth + webhook + pull-reconciliation. Tokens in storage.
 // Env: STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_VERIFY_TOKEN, BASE_URL
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 const API = 'https://www.strava.com/api/v3';
 const OAUTH = 'https://www.strava.com/oauth';
@@ -85,7 +86,7 @@ async function latestActivity() {
   return { connected: !!d.tokens, activity: d.latest || null };
 }
 
-const isToday = iso => new Date(iso).toDateString() === new Date().toDateString();
+const isToday = iso => tz.isToday(new Date(iso));
 
 // Sum of kilojoules across today's rides — the standard cycling rule of thumb
 // is kJ of mechanical work ≈ kcal burned (human muscular efficiency ~23-25%

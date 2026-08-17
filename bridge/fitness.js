@@ -12,6 +12,7 @@
 //   GET  /fitness/backfill?n=20      walk stored rides and do the same
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 const Z = require('./zones');
 
@@ -35,7 +36,7 @@ async function noteWellness(d) {
     const s = await sleepLatest({ sync: false });
     const rec = s && s.recovery;
     if (!rec || rec.score == null) return false;
-    const date = new Date().toISOString().slice(0, 10);
+    const date = tz.todayKey();
     if (d.wellness.some(w => w.date === date)) return false;
     d.wellness.push({ date, hrv: rec.hrv ?? null, rhr: rec.rhr ?? null, recovery: rec.score });
     if (d.wellness.length > MAX_WELLNESS) d.wellness = d.wellness.slice(-MAX_WELLNESS);

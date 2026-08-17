@@ -1,6 +1,7 @@
 // Route-aware weather (Open-Meteo). Uses today's plan bearings when present.
 const { getJSON } = require('./storage');
 const { auth } = require('./fuel-log');
+const tz = require('./tz');
 const HOME_LAT = process.env.HOME_LAT || 39.0;
 const HOME_LON = process.env.HOME_LON || -76.5;
 const ROUTE_BEARING = 135;
@@ -11,7 +12,7 @@ function windKind(windDeg, heading) {
 }
 async function routeWeather(hour) {
   const p = await getJSON('plan', null);
-  const plan = (p && p.for_date === new Date().toDateString()) ? p : null;
+  const plan = (p && p.for_date === tz.todayKey()) ? p : null;
   const lat = (plan && plan.route && plan.route.start_lat) || HOME_LAT;
   const lon = (plan && plan.route && plan.route.start_lon) || HOME_LON;
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +

@@ -9,6 +9,7 @@
 // Authorization: Basic base64("[api_key]:[auth_token]")
 
 const { getJSON, setJSON } = require("./storage");
+const tz = require('./tz');
 const { auth } = require("./fuel-log");
 
 const RWGPS_API_BASE = "https://ridewithgps.com/api/v1";
@@ -353,7 +354,7 @@ async function getPlan() {
   return {
     ...plan,
     for_today:
-      plan.for_date === new Date().toDateString(),
+      plan.for_date === tz.todayKey(),
     intensity: plan.intensity || "moderate",
     planned_hours: plan.planned_hours || null,
     effective_hours,
@@ -423,7 +424,7 @@ function attach(app) {
         ? req.body.start
         : "06:00",
 
-      for_date: tomorrow.toDateString(),
+      for_date: tz.shiftKey(tz.todayKey(), 1),
 
       route: null,
       route_error: null,

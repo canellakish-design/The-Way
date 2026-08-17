@@ -7,6 +7,7 @@
 // the first live run; everything degrades visibly if they've moved.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
 const KEY = process.env.INTERVALS_ICU_API_KEY || '';
@@ -104,7 +105,7 @@ async function plannedRange(oldest, newest) {
 // fetched, causing both to refetch on every status load.
 async function ping() {
   if (!configured()) return { ok: false, configured: false, reason: 'no API key' };
-  const today = new Date().toISOString().slice(0, 10);
+  const today = tz.todayKey();
   try {
     const raw = await fetchRange(today, today);
     return { ok: true, configured: true, planned_today: raw.filter(isPlanned).length, events_today: raw.length };
@@ -120,7 +121,7 @@ function attach(app) {
     res.json({ configured: configured(), athlete: ATHLETE || null }); });
   app.get('/intervals/day', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const date = req.query.date || new Date().toISOString().slice(0, 10);
+      const date = req.query.date || tz.todayKey();
       const r = await plannedRange(date, date);
       res.json({ ...r, workouts: (r.days && r.days[date]) || [] });
     } catch (e) { res.status(500).json({ error: e.message }); } });

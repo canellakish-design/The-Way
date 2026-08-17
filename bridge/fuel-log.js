@@ -1,10 +1,13 @@
 // Fuel ledger: meals in, fuel-state out. Exports functions for the agent.
 const { getJSON, setJSON } = require('./storage');
+const tz = require('./tz');
 const TOKEN = process.env.FUEL_TOKEN || '';
 const BASE_BURN = 2050;
 const DECAY_HOURS = 4, FASTED_HOURS = 10;
 const hoursSince = iso => (Date.now() - new Date(iso).getTime()) / 3.6e6;
-const isToday = iso => new Date(iso).toDateString() === new Date().toDateString();
+// In the athlete's zone, not the server's: on a UTC host these all rolled
+// over at 8pm Eastern, so the day's meals reset mid-evening.
+const isToday = iso => tz.isToday(new Date(iso));
 async function db() { return getJSON('fuel-log', { meals: [] }); }
 async function ballCarbs() {
   const seeds = await getJSON('seed-recipes', null);
@@ -36,7 +39,8 @@ async function fuelState() {
   const last = d.meals.length ? d.meals[d.meals.length - 1].logged_at : null;
   const hSince = last ? hoursSince(last) : 999;
   const workoutKcal = await todaysWorkoutKcal();
-  const baseBurn = BASE_BURN * (Date.now() - new Date().setHours(0, 0, 0, 0)) / 864e5;
+  // fraction of the day elapsed, measured from local midnight in the zone
+  const baseBurn = BASE_BURN * (tz.minutesOf(new Date()) / 1440);
   return {
     carbs_g: Math.round(carbs),
     hours_since_meal: Math.round(hSince * 10) / 10,
