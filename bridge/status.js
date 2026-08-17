@@ -10,9 +10,16 @@ const { getJSON } = require('./storage');
 const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
-// Trailing slashes are silently fatal: they make every redirect_uri a double
-// slash, which no OAuth provider matches against its registered value.
-const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
+// Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
+// build, so the site knows where it lives even if BASE_URL was never set —
+// and a missing BASE_URL otherwise yields a relative redirect_uri, which
+// providers reject with a message that names neither the app nor the variable.
+// Trailing slashes are stripped: they turn every redirect into a double slash.
+function siteUrl() {
+  const v = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '';
+  return v.replace(/\/+$/, '');
+}
+const BASE = siteUrl();
 const env = k => !!(process.env[k] || '').trim();
 
 // Auth links must be absolute for the phone to follow them. BASE_URL is what

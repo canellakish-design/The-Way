@@ -30,9 +30,16 @@ const { auth } = require('./fuel-log');
 const API = 'https://wbsapi.withings.net';
 const CLIENT_ID = process.env.WITHINGS_CLIENT_ID || '';
 const CLIENT_SECRET = process.env.WITHINGS_CLIENT_SECRET || '';
-// Trailing slashes are silently fatal: they make every redirect_uri a double
-// slash, which no OAuth provider matches against its registered value.
-const BASE_URL = (process.env.BASE_URL || '').replace(/\/+$/, '');
+// Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
+// build, so the site knows where it lives even if BASE_URL was never set —
+// and a missing BASE_URL otherwise yields a relative redirect_uri, which
+// providers reject with a message that names neither the app nor the variable.
+// Trailing slashes are stripped: they turn every redirect into a double slash.
+function siteUrl() {
+  const v = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '';
+  return v.replace(/\/+$/, '');
+}
+const BASE_URL = siteUrl();
 
 async function db() { return getJSON('withings', { tokens: null, weights: [] }); }
 async function save(d) { return setJSON('withings', d); }
@@ -236,7 +243,10 @@ function attach(app) {
   app.get('/withings/debug', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
     res.json({
-      base_url: BASE_URL || '(BASE_URL not set)',
+      base_url: BASE_URL || '(no site URL — BASE_URL, URL and DEPLOY_PRIME_URL are all unset)',
+      base_url_source: process.env.BASE_URL ? 'BASE_URL'
+        : process.env.URL ? 'URL (set by Netlify)'
+        : process.env.DEPLOY_PRIME_URL ? 'DEPLOY_PRIME_URL (set by Netlify)' : 'none',
       redirect_uri_sent: BASE_URL + '/withings/callback',
       webhook_url_sent: BASE_URL + '/withings/webhook',
       register_both_of_these_at_withings: [BASE_URL + '/withings/callback', BASE_URL + '/withings/webhook'],

@@ -8,9 +8,16 @@ const OAUTH = 'https://www.strava.com/oauth';
 const CID = process.env.STRAVA_CLIENT_ID || '';
 const SEC = process.env.STRAVA_CLIENT_SECRET || '';
 const VERIFY = process.env.STRAVA_VERIFY_TOKEN || 'the-way-2026';
-// Trailing slashes are silently fatal: they make every redirect_uri a double
-// slash, which no OAuth provider matches against its registered value.
-const BASE = (process.env.BASE_URL || '').replace(/\/+$/, '');
+// Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
+// build, so the site knows where it lives even if BASE_URL was never set —
+// and a missing BASE_URL otherwise yields a relative redirect_uri, which
+// providers reject with a message that names neither the app nor the variable.
+// Trailing slashes are stripped: they turn every redirect into a double slash.
+function siteUrl() {
+  const v = process.env.BASE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL || '';
+  return v.replace(/\/+$/, '');
+}
+const BASE = siteUrl();
 
 async function db() { return getJSON('strava', { tokens: null, athlete_id: null, latest: null, subscription_id: null,
   rides: [], eftp: null, lthr: null, ef_trend: 'flat' }); }
