@@ -1,5 +1,29 @@
 # The Way — changelog
 
+# The scale connected to the wrong account
+
+## Fixed
+- **`/withings/disconnect` could not clean up after a demo account.** The demo
+  label is only set when the connect went through `/withings/auth?demo=1` — it
+  rides along in the OAuth state. Sign into a demo or test account through the
+  ordinary flow and the readings arrive labelled as real, are mirrored into the
+  shared weigh-in store as real, and nothing downstream can tell: a scale that
+  reported 143 lb and 249 lb on consecutive days is stored exactly like a
+  person. Disconnect only ever removed entries flagged demo, so those readings
+  survived the disconnect and stayed in the trend after reconnecting.
+  `?purge=1` now removes everything the scale mirrored, flagged or not
+- Not the default, deliberately: disconnecting a real scale must not delete a
+  true history, and it would be gone for good — the same call clears the
+  scale's own store, which is the other place those readings live
+- Disconnect now reports `readings_removed` and `purged`, so it is possible to
+  tell what it actually did
+
+## Notes
+- The app still cannot detect a demo account connected through the ordinary
+  flow. The only signal is the OAuth state round-trip. A plausibility check on
+  the readings themselves — no one loses 79 lb overnight — would catch it, and
+  is not written
+
 # The scale moves up
 
 ## Changed
