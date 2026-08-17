@@ -1868,6 +1868,74 @@ function demoSchedule(){
    Every integration fails in three different places — no credentials, no
    authorization, no data yet — and each needs a different move. The list says
    which, per source, with the link that fixes it. */
+/* ---------------- HEXIS (the morning run's landing page) ----------------
+   Hexis has no API, so today's targets arrive by hand every morning: read
+   them in a browser that's already signed in, then land here. This exists so
+   that step is typing four numbers into a form — something a person or Claude
+   in Chrome can both do reliably — instead of pasting a fetch() into a
+   console. Same origin, so it needs no key and nothing has to invent one. */
+V.hexis = async function(){
+  // Which day this is has to come from the bridge, not from the browser. A
+  // phone in another zone — or this one at 9pm Eastern, where UTC has already
+  // rolled over — would otherwise file the morning's targets under tomorrow
+  // and the day would still show none.
+  const key = "";
+  view.innerHTML = `<span class="eyebrow">Hexis</span>
+    <div class="card"><h4>Today's macro targets</h4>
+      <div class="small" id="hxNow">checking what's already in…</div>
+      <ul class="agenda totals" style="margin-top:10px">
+        <li><span class="n"><label for="hxDate">date</label></span>
+          <span class="tag"><input id="hxDate" type="date" value="${key}"></span></li>
+        <li><span class="n"><label for="hxKcal">kcal</label></span>
+          <span class="tag"><input id="hxKcal" type="number" inputmode="numeric" placeholder="2800"></span></li>
+        <li><span class="n"><label for="hxCarb">carbs (g)</label></span>
+          <span class="tag"><input id="hxCarb" type="number" inputmode="numeric" placeholder="380"></span></li>
+        <li><span class="n"><label for="hxPro">protein (g)</label></span>
+          <span class="tag"><input id="hxPro" type="number" inputmode="numeric" placeholder="165"></span></li>
+        <li><span class="n"><label for="hxFat">fat (g)</label></span>
+          <span class="tag"><input id="hxFat" type="number" inputmode="numeric" placeholder="80"></span></li>
+        <li><span class="n"><label for="hxFuel">fuelling</label></span>
+          <span class="tag"><input id="hxFuel" type="text" placeholder="e.g. high"></span></li>
+      </ul>
+      <button class="primary" id="hxSave">Save today's targets</button>
+      <div class="small" id="hxMsg"></div>
+      <div class="small" style="margin-top:12px">Read these in Hexis first — this page
+        only stores what you type. Nothing here signs into anything.</div>
+    </div>`;
+
+  const msg = document.getElementById("hxMsg");
+  const showCurrent = async ()=>{
+    const el = document.getElementById("hxNow");
+    try{
+      const m = await bridge("/macros/today");
+      // The bridge names the day; the field follows it rather than the device.
+      const df = document.getElementById("hxDate");
+      if (df && m && m.date && !df.value) df.value = m.date;
+      el.innerHTML = m && m.have
+        ? `Already in for today: <b>${m.kcal ?? "—"} kcal</b> · ${m.carbs_g ?? "—"}c ·
+           ${m.protein_g ?? "—"}p · ${m.fat_g ?? "—"}f${m.fuelling ? " · " + esc(m.fuelling) : ""}.
+           Saving again replaces them.`
+        : "Nothing in for today yet.";
+    }catch(e){ el.textContent = "Can't reach the bridge — " + e.message; }
+  };
+  showCurrent();
+
+  document.getElementById("hxSave").onclick = async ()=>{
+    const n = id => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
+    const body = { date: document.getElementById("hxDate").value,
+      kcal: n("hxKcal"), carbs_g: n("hxCarb"), protein_g: n("hxPro"), fat_g: n("hxFat"),
+      fuelling: document.getElementById("hxFuel").value || null };
+    if (body.kcal == null && body.carbs_g == null){ msg.textContent = "Give it at least kcal or carbs."; return; }
+    msg.textContent = "saving…";
+    try{
+      await bridge("/macros", { method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(body) });
+      msg.innerHTML = `Saved. <a href="#today">Back to the day</a>.`;
+      showCurrent();
+    }catch(e){ msg.textContent = "Failed: " + e.message; }
+  };
+};
+
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
