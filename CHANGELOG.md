@@ -1,5 +1,37 @@
 # The Way — changelog
 
+# Tests for WHOOP, the weigh-in and the calendar
+
+## Added
+- `bridge/whoop.test.js`, `bridge/weighin.test.js`, `bridge/calendar.test.js` —
+  293 assertions across the five suites, `npm test` runs the lot and exits
+  non-zero on the first failure. Same shape as the zones and ics tests already
+  here: plain node, no framework
+- `bridge/test-helpers.js` — an in-memory `./storage`, a real Express app on an
+  ephemeral port, and a scriptable stand-in for the outbound `fetch`. Route
+  behaviour is tested through real routing and real status codes rather than a
+  hand-rolled req/res double
+- The WHOOP fixes in the section below now have tests holding them down: the
+  `scope=offline` refresh grant, the webhook bypassing the sync cache, the
+  401-mid-sync retry, the last-write-wins token guard, and `/whoop/status`
+  naming the next action when a refresh token has died
+- Pinned regressions with a cost attached: "slept" reporting time asleep rather
+  than time in bed; yesterday's nap clearing instead of sitting on this
+  morning's card; clock times read in Harry's zone rather than the server's UTC;
+  the Withings dedupe matching on "came from the scale" rather than an exact
+  label; a hand-typed weight not blanking the last scale reading; credentials
+  trimmed of the quotes and newlines a hosting dashboard adds
+
+## Notes
+- `classify()` does not recognise an intervals.icu-style session title ("VO2 6x4
+  (dawn)") as training — it falls through to `busy`. Harmless today, because
+  planned work arrives already categorised from `intervals.js`, but a Google
+  event titled that way blocks the window it describes. Pinned as current
+  behaviour rather than changed
+- `whoop.js` now exports `syncLatest` and `storeTokens`. No behaviour change —
+  the night-vs-nap pick and the token race guard are not reachable through the
+  routes on their own
+
 # WHOOP, properly
 
 ## Fixed
