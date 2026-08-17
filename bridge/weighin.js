@@ -23,11 +23,54 @@ async function db() { return getJSON('weigh-in', { entries: [] }); }
 
 // The scale writes into this same store (see withings-weight.js), so nothing
 // downstream has to care whether a number was weighed or typed.
+const KG_TO_LB = 2.20462;
 async function withingsEntries() {
   try {
     const w = await getJSON('withings', { weights: [] });
-    return (w.weights || []).map(x => ({ ts: x.ts, lb: x.kg * 2.20462, source: 'withings' }));
+    return (w.weights || []).map(x => ({
+      ts: x.ts, lb: x.kg * KG_TO_LB, source: 'withings',
+      // Carry composition here too: this path is what's read when the mirror
+      // into the weigh-in store hasn't run, and dropping it would show a
+      // weight with no body composition for no reason.
+      fat_pct: x.fat_pct ?? null,
+      fat_mass_lb: x.fat_mass_kg != null ? x.fat_mass_kg * KG_TO_LB : null,
+      fat_free_lb: x.fat_free_kg != null ? x.fat_free_kg * KG_TO_LB : null,
+      muscle_lb: x.muscle_kg != null ? x.muscle_kg * KG_TO_LB : null,
+      water_lb: x.water_kg != null ? x.water_kg * KG_TO_LB : null,
+      bone_lb: x.bone_kg != null ? x.bone_kg * KG_TO_LB : null
+    }));
   } catch { return []; }
+}
+
+// A single day's reading bounces a pound or two on water alone, so direction
+// comes from the 7-day average against the week before it, not from today
+// against yesterday. Inside the flat band it says holding rather than
+// inventing a trend out of noise.
+const FLAT_BAND_LB = 0.3;
+function direction(ma7, prev7) {
+  if (ma7 == null || prev7 == null) return { arrow: '·', word: 'not enough data yet', tone: 'muted' };
+  const delta = ma7 - prev7;
+  if (Math.abs(delta) < FLAT_BAND_LB) return { arrow: '→', word: 'holding', tone: 'muted', delta };
+  // The goal is weight loss, so down is the good direction. If that ever
+  // changes, this is the one place that decides which way is good.
+  return delta < 0
+    ? { arrow: '↓', word: 'losing', tone: 'good', delta }
+    : { arrow: '↑', word: 'gaining', tone: 'bad', delta };
+}
+
+const COMP_FIELDS = ['fat_pct', 'fat_mass_lb', 'fat_free_lb', 'muscle_lb', 'water_lb', 'bone_lb'];
+// The latest reading that actually carried body composition — a hand-typed
+// weight has none, and shouldn't blank out what the scale last reported.
+function latestComposition(entries) {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const e = entries[i];
+    if (COMP_FIELDS.some(f => e[f] != null)) {
+      const out = { at: new Date(e.ts).toISOString() };
+      for (const f of COMP_FIELDS) if (e[f] != null) out[f] = Math.round(e[f] * 10) / 10;
+      return out;
+    }
+  }
+  return null;
 }
 
 function trend(entries) {
@@ -49,6 +92,9 @@ function trend(entries) {
     } : null,
     ma7_lb: ma7 == null ? null : Math.round(ma7 * 10) / 10,
     week_change_lb: (ma7 == null || prev7 == null) ? null : Math.round((ma7 - prev7) * 10) / 10,
+    direction: direction(ma7, prev7),
+    composition: latestComposition(all),
+    readings_7d: since(7 * 864e5).length,
     entries: all.length
   };
 }
@@ -97,4 +143,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, state };
+module.exports = { attach, state, direction, trend };

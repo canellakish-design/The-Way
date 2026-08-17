@@ -100,3 +100,5 @@ ul.agenda-big .tag{font-size:11px}
   ul.agenda-big li{font-size:21px; grid-template-columns:92px 1fr auto}
   ul.agenda-big .t{font-size:15px}
 }
+.bodyrow{display:flex; align-items:center; gap:14px; margin:6px 0 2px}
+.bodyrow .arrow{font-size:40px; line-height:1; font-weight:700}

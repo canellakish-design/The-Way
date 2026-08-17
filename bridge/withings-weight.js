@@ -17,8 +17,12 @@
 //   2. Visit BASE_URL/withings/auth once, approve on Withings
 //   3. The server subscribes the webhook itself. Weigh-ins then push forever.
 //
-// NOTE: Endpoint/param names follow Withings' v2 API conventions —
-// verify against current docs at developer.withings.com on the first run.
+// Checked against Withings' own API reference: Bearer-header auth, the
+// {status, body} envelope, value × 10^unit decoding, measure types 1/5/6/8/
+// 76/77/88, getmeas pagination via more+offset, lastupdate from updatetime,
+// and appli=1 for body-metric notifications. Access tokens last 3 hours; a
+// refresh token is valid for a year but the previous one dies 8 hours after a
+// new one is issued, so the new one is always stored.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
@@ -31,10 +35,32 @@ const BASE_URL = process.env.BASE_URL || '';
 async function db() { return getJSON('withings', { tokens: null, weights: [] }); }
 async function save(d) { return setJSON('withings', d); }
 
-async function withingsPost(pathname, params) {
-  const r = await fetch(API + pathname, { method: 'POST', body: new URLSearchParams(params) });
+// Named error codes, so a failure says what it means rather than a bare number.
+const ERRORS = {
+  100: 'request succeeded but no data found',
+  214: 'an error occurred', 247: 'invalid userid',
+  250: 'userid absent or does not match the client', 286: 'no such subscription',
+  293: 'callback URL absent or incorrect', 294: 'no notification callback',
+  304: 'authorization code absent or incorrect', 305: 'missing required parameter',
+  342: 'OAuth credentials absent or incorrect', 343: 'access token absent or invalid',
+  601: 'rate limited — no more than one poll per 10 minutes'
+};
+
+// token: sent as an Authorization: Bearer header. Passing access_token as a
+// form field is the older style and returns 343 against the current API.
+async function withingsPost(pathname, params, token) {
+  const headers = {};
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const r = await fetch(API + pathname, { method: 'POST', headers, body: new URLSearchParams(params) });
   const data = await r.json();
-  if (data.status !== 0) throw new Error('Withings error ' + data.status + (data.error ? ' — ' + data.error : ''));
+  // 100 is "nothing to report", which is an ordinary outcome for a date range
+  // with no weigh-ins — not a failure.
+  if (data.status === 100) return { measuregrps: [], updatetime: null, empty: true };
+  if (data.status !== 0) {
+    throw new Error('Withings error ' + data.status
+      + (ERRORS[data.status] ? ' — ' + ERRORS[data.status] : '')
+      + (data.error ? ' — ' + data.error : ''));
+  }
   return data.body;
 }
 
@@ -74,7 +100,13 @@ async function mirrorToWeighIn(entries) {
   let added = 0;
   for (const e of entries) {
     if (w.entries.some(x => Math.abs(x.ts - e.ts) < 60000 && x.source === 'withings')) continue;
-    w.entries.push({ ts: e.ts, lb: e.kg * 2.20462, fat_pct: e.fat_pct ?? null, source: 'withings' });
+    w.entries.push({ ts: e.ts, lb: e.kg * 2.20462, source: 'withings',
+      fat_pct: e.fat_pct ?? null,
+      fat_mass_lb: e.fat_mass_kg != null ? e.fat_mass_kg * 2.20462 : null,
+      fat_free_lb: e.fat_free_kg != null ? e.fat_free_kg * 2.20462 : null,
+      muscle_lb: e.muscle_kg != null ? e.muscle_kg * 2.20462 : null,
+      water_lb: e.water_kg != null ? e.water_kg * 2.20462 : null,
+      bone_lb: e.bone_kg != null ? e.bone_kg * 2.20462 : null });
     added++;
   }
   if (added) {
@@ -84,21 +116,49 @@ async function mirrorToWeighIn(entries) {
   return added;
 }
 
-// Pull measurements since a timestamp; store weight (type 1) + fat % (type 6)
+// Withings measure types. Only the ones the scale actually reports are stored;
+// anything else in the response is ignored rather than guessed at.
+const MEASURE = {
+  1:  'kg',            // weight
+  5:  'fat_free_kg',   // fat free mass
+  6:  'fat_pct',       // fat ratio %
+  8:  'fat_mass_kg',   // fat mass
+  76: 'muscle_kg',     // muscle mass
+  77: 'water_kg',      // hydration
+  88: 'bone_kg'        // bone mass
+};
+const MEASTYPES = Object.keys(MEASURE).join(',');
+
+// Pull measurements since a timestamp: weight plus whatever body composition
+// the scale sent with it.
 async function syncMeasures(sinceEpoch) {
   const d = await db();
   const access = await ensureToken(d);
-  const body = await withingsPost('/measure', {
-    action: 'getmeas', access_token: access,
-    meastypes: '1,6', category: 1, lastupdate: sinceEpoch || 0
-  });
+  // lastupdate: the updatetime Withings returned last time, so a sync asks only
+  // for what changed since. 0 on the first run pulls the whole history.
+  const since = sinceEpoch != null ? sinceEpoch : (d.updatetime || 0);
+  const groups = [];
+  let offset = 0, updatetime = null, guard = 0;
+  // Paginated: keep going while more=1, or a long history arrives truncated
+  // with no sign anything is missing.
+  while (guard++ < 40) {
+    const body = await withingsPost('/measure', {
+      action: 'getmeas', meastypes: MEASTYPES, category: 1,
+      lastupdate: since, ...(offset ? { offset } : {})
+    }, access);
+    groups.push(...(body.measuregrps || []));
+    if (body.updatetime) updatetime = body.updatetime;
+    if (body.more === 1 && body.offset != null) offset = body.offset;
+    else break;
+  }
   const fresh = [];
-  for (const grp of body.measuregrps || []) {
+  for (const grp of groups) {
     const entry = { ts: grp.date * 1000, kg: null, fat_pct: null };
     for (const m of grp.measures) {
+      // value × 10^unit — unit is negative, e.g. 82345 × 10^-3 = 82.345 kg
       const v = m.value * Math.pow(10, m.unit);
-      if (m.type === 1) entry.kg = v;
-      if (m.type === 6) entry.fat_pct = v;
+      const field = MEASURE[m.type];
+      if (field) entry[field] = v;
     }
     if (entry.kg && !d.weights.some(w => w.ts === entry.ts)) {
       d.weights.push(entry);
@@ -108,6 +168,7 @@ async function syncMeasures(sinceEpoch) {
   }
   d.weights.sort((a, b) => a.ts - b.ts);
   d.weights = d.weights.slice(-400); // ~1 year daily
+  if (updatetime) d.updatetime = updatetime;   // next sync's lastupdate
   d.synced_at = new Date().toISOString();
   await save(d);
   await mirrorToWeighIn(fresh).catch(e => console.error('[withings] mirror failed:', e.message));
@@ -138,9 +199,8 @@ function attach(app) {
       await save(d);
       // appli=1 covers weight-related measures
       await withingsPost('/notify', {
-        action: 'subscribe', access_token: d.tokens.access_token,
-        callbackurl: BASE_URL + '/withings/webhook', appli: 1
-      }).catch(e => console.error('[withings] subscribe failed:', e.message));
+        action: 'subscribe', callbackurl: BASE_URL + '/withings/webhook', appli: 1
+      }, d.tokens.access_token).catch(e => console.error('[withings] subscribe failed:', e.message));
       const r = await syncMeasures(0); // backfill history
       res.send(`Withings connected. Webhook subscribed. ${r.total} weigh-ins pulled. You can close this.`);
     } catch (e) {
@@ -162,10 +222,12 @@ function attach(app) {
   app.get('/withings/status', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
     res.json({ connected: !!d.tokens, weigh_ins: d.weights.length, synced_at: d.synced_at || null,
+      last_updatetime: d.updatetime || null,
       configured: !!(CLIENT_ID && CLIENT_SECRET && BASE_URL) }); });
 
   app.get('/withings/sync', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json({ ok: true, ...(await syncMeasures(0)) }); }
+    // ?full=1 re-pulls everything; by default sync asks only for what changed.
+    try { res.json({ ok: true, ...(await syncMeasures(req.query.full === '1' ? 0 : null)) }); }
     catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 }
 

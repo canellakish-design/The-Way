@@ -1326,6 +1326,8 @@ V.today = async function(){
     </div>
     <div class="card" id="readiness"><h4>Last night · this morning</h4>
       <div class="small">reaching the bridge…</div></div>
+    <div class="card" id="body"><h4>Weight · body composition</h4>
+      <div class="small">reaching the bridge…</div></div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
@@ -1354,6 +1356,45 @@ V.today = async function(){
   /* ---- the top strip: how the night went, what the scale said ----
      WHOOP is connected and pushes on its own. Withings is not wired up yet,
      so the weigh-in is entered here by hand and says so. */
+  // The scale's own box: where the weight is going, and what it's made of.
+  const drawBody = (w)=>{
+    const el = document.getElementById("body");
+    if (!el) return;
+    if (!w){ el.innerHTML = `<h4>Weight · body composition</h4>
+      <div class="small">bridge unreachable</div>`; return; }
+    const d = w.direction || {};
+    const tone = d.tone === "good" ? "var(--green)" : d.tone === "bad" ? "var(--red)" : "var(--muted)";
+    const lb = w.latest ? w.latest.lb : null;
+    const since = w.change_since_start_lb;
+    const c = w.composition;
+    const chip = (label, val, unit)=> val==null ? "" :
+      `<span class="unit">${val}${unit} ${label}</span>`;
+    const comp = c ? `<div class="unitrow">
+        ${chip("body fat", c.fat_pct, "%")}
+        ${chip("fat mass", c.fat_mass_lb, " lb")}
+        ${chip("lean", c.fat_free_lb, " lb")}
+        ${chip("muscle", c.muscle_lb, " lb")}
+        ${chip("water", c.water_lb, " lb")}
+        ${chip("bone", c.bone_lb, " lb")}
+      </div>
+      <div class="small">composition from ${new Date(c.at).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>`
+      : `<div class="small">${w.withings_connected
+          ? "No body composition yet — it arrives with the next scale reading."
+          : "Body composition needs the Withings scale connected."}</div>`;
+    el.innerHTML = `<h4>Weight · body composition</h4>
+      ${lb == null ? `<div class="small">No reading yet. Starting weight ${w.start_lb} lb.</div>` : `
+      <div class="bodyrow">
+        <span class="arrow" style="color:${tone}">${d.arrow || "·"}</span>
+        <span><span class="bignum" style="font-size:34px">${lb} lb</span>
+          <div class="small"><b style="color:${tone}">${esc(d.word || "")}</b>${
+            w.week_change_lb != null ? ` · ${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb} lb this week` : ""}</div></span>
+      </div>
+      <div class="small">7-day average ${w.ma7_lb ?? "—"} lb${
+        since != null ? ` · <b>${since > 0 ? "+" : ""}${since} lb</b> since ${w.start_lb}` : ""}${
+        w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}</div>`}
+      ${comp}`;
+  };
+
   const recBand = s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
   const refreshReadiness = async ()=>{
     const el = document.getElementById("readiness");
@@ -1401,6 +1442,7 @@ V.today = async function(){
           <div class="small" id="wiMsg"></div></div>`;
     el.innerHTML = `<h4>Last night · this morning</h4>
       <div class="readyrow">${sleepHTML}${weighHTML}</div>`;
+    drawBody(w);
     const btn = document.getElementById("wiSave");
     if (btn) btn.onclick = async ()=>{
       const lb = +document.getElementById("wiLb").value;
