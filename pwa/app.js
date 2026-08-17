@@ -1494,27 +1494,23 @@ V.today = async function(){
           ${cached.days.length} days from ${esc(cached.days[0].date)}.</div></div>`;
 
     // The morning Hexis run, ready to hand to Claude in Chrome. Hexis has no
-    // API, so a browser that is already signed in is the only way in. The
-    // instruction deliberately posts from The Way's own tab: same origin, so
-    // it needs no token and nothing has to invent one.
+    // API, so a browser already signed in is the only way in — which means
+    // this instruction is only ever runnable in Harry's own browser, never by
+    // an assistant somewhere else. It points at the #hexis form rather than a
+    // console: same post, but something a person or a browser agent can both
+    // do without being handed a snippet to paste.
     const hx = document.getElementById("hexisRun");
     if (hx) hx.onclick = async ()=>{
-      const day = (cached.days[cached.todayIndex || 0] || {}).date || "";
+      const day = (cached.days[cached.todayIndex || 0] || {}).date || "today";
       const text =
-`In Hexis (hexis.live), open today — ${day} — and read the day's macro targets:
-kcal, carbs (g), protein (g), fat (g), and the fuelling label if there is one.
+`1. Open hexis.live and go to ${day}. Read the day's macro targets:
+   kcal, carbs (g), protein (g), fat (g), and the fuelling label.
+2. Open ${location.origin}/#hexis
+3. Type the numbers into the form and press Save.
+4. Tell me what the targets were.
 
-Then open ${location.origin} in a tab and run this from that tab's console,
-filling in the numbers you read. It is same-origin, so no key is needed:
-
-fetch("/.netlify/functions/api/macros", {
-  method: "POST",
-  headers: { "Content-Type": "application/json", "x-the-way-app": "1" },
-  body: JSON.stringify({ date: "${day}", kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, fuelling: "" })
-}).then(r => r.json()).then(console.log)
-
-Report the numbers back to me. Don't log into anything I'm not already signed
-into, and don't create any credentials.`;
+Don't log into anything I'm not already signed into, and don't create any
+credentials — if Hexis isn't already signed in, stop and say so.`;
       try{
         await navigator.clipboard.writeText(text);
         hx.textContent = "copied — paste it to Claude in Chrome";
