@@ -3,8 +3,13 @@
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const API = 'https://api.prod.whoop.com';
-const CID = process.env.WHOOP_CLIENT_ID || '';
-const SEC = process.env.WHOOP_CLIENT_SECRET || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const CID = envStr('WHOOP_CLIENT_ID');
+const SEC = envStr('WHOOP_CLIENT_SECRET');
 // Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
 // build, so the site knows where it lives even if BASE_URL was never set —
 // and a missing BASE_URL otherwise yields a relative redirect_uri, which

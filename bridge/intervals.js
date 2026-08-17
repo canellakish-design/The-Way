@@ -10,8 +10,13 @@ const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
 const { auth } = require('./fuel-log');
 
-const KEY = process.env.INTERVALS_ICU_API_KEY || '';
-const ATHLETE = process.env.INTERVALS_ICU_ATHLETE_ID || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const KEY = envStr('INTERVALS_ICU_API_KEY');
+const ATHLETE = envStr('INTERVALS_ICU_ATHLETE_ID');
 const BASE = 'https://intervals.icu/api/v1';
 const TTL_MS = 10 * 60 * 1000;   // the plan changes rarely; don't refetch per page load
 

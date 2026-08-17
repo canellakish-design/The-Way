@@ -7,8 +7,13 @@
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const tz = require('./tz');
-const CID = process.env.GOOGLE_CLIENT_ID || '';
-const SEC = process.env.GOOGLE_CLIENT_SECRET || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const CID = envStr('GOOGLE_CLIENT_ID');
+const SEC = envStr('GOOGLE_CLIENT_SECRET');
 // Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
 // build, so the site knows where it lives even if BASE_URL was never set —
 // and a missing BASE_URL otherwise yields a relative redirect_uri, which

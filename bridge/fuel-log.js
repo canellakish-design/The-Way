@@ -1,7 +1,12 @@
 // Fuel ledger: meals in, fuel-state out. Exports functions for the agent.
 const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
-const TOKEN = process.env.FUEL_TOKEN || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const TOKEN = envStr('FUEL_TOKEN');
 const BASE_BURN = 2050;
 const DECAY_HOURS = 4, FASTED_HOURS = 10;
 const hoursSince = iso => (Date.now() - new Date(iso).getTime()) / 3.6e6;

@@ -28,8 +28,13 @@ const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 
 const API = 'https://wbsapi.withings.net';
-const CLIENT_ID = process.env.WITHINGS_CLIENT_ID || '';
-const CLIENT_SECRET = process.env.WITHINGS_CLIENT_SECRET || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const CLIENT_ID = envStr('WITHINGS_CLIENT_ID');
+const CLIENT_SECRET = envStr('WITHINGS_CLIENT_SECRET');
 // Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
 // build, so the site knows where it lives even if BASE_URL was never set —
 // and a missing BASE_URL otherwise yields a relative redirect_uri, which
@@ -251,7 +256,12 @@ function attach(app) {
       webhook_url_sent: BASE_URL + '/withings/webhook',
       register_both_of_these_at_withings: [BASE_URL + '/withings/callback', BASE_URL + '/withings/webhook'],
       client_id_set: !!CLIENT_ID, client_secret_set: !!CLIENT_SECRET,
+      // enough to compare against the dashboard without printing the value
       client_id_tail: CLIENT_ID ? '…' + CLIENT_ID.slice(-6) : null,
+      client_id_length: CLIENT_ID.length || 0,
+      client_secret_length: CLIENT_SECRET.length || 0,
+      raw_had_whitespace_or_quotes: (process.env.WITHINGS_CLIENT_ID || '') !== CLIENT_ID
+        || (process.env.WITHINGS_CLIENT_SECRET || '') !== CLIENT_SECRET,
       connected: !!d.tokens, weigh_ins: (d.weights || []).length
     }); });
   app.get('/withings/disconnect', async (req, res) => { if (!auth(req, res)) return;

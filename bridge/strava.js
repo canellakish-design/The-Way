@@ -5,8 +5,13 @@ const tz = require('./tz');
 const { auth } = require('./fuel-log');
 const API = 'https://www.strava.com/api/v3';
 const OAUTH = 'https://www.strava.com/oauth';
-const CID = process.env.STRAVA_CLIENT_ID || '';
-const SEC = process.env.STRAVA_CLIENT_SECRET || '';
+// Credentials pasted into a hosting dashboard pick up stray whitespace,
+// newlines and sometimes the quotes around them. Providers then reject the
+// value with a message about the credential being invalid, which sends you
+// looking at the wrong thing.
+const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
+const CID = envStr('STRAVA_CLIENT_ID');
+const SEC = envStr('STRAVA_CLIENT_SECRET');
 const VERIFY = process.env.STRAVA_VERIFY_TOKEN || 'the-way-2026';
 // Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
 // build, so the site knows where it lives even if BASE_URL was never set —
