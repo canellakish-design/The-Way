@@ -98,7 +98,24 @@ async function plannedRange(oldest, newest) {
   return { configured: true, days, fetched_at: new Date().toISOString(), cached: false };
 }
 
+// A cheap liveness check for the Connections screen: does the key actually
+// work? Deliberately does not touch the cache — the cache holds one range at a
+// time, and a one-day probe would evict the fortnight the day page just
+// fetched, causing both to refetch on every status load.
+async function ping() {
+  if (!configured()) return { ok: false, configured: false, reason: 'no API key' };
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    const raw = await fetchRange(today, today);
+    return { ok: true, configured: true, planned_today: raw.filter(isPlanned).length, events_today: raw.length };
+  } catch (e) {
+    return { ok: false, configured: true, reason: e.message };
+  }
+}
+
 function attach(app) {
+  app.get('/intervals/ping', async (req, res) => { if (!auth(req, res)) return;
+    res.json(await ping()); });
   app.get('/intervals/status', async (req, res) => { if (!auth(req, res)) return;
     res.json({ configured: configured(), athlete: ATHLETE || null }); });
   app.get('/intervals/day', async (req, res) => { if (!auth(req, res)) return;
@@ -109,4 +126,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, plannedRange, configured };
+module.exports = { attach, plannedRange, configured, ping };

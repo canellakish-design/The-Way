@@ -107,14 +107,20 @@ async function report() {
     const iv = require('./intervals');
     const cache = await getJSON('intervals-cache', null);
     const configured = iv.configured();
+    // Env vars being present says nothing about the key working. Ask.
+    const probe = configured ? await iv.ping() : { ok: false, reason: 'no API key' };
+    const cached = !!(cache && cache.days && Object.keys(cache.days).length);
     push({
       key: 'intervals', name: 'intervals.icu', role: 'planned intervals and lifting on the day',
-      configured, connected: configured,
-      has_data: !!(cache && cache.days && Object.keys(cache.days).length),
-      detail: configured ? `athlete ${process.env.INTERVALS_ICU_ATHLETE_ID}`
-        : 'no API key',
+      configured, connected: probe.ok,
+      has_data: cached || !!(probe.planned_today),
+      detail: !configured ? 'no API key'
+        : probe.ok ? `athlete ${process.env.INTERVALS_ICU_ATHLETE_ID} · ${probe.planned_today} planned today`
+          + (cached ? ` · ${Object.keys(cache.days).length} days cached` : '')
+        : 'API key rejected — ' + probe.reason,
       auth_url: null,
-      fix: configured ? null : 'set INTERVALS_ICU_API_KEY and INTERVALS_ICU_ATHLETE_ID (athlete id looks like i123456)'
+      fix: !configured ? 'set INTERVALS_ICU_API_KEY and INTERVALS_ICU_ATHLETE_ID (athlete id looks like i123456)'
+        : probe.ok ? null : 'check the API key and athlete id on intervals.icu → Settings → Developer'
     });
   } catch (e) { push({ key: 'intervals', name: 'intervals.icu', error: e.message }); }
 
