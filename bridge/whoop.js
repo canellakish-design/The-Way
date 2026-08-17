@@ -7,7 +7,7 @@ const CID = process.env.WHOOP_CLIENT_ID || '';
 const SEC = process.env.WHOOP_CLIENT_SECRET || '';
 const BASE = process.env.BASE_URL || '';
 
-async function db() { return getJSON('whoop', { tokens: null, sleep: null, recovery: null }); }
+async function db() { return getJSON('whoop', { tokens: null, sleep: null, nap: null, recovery: null }); }
 
 // WHOOP rotates the refresh token on every use: refreshing consumes the one
 // you hold and hands back a new pair. So two refreshes racing each other means
@@ -78,10 +78,17 @@ async function syncLatest(force) {
       if (!r.ok) throw new Error('whoop ' + r.status + ' on ' + path.split('?')[0]);
       return r.json();
     };
-    const s = await get('/developer/v2/activity/sleep?limit=1');
+    // limit=10, not 1: the most recent sleep record is often a nap, and a nap
+    // is not last night. Keep the latest real night, and the latest nap
+    // separately so an afternoon lie-down doesn't overwrite the night.
+    const s = await get('/developer/v2/activity/sleep?limit=10');
     const rec = await get('/developer/v2/recovery?limit=1');
     const cur = await db();
-    if (s.records && s.records[0]) cur.sleep = s.records[0];
+    const records = (s.records || []).filter(r => r && r.score);
+    const night = records.find(r => r.nap !== true);
+    const nap = records.find(r => r.nap === true);
+    if (night) cur.sleep = night;
+    cur.nap = nap || null;
     if (rec.records && rec.records[0]) cur.recovery = rec.records[0];
     cur.synced_at = new Date().toISOString();
     cur.auth_error = null;
@@ -90,6 +97,17 @@ async function syncLatest(force) {
   })();
   try { return await inflight; }
   finally { inflight = null; }
+}
+
+const round1 = ms => Math.round(ms / 3.6e6 * 10) / 10;
+function hoursInBed(r) {
+  const st = r && r.score && r.score.stage_summary;
+  return st && st.total_in_bed_time_milli ? round1(st.total_in_bed_time_milli) : null;
+}
+function hoursAsleep(r) {
+  const st = r && r.score && r.score.stage_summary;
+  if (!st || !st.total_in_bed_time_milli) return null;
+  return round1(st.total_in_bed_time_milli - (st.total_awake_time_milli || 0));
 }
 
 // opts.sync === false reads what's stored without touching WHOOP. Passive
@@ -104,8 +122,12 @@ async function sleepLatest(opts) {
     connected: !!d.tokens,
     synced_at: d.synced_at || null,
     auth_error: d.auth_error || null,
+    // "slept" means asleep, not in bed. WHOOP reports both; time in bed
+    // includes the awake stretches and overstates the night.
     sleep: s ? { performance: s.score ? s.score.sleep_performance_percentage : null,
-                 hours: s.score ? Math.round(s.score.stage_summary.total_in_bed_time_milli / 3.6e6 * 10) / 10 : null } : null,
+                 hours: hoursAsleep(s), in_bed: hoursInBed(s),
+                 nap: false, start: s.start || null } : null,
+    nap: d.nap ? { hours: hoursAsleep(d.nap), at: d.nap.start || null } : null,
     recovery: r ? { score: r.score ? r.score.recovery_score : null,
                     hrv: r.score ? r.score.hrv_rmssd_milli : null,
                     rhr: r.score ? r.score.resting_heart_rate : null } : null

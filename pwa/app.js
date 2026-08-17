@@ -1372,8 +1372,11 @@ V.today = async function(){
         : age < 24 ? ` · synced ${Math.round(age)}h ago` : ` · synced ${Math.round(age/24)}d ago`;
       sleepHTML = `<div class="rblock">
         <span class="bandpill" style="background:${b.c}">Recovery ${s.recovery.score} · ${b.name}</span>
-        <div class="small">slept ${s.sleep?.hours ?? "—"} h · performance ${s.sleep?.performance ?? "—"}
-          · HRV ${s.recovery.hrv ?? "—"} · RHR ${s.recovery.rhr ?? "—"}${when}</div>
+        <div class="small">slept ${s.sleep?.hours ?? "—"} h${
+            s.sleep?.in_bed ? ` <span title="time in bed">(${s.sleep.in_bed} in bed)</span>` : ""}
+          · sleep performance ${s.sleep?.performance != null ? s.sleep.performance + "%" : "—"}
+          · HRV ${s.recovery.hrv ?? "—"} ms · resting HR ${s.recovery.rhr ?? "—"}${when}</div>
+        ${s.nap && s.nap.hours ? `<div class="small">plus a ${s.nap.hours} h nap</div>` : ""}
         ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> — visit /whoop/auth on the bridge (${esc(s.auth_error.detail||"")})</div>`:""}</div>`;
     } else {
       const why = !s ? "bridge unreachable" : s.auth_error ? "WHOOP needs reconnecting — visit /whoop/auth on the bridge"
