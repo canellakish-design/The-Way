@@ -28,8 +28,11 @@ const KG_TO_LB = 2.20462;
 async function withingsEntries() {
   try {
     const w = await getJSON('withings', { weights: [] });
+    // Demo readings must stay labelled here too, or the fallback copy of a
+    // reading arrives unlabelled and the day shows demo numbers as real.
+    const source = w.demo ? 'withings (demo)' : 'withings';
     return (w.weights || []).map(x => ({
-      ts: x.ts, lb: x.kg * KG_TO_LB, source: 'withings',
+      ts: x.ts, lb: x.kg * KG_TO_LB, source, demo: !!w.demo,
       // Carry composition here too: this path is what's read when the mirror
       // into the weigh-in store hasn't run, and dropping it would show a
       // weight with no body composition for no reason.
@@ -105,14 +108,19 @@ async function state() {
   // Dedupe: Withings mirrors its readings into this store, so the same weigh-in
   // can appear on both sides. Same source within a minute is the same reading.
   const mirrored = await withingsEntries();
+  // Match on "came from the scale", not on an exact label: a demo reading is
+  // sourced 'withings (demo)', and an exact comparison let the same reading
+  // through twice, once unlabelled.
+  const fromScale = e => String(e.source || '').startsWith('withings');
   const merged = d.entries.concat(
-    mirrored.filter(m => !d.entries.some(e => e.source === 'withings' && Math.abs(e.ts - m.ts) < 60000)));
+    mirrored.filter(m => !d.entries.some(e => fromScale(e) && Math.abs(e.ts - m.ts) < 60000)));
   const t = trend(merged);
   const start = d.start_lb || START_LB;
   let withings_connected = false;
   try { withings_connected = await require('./withings-weight').connected(); } catch (e) { /* not configured */ }
   return {
     ...t,
+    demo: merged.some(e => e.demo),
     start_lb: start,
     change_since_start_lb: t.latest ? Math.round((t.latest.lb - start) * 10) / 10 : null,
     withings_connected

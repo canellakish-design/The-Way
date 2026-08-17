@@ -114,13 +114,13 @@ async function ensureToken(d) {
 
 // Mirror scale readings into the shared weigh-in store, deduped by timestamp,
 // so /weigh-in and the front page see them without knowing about Withings.
-async function mirrorToWeighIn(entries) {
+async function mirrorToWeighIn(entries, demo) {
   if (!entries.length) return;
   const w = await getJSON('weigh-in', { entries: [] });
   let added = 0;
   for (const e of entries) {
     if (w.entries.some(x => Math.abs(x.ts - e.ts) < 60000 && x.source === 'withings')) continue;
-    w.entries.push({ ts: e.ts, lb: e.kg * 2.20462, source: 'withings',
+    w.entries.push({ ts: e.ts, lb: e.kg * 2.20462, source: demo ? 'withings (demo)' : 'withings', demo,
       fat_pct: e.fat_pct ?? null,
       fat_mass_lb: e.fat_mass_kg != null ? e.fat_mass_kg * 2.20462 : null,
       fat_free_lb: e.fat_free_kg != null ? e.fat_free_kg * 2.20462 : null,
@@ -191,7 +191,7 @@ async function syncMeasures(sinceEpoch) {
   if (updatetime) d.updatetime = updatetime;   // next sync's lastupdate
   d.synced_at = new Date().toISOString();
   await save(d);
-  await mirrorToWeighIn(fresh).catch(e => console.error('[withings] mirror failed:', e.message));
+  await mirrorToWeighIn(fresh, !!d.demo).catch(e => console.error('[withings] mirror failed:', e.message));
   return { found: fresh.length, total: d.weights.length };
 }
 
@@ -202,10 +202,10 @@ function attach(app) {
     u.searchParams.set('client_id', CLIENT_ID);
     u.searchParams.set('scope', 'user.metrics');
     u.searchParams.set('redirect_uri', BASE_URL + '/withings/callback');
-    u.searchParams.set('state', 'the-way');
-    // ?demo=1 — Withings' documented demo account, so the whole path (consent,
-    // token exchange, webhook subscribe, backfill, the body box) can be proved
-    // before a real scale reading exists. Disconnect and re-auth for real data.
+    // The state comes back on the callback, which is the only way that handler
+    // can know this was a demo run — and demo data must never be mistaken for
+    // the athlete's own.
+    u.searchParams.set('state', req.query.demo === '1' ? 'the-way-demo' : 'the-way');
     if (req.query.demo === '1') u.searchParams.set('mode', 'demo');
     res.redirect(u.toString());
   });
@@ -220,13 +220,17 @@ function attach(app) {
       });
       d.tokens = { access_token: body.access_token, refresh_token: body.refresh_token,
         expires_at: Date.now() + body.expires_in * 1000 };
+      d.demo = req.query.state === 'the-way-demo';
       await save(d);
       // appli=1 covers weight-related measures
       await withingsPost('/notify', {
         action: 'subscribe', callbackurl: BASE_URL + '/withings/webhook', appli: 1
       }, d.tokens.access_token).catch(e => console.error('[withings] subscribe failed:', e.message));
       const r = await syncMeasures(0); // backfill history
-      res.send(`Withings connected. Webhook subscribed. ${r.total} weigh-ins pulled. You can close this.`);
+      res.send((d.demo ? 'DEMO MODE — these are Withings\' demo readings, not yours. ' : '')
+        + `Withings connected. Webhook subscribed. ${r.total} weigh-ins pulled.`
+        + (d.demo ? ' Visit /withings/disconnect then /withings/auth for your own account.' : '')
+        + ' You can close this.');
     } catch (e) {
       console.error('[withings] auth failed:', e.message);
       res.status(500).send('Withings auth failed: ' + e.message);
@@ -245,7 +249,8 @@ function attach(app) {
 
   app.get('/withings/status', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
-    res.json({ connected: !!d.tokens, weigh_ins: d.weights.length, synced_at: d.synced_at || null,
+    res.json({ connected: !!d.tokens, demo: !!d.demo,
+      weigh_ins: d.weights.length, synced_at: d.synced_at || null,
       last_updatetime: d.updatetime || null,
       configured: !!(CLIENT_ID && CLIENT_SECRET && BASE_URL) }); });
 
@@ -270,10 +275,28 @@ function attach(app) {
         || (process.env.WITHINGS_CLIENT_SECRET || '') !== CLIENT_SECRET,
       connected: !!d.tokens, weigh_ins: (d.weights || []).length
     }); });
+  // The actual readings, newest first — for checking whether the numbers are
+  // the athlete's or a demo account's.
+  app.get('/withings/recent', async (req, res) => { if (!auth(req, res)) return;
+    const d = await db();
+    const n = Math.min(50, Math.max(1, parseInt(req.query.n, 10) || 10));
+    res.json({ demo: !!d.demo, total: d.weights.length,
+      readings: d.weights.slice(-n).reverse().map(w => ({
+        date: new Date(w.ts).toISOString().slice(0, 10),
+        lb: Math.round(w.kg * 2.20462 * 10) / 10, kg: Math.round(w.kg * 10) / 10,
+        fat_pct: w.fat_pct ?? null })) }); });
   app.get('/withings/disconnect', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
-    d.tokens = null; d.weights = []; d.updatetime = null;
+    d.tokens = null; d.weights = []; d.updatetime = null; d.demo = false;
     await save(d);
+    // Demo readings were mirrored into the shared weigh-in store; take them
+    // back out, or they stay in the trend as if they were real.
+    try {
+      const w = await getJSON('weigh-in', { entries: [] });
+      const before = w.entries.length;
+      w.entries = w.entries.filter(e => !e.demo);
+      if (w.entries.length !== before) await setJSON('weigh-in', w);
+    } catch (e) { console.error('[withings] could not clear demo readings:', e.message); }
     // leave the mirrored readings alone — clearing the scale's own store is
     // enough to reconnect cleanly, and the weigh-in history is still true
     res.json({ ok: true, disconnected: true }); });

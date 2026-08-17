@@ -1381,7 +1381,9 @@ V.today = async function(){
       : `<div class="small">${w.withings_connected
           ? "No body composition yet — it arrives with the next scale reading."
           : "Body composition needs the Withings scale connected."}</div>`;
+    const demo = w.demo || (w.latest && /demo/.test(w.latest.source || ""));
     el.innerHTML = `<h4>Weight · body composition</h4>
+      ${demo ? `<div class="macros"><span class="mfuel" style="background:var(--red)">Demo data — not your readings</span></div>` : ""}
       ${lb == null ? `<div class="small">No reading yet. Starting weight ${w.start_lb} lb.</div>` : `
       <div class="bodyrow">
         <span class="arrow" style="color:${tone}">${d.arrow || "·"}</span>
