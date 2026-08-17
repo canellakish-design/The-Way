@@ -2,6 +2,7 @@
 // Env: WHOOP_CLIENT_ID, WHOOP_CLIENT_SECRET, BASE_URL
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
+const tz = require('./tz');
 const API = 'https://api.prod.whoop.com';
 // Credentials pasted into a hosting dashboard pick up stray whitespace,
 // newlines and sometimes the quotes around them. Providers then reject the
@@ -106,7 +107,11 @@ async function syncLatest(force) {
     const cur = await db();
     const records = (s.records || []).filter(r => r && r.score);
     const night = records.find(r => r.nap !== true);
-    const nap = records.find(r => r.nap === true);
+    // A nap is only news on the day you took it. The last ten sleep records
+    // reach back several days, so the most recent nap kept showing under
+    // today's recovery until another one replaced it — yesterday's afternoon
+    // lie-down sitting on this morning's card. Clear it unless it's today's.
+    const nap = records.find(r => r.nap === true && r.start && tz.isToday(new Date(r.start)));
     if (night) cur.sleep = night;
     cur.nap = nap || null;
     if (rec.records && rec.records[0]) cur.recovery = rec.records[0];
@@ -147,7 +152,11 @@ async function sleepLatest(opts) {
     sleep: s ? { performance: s.score ? s.score.sleep_performance_percentage : null,
                  hours: hoursAsleep(s), in_bed: hoursInBed(s),
                  nap: false, start: s.start || null } : null,
-    nap: d.nap ? { hours: hoursAsleep(d.nap), at: d.nap.start || null } : null,
+    // Checked again on the way out, not just on the way in: the passive read
+    // serves whatever was last stored, so without this a nap stored yesterday
+    // would still render today until the next sync happened to run.
+    nap: (d.nap && d.nap.start && tz.isToday(new Date(d.nap.start)))
+      ? { hours: hoursAsleep(d.nap), at: d.nap.start } : null,
     recovery: r ? { score: r.score ? r.score.recovery_score : null,
                     hrv: r.score ? r.score.hrv_rmssd_milli : null,
                     rhr: r.score ? r.score.resting_heart_rate : null } : null
