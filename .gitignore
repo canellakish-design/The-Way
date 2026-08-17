@@ -2,8 +2,12 @@ node_modules/
 package-lock.json
 
 # Local storage. bridge/storage.js writes one file per key when running on the
-# PC; production uses Netlify Blobs. seed-recipes.json and schedule-classes.json
-# are real tracked data, not storage — they stay in git.
+# PC; production uses Netlify Blobs.
+#
+# TRACKED DATA — never delete these, they are not scratch:
+#   bridge/package.json, bridge/seed-recipes.json,
+#   bridge/schedule-classes.json, bridge/snacks.json
+# Clean local storage with the named list below, never `rm bridge/*.json`.
 bridge/agent-thread*.json
 bridge/batches.json
 bridge/fuel-log.json

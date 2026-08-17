@@ -1,0 +1,8 @@
+{
+  "name": "the-way-bridge",
+  "version": "1.0.0",
+  "description": "The Way — bridge server (the brain)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "dependencies": { "express": "^4.19.0" }
+}
