@@ -210,3 +210,83 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 /* the scale's rows: value, arrow and move sit together on the right */
 #body .tag{display:inline-flex; align-items:baseline; gap:8px}
 #body .arrow{font-family:var(--mono); font-size:18px; line-height:1}
+
+/* ============================================================
+   The plan — week calendar and workout builder (plan.js).
+   Same language as the day: mono for values, ink borders, square corners.
+   The plan views get a wider column; a week reads better with room.
+   ============================================================ */
+.ptitle{font-weight:700; font-size:24px; letter-spacing:.2px; margin:4px 0 2px}
+.pweekhead{display:flex; justify-content:space-between; align-items:flex-end; gap:10px; flex-wrap:wrap}
+.pweeknav{display:flex; gap:0}
+.pweeknav button{margin-right:-1px; min-width:44px; padding:10px 12px}
+.pcols{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+.pcols label{margin-top:0}
+.pbig{font-family:var(--mono); font-weight:700; font-size:26px; line-height:1.1; font-variant-numeric:tabular-nums}
+.pbar{height:8px; border:1px solid var(--ink); margin-top:12px; position:relative}
+.pbar i{position:absolute; inset:0 auto 0 0; background:var(--green)}
+.pwarn{border-color:var(--amber); background:var(--amber-soft)}
+.pwarn .small{color:var(--ink)}
+.pday.today{border-color:var(--ink); box-shadow:var(--shadow)}
+.pday.past{opacity:.92}
+.pdayhead{display:flex; justify-content:space-between; align-items:baseline; gap:8px; flex-wrap:wrap; margin-bottom:4px}
+.pdayhead h4{margin:0}
+.pitem{display:grid; grid-template-columns:1fr; gap:1px; padding:9px 10px; margin-top:6px; border:1px solid var(--line);
+  text-decoration:none; color:var(--ink); background:var(--paper)}
+.pitem.planned{border-left:4px solid var(--ink)}
+.pitem.planned:hover{border-color:var(--ink)}
+.pitem.icu{border-left:4px solid var(--line); color:var(--muted)}
+.pitem.done{border-left:4px solid var(--green); background:var(--green-soft)}
+.pitem .pk{font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transform:uppercase; color:var(--muted)}
+.pitem .pn{font-weight:600; font-size:15px; line-height:1.3}
+.pitem .pm{font-family:var(--mono); font-size:12.5px; color:var(--muted); font-variant-numeric:tabular-nums}
+.pempty{padding:4px 0}
+.padd{display:inline-block; margin-top:8px; font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1px;
+  text-transform:uppercase; color:var(--ink); text-decoration:none; border-bottom:1px solid var(--ink); padding:6px 0}
+.pbadge{display:inline-block; font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+  padding:1px 6px; border:1px solid var(--line); color:var(--muted); margin-left:4px; vertical-align:1px; white-space:nowrap}
+.pbadge.ok{color:var(--green); border-color:var(--green)}
+.pbadge.warn{color:var(--amber); border-color:var(--amber)}
+.pbadge.bad{color:var(--red); border-color:var(--red)}
+.pissues{margin:6px 0 6px 18px} .pissues li{font-size:14px; color:var(--ink)}
+.row3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
+.pback{display:inline-block; font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+  color:var(--ink); text-decoration:none; margin-bottom:6px}
+.plib{display:grid; grid-template-columns:1fr; gap:8px; margin-top:10px}
+.plibitem{display:grid; text-align:left; margin:0; text-transform:none; letter-spacing:0; font-family:var(--sans); padding:12px 14px}
+.plibitem .pn{font-weight:700; font-size:15px}
+.plibitem .pm{font-family:var(--mono); font-size:12.5px; color:var(--muted); font-weight:400}
+.psum{position:sticky; top:58px; z-index:5}
+.pprof{display:block; width:100%; height:96px; margin-top:12px; border-bottom:1px solid var(--ink)}
+.pleg{display:flex; flex-wrap:wrap; gap:4px 12px; margin-top:4px}
+.pleg i{display:inline-block; width:10px; height:10px; margin-right:4px; vertical-align:-1px}
+.pstep,.prep{padding:10px 12px}
+.prep{border-color:var(--ink); border-style:dashed}
+.prephead{display:flex; align-items:center; gap:6px}
+.prephead input{margin-top:0}
+.pcount{width:76px; flex:none}
+.px{font-family:var(--mono); font-weight:700}
+.pstep.inner{border-top:1px dashed var(--line); padding:10px 0 4px}
+.pstephead{display:flex; gap:6px; align-items:center}
+.pstephead input{margin-top:0; font-weight:600}
+.ptools{display:flex; flex:none}
+.ptools button{margin:0 0 0 -1px; min-width:36px; min-height:40px; padding:4px 8px; box-shadow:none; font-size:14px}
+.pgrid{display:grid; grid-template-columns:1fr 1fr; gap:6px 10px; margin-top:6px; align-items:center}
+.pdur,.prange{display:flex; align-items:center; gap:6px}
+.pdur input,.prange input{width:72px; flex:none; margin-top:0}
+.pdur span,.prange span{font-family:var(--mono); font-size:12px; color:var(--muted)}
+.pgrid select{margin-top:0}
+.pfree{grid-column:span 1}
+.pcad input{width:64px}
+.pbtns{display:flex; flex-wrap:wrap; gap:0 6px}
+.pbtns .btn{display:inline-flex; align-items:center; text-decoration:none; margin-top:8px}
+button.pdanger{border-color:var(--red); color:var(--red)}
+.ptext{font-family:var(--mono); font-size:13px; white-space:pre-wrap; margin-top:8px; line-height:1.5}
+details.card summary{font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); cursor:pointer}
+@media (max-width:520px){
+  .pgrid{grid-template-columns:1fr}
+  .row3{grid-template-columns:1fr 1fr}
+  .row3 > div:last-child{grid-column:span 2}
+  .pbig{font-size:22px}
+  .psum{top:54px}
+}

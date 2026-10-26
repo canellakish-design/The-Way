@@ -14,6 +14,9 @@ require('./whoop').attach(app);
 require('./calendar').attach(app);
 require('./ics').attach(app);
 require('./intervals').attach(app);
+// The plan: workouts authored here, sent to the Garmin through intervals.icu,
+// and the week calendar that puts planned next to done.
+require('./workouts').attach(app);
 require('./macros').attach(app);
 require('./intake').attach(app);
 require('./status').attach(app);

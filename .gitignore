@@ -24,3 +24,8 @@ bridge/whoop-prev.json
 bridge/intake.json
 bridge/withings.json
 bridge/withings-trend.json
+# The plan (workouts.js)
+bridge/plan-workouts.json
+bridge/workout-settings.json
+bridge/calendar-icu-cache.json
+bridge/calendar-strava-cache.json

@@ -1,5 +1,46 @@
 # The Way — changelog
 
+# The plan: a week calendar and a workout builder
+
+The first piece of replacing TrainingPeaks. The Way now owns the plan;
+intervals.icu becomes the pipe to the Garmin rather than the place the plan
+is written.
+
+## Added
+- **The week** (`#calendar`, "The plan" on the day): planned workouts, anything
+  still planned directly in intervals.icu (marked as such), and completed rides
+  from Strava, day by day. Week totals for time and TSS, done-of-planned, and
+  past days marked done, partly done or missed. Warnings name any source that
+  isn't answering instead of showing an empty week
+- **The builder** (`#workout`): steps and repeat blocks; targets as % FTP, watts,
+  ramp, heart rate or free ride; optional cadence. Time, TSS and IF update as you
+  edit, with a profile chart. Starts from a library of the sessions this plan
+  actually uses: Z1 45 and 90 min, 2 h with 2 × 10 threshold (heart-rate led),
+  VO2 Session A (30/15 × 3) and Session B (hard-start 4 × 4), and the ramp test
+- **Send to Garmin**: writes the workout to intervals.icu
+  (`POST /events/bulk?upsert=true`, keyed by `external_id`, workout in the
+  `description` text syntax), and intervals.icu's Garmin Connect sync carries it
+  to the Edge. Editing a sent workout updates it there; moving its date removes
+  the old copy; deleting it deletes it there. Heart-rate steps go as % LTHR,
+  because the syntax has no absolute bpm
+- **Zwift file**: any workout downloads as `.zwo`
+- **Planning numbers** (FTP, threshold HR, resting HR) with a check against what
+  intervals.icu holds — the Garmin shows targets as % of intervals.icu's FTP and
+  LTHR, so a mismatch means different targets on the bike from the ones planned
+- `bridge/workout-math.js` (pure, tested: `node bridge/workout-math.test.js`):
+  duration, NP-style IF and TSS, the intervals.icu text and the `.zwo`
+
+## Routes
+`GET /calendar?from&to`, `GET|PUT /workouts/settings`, `GET /workouts/library`,
+`GET /workouts/preflight`, `POST /workouts/preview`, `GET|POST /workouts`,
+`GET|PUT|DELETE /workouts/:id`, `POST /workouts/:id/sync`, `GET /workouts/:id/zwo`
+
+## Notes
+- Planning FTP defaults to **175 W**; `fitness.js` still derives its own FTP for
+  the rest of the app. The two are deliberately separate until that's settled
+- Storage keys: `plan-workouts`, `workout-settings`, `calendar-icu-cache`,
+  `calendar-strava-cache` (all in `.gitignore` for local runs)
+
 # WHOOP, properly
 
 ## Fixed

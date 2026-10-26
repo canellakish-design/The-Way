@@ -179,7 +179,8 @@ view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
 const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan" };
 function nav(){
-  let h = location.hash.replace("#","") || defaultView();
+  // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
+  let h = location.hash.replace("#","").split("?")[0] || defaultView();
   if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
   // No tab bar: the day is the app. Everything else still exists at its hash
   // (the alarm lands on the morning routine, the routines link to their
@@ -1338,6 +1339,7 @@ V.today = async function(){
     <div class="card" id="body"><h4>The scale</h4>
       <div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
+    <button id="toPlan" class="primary">The plan</button>
     <button id="toClock">Bedside clock</button>
     <button id="toSettings">Settings</button>`;
 
@@ -1365,6 +1367,7 @@ V.today = async function(){
   // URL and token once — without a way back to Settings a fresh tablet is
   // stranded on demo data with no way to fix it.
   document.getElementById("toSettings").onclick = ()=>{ location.hash = "#settings"; };
+  document.getElementById("toPlan").onclick = ()=>{ location.hash = "#calendar"; };
 
   const nowMin = ()=>{
     const p = new Intl.DateTimeFormat("en-US", { timeZone: cached.timezone || undefined,
