@@ -62,12 +62,14 @@ ok('zwo: steady states, ramps, IntervalsT for simple on/off repeats', () => {
 });
 ok('library: every template normalises, and the session lengths are right', () => {
   const byKey = Object.fromEntries(LIBRARY.map(t => [t.key, W.metrics(W.normItems(t.steps), st)]));
-  assert.strictEqual(byKey['thr-2x10'].duration_s, 120 * 60);
+  // Only three kinds of workout: Zone 1, VO2 40/20s, mountain bike handling.
+  assert.deepStrictEqual([...new Set(LIBRARY.map(t => t.key.split('-')[0]))], ['z1', 'vo2', 'mtb']);
   assert.strictEqual(byKey['z1-45'].duration_s, 45 * 60);
-  // Session A per the protocol doc: ~69 min
-  assert.ok(Math.abs(byKey['vo2-a'].duration_s / 60 - 69) < 2, 'A is ' + byKey['vo2-a'].duration_s / 60);
-  // Session B: ~59 min
-  assert.ok(Math.abs(byKey['vo2-b'].duration_s / 60 - 59) < 2, 'B is ' + byKey['vo2-b'].duration_s / 60);
+  assert.strictEqual(byKey['z1-150'].duration_s, 150 * 60);
+  // Zwift's 40/20's #1 is 50 min
+  assert.strictEqual(byKey['vo2-4020'].duration_s, 50 * 60);
+  assert.strictEqual(byKey['mtb-60'].duration_s, 60 * 60);
+  for (const t of LIBRARY) assert.ok(/EAT/.test(t.notes), t.key + ' has eating guidelines');
   for (const t of LIBRARY) assert.ok(W.toIntervalsText(W.normItems(t.steps), st).length > 0);
 });
 console.log(n + ' passed');
