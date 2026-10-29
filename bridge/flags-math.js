@@ -249,20 +249,15 @@ function level(xp) {
 
 // Today's hunt: the route whose flags fit the day's work, and the flags
 // on it that the planned TSS reaches. virtual picks Zwift routes.
-// Where he rides from: the 2 km cell most road rides start in, so a loop
-// ridden on a trip is not today's hunt.
+// Where he rides from now: the 2 km cell the latest road ride started in
+// (he rides in more than one place), so a loop elsewhere is not today's hunt.
 const HOME_KM = 60;
 function homeOf(tracks) {
-  const cells = new Map();
-  for (const t of tracks || []) {
-    const p = t.points && t.points[0]; if (!p) continue;
-    const k = Math.round(p.lat * 50) + ':' + Math.round(p.lng * 50);
-    if (!cells.has(k)) cells.set(k, []); cells.get(k).push(p);
-  }
-  let best = null;
-  for (const list of cells.values()) if (!best || list.length > best.length) best = list;
-  if (!best) return null;
-  return { lat: +(best.reduce((a, p) => a + p.lat, 0) / best.length).toFixed(4), lng: +(best.reduce((a, p) => a + p.lng, 0) / best.length).toFixed(4), rides: best.length };
+  const starts = (tracks || []).filter(t => t.points && t.points[0]).map(t => ({ p: t.points[0], date: t.date || '' })).sort((a, b) => a.date < b.date ? 1 : -1);
+  if (!starts.length) return null;
+  const latest = starts[0].p;
+  const near = starts.filter(s => dist(s.p, latest) <= 2000).map(s => s.p);
+  return { lat: +(near.reduce((a, p) => a + p.lat, 0) / near.length).toFixed(4), lng: +(near.reduce((a, p) => a + p.lng, 0) / near.length).toFixed(4), rides: near.length, since: starts[0].date || null };
 }
 function hunt(flags, tssTarget, virtual, opts) {
   if (!tssTarget || tssTarget < 15) return null;

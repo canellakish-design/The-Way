@@ -78,13 +78,18 @@ async function rides(from, to) {
 
 // ---- naming from OpenStreetMap ----
 const MIRRORS = [OVERPASS, 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-async function namesFor(route, which, shape) {
-  const body = 'data=' + encodeURIComponent(G.overpassQuery(route.points, shape));
+async function namesFor(route, which, shape, o) {
+  const opt = o || {};
+  const query = opt.trivial ? '[out:json][timeout:5];node(1);out;' : G.overpassQuery(route.points, shape);
+  const raw = opt.mode === 'raw';
+  const body = raw ? query : 'data=' + encodeURIComponent(query);
+  const headers = { 'Content-Type': raw ? 'text/plain; charset=utf-8' : 'application/x-www-form-urlencoded' };
+  if (opt.ua !== 'none') headers['User-Agent'] = opt.ua || 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)';
   const errs = [];
   for (const url of [MIRRORS[(which || 0) % MIRRORS.length]]) {   // one mirror per call: a function has ten seconds
     try {
-      const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 7000);
-      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: '*/*', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body }).finally(() => clearTimeout(timer));
+      const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), opt.timeout || 7000);
+      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers, body }).finally(() => clearTimeout(timer));
       const text = await r.text();
       if (!r.ok) { errs.push(new URL(url).host + ' ' + r.status + ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)); continue; }
       return G.parsePois(JSON.parse(text));
@@ -350,7 +355,7 @@ function attach(app) {
       const d = await getJSON(routeKey(req.query.route || ''), null);
       if (!d) return res.status(404).json({ error: 'no such route' });
       const t0 = Date.now();
-      try { const pois = await namesFor(d, +(req.query.mirror || 0), req.query.shape || 'bbox'); res.json({ ok: true, ms: Date.now() - t0, pois: pois.length, sample: pois.slice(0, 12) }); }
+      try { const pois = await namesFor(d, +(req.query.mirror || 0), req.query.shape || 'bbox', { mode: req.query.mode, ua: req.query.ua, trivial: req.query.q === 'trivial', timeout: +(req.query.timeout || 7000) }); res.json({ ok: true, ms: Date.now() - t0, pois: pois.length, sample: pois.slice(0, 12) }); }
       catch (e) { res.json({ ok: false, ms: Date.now() - t0, error: e.message }); }
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
