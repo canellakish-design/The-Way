@@ -50,4 +50,13 @@ ok('suggest: foods and supplements that lift the score, iron gated, carbs capped
   assert.ok(M.suggest([ironLow], { day: 'high' }).supplements.some(x => x.key === 'iron'), 'iron suggested when iron is empty');
 });
 
+ok('today_share: a part-day owes only its share', () => {
+  const quarter = Object.fromEntries(M.KEYS.map(k => [k, M.TABLE.targets[k] / 4]));
+  assert.strictEqual(M.dayScore([quarter], { today_share: 0.25 }).score, 100);   // breakfast's share, met
+  assert.strictEqual(M.dayScore([quarter], { today_share: 1 }).score, 25);       // the whole day, not met
+  const full = Object.fromEntries(M.KEYS.map(k => [k, M.TABLE.targets[k]]));
+  const s = M.dayScore([quarter, full, full], { today_share: 0.25 });             // three days: two whole, today a quarter
+  assert.strictEqual(s.per.find(p => p.key === 'fiber_g').pct, 100);
+});
+
 console.log(n + ' passed');

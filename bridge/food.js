@@ -255,7 +255,7 @@ async function dayReport(date) {
     else if (microDays.length > 1) break;   // the journal started here
   }
   const rideHours = g.sessions.filter(s => s.done).reduce((a, s) => a + (s.minutes || 0), 0) / 60;
-  const microOpts = { day: g.day, post: !!(g.cue && g.cue.key === 'post'), ride_hours: Math.round(rideHours * 10) / 10 };
+  const microOpts = { day: g.day, post: !!(g.cue && g.cue.key === 'post'), ride_hours: Math.round(rideHours * 10) / 10, today_share: due ? due.share : 1 };
   const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays, microOpts) : null;
   const microSuggest = micro ? MI.suggest(microDays, microOpts) : null;
   const nowP = tz.parts(new Date());

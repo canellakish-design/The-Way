@@ -75,7 +75,12 @@ function dayScore(days, opts) {
     const avg = slice.reduce((s, d) => s + (Number(d && d[k]) || 0), 0) / win;
     let t = TABLE.targets[k];
     if (k === 'sodium_mg') t = Math.round(t + 1000 * (o.ride_hours || 0));
-    const pct = Math.min(100, Math.round(avg / t * 100));
+    // Today is only part-way through: it owes only the share of its target that
+    // the meal plan has reached by now (o.today_share, 0.25 after breakfast),
+    // so one meal is not read against a whole day's nutrients. Past days owe all.
+    const share = o.today_share == null ? 1 : Math.max(0.05, Math.min(1, o.today_share));
+    const due = t * ((win - 1) + share) / win;
+    const pct = Math.min(100, Math.round(avg / due * 100));
     return { key: k, label: TABLE.labels[k] || k, value: r1(avg), target: t, pct, window: win,
       settled: n >= ((TABLE.windows && TABLE.windows[k]) || 3),
       unit: k.endsWith('_mg') ? 'mg' : k.endsWith('_ug') ? 'µg' : 'g' };
