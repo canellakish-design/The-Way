@@ -273,6 +273,20 @@ async function dayReport(date) {
   };
 }
 
+// A supplement taken: one tap, one entry, its micronutrients counted.
+async function addSupplement(key) {
+  const sm = MI.supplementMicros(key);
+  if (!sm) return null;
+  const date = tz.todayKey();
+  const p = tz.parts(new Date());
+  const entry = { id: 'f_' + crypto.randomBytes(5).toString('hex'), at: new Date().toISOString(), date,
+    time: String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'), slot: null, meal: 'supplement', supplement: true, key: sm.key,
+    name: sm.name, portion: '', kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, confidence: 'high', notes: sm.note || '',
+    assessment: null, thumb: null, ingredients: [], micros: sm.micros, micros_matched_pct: 100, micros_unknown: [] };
+  const doc = await dayDoc(date); doc.entries.push(entry); await setJSON(dayKey(date), doc);
+  return entry;
+}
+
 // A photo, or words instead of one (body.text): the same read, the same entry.
 async function addPhoto(body) {
   const images = Array.isArray(body.images) ? body.images.filter(i => i && i.image_base64) : [];
@@ -360,16 +374,9 @@ function attach(app) {
   // A supplement is an entry without a photo: one tap, its nutrients counted.
   app.post('/food/supplement', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const sm = MI.supplementMicros(String((req.body || {}).key || ''));
-      if (!sm) return res.status(400).json({ error: 'unknown supplement' });
-      const date = tz.todayKey();
-      const p = tz.parts(new Date());
-      const entry = { id: 'f_' + crypto.randomBytes(5).toString('hex'), at: new Date().toISOString(), date,
-        time: String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'), slot: null, meal: 'supplement', supplement: true, key: sm.key,
-        name: sm.name, portion: '', kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, confidence: 'high', notes: sm.note || '',
-        assessment: null, thumb: null, ingredients: [], micros: sm.micros, micros_matched_pct: 100, micros_unknown: [] };
-      const doc = await dayDoc(date); doc.entries.push(entry); await setJSON(dayKey(date), doc);
-      res.json({ ok: true, entry, day: await dayReport(date) });
+      const entry = await addSupplement(String((req.body || {}).key || ''));
+      if (!entry) return res.status(400).json({ error: 'unknown supplement' });
+      res.json({ ok: true, entry, day: await dayReport(entry.date) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
   app.get('/food/photo/:id', async (req, res) => { if (!auth(req, res)) return;
@@ -465,4 +472,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, guidelinesFor, sessionsFor };
+module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement };

@@ -483,4 +483,12 @@ function attach(app) {
     res.json({ ok: true, removed: w.id, removed_from_intervals: !!(w.sync && w.sync.intervals_event_id) }); });
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad };
+// Create a planned workout from a plain body (the voice route uses this).
+async function create(body) {
+  const st = await settings(); const d = await db();
+  const w = clean(body);
+  d.workouts[w.id] = w; await save(d);
+  return withMetrics(w, st);
+}
+
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create };
