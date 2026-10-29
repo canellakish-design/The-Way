@@ -78,10 +78,10 @@ async function rides(from, to) {
 
 // ---- naming from OpenStreetMap ----
 const MIRRORS = [OVERPASS, 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-async function namesFor(route) {
+async function namesFor(route, which) {
   const body = 'data=' + encodeURIComponent(G.overpassQuery(route.points));
   const errs = [];
-  for (const url of MIRRORS) {
+  for (const url of [MIRRORS[(which || 0) % MIRRORS.length]]) {   // one mirror per call: a function has ten seconds
     try {
       const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 7000);
       const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body }).finally(() => clearTimeout(timer));
@@ -175,15 +175,15 @@ async function buildStep() {
     // that outlives the function counts as failed next time instead of
     // stalling the build; the flags then fall back to the high point and far turn.
     const stuck = s.routes.find(x => x.named === 'pending');
-    if (stuck) { stuck.named = 'failed'; log.push('names for ' + stuck.name + ': the map did not answer in time'); }
+    if (stuck) { stuck.named = (stuck.tries || 0) >= 3 ? 'failed' : false; log.push('names for ' + stuck.name + ': the map did not answer in time'); }
     const r = s.routes.find(x => !x.named && !x.virtual);
     if (r) {
       const d = await getJSON(routeKey(r.id), null);
       if (!d) r.named = true;
       else {
-        r.named = 'pending'; await save(s);
-        try { d.pois = (d.pois || []).concat(await namesFor(d)); await setJSON(routeKey(r.id), d); r.named = true; }
-        catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = 'failed'; }
+        r.tries = (r.tries || 0) + 1; r.named = 'pending'; await save(s);
+        try { d.pois = (d.pois || []).concat(await namesFor(d, r.tries - 1)); await setJSON(routeKey(r.id), d); r.named = true; }
+        catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = r.tries >= 3 ? 'failed' : false; }
       }
     }
     const pending = s.routes.filter(x => !x.named && !x.virtual).length;
@@ -316,7 +316,7 @@ function attach(app) {
   app.post('/flags/build', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await buildStep()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/rebuild', async (req, res) => { if (!auth(req, res)) return;
-    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: r.virtual })); s.phase = 'tracks'; await save(s); res.json(await buildStep()); }
+    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: r.virtual, tries: 0 })); s.phase = 'tracks'; await save(s); res.json(await buildStep()); }
     catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/scan', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await scan(SCAN_PER_CALL)); } catch (e) { res.status(500).json({ error: e.message }); } });
