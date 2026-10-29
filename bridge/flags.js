@@ -245,13 +245,14 @@ async function buildStep() {
     s.cal = { road: cal(false), zwift: cal(true) };
     s.speed_kmh = s.cal.road.speed_kmh;
     s.home = G.homeOf(road);
-    const kept = {};
-    for (const f of s.flags) kept[f.id] = { name: f.renamed ? f.name : null, hidden: f.hidden || false };
+    // Renames and hides survive a rebuild by place, not by index: a flag is the same flag when it sits within 150 m of where it was.
+    const kept = s.flags.filter(f => f.renamed || f.hidden).map(f => ({ lat: f.lat, lng: f.lng, route_id: f.route_id, name: f.renamed ? f.name : null, hidden: !!f.hidden }));
+    const keptFor = f => kept.find(k => k.route_id === f.route_id && G.dist(k, f) <= 150) || {};
     const flags = [];
     for (const r of s.routes) {
       const d = await getJSON(routeKey(r.id), null); if (!d) continue;
       const placed = G.placeFlags(d, d.pois || [], full.filter(t => !!t.virtual === !!d.virtual), d.virtual ? s.cal.zwift : s.cal.road);
-      for (const f of placed) { const k = kept[f.id] || {}; flags.push(Object.assign(f, { name: k.name || f.name, renamed: !!k.name, hidden: !!k.hidden, caught: 0, first_at: null, last_at: null })); }
+      for (const f of placed) { const k = keptFor(f); flags.push(Object.assign(f, { name: k.name || f.name, renamed: !!k.name, hidden: !!k.hidden, caught: 0, first_at: null, last_at: null })); }
     }
     s.flags = flags; s.built_at = new Date().toISOString();
     s.scanned = []; s.catches = []; s.xp = 0; s.hunt_bonus_days = [];
