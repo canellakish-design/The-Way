@@ -1328,6 +1328,7 @@ V.today = async function(){
       <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1397,10 +1398,9 @@ V.today = async function(){
      flat band each metric gets — a scale that reads 0.1 lb of bone loss has
      not told you anything. */
   const trendTone = t => t === "good" ? "var(--green)" : t === "bad" ? "var(--red)" : "var(--ink)";
-  const drawBody = (w)=>{
-    const el = document.getElementById("body");
-    if (!el) return;
-    if (!w){ el.innerHTML = `<h4>The scale</h4><div class="small">bridge unreachable</div>`; return; }
+  let bodyData = null;
+  const bodyHTML = (w)=>{
+    if (!w) return `<h4>The scale</h4><div class="small">bridge unreachable</div>`;
     const rows = (w.trends || []).map(t=>{
       const c = trendTone(t.tone);
       const move = t.delta == null ? ""
@@ -1414,32 +1414,47 @@ V.today = async function(){
     const since = w.change_since_start_lb;
     const demo = w.demo || (w.latest && /demo/.test(w.latest.source || ""));
     const basis = (w.trends || []).length ? (w.trends[0].basis || "") : "";
-    el.innerHTML = `<h4>The scale</h4>
+    const last = w.latest && w.latest.at ? new Date(w.latest.at) : null;
+    const lastWhen = !last ? "" : w.latest.logged_today ? "today" : last.toLocaleDateString(undefined,{month:"short",day:"numeric"});
+    return `<h4>The scale</h4>
       ${demo ? `<div class="macros"><span class="mfuel" style="background:var(--red)">Demo data — not your readings</span></div>` : ""}
       ${rows ? `<ul class="agenda totals">${rows}</ul>
         <div class="small">arrows compare ${esc(basis)}${
           since != null ? ` · <b>${since > 0 ? "+" : ""}${since} lb</b> since ${w.start_lb}` : ""}${
-          w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}</div>`
+          w.readings_7d ? ` · ${w.readings_7d} readings this week` : ""}${
+          lastWhen ? ` · last reading ${esc(lastWhen)}${w.latest.source ? " (" + esc(w.latest.source) + ")" : ""}` : ""}</div>`
         : `<div class="small">${w.withings_connected
             ? "Connected — the numbers land here with your next reading."
             : "Withings isn't connected. Starting weight " + (w.start_lb || 210) + " lb."}</div>`}
+      ${w.withings_connected ? "" : `<div class="small">The Withings scale pushes every weigh-in here once it is connected —
+        <a href="${DEFAULT_API}/withings/auth"><b>connect the scale</b></a> (one approval, in your Withings account).</div>`}
       ${(w.latest && w.latest.logged_today) ? "" : `
         <div class="weighin">
           <div class="small">${w.withings_connected
             ? "Nothing from the scale today — it fills in when you step on, or enter it:"
             : "Enter this morning's number:"}</div>
-          <div class="row2"><span><input id="wiLb" type="number" step="0.1" placeholder="${w.start_lb || 210}"></span>
-            <span><button class="primary" id="wiSave">Log weigh-in</button></span></div>
-          <div class="small" id="wiMsg"></div></div>`}`;
-    const btn = document.getElementById("wiSave");
-    if (btn) btn.onclick = async ()=>{
-      const lb = +document.getElementById("wiLb").value;
+          <div class="row2"><span><input class="wiLb" type="number" step="0.1" placeholder="${w.start_lb || 210}"></span>
+            <span><button class="primary wiSave">Log weigh-in</button></span></div>
+          <div class="small wiMsg"></div></div>`}`;
+  };
+  const wireBody = (root)=>{
+    const btn = root && root.querySelector(".wiSave");
+    if (!btn) return;
+    btn.onclick = async ()=>{
+      const lb = +root.querySelector(".wiLb").value;
       if (!lb) return;
       try{
         await bridge("/weigh-in",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({lb})});
         refreshBody();
-      }catch(e){ const m=document.getElementById("wiMsg"); if(m) m.textContent = "Failed: " + e.message; }
+      }catch(e){ const m=root.querySelector(".wiMsg"); if(m) m.textContent = "Failed: " + e.message; }
     };
+  };
+  const drawBody = (w)=>{
+    bodyData = w;
+    const el = document.getElementById("body");
+    if (el){ el.innerHTML = bodyHTML(w); wireBody(el); }
+    drawWeightTile();
+    if (typeof drawScoreDetail === "function" && openScore === "weight") drawScoreDetail();
   };
   const refreshBody = async ()=> drawBody(await bridge("/weigh-in").catch(()=>null));
 
@@ -1458,6 +1473,17 @@ V.today = async function(){
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
   let scoresData = null, complianceData = null, openScore = null;
+  const drawWeightTile = ()=>{
+    const w = bodyData;
+    if (!w || !w.latest){ paintTile("weight", null, "", "", w ? (w.withings_connected ? "no reading yet" : "scale not connected") : "bridge unreachable"); return; }
+    // Down is the direction this program wants: the band is −600 to −300 a day.
+    const wk = w.week_change_lb, since = w.change_since_start_lb;
+    let word = "", tone = "neutral", sub = "";
+    if (wk != null){ word = wk < -0.2 ? "down" : wk > 0.2 ? "up" : "flat"; tone = wk < -0.2 ? "good" : wk > 0.2 ? "bad" : "neutral"; sub = `${sgn(wk)} lb/wk`; }
+    else if (since != null){ word = since < 0 ? "down" : since > 0 ? "up" : "at start"; tone = since < 0 ? "good" : since > 0 ? "warn" : "neutral"; sub = `${sgn(since)} lb since ${w.start_lb}`; }
+    if (w.latest && !w.latest.logged_today) sub = sub || "not today";
+    paintTile("weight", Math.round(w.latest.lb), word, tone, sub || `${w.latest.lb} lb`);
+  };
   const foodBand = o => o == null ? null : o >= 90 ? { word: "on target", tone: "good" } : o >= 70 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
   const drawFood = ()=>{
     const c = complianceData;
@@ -1523,6 +1549,7 @@ V.today = async function(){
     }
     if (vd) vd.textContent = verdictOf(d);
     drawFood();
+    drawWeightTile();
     drawScoreDetail();
   };
 
@@ -1531,9 +1558,13 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
+    if (openScore === "weight"){
+      html = bodyHTML(bodyData) + `<div class="small">The number on the box is the latest reading; the word is the week-over-week move of the 7-day average, down green, up red. ${bodyData && bodyData.start_lb ? "Measured against the " + bodyData.start_lb + " lb start." : ""}</div>`;
+      box.innerHTML = html; box.hidden = false; wireBody(box); return;
+    }
     if (openScore === "food"){
       const c = complianceData;
       html = `<h4>Food · compliance</h4>
