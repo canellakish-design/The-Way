@@ -1511,7 +1511,7 @@ V.today = async function(){
     if (w.latest && !w.latest.logged_today) sub = sub || "not today";
     paintTile("weight", Math.round(w.latest.lb), word, tone, sub || `${w.latest.lb} lb`);
   };
-  const foodBand = o => o == null ? null : o >= 90 ? { word: "on target", tone: "good" } : o >= 70 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
+  const foodBand = o => o == null ? null : o >= 80 ? { word: "on target", tone: "good" } : o >= 60 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
   const drawFood = ()=>{
     const c = complianceData;
     if (!c){ paintTile("food", null, "", "", scoresData ? "no answer" : "bridge unreachable"); return; }
@@ -1642,7 +1642,7 @@ V.today = async function(){
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a meal</a>
-        <div class="small">Half the score is the macros against what the meal plan says should be in by now (the meals whose time has come, as a share of the day), carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. Before the first planned meal only the journal half counts. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 90 and up is on target, 70 to 89 close, under 70 off. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
+        <div class="small">Half the score is the macros against what the meal plan says should be in by now (the meals whose time has come, as a share of the day), carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. Before the first planned meal only the journal half counts. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 80 and up is on target, 60 to 79 close, under 60 off, the same bands as the other boxes. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
     } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>

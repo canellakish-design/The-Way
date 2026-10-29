@@ -302,8 +302,8 @@ function overall(macroScore, guideline) {
 
 function band(score) {
   if (score == null) return null;
-  if (score >= 90) return { word: 'on target', tone: 'good' };
-  if (score >= 70) return { word: 'close', tone: 'warn' };
+  if (score >= 80) return { word: 'on target', tone: 'good' };
+  if (score >= 60) return { word: 'close', tone: 'warn' };
   return { word: 'off', tone: 'bad' };
 }
 
