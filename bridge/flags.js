@@ -83,7 +83,7 @@ async function namesFor(route) {
   const errs = [];
   for (const url of MIRRORS) {
     try {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body });
       const text = await r.text();
       if (!r.ok) { errs.push(new URL(url).host + ' ' + r.status + ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)); continue; }
       return G.parsePois(JSON.parse(text));
