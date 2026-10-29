@@ -142,6 +142,18 @@ V.food = async function(){
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
+    el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
+      // the entry logged just before this one, by time
+      const meals = day.entries.filter(x => !x.supplement).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));
+      const i = meals.findIndex(x => x.id === btn.dataset.merge);
+      if (i < 1) { alert("Nothing logged before this one."); return; }
+      const prev = meals[i-1], cur = meals[i];
+      const text = prompt(`Combine "${prev.name}" and "${cur.name}" into one meal.\nDescribe the whole plate to have it read again (add anything the photos missed), or leave blank to just add them up:`, "");
+      if (text == null) return;
+      btn.disabled = true;
+      try{ const r = await bridge("/food/merge",{method:"POST",headers:J,body:JSON.stringify({ ids:[prev.id, cur.id], date, text: text.trim() || undefined, meal: prev.meal })}); day = r.day; draw(); }
+      catch(err){ alert(err.message); btn.disabled = false; }
+    });
     el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
       if (!confirm("Remove this meal from the journal?")) return;
       try{ const r = await bridge(`/food/${encodeURIComponent(btn.dataset.del)}?date=${date}`,{method:"DELETE"}); day = r.day; draw(); }
@@ -179,7 +191,7 @@ V.food = async function(){
           <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
           <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
           <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
-          <button data-fix="${esc(e.id)}">Save correction</button> <button class="pdanger" data-del="${esc(e.id)}">Remove</button></div>`:""}
+          <button data-fix="${esc(e.id)}">Save correction</button> <button data-merge="${esc(e.id)}">Combine with previous</button> <button class="pdanger" data-del="${esc(e.id)}">Remove</button></div>`:""}
       </div></div>`;
   };
 

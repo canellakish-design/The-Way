@@ -393,6 +393,57 @@ function attach(app) {
       res.json({ ok: true, entry: e, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
+  // Two or more entries were one meal: fold them into one. With `text`, the
+  // combined plate is read again from his words (so a food neither photo
+  // caught can be added); without it the numbers are simply added up. The
+  // merged entry keeps the earliest time and slot; the originals go.
+  app.post('/food/merge', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const b = req.body || {};
+      const ids = Array.isArray(b.ids) ? b.ids.map(String) : [];
+      const date = isDate(b.date) ? b.date : tz.todayKey();
+      let doc = await dayDoc(date);
+      const olds = doc.entries.filter(e => ids.includes(e.id) && !e.supplement).sort((x, y) => String(x.time).localeCompare(String(y.time)));
+      if (olds.length < 2) return res.status(400).json({ error: 'pick two or more entries' });
+      const first = olds[0];
+      const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal) ? b.meal : first.meal;
+      let merged;
+      if (b.text && String(b.text).trim()) {
+        if (date !== tz.todayKey()) return res.status(400).json({ error: 'a re-read is only for today' });
+        const r = await addPhoto({ text: String(b.text).trim(), meal });
+        doc = await dayDoc(date);
+        merged = doc.entries.find(e => e.id === r.entry.id);
+      } else {
+        const sum = k => olds.reduce((a, e) => a + (e[k] || 0), 0);
+        const g = await guidelinesFor(date);
+        merged = Object.assign({}, first, {
+          id: 'f_' + crypto.randomBytes(5).toString('hex'), meal,
+          name: olds.map(e => e.name).join(' + ').slice(0, 80), portion: olds.map(e => e.portion).filter(Boolean).join('; ').slice(0, 120),
+          kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), fluid_ml: sum('fluid_ml'),
+          drink: olds.map(e => e.drink).filter(Boolean).join(', ').slice(0, 40) || null,
+          assessment: { protein_source: olds.some(e => e.assessment && e.assessment.protein_source),
+            carbs: olds.some(e => e.assessment && e.assessment.carbs === 'heavy') ? 'heavy' : olds.some(e => e.assessment && e.assessment.carbs === 'some') ? 'some' : 'none',
+            vegetables: olds.some(e => e.assessment && e.assessment.vegetables), processed: olds.some(e => e.assessment && e.assessment.processed),
+            fits: first.assessment ? first.assessment.fits : 'partly', why: olds.map(e => e.assessment && e.assessment.why).filter(Boolean).join(' ').slice(0, 240) },
+          written: olds.map(e => e.written).filter(Boolean).join('; ') || null, thumb: olds.map(e => e.thumb).find(Boolean) || null,
+          ingredients: olds.flatMap(e => e.ingredients || []).slice(0, 20),
+          micros: MI.sumDays(olds.map(e => e.micros).filter(Boolean)), micros_unknown: olds.flatMap(e => e.micros_unknown || []),
+          micros_matched_pct: Math.round(olds.reduce((a, e) => a + (e.micros_matched_pct || 0), 0) / olds.length), merged_from: ids
+        });
+        merged.drink_only = false;
+        doc.entries.push(merged);
+        await logMeal({ name: merged.name, meal: merged.meal === 'on the bike' ? 'snack' : merged.meal, kcal: merged.kcal, carbs_g: merged.carbs_g, protein_g: merged.protein_g, fat_g: merged.fat_g, food_id: merged.id });
+        void g;
+      }
+      merged.time = first.time; merged.at = first.at; merged.merged_from = ids;
+      const gl = await guidelinesFor(date); merged.slot = F.slotFor(gl.meals, merged.time);
+      doc.entries = doc.entries.filter(e => !ids.includes(e.id));
+      doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time)));
+      await setJSON(dayKey(date), doc);
+      for (const id of ids) await removeFromLedger(id);
+      res.json({ ok: true, entry: merged, day: await dayReport(date) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+
   app.delete('/food/:id', async (req, res) => { if (!auth(req, res)) return;
     try {
       const date = isDate(req.query.date) ? req.query.date : tz.todayKey();
