@@ -85,8 +85,9 @@ V.food = async function(){
         <div class="small" id="snapMsg"></div></div>
       <button id="writeBtn" class="writebtn">Write it instead</button>
       <div id="writeForm" hidden>
-        <label for="writeText">What you ate, in your words</label>
-        <textarea id="writeText" rows="3" placeholder="Rice bowl: a cup of jasmine rice, grilled salmon about 150 g, edamame, kimchi, soft egg"></textarea>
+        <label for="writeText">What is on the plate, in your words</label>
+        <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
+        <div class="small">Weights from the kitchen scale make it exact: "rice 200 g, salmon 150 g". Without them the coach assumes your usual portions, about ±35% on calories; with them, about ±15%.</div>
         <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
           <span><label>&nbsp;</label><button class="primary" id="writeLog">Log it</button> <button id="writeCancel">Cancel</button></span></div>
         <div class="small" id="writeMsg"></div></div>
