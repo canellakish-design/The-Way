@@ -200,7 +200,7 @@ function mealPlan(day, sessions, target) {
   } else if (start < 15 * 60) {
     // Midday ride: breakfast carries the pre-ride role, the post-ride meal is lunch.
     out.push(bfast(Math.min(7 * 60 + 30, start - 150), name));
-    if (start - 150 > 9 * 60 + 30) out.push(meal(start - 120, 'before', day === 'high'
+    if (start - 150 >= 9 * 60 + 30) out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBike);
