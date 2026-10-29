@@ -1318,6 +1318,14 @@ const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
+    <div class="scores" id="scores">
+      <button class="score" data-k="training"><span class="slabel">Training</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
+      <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+    </div>
+    <div class="scoreverdict small" id="scoreVerdict"></div>
+    <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="nowbar">
       <div class="nowtime" id="nowTime">--:--</div>
       <div class="nowmeta">
@@ -1327,13 +1335,6 @@ V.today = async function(){
     </div>
     <div class="upnext" id="upnext"><div class="label">Next</div>
       <div class="what">reaching the bridge…</div></div>
-    <div class="scores" id="scores">
-      <button class="score" data-k="training"><span class="slabel">Training</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
-      <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-    </div>
-    <div class="scoreverdict small" id="scoreVerdict"></div>
-    <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
       <div class="daystep-label" id="dayLabel"></div>
@@ -1451,7 +1452,20 @@ V.today = async function(){
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
-  let scoresData = null, openScore = null;
+  let scoresData = null, complianceData = null, openScore = null;
+  const foodBand = o => o == null ? null : o >= 90 ? { word: "on target", tone: "good" } : o >= 70 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
+  const drawFood = ()=>{
+    const c = complianceData;
+    if (!c){ paintTile("food", null, "", "", scoresData ? "no answer" : "bridge unreachable"); return; }
+    const o = c.compliance ? c.compliance.overall : null;
+    if (o == null){
+      paintTile("food", null, "", "", !c.target ? "no Hexis target" : "nothing logged yet");
+      return;
+    }
+    const b = foodBand(o);
+    const k = c.compliance.per_macro && c.compliance.per_macro.kcal;
+    paintTile("food", o, b.word, b.tone, k && k.target ? `${Math.round(k.actual / k.target * 100)}% of kcal` : "");
+  };
   const paintTile = (k, num, word, tone, sub)=>{
     const el = view.querySelector(`.score[data-k="${k}"]`);
     if (!el) return;
@@ -1488,7 +1502,7 @@ V.today = async function(){
     const t = d.training, f = d.fatigue, r = d.recovery;
     if (strava && t){
       paintTile("training", t.ctl, t.ramp ? t.ramp.word : "", t.ramp ? t.ramp.tone : "",
-        `${sgn(t.ramp_7d)} this week`);
+        `${sgn(t.ramp_7d)}/wk`);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
         `form ${sgn(f.tsb)}`);
     } else {
@@ -1496,13 +1510,14 @@ V.today = async function(){
       paintTile("fatigue", null, "", "", "");
     }
     if (r.score != null){
-      const hrv = r.hrv != null ? `HRV ${r.hrv}${r.hrv_delta_pct != null ? ` (${sgn(r.hrv_delta_pct)}%)` : ""}` : "";
+      const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(r.hrv_delta_pct)}%` : r.hrv != null ? `HRV ${r.hrv}` : "";
       paintTile("recovery", r.score, r.band.word, r.band.tone, hrv);
     } else {
       const w = d.sources && d.sources.whoop;
       paintTile("recovery", null, "", "", w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "WHOOP not connected");
     }
     if (vd) vd.textContent = verdictOf(d);
+    drawFood();
     drawScoreDetail();
   };
 
@@ -1511,10 +1526,15 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || !scoresData){ box.hidden = true; box.innerHTML = ""; return; }
-    const d = scoresData, strava = d.sources && d.sources.strava && d.sources.strava.connected;
+    if (!openScore || (!scoresData && openScore !== "food")){ box.hidden = true; box.innerHTML = ""; return; }
+    const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
-    if (openScore === "training"){
+    if (openScore === "food"){
+      const c = complianceData;
+      html = `<h4>Food · compliance</h4>
+        ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
+        <div class="small">Scored per macro, carbs, protein, fat and kcal each 0 to 100 against the Hexis target for the day, then averaged, so a good calorie total cannot hide a protein miss. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure: it is day-to-date intake against the whole day.</div>`;
+    } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>
         ${strava ? `<ul class="agenda totals">
@@ -1556,6 +1576,13 @@ V.today = async function(){
         <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. HRV and resting HR are also read here against your 30-day median, the way Oura and Garmin do it: HRV down 10% or resting HR up 5 means the night did not do its job.</div>`;
     }
     box.innerHTML = html; box.hidden = false;
+    const sb = document.getElementById("snackLog");
+    if (sb) sb.onclick = async ()=>{
+      const r = await logMealQueued({ name: sb.dataset.name, meal:"snack",
+        kcal:+sb.dataset.k, carbs_g:+sb.dataset.c, protein_g:+sb.dataset.p, fat_g:+sb.dataset.f });
+      sb.textContent = r.ok ? "logged" : "queued offline"; sb.disabled = true;
+      if (r.ok) refreshScores();
+    };
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");
@@ -1570,7 +1597,10 @@ V.today = async function(){
     drawScoreDetail();
   });
   const refreshScores = async ()=>{
-    scoresData = await bridge("/scores").catch(()=>null);
+    [scoresData, complianceData] = await Promise.all([
+      bridge("/scores").catch(()=>null),
+      bridge("/compliance").catch(()=>null)
+    ]);
     drawScores();
   };
 

@@ -4,36 +4,23 @@
    watts, labels), a system face for anything you read as language. The old
    sheet set Courier on everything, which made prose work to read and gave
    numbers no distinction at all.
-   Colour lives entirely in tokens so the dark theme is a token swap, not a
-   second stylesheet.
+   Colour lives entirely in tokens. The theme is black, whatever the device
+   says: one palette, no light mode.
    ============================================================ */
 :root{
-  --paper:#F7F7F4; --card:#FFFFFF; --ink:#141414;
-  --muted:#5F5E59;              /* was #767570 — that failed contrast on paper */
-  --line:#DEDDD6; --line-soft:#EBEAE4;
-  --green:#2F6B41; --green-soft:#DDEBE0;
-  --amber:#8A6115; --amber-soft:#F0E6D0;
-  --red:#A63F33;   --red-soft:#F3DEDA;
-  --blue-soft:#DCE8FB;
-  --carb:#B4620F; --fat:#2F5F9E;
+  /* Black, always. The page is black, cards sit a shade above it, and the
+     hard shadow is a dark grey so the card edges still read on black. */
+  --paper:#000000; --card:#121212; --ink:#F2F1EC;
+  --muted:#A8A69E; --line:#33352F; --line-soft:#26281F;
+  --green:#7BC48E; --green-soft:#1F3327;
+  --amber:#D8A945; --amber-soft:#332A16;
+  --red:#E58273;   --red-soft:#33201C;
+  --blue-soft:#1C2942;
+  --carb:#E29A5A; --fat:#8FB4E8;
   --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --shadow:3px 3px 0 var(--line);
+  --shadow:3px 3px 0 #2A2C27;
   --radius:0px;
-}
-/* The bedside tablet and the 5am kitchen. Follows the device rather than
-   adding a setting nobody would find. */
-@media (prefers-color-scheme: dark){
-  :root{
-    --paper:#121311; --card:#1B1D1A; --ink:#F2F1EC;
-    --muted:#A8A69E; --line:#33352F; --line-soft:#26281F;
-    --green:#7BC48E; --green-soft:#1F3327;
-    --amber:#D8A945; --amber-soft:#332A16;
-    --red:#E58273;   --red-soft:#33201C;
-    --blue-soft:#1C2942;
-    --carb:#E29A5A; --fat:#8FB4E8;
-    --shadow:3px 3px 0 #000;
-  }
 }
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--paper); color:var(--ink); font-family:var(--sans); font-size:16px;
@@ -195,16 +182,14 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 #alarmOverlay .bignum{font-size:72px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
-/* the three scores: Training, Recovery, Fatigue. Tiles are buttons — tap one
-   and the card beneath explains the number and how it was made. */
-.scores{display:grid; grid-template-columns:repeat(3,1fr); gap:0; margin:14px 0 0; border:1px solid var(--ink);
-  background:var(--card); box-shadow:var(--shadow)}
+/* the three scores: Training, Recovery, Fatigue — three boxes side by side.
+   Each is a button: tap one and the card beneath explains the number. */
+.scores{display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:2px 0 0}
 .score{display:flex; flex-direction:column; align-items:flex-start; gap:2px; margin:0; padding:12px 12px 10px;
-  background:none; border:0; border-right:1px solid var(--line); box-shadow:none; text-align:left; min-width:0;
+  background:var(--card); border:1px solid var(--ink); box-shadow:var(--shadow); text-align:left; min-width:0;
   font:inherit; text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer; width:100%; min-height:0}
-.score:active{transform:none; box-shadow:none}
-.score:last-child{border-right:0}
-.score.on{background:var(--paper)}
+.score:active{transform:none}
+.score.on{background:var(--paper); box-shadow:none; transform:translate(3px,3px)}
 .score .slabel{font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted)}
 .score .snum{font-family:var(--mono); font-size:44px; font-weight:700; line-height:1; letter-spacing:-2px;
   font-variant-numeric:tabular-nums; margin-top:4px}
@@ -214,10 +199,14 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 .scoreverdict{margin:8px 2px 0; color:var(--ink); font-weight:500; min-height:0}
 .scoreverdict:empty{display:none}
 .scoredetail{margin-top:10px}
-@media (max-width:400px){
-  .score{padding:10px 8px 8px}
-  .score .snum{font-size:34px}
-  .score .slabel{letter-spacing:1px}
+.scores ~ .nowbar{margin-top:14px}
+@media (max-width:520px){
+  .scores{gap:8px}
+  .score{padding:9px 6px 8px}
+  .score .snum{font-size:30px; letter-spacing:-1.5px}
+  .score .slabel{font-size:10px; letter-spacing:1px}
+  .score .sword{font-size:9.5px; letter-spacing:.4px}
+  .score .ssub{font-size:11px}
 }
 .weighin{border-top:1px dashed var(--line); margin-top:12px; padding-top:10px}
 
