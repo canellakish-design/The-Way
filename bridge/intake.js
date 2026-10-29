@@ -105,8 +105,8 @@ function suggestSnack(actual, target, opts) {
   const carbCap = o.post ? Infinity : o.day === 'rest' ? 15 : o.day === 'normal' ? 30 : Infinity;
   let best = null;
   for (const s of (SNACKS.snacks || [])) {
-    if (s.carbs_g > carbCap) continue;
     for (let n = 1; n <= 2; n++) {
+      if (s.carbs_g * n > carbCap) continue;
       const after = {
         kcal: (actual.kcal || 0) + s.kcal * n,
         carbs_g: (actual.carbs_g || 0) + s.carbs_g * n,
@@ -118,7 +118,13 @@ function suggestSnack(actual, target, opts) {
       if (!sc || sc.overall == null) continue;
       const gain = sc.overall - base.overall;
       if (gain <= 0) continue;
-      if (!best || gain > best.gain || (gain === best.gain && s.kcal * n < best.kcal)) {
+      // Protein first: among snacks within a few points of the best lift,
+      // the one carrying the most protein wins; the deficit runs on protein.
+      const protein = s.protein_g * n;
+      const better = !best ? true
+        : gain > best.gain + 3 ? true
+        : gain >= best.gain - 3 && (protein > best.protein_g + 2 || (Math.abs(protein - best.protein_g) <= 2 && gain > best.gain));
+      if (better) {
         best = { name: s.name, servings: n, gain, score_after: sc.overall,
           kcal: Math.round(s.kcal * n),
           carbs_g: Math.round(s.carbs_g * n * 10) / 10,
