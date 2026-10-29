@@ -33,3 +33,6 @@ bridge/calendar-strava-cache.json
 bridge/food-*.json
 bridge/food-index.json
 bridge/ride-*.json
+
+# research working notes (the report itself is kept in reports/)
+research_notes/
