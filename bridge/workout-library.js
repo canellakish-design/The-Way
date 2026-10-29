@@ -35,7 +35,7 @@ On the bike: 60 g carbs an hour from the first 20 minutes. Tailwind 2 scoops a b
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
   vo2: `VO2 MAX: ride Zwift's 40/20's #1 (Workouts > VO2 Max). The steps below only mirror it so the load shows here.
-Judge it by one number: minutes above 147 bpm, target 8 to 12.
+Judge it by one number: minutes above 152 bpm, target 8 to 12.
 When done: SAVE the ride in Zwift. Never exit without saving.
 
 EAT
