@@ -430,6 +430,22 @@ function attach(app) {
       // A dead source dims one lane of the day; it never blanks the page.
       const iv = await intervals.plannedRange(firstKey, lastKey)
         .catch(e => ({ configured: intervals.configured(), days: {}, error: e.message }));
+      // The plan's own workouts, merged in. One that was sent to the Garmin
+      // comes back from intervals.icu as well, so the same session on the same
+      // day at the same time is shown once, as the plan's copy (it links to
+      // the builder).
+      try {
+        const own = await require('./workouts').plannedDays(firstKey, lastKey);
+        for (const [k, list] of Object.entries(own)) {
+          const have = iv.days[k] || [];
+          const dup = p => have.some(e => (e.start_min ?? -1) === (p.start_min ?? -1)
+            && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase());
+          iv.days[k] = have.filter(e => !list.some(p => (p.start_min ?? -1) === (e.start_min ?? -1)
+              && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase()))
+            .concat(list);
+          iv.days[k].sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
+        }
+      } catch (e) { /* no plan store yet: the intervals.icu lane stands alone */ }
       // iCal feeds sit alongside the OAuth accounts — same day, same shape.
       const icsMod = require('./ics');
       const ics = await icsMod.fetchAll(firstKey, lastKey)

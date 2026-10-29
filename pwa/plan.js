@@ -65,7 +65,7 @@ V.calendar = async function(){
     for (const w of d.planned) rows.push(`<a class="pitem planned" href="#workout?id=${encodeURIComponent(w.id)}">
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}</span>
         <span class="pn">${esc(w.name)}</span>
-        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${syncBadge(w)}</span></a>`);
+        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:syncBadge(w)}</span></a>`);
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
         <span class="pn">${esc(e.name)}</span>

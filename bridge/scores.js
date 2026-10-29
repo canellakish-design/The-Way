@@ -21,8 +21,19 @@ async function build() {
   const from = tz.shiftKey(today, -(HISTORY_DAYS - 1));
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
 
-  const { stravaDone } = require('./workouts');
+  const { stravaDone, loggedPlanned } = require('./workouts');
   const done = await stravaDone(from, today, st).catch(e => ({ connected: false, reason: e.message, rides: [] }));
+  // Workouts saved on days already gone, with no Strava ride that day, are
+  // the rider's own log of what he did. They carry their planned TSS.
+  let logged = [];
+  try {
+    const plan = await getJSON('plan-workouts', { workouts: {} });
+    const byDate = {};
+    for (const r of done.rides || []) (byDate[r.date] = byDate[r.date] || []).push(r);
+    logged = loggedPlanned(Object.values(plan.workouts || {}).filter(w => w.date >= from && w.date <= today), st, today, byDate)
+      .map(w => ({ date: w.date, tss: w.metrics.tss, logged: true }));
+  } catch (e) { logged = []; }
+  const loads = (done.rides || []).concat(logged);
 
   // Passive WHOOP read: the webhook keeps it fresh; the page can force a sync.
   let whoop = null;
@@ -38,11 +49,11 @@ async function build() {
     wellness = d.wellness || [];
   } catch (e) { wellness = []; }
 
-  const out = M.scores({ loads: done.rides, from, to: today, today, shiftKey: tz.shiftKey, whoop, wellness });
+  const out = M.scores({ loads, from, to: today, today, shiftKey: tz.shiftKey, whoop, wellness });
   return Object.assign(out, {
     settings: { ftp: st.ftp, lthr: st.lthr },
     sources: {
-      strava: { connected: !!done.connected, reason: done.reason || null, rides: (done.rides || []).length,
+      strava: { connected: !!done.connected, reason: done.reason || null, rides: (done.rides || []).length, logged: logged.length,
         basis: 'TSS from NP against FTP ' + st.ftp + ' W when Strava has power, heart rate against LTHR ' + st.lthr + ' otherwise' },
       whoop: { connected: !!(whoop && whoop.connected), synced_at: whoop ? whoop.synced_at : null,
         auth_error: whoop ? whoop.auth_error : null }

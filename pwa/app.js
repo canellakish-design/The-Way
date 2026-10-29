@@ -1221,6 +1221,7 @@ const LANE = {
   class:     { tag:"class",   cls:"lane-class" },
   coaching:  { tag:"coach",   cls:"lane-coach" },
   intervals: { tag:"icu",     cls:"lane-icu"   },
+  plan:      { tag:"plan",    cls:"lane-icu"   },
   calendar:  { tag:"cal",     cls:"lane-cal"   },
   ride:      { tag:"ride",    cls:"lane-icu"   },
   open:      { tag:"open",    cls:"lane-open"  }
@@ -1502,6 +1503,8 @@ V.today = async function(){
     if (!el) return;
     el.querySelector(".snum").textContent = num == null ? "—" : num;
     el.querySelector(".snum").style.color = num == null ? "var(--muted)" : toneC(tone);
+    // The box itself carries the colour: the tone fills the background.
+    el.dataset.tone = num == null ? "none" : (tone || "neutral");
     const w = el.querySelector(".sword"); w.textContent = word || " "; w.style.color = toneC(tone);
     el.querySelector(".ssub").innerHTML = sub || "&nbsp;";
   };

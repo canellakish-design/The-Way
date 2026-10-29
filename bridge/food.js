@@ -42,8 +42,12 @@ async function sessionsFor(date) {
     for (const w of Object.values(d.workouts || {})) if (w.date === date) {
       const m = W.metrics(w.steps || [], st);
       const start = w.time ? tz.zonedToUTC(...date.split('-').map(Number), +w.time.slice(0, 2), +w.time.slice(3, 5)) : null;
-      out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, notes: w.notes || '', planned: true,
-        time: w.time || null, start_at: start ? start.toISOString() : null });
+      const { pastNow } = require('./workouts');
+      const logged = pastNow(w, tz.todayKey());
+      out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, notes: w.notes || '', planned: !logged, done: logged,
+        time: w.time || null, start_at: start ? start.toISOString() : null,
+        end_time: w.time ? F.toHM(F.toMin(w.time) + Math.round(m.duration_s / 60)) : null,
+        end_at: logged && start ? new Date(start.getTime() + m.duration_s * 1000).toISOString() : null });
     }
   } catch (e) { /* no plan store yet */ }
   try {

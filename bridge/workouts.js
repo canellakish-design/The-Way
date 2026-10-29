@@ -197,6 +197,21 @@ async function stravaDone(from, to, st) {
   return { connected: true, rides };
 }
 
+// A workout saved on a day already gone is the rider logging what he did,
+// not planning what he will do. It counts as done unless Strava has the ride.
+function pastNow(w, today) {
+  if (w.date < today) return true;
+  if (w.date > today) return false;
+  if (!isTime(w.time)) return false;
+  const p = tz.parts(new Date());
+  const endMin = (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) + Math.round(W.metrics(w.steps || [], W.DEFAULTS).duration_s / 60);
+  return p.h * 60 + p.mi >= endMin;
+}
+function loggedPlanned(workouts, st, today, ridesByDate) {
+  return workouts.filter(w => pastNow(w, today) && !(ridesByDate[w.date] || []).length)
+    .map(w => Object.assign(withMetrics(w, st), { logged: true }));
+}
+
 async function calendar(from, to) {
   const st = await settings();
   const d = await db();
@@ -205,22 +220,58 @@ async function calendar(from, to) {
     icuEvents(from, to).catch(e => ({ configured: true, error: e.message, events: [] })),
     stravaDone(from, to, st).catch(e => ({ connected: false, reason: e.message, rides: [] }))
   ]);
+  const today = tz.todayKey();
+  const ridesByDate = {};
+  for (const r of doneR.rides) (ridesByDate[r.date] = ridesByDate[r.date] || []).push(r);
   const days = [];
   for (let k = from; k <= to; k = tz.shiftKey(k, 1)) {
-    const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1);
+    const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1)
+      .map(w => pastNow(w, today) && !(ridesByDate[k] || []).length ? Object.assign({}, w, { logged: true }) : w);
     const i = icuR.events.filter(e => e.date === k);
     const done = doneR.rides.filter(r => r.date === k);
+    const logged = p.filter(w => w.logged);
     const plannedMin = Math.round(p.reduce((s, w) => s + w.metrics.duration_s, 0) / 60) + i.reduce((s, e) => s + (e.minutes || 0), 0);
-    const doneMin = done.reduce((s, r) => s + r.minutes, 0);
+    const doneMin = done.reduce((s, r) => s + r.minutes, 0) + Math.round(logged.reduce((s, w) => s + w.metrics.duration_s, 0) / 60);
     days.push({ date: k, planned: p, intervals: i, done,
       totals: { planned_min: plannedMin, done_min: doneMin,
         planned_tss: p.reduce((s, w) => s + w.metrics.tss, 0) + i.reduce((s, e) => s + (e.tss || 0), 0),
-        done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) } });
+        done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0) } });
     if (days.length > 62) break;
   }
-  return { from, to, today: tz.todayKey(), settings: st, days,
+  return { from, to, today, settings: st, days,
     sources: { intervals: { configured: icuR.configured, error: icuR.error || null },
                strava: { connected: doneR.connected, reason: doneR.reason || null } } };
+}
+
+// ---------- the day page ----------
+// The plan's own workouts in the shape the day page draws planned sessions
+// in (see intervals.js plannedRange), so a workout saved here shows on the
+// day whether or not it has been sent to the Garmin yet.
+function fmtMin(m) {
+  let h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? 'a' : 'p';
+  h = h % 12; if (h === 0) h = 12;
+  return h + ':' + String(mm).padStart(2, '0') + ap;
+}
+async function plannedDays(from, to) {
+  const st = await settings();
+  const d = await db();
+  const days = {};
+  for (const w of Object.values(d.workouts)) {
+    if (w.date < from || w.date > to) continue;
+    const m = W.metrics(w.steps || [], st);
+    const mins = Math.round(m.duration_s / 60);
+    const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
+    const timed = sm != null && sm > 0;
+    (days[w.date] = days[w.date] || []).push({
+      summary: w.name, detail: [mins + ' min', m.tss + ' TSS', w.sport].join(' · '),
+      description: w.notes || null,
+      category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
+      calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
+      workout_id: w.id, synced: !!(w.sync && w.sync.state === 'synced'),
+      ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
+    });
+  }
+  return days;
 }
 
 // ---------- routes ----------
@@ -305,4 +356,4 @@ function attach(app) {
     res.json({ ok: true, removed: w.id, removed_from_intervals: !!(w.sync && w.sync.intervals_event_id) }); });
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone };
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow };
