@@ -85,7 +85,11 @@ function cue(day, sessions, nowIso) {
     const name = next.x.name || 'the ride';
     if (next.dt <= 0) return { key: 'during', text: `${name} is on now: ${day === 'high' ? 'Tailwind in the bottle, a fig bar each hour on a long one' : 'water, one bottle'}.` };
     if (next.dt <= 60) return { key: 'pre-close', text: `${name} in ${Math.round(next.dt)} min: nothing heavy now. A banana or rice cakes if you need something.` };
-    if (next.dt <= 180) return { key: 'pre', text: day === 'high'
+    const early = toMin(next.x.time) != null && toMin(next.x.time) < 7 * 60 + 30;
+    if (next.dt <= 180) return { key: 'pre', text: early
+      ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or rice cakes 45 minutes before, breakfast after.`
+                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and go. Zone 1 needs nothing before it; eat straight after.`)
+      : day === 'high'
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: carb breakfast now, oats and fruit, then water.`
       : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: low carb breakfast now. Protein smoothie, eggs or Greek yogurt, no toast.` };
     return { key: 'ahead', text: `${name} at ${next.x.time || 'later'}: ${day === 'high' ? 'carbs at every meal before it' : 'low carb until the ride, protein first'}.` };
@@ -95,9 +99,6 @@ function cue(day, sessions, nowIso) {
 }
 
 // ---- the day's meals, timed around the session ----
-const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; };
-const toHM = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
-const r5 = x => Math.round(x / 5) * 5;
 
 // sessions: [{name, time:'HH:MM', end_time:'HH:MM', minutes, done}] in the
 // athlete's zone. Returns [{time, slot, what, kcal, carbs_g, protein_g}].
@@ -175,6 +176,10 @@ function slotFor(plan, hm) {
 
 // One photo's verdict, from the model's assessment, to points.
 const FIT_POINTS = { yes: 100, partly: 60, no: 20 };
+const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+const toHM = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+const r5 = x => Math.round(x / 5) * 5;
+
 
 // entries: [{at, meal, assessment:{protein_source, carbs, vegetables, processed, fits}}]
 // rides: [{end_at}] done rides for the day, for the post-ride window.

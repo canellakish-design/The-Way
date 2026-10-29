@@ -180,6 +180,10 @@ async function stravaDone(from, to, st) {
     // otherwise the heart-rate method against threshold. Labelled as such.
     let tss = null, basis = null;
     if (a.weighted_average_watts) { const IF = a.weighted_average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'power'; }
+    // Strava only reports a weighted average on some rides; a plain average
+    // still beats scoring the ride as nothing (it reads a little low on a
+    // variable ride, which is the honest direction to be wrong in).
+    else if (a.average_watts) { const IF = a.average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'average power'; }
     else if (a.average_heartrate) { const IF = Math.max(0, (a.average_heartrate - st.hr_rest) / (st.lthr - st.hr_rest)); tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'heart rate'; }
     return { id: a.id, date, time: String(a.start_date_local || '').slice(11, 16), name: a.name || 'Activity',
       type: a.sport_type || a.type || null, minutes: Math.round(secs / 60),

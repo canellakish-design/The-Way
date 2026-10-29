@@ -69,6 +69,8 @@ ok('cue: follows the next scheduled session and the post-ride window', () => {
   // a Zone 1 morning: low carb breakfast before it, a protein smoothie
   const z1 = [{ name: 'Zone 1, 60 min', start_at: at(9), time: '09:00' }];
   assert.ok(/low carb breakfast/i.test(F.cue('normal', z1, at(7)).text));
+  const dawn = [{ name: 'Zone 1, 45 min', start_at: at(6), time: '06:00' }];
+  assert.ok(/coffee and go/i.test(F.cue('normal', dawn, at(4)).text));
   assert.ok(F.guidelines('normal').some(g => /protein smoothie/i.test(g.text)));
   assert.strictEqual(F.cue('rest', [], at(13)).key, 'rest');
 });
