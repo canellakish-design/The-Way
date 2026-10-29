@@ -34,9 +34,11 @@ function dueFraction(nowMin) {
   return Math.max(0, Math.min(1, (nowMin - WAKE) / (SLEEP - WAKE)));
 }
 
-function band(score) {
+// The word says what the number means: green early in the day is "on pace",
+// not hydrated; it reads "hydrated" only once the whole day's target is in.
+function band(score, done) {
   if (score == null) return { key: 'none', word: '', tone: 'neutral' };
-  if (score >= 80) return { key: 'green', word: 'hydrated', tone: 'good' };
+  if (score >= 80) return { key: 'green', word: done ? 'hydrated' : 'on pace', tone: 'good' };
   if (score >= 50) return { key: 'yellow', word: 'behind', tone: 'warn' };
   return { key: 'red', word: 'dry', tone: 'bad' };
 }
@@ -53,9 +55,9 @@ function score(entries, opts) {
   const logged = (entries || []).some(e => e && !e.supplement);
   const s = logged ? Math.min(100, Math.round(drunk / due * 100)) : null;
   const left = Math.max(0, t.total - drunk);
-  return { score: s, band: band(s), drunk_ml: drunk, due_ml: due, target: t, left_ml: left, drinks,
+  return { score: s, band: band(s, drunk >= t.total), drunk_ml: drunk, due_ml: due, target: t, left_ml: left, drinks,
     note: s == null ? 'Nothing logged yet. A glass, a mug or a bottle in any photo counts; a photo of the bottle alone counts too.'
-      : drunk >= due ? `${(drunk / 1000).toFixed(1)} L so far, ahead of the day. ${left ? (left / 1000).toFixed(1) + ' L more by bedtime.' : 'Done for the day.'}`
+      : drunk >= due ? `${(drunk / 1000).toFixed(1)} L so far, on pace for the time of day. ${left ? (left / 1000).toFixed(1) + ' L more by bedtime.' : 'Done for the day.'}`
       : `${(drunk / 1000).toFixed(1)} L so far, ${((due - drunk) / 1000).toFixed(1)} L behind where the day should be. Drink ${Math.min(500, due - drunk)} ml now.` };
 }
 

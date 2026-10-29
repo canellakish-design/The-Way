@@ -16,7 +16,7 @@ ok('paced through the day: breakfast is not judged against the whole target', ()
   const morning = H.score(glass, { kg: 104, now_min: 8 * 60 });   // 2 h in: 3100 × 2/16 ≈ 400 due
   assert.strictEqual(morning.due_ml, 400);
   assert.strictEqual(morning.score, 88);
-  assert.strictEqual(morning.band.key, 'green');
+  assert.strictEqual(morning.band.key, 'green'); assert.strictEqual(morning.band.word, 'on pace');
   const noon = H.score(glass, { kg: 104, now_min: 12 * 60 });    // 6 h in: 1150 due
   assert.strictEqual(noon.score, 30);
   assert.strictEqual(noon.band.key, 'red');
@@ -40,7 +40,7 @@ ok('nothing logged is no score; meals without a drink score zero; a past day is 
   const dry = H.score([{ id: 'm', fluid_ml: 0, kcal: 600 }], { kg: 104, now_min: 10 * 60 });
   assert.strictEqual(dry.score, 0); assert.strictEqual(dry.band.key, 'red');
   const whole = H.score([{ id: 'm', fluid_ml: 3100 }], { kg: 104, now_min: null });
-  assert.strictEqual(whole.score, 100); assert.strictEqual(whole.left_ml, 0);
+  assert.strictEqual(whole.score, 100); assert.strictEqual(whole.left_ml, 0); assert.strictEqual(whole.band.word, 'hydrated');
   assert.ok(/Done for the day/.test(whole.note));
 });
 
