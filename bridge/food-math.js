@@ -86,22 +86,22 @@ function targets(day, kcalFromRiding, opts) {
 function guidelines(day, opts) {
   const o = opts || {};
   const g = [
-    { key: 'protein', text: 'Protein at every meal, 45 g or more: at 55 a meal needs 0.4 g/kg to build. About 200 g for the day.' },
+    { key: 'protein', text: 'Protein at every meal, 45 g or more.' },
     { key: 'plants', text: 'Vegetables or fruit at two meals or more.' }
   ];
   if (day === 'high') {
-    g.push({ key: 'carbs', text: 'Higher carb day: carbs at every meal. Rice, oats, potatoes, bread, fruit.' });
+    g.push({ key: 'carbs', text: 'Higher carb day: carbs at every meal.' });
     g.push({ key: 'pre', text: 'Carb breakfast 2 to 3 hours before the ride: oats and fruit.' });
-    g.push({ key: 'post', text: 'A real meal within 2 hours of the ride: 45 g protein and carbs. The 30-minute window only matters with a second session the same day.' });
+    g.push({ key: 'post', text: 'A real meal within 2 hours of the ride: 45 g protein and carbs.' });
   } else if (day === 'normal') {
-    g.push({ key: 'pre', text: 'Zone 1 day: low carb breakfast before the ride, with 20 g of protein in it. Protein smoothie, eggs, Greek yogurt.' });
-    g.push({ key: 'carbs', text: 'Carbs at the meal after the ride, protein-led everywhere else. Not more than 3 low-carb days in a row.' });
+    g.push({ key: 'pre', text: 'Zone 1 day: low carb breakfast before the ride, 20 g protein in it.' });
+    g.push({ key: 'carbs', text: 'Carbs at the meal after the ride, protein-led everywhere else.' });
     g.push({ key: 'post', text: 'Protein and carbs within 2 hours of the ride.' });
   } else {
-    g.push({ key: 'carbs', text: 'Rest day: no extra carbs. Starches at one meal only, beside protein.' });
+    g.push({ key: 'carbs', text: 'Rest day: starches at one meal only.' });
   }
-  g.push({ key: 'processed', text: 'Nothing ultra-processed. Sweets and fried food are a miss.' });
-  if (o.deficit !== false) g.push({ key: 'deficit', text: 'Portions sized for a 450 kcal deficit: the plate is half protein and vegetables.' });
+  g.push({ key: 'processed', text: 'Nothing ultra-processed.' });
+  if (o.deficit !== false) g.push({ key: 'deficit', text: 'Half the plate protein and vegetables.' });
   return g;
 }
 

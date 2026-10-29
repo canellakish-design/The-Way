@@ -2016,7 +2016,6 @@ function complianceHTML(c){
     <ul class="agenda totals">
       ${row("carbs","carbs_g")}${row("protein","protein_g")}${row("fat","fat_g")}${row("kcal","kcal")}
     </ul>
-    <div class="small">${esc(c.basis)}.</div>
     ${snack}`;
 }
 
