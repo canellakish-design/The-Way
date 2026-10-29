@@ -1606,6 +1606,8 @@ V.today = async function(){
           ${row("WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
           ${row("HRV", `${r.hrv ?? "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(r.hrv_delta_pct)}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
           ${row("resting HR", `${r.rhr ?? "—"} bpm${r.rhr_delta != null ? ` · <b style="color:${toneC(r.rhr_delta <= 0 ? "good" : r.rhr_delta >= 5 ? "bad" : "warn")}">${sgn(r.rhr_delta)}</b> vs ${r.rhr_baseline}` : ""}`)}
+          ${r.resp != null ? row("breathing, overnight", `${r.resp} /min${r.resp_delta != null ? ` · <b style="color:${toneC(Math.abs(r.resp_delta) < 1 ? "good" : Math.abs(r.resp_delta) >= 2 ? "bad" : "warn")}">${sgn(r.resp_delta)}</b> vs ${r.resp_baseline}` : ""}`) : ""}
+          ${r.spo2 != null ? row("blood oxygen", `${r.spo2}%`) : ""}
           ${row("slept", `${r.sleep_h ?? "—"} h${r.sleep_performance != null ? ` · ${r.sleep_performance}% of need` : ""}`)}
         </ul>
         <div class="small">${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}</div>`
@@ -1613,7 +1615,7 @@ V.today = async function(){
             : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
             : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
         ${w.auth_error && r.score != null ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
-        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. HRV and resting HR are also read here against your 30-day median, the way Oura and Garmin do it: HRV down 10% or resting HR up 5 means the night did not do its job.</div>`;
+        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. HRV, resting HR and overnight breathing rate are also read here against your 30-day median, the way Oura and Garmin do it: HRV down 10%, resting HR up 5, or breathing up 2 a minute means the night did not do its job, or something is coming on.</div>`;
     }
     box.innerHTML = html; box.hidden = false;
     const sb = document.getElementById("snackLog");

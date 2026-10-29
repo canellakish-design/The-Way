@@ -33,6 +33,19 @@ ok('gradeOne: the plan against the ride, by the smaller of time and load', () =>
   assert.strictEqual(dayCompliance([g], { planned_min: 60 }, true, 1).band, 'green');
   assert.strictEqual(dayCompliance([], { planned_min: 0 }, true, 1).band, 'extra');
   assert.strictEqual(dayCompliance([], { planned_min: 0 }, true, 0), null);
+  // the plan lives in intervals.icu: the day's totals grade it
+  assert.strictEqual(dayCompliance([], { planned_min: 60, planned_tss: 40, done_min: 114, done_tss: 86 }, true, 1).band, 'green');
+  assert.strictEqual(dayCompliance([], { planned_min: 60, planned_tss: 40, done_min: 20, done_tss: 10 }, true, 1).band, 'red');
+});
+
+ok('gradeOne: a VO2 session is graded by minutes above 147 when the heart rate was read', () => {
+  const vo2 = { name: 'VO2 max: Zwift 40/20s #1', metrics: { duration_s: 3000, tss: 65 } };
+  const ride = { minutes: 50, tss: 60, analysis: { hr: { minutes_above_hard: 9.5 } } };
+  assert.strictEqual(gradeOne(vo2, [ride]).compliance.band, 'green');
+  assert.ok(/above 147/.test(gradeOne(vo2, [ride]).compliance.basis));
+  assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60, analysis: { hr: { minutes_above_hard: 3 } } }]).compliance.band, 'red');
+  // no heart rate read yet: time and load, as for any session
+  assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60 }]).compliance.band, 'green');
 });
 
 console.log(n + ' passed');

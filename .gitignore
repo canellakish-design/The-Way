@@ -32,3 +32,4 @@ bridge/calendar-strava-cache.json
 # Food: the photo journal (food.js)
 bridge/food-*.json
 bridge/food-index.json
+bridge/ride-*.json

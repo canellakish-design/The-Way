@@ -141,7 +141,10 @@ function scores(input) {
   const hist = (wellness || []).filter(w => w && w.date !== today).slice(-30);
   const hrv = vsBaseline(rec ? rec.hrv : null, hist.map(w => w.hrv));
   const rhr = vsBaseline(rec ? rec.rhr : null, hist.map(w => w.rhr));
+  const resp = vsBaseline(rec ? rec.resp : null, hist.map(w => w.resp));
   const recovery = {
+    resp: rec ? rec.resp ?? null : null, resp_baseline: resp.baseline, resp_delta: resp.delta,
+    spo2: rec ? rec.spo2 ?? null : null, skin_temp_c: rec ? rec.skin_temp_c ?? null : null,
     score: rec && rec.score != null ? Math.round(rec.score) : null,
     band: recoveryBand(rec ? rec.score : null),
     hrv: rec ? rec.hrv ?? null : null, hrv_baseline: hrv.baseline, hrv_delta_pct: hrv.delta_pct,

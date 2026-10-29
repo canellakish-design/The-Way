@@ -250,6 +250,16 @@ function gradeOne(w, rides) {
   const plannedMin = w.metrics.duration_s / 60, plannedTss = w.metrics.tss;
   if (w.logged) return Object.assign({}, w, { compliance: { pct: 100, band: 'green', basis: 'logged by hand' } });
   if (!rides.length) return Object.assign({}, w, { compliance: { pct: 0, band: 'red', basis: 'no ride on Strava' } });
+  // The VO2 session has its own yardstick: minutes above 147 bpm, 8 to 12.
+  // When the ride's heart rate has been read, that is the grade.
+  if (/vo2|40\s*\/\s*20/i.test(String(w.name || ''))) {
+    const R = require('./ride-math');
+    const withHr = rides.filter(r => r.analysis && r.analysis.hr);
+    if (withHr.length) {
+      const mins = Math.round(withHr.reduce((s, r) => s + r.analysis.hr.minutes_above_hard, 0) * 10) / 10;
+      return Object.assign({}, w, { compliance: R.vo2Grade(mins) });
+    }
+  }
   const doneMin = rides.reduce((s, r) => s + r.minutes, 0);
   const doneTss = rides.reduce((s, r) => s + (r.tss || 0), 0);
   const tPct = plannedMin ? doneMin / plannedMin : 1;
@@ -272,6 +282,13 @@ function dayCompliance(planned, totals, dayOver, rideCount) {
     return { pct, band: bandOf(pct), basis: 'planned sessions against the day\'s rides' };
   }
   if (!totals.planned_min) return rideCount ? { pct: null, band: 'extra', basis: 'ridden with nothing planned' } : null;
+  // The plan that day lives in intervals.icu: grade the day's totals instead.
+  if (rideCount) {
+    const t = totals.done_min / totals.planned_min;
+    const l = totals.planned_tss && totals.done_tss ? totals.done_tss / totals.planned_tss : null;
+    const pct = Math.round(100 * Math.min(1, l == null ? t : Math.min(t, l)));
+    return { pct, band: bandOf(pct), basis: `${totals.done_min} of ${totals.planned_min} min planned in intervals.icu` };
+  }
   if (!dayOver) return null;
   return { pct: 0, band: 'red', basis: 'nothing ridden' };
 }
@@ -285,6 +302,17 @@ async function calendar(from, to) {
     stravaDone(from, to, st).catch(e => ({ connected: false, reason: e.message, rides: [] }))
   ]);
   const today = tz.todayKey();
+  // What the streams said about each ride, when it has been read. Reads are
+  // cached per ride; up to two unread rides are analysed on this call so a
+  // week fills in over a few loads without leaning on Strava's limits.
+  let fresh = 0;
+  for (const r of doneR.rides) {
+    try {
+      const c = await getJSON('ride-' + String(r.id).replace(/\D/g, ''), null);
+      if (c) r.analysis = { hr: c.hr, resp: c.resp, sources: c.sources };
+      else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, sources: a.sources }; }
+    } catch (e) { /* unread stays unread */ }
+  }
   const ridesByDate = {};
   for (const r of doneR.rides) (ridesByDate[r.date] = ridesByDate[r.date] || []).push(r);
   const days = [];

@@ -38,7 +38,7 @@ async function noteWellness(d) {
     if (!rec || rec.score == null) return false;
     const date = tz.todayKey();
     if (d.wellness.some(w => w.date === date)) return false;
-    d.wellness.push({ date, hrv: rec.hrv ?? null, rhr: rec.rhr ?? null, recovery: rec.score });
+    d.wellness.push({ date, hrv: rec.hrv ?? null, rhr: rec.rhr ?? null, recovery: rec.score, resp: rec.resp ?? null });
     if (d.wellness.length > MAX_WELLNESS) d.wellness = d.wellness.slice(-MAX_WELLNESS);
     return true;
   } catch (e) { return false; /* WHOOP unreachable — confound filter stays inert */ }

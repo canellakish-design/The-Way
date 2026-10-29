@@ -21,6 +21,8 @@ require('./workouts').attach(app);
 require('./scores').attach(app);
 // Food: the photo journal, scored against the day's guidelines.
 require('./food').attach(app);
+// Every ride, read: heart rate and breathing from the streams.
+require('./rides').attach(app);
 require('./macros').attach(app);
 require('./intake').attach(app);
 require('./status').attach(app);

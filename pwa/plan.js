@@ -73,10 +73,14 @@ V.calendar = async function(){
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
         <span class="pn">${esc(e.name)}</span>
         <span class="pm">${e.minutes?hm(e.minutes):"—"}${e.tss?" · "+e.tss+" TSS":""} <span class="pbadge">Planned outside The Way</span></span></div>`);
-    for (const r of d.done) rows.push(`<div class="pitem done">
+    for (const r of d.done){
+      const a = r.analysis, h = a && a.hr, b = a && a.resp;
+      rows.push(`<div class="pitem done">
         <span class="pk">Done${r.time?" · "+esc(r.time):""}</span>
         <span class="pn">${esc(r.name)}</span>
-        <span class="pm">${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span></div>`);
+        <span class="pm">${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
+        ${h?`<span class="pm small">${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}</span>`:""}</div>`);
+    }
     let verdict = "";
     const dc = d.compliance;
     if (dc && dc.band === "extra") verdict = `<span class="pbadge">Unplanned ride</span>`;

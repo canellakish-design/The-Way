@@ -159,7 +159,11 @@ async function sleepLatest(opts) {
       ? { hours: hoursAsleep(d.nap), at: d.nap.start } : null,
     recovery: r ? { score: r.score ? r.score.recovery_score : null,
                     hrv: r.score ? r.score.hrv_rmssd_milli : null,
-                    rhr: r.score ? r.score.resting_heart_rate : null } : null
+                    rhr: r.score ? r.score.resting_heart_rate : null,
+                    // breaths per minute overnight; WHOOP reports it on the sleep record
+                    resp: s && s.score && s.score.respiratory_rate != null ? Math.round(s.score.respiratory_rate * 10) / 10 : null,
+                    spo2: r.score && r.score.spo2_percentage != null ? Math.round(r.score.spo2_percentage * 10) / 10 : null,
+                    skin_temp_c: r.score && r.score.skin_temp_celsius != null ? Math.round(r.score.skin_temp_celsius * 10) / 10 : null } : null
   };
 }
 function attach(app) {
