@@ -102,6 +102,16 @@ ok('mealPlan: meals are timed around the session', () => {
   const early = F.mealPlan('normal', [{ name: 'Zone 1, 45 min', time: '05:30', minutes: 45 }], F.targets('normal', 200));
   assert.strictEqual(early[0].slot, 'before');
   assert.strictEqual(early[0].time, '04:45');
+  assert.strictEqual(early[2].slot, 'breakfast');            // after a dawn ride, the post-ride meal is breakfast
+  // an evening ride: breakfast and lunch as normal, light before, the post-ride meal is dinner
+  const eve = F.mealPlan('normal', [{ name: 'Zone 1, 90 min', time: '19:00', minutes: 90 }], F.targets('normal', 370));
+  assert.deepStrictEqual(eve.map(m => m.slot), ['breakfast', 'lunch', 'before', 'on the bike', 'dinner']);
+  assert.strictEqual(eve[0].time, '07:00'); assert.strictEqual(eve[2].time, '17:00'); assert.strictEqual(eve[4].time, '21:00');
+  assert.ok(eve.every(m => F.toMin(m.time) >= 5 * 60), 'nothing wraps past midnight');
+  // a midday ride: breakfast is the pre-ride meal, lunch is the post-ride meal
+  const mid = F.mealPlan('high', [{ name: 'VO2 max: Zwift 40/20s #1', time: '12:00', minutes: 50 }], F.targets('high', 400));
+  assert.deepStrictEqual(mid.map(m => m.slot), ['breakfast', 'before', 'on the bike', 'lunch', 'dinner', 'snack']);
+  assert.strictEqual(mid[3].time, '13:20');
   const rest = F.mealPlan('rest', [], F.targets('rest', 0));
   assert.strictEqual(rest.length, 4);
   assert.ok(rest.every(m => /^\d{2}:\d{2}$/.test(m.time)));
