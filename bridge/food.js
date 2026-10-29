@@ -384,6 +384,7 @@ function attach(app) {
       if (b.name) e.name = String(b.name).slice(0, 80);
       if (['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal)) e.meal = b.meal;
       if (['yes', 'partly', 'no'].includes(b.fits)) e.assessment.fits = b.fits;
+      if (/^\d{2}:\d{2}$/.test(b.time || '')) { e.time = b.time; const gl = await guidelinesFor(date); e.slot = F.slotFor(gl.meals, e.time); doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time))); }
       e.corrected = true;
       await setJSON(dayKey(date), doc);
       // keep the ledger in step
@@ -410,6 +411,9 @@ function attach(app) {
       let merged;
       if (b.text && String(b.text).trim()) {
         if (date !== tz.todayKey()) return res.status(400).json({ error: 'a re-read is only for today' });
+        // The originals go first: if the read outlives the function, the page shows the gap, never three entries.
+        doc.entries = doc.entries.filter(e => !ids.includes(e.id)); await setJSON(dayKey(date), doc);
+        for (const id of ids) await removeFromLedger(id);
         const r = await addPhoto({ text: String(b.text).trim(), meal });
         doc = await dayDoc(date);
         merged = doc.entries.find(e => e.id === r.entry.id);
@@ -441,7 +445,7 @@ function attach(app) {
       doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time)));
       await setJSON(dayKey(date), doc);
       for (const id of ids) await removeFromLedger(id);
-      res.json({ ok: true, entry: merged, day: await dayReport(date) });
+      res.json({ ok: true, entry: merged });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.delete('/food/:id', async (req, res) => { if (!auth(req, res)) return;

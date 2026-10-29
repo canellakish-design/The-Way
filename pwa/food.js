@@ -151,7 +151,7 @@ V.food = async function(){
       const text = prompt(`Combine "${prev.name}" and "${cur.name}" into one meal.\nDescribe the whole plate to have it read again (add anything the photos missed), or leave blank to just add them up:`, "");
       if (text == null) return;
       btn.disabled = true;
-      try{ const r = await bridge("/food/merge",{method:"POST",headers:J,body:JSON.stringify({ ids:[prev.id, cur.id], date, text: text.trim() || undefined, meal: prev.meal })}); day = r.day; draw(); }
+      try{ await bridge("/food/merge",{method:"POST",headers:J,body:JSON.stringify({ ids:[prev.id, cur.id], date, text: text.trim() || undefined, meal: prev.meal })}); day = await bridge(`/food/day?date=${date}`); draw(); }
       catch(err){ alert(err.message); btn.disabled = false; }
     });
     el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
