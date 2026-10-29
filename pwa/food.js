@@ -256,7 +256,7 @@ V.food = async function(){
         meal: document.getElementById("snapMeal").value || undefined,
         notes: document.getElementById("snapNote").value || undefined })});
       showVerdict(r.entry);
-      form.hidden = true; file = null; fileEl.value = ""; msg.textContent = "";
+      form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
       day = r.day; draw();
     }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
