@@ -189,7 +189,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["flags","Flags"]];
+  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = h === "bedroom" ? "" :
     NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
@@ -1332,7 +1332,7 @@ V.today = async function(){
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="flags"><span class="slabel">Flags</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="workouts"><span class="slabel">Workouts</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1476,23 +1476,48 @@ V.today = async function(){
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
-  let scoresData = null, complianceData = null, foodData = null, flagsData = null, openScore = null;
+  let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null;
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : "bridge unreachable"); return; }
     const gaps = (m.gaps||[]).map(g=>g.label).join(", ");
     paintTile("micros", m.score, m.band.word, m.band.tone, gaps ? `low: ${gaps}` : "all covered");
   };
-  const drawFlagsTile = ()=>{
-    const f = flagsData;
-    if (!f){ paintTile("flags", null, "", "", "bridge unreachable"); return; }
-    if (!f.built){ paintTile("flags", null, "", "", "build on the Flags page"); return; }
-    const fresh = f.new_catches && f.new_catches.length ? `${f.new_catches.length} new catch${f.new_catches.length===1?"":"es"}!` : "";
-    if (fresh && window.flagBits) window.flagBits.setUnseen(window.flagBits.unseen().concat(f.new_catches));
-    if (!f.hunt){ paintTile("flags", f.caught_today ? f.caught_today.length : null, f.tss ? "no fit" : "rest day", "neutral", fresh || (f.tss ? `${f.tss} TSS planned` : "no ride planned")); return; }
-    const size = f.hunt.size, c = f.caught;
-    const tone = c >= size ? "good" : c >= size / 2 ? "warn" : "bad";
-    paintTile("flags", c, `${c}/${size}`, tone, fresh || f.hunt.route);
+  // Today's sessions: done over planned. A double day (a ride and the gym)
+  // reads 0/2, then 1/2, then 2/2. A ride nobody planned still counts as done.
+  const workoutsToday = ()=>{
+    const d = workoutsData && workoutsData.days && workoutsData.days[0];
+    if (!d) return null;
+    const planned = (d.planned||[]).map(w => ({ name: w.name, time: w.time || null, minutes: w.metrics ? Math.round(w.metrics.duration_s/60) : null, sport: w.sport,
+      done: !!(w.logged || (w.compliance && w.compliance.band !== "red") || (w.compliance && w.compliance.basis !== "no ride on Strava" && w.compliance.pct > 0)),
+      band: w.compliance ? w.compliance.band : null, pct: w.compliance ? w.compliance.pct : null }))
+      .concat((d.intervals||[]).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes, sport: e.type, done: false, band: null, pct: null, source: "intervals.icu" })));
+    const rides = d.done || [];
+    // Done: planned sessions Strava graded or that were logged by hand; an
+    // intervals.icu session is done when a ride is left over to cover it; a
+    // ride nobody planned counts as done too (so 3/2 can happen).
+    const stravaDone = planned.filter(p => p.done && p.source !== "intervals.icu").length;
+    let spare = Math.max(0, rides.length - planned.filter(p => p.done && p.band != null).length);
+    for (const p of planned) if (p.source === "intervals.icu" && !p.done && spare > 0) { p.done = true; p.band = "green"; spare--; }
+    const done = planned.filter(p => p.done).length + spare;
+    return { planned, rides, count: planned.length, done, compliance: d.compliance || null };
+  };
+  const drawWorkoutsTile = ()=>{
+    if (!workoutsData){ paintTile("workouts", null, "", "", "bridge unreachable"); return; }
+    const t = workoutsToday();
+    if (!t){ paintTile("workouts", null, "", "", "no day"); return; }
+    const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
+    const next = t.planned.find(p => !p.done);
+    const lastEnd = Math.max(0, ...t.planned.map(p => p.time ? (+p.time.slice(0,2))*60 + (+p.time.slice(3,5)) + (p.minutes||60) : 0));
+    const word = `${t.done}/${t.count}`;
+    let tone = "neutral";
+    if (t.count === 0) tone = t.done ? "good" : "neutral";
+    else if (t.done >= t.count) tone = "good";
+    else if (t.done > 0) tone = "warn";
+    else tone = (lastEnd && nowMin > lastEnd + 30) || (t.compliance && t.compliance.band === "red") ? "bad" : "neutral";
+    const sub = t.count === 0 ? (t.done ? `${t.done} unplanned ride${t.done===1?"":"s"}` : "rest day")
+      : next ? `${next.time ? hm12(next.time) + " · " : ""}${next.name}` : (t.compliance && t.compliance.word ? t.compliance.word : "all done");
+    paintTile("workouts", t.done, word, tone, sub);
   };
   const drawHydrationTile = ()=>{
     const h = foodData && foodData.hydration;
@@ -1588,7 +1613,7 @@ V.today = async function(){
     drawWeightTile();
     drawMicroTile();
     drawHydrationTile();
-    drawFlagsTile();
+    drawWorkoutsTile();
     drawScoreDetail();
   };
 
@@ -1597,7 +1622,7 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration" && openScore !== "flags")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "micros"){
@@ -1608,16 +1633,18 @@ V.today = async function(){
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
     }
-    if (openScore === "flags"){
-      const f = flagsData, B = window.flagBits || {};
-      html = `<h4>Flags · today's hunt</h4>
-        ${!f ? `<div class="small">bridge unreachable</div>` : !f.built ? `<div class="small">No flags yet. Build them from your routes on the Flags page.</div>`
-          : f.hunt ? `<div class="small">${f.hunt.tss} TSS planned${f.virtual ? " on Zwift" : ""} fits <b>${esc(f.hunt.route)}</b>: ${f.hunt.size} flags within reach, ${f.caught} caught.</div>
-            <ul class="agenda totals flaglist">${f.hunt.flags.map(x => `<li class="${x.caught_today?"got":""}"><span class="n">${B.icon ? B.icon(x.kind) : "⚑"} ${esc(x.name)} ${B.rbadge ? B.rbadge(x.rarity) : ""}</span><span class="tag">${x.caught_today ? "caught ✓" : `${x.work_tss} TSS · km ${x.km}`}</span></li>`).join("")}</ul>`
-          : `<div class="small">${f.tss ? `${f.tss} TSS planned, no ${f.virtual ? "Zwift" : "road"} flags fit it yet.` : "Rest day: no hunt."}</div>`}
-        ${f && f.level ? `<div class="small">Level ${f.level.level} · ${f.level.xp} XP · ${f.level.next - f.level.xp} to the next level.</div>` : ""}
-        <a class="btn primary" href="#flags">The flags</a>
-        <div class="small">Iconic spots on your routes are flags: summits, dams, bridges, viewpoints, towns, the far turn. The day's planned work picks a route and the flags it reaches; ride past one and the ride's GPS track on Strava catches it. Green is the hunt complete, amber half of it, red less. Rarity is how often you have been there; a flag you have never reached is legendary and worth the most.</div>`;
+    if (openScore === "workouts"){
+      const t = workoutsToday();
+      const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
+      html = `<h4>Workouts · today</h4>
+        ${!t ? `<div class="small">bridge unreachable</div>` : `<ul class="agenda totals">
+          ${t.planned.map(p => row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${p.minutes ? ` <span class="small">${p.minutes} min</span>` : ""}`,
+              p.done ? `<b style="color:${toneC(bandTone(p.band || "green"))}">${p.band === "yellow" ? "partly" : p.band === "red" ? "missed" : p.pct > 120 ? "over" : "done"}</b>${p.pct != null ? ` · ${p.pct}%` : ""}` : `<span class="small">to do</span>`)).join("")}
+          ${t.rides.filter(r => !t.planned.some(p => p.done)).map(r => row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`)).join("")}
+          ${!t.planned.length && !t.rides.length ? `<li><span class="n">Nothing planned</span><span class="tag">rest day</span></li>` : ""}
+        </ul>`}
+        <a class="btn primary" href="#calendar">The calendar</a>
+        <div class="small">Done over planned for the day: a ride and a gym session read 0/2, then 1/2, then 2/2. A planned session counts as done when Strava has the ride (graded green, yellow or over against the plan) or when it was logged by hand; a ride nobody planned counts too. Green when everything is done, amber part-way, red once the last session's time has passed with nothing recorded. The flag game still lives at <a href="#flags">#flags</a>.</div>`;
       box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "hydration"){
@@ -1709,11 +1736,11 @@ V.today = async function(){
     drawScoreDetail();
   });
   const refreshScores = async ()=>{
-    [scoresData, complianceData, foodData, flagsData] = await Promise.all([
+    [scoresData, complianceData, foodData, workoutsData] = await Promise.all([
       bridge("/scores").catch(()=>null),
       bridge("/compliance").catch(()=>null),
       bridge("/food/today").catch(()=>null),
-      bridge("/flags/today").catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${k}&to=${k}`); })().catch(()=>null)
     ]);
     drawScores();
   };
