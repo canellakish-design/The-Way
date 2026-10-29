@@ -83,7 +83,7 @@ V.calendar = async function(){
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?" · today":""}</h4>
         <span class="small">${d.totals.planned_min?hm(d.totals.planned_min)+" planned":""}${d.totals.done_min?" · "+hm(d.totals.done_min)+" done":""} ${verdict}</span></div>
       ${rows.join("") || `<div class="small pempty">Rest${past?"":", or nothing planned yet"}.</div>`}
-      <a class="padd" href="#workout?date=${d.date}">${past ? "+ Log a ride you did" : "+ Plan a workout"}</a>
+      ${past ? `<div class="small">What was ridden comes in from the Garmin through Strava.</div>` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
   }
   html += `<div class="card"><h4>Planning numbers</h4><div id="pSettings" class="small">loading…</div></div>`;
@@ -134,16 +134,15 @@ V.workout = async function(){
 
   const box = document.getElementById("pB");
   // A new workout is planned ahead: without a day from the calendar it lands
-  // on tomorrow, never on a day already gone. A past day still works when
-  // chosen on purpose from the week, as the log of a ride already done.
+  // on tomorrow, and never on a day already gone. The past is Strava's
+  // record, filled in by the Garmin, not something typed in here.
   const today = localToday();
-  const date0 = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : keyAdd(today, 1);
-  const inPast = date0 < today;
+  const wanted = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : keyAdd(today, 1);
+  const date0 = wanted < today ? keyAdd(today, 1) : wanted;
 
   if (!W){   // pick a starting point
-    box.innerHTML = `<span class="eyebrow">${inPast ? "Log a ride · " : "New workout · "}${esc(dayLabel(date0))}</span>
+    box.innerHTML = `<span class="eyebrow">New workout · ${esc(dayLabel(date0))}</span>
       <h2 class="ptitle">Start from</h2>
-      ${inPast ? `<div class="card pwarn"><div class="small">${esc(dayLabel(date0))} has passed. A workout saved here counts as a ride you did, unless Strava has one that day. To plan ahead, pick a later date in the builder.</div></div>` : ""}
       <div class="plib">${lib.map((t,i)=>`<button class="plibitem" data-i="${i}">
         <span class="pn">${esc(t.name)}</span>
         <span class="pm">${clock(t.metrics.duration_s)} · ${t.metrics.tss} TSS · ${esc(SPORT[t.sport]||t.sport)}</span></button>`).join("")}
@@ -165,7 +164,7 @@ V.workout = async function(){
       <div class="card">
         <label for="wName">Name</label><input id="wName" value="${esc(W.name)}">
         <div class="row3">
-          <div><label for="wDate">Date</label><input id="wDate" type="date" value="${esc(W.date)}"></div>
+          <div><label for="wDate">Date</label><input id="wDate" type="date" min="${saved ? "" : today}" value="${esc(W.date)}"></div>
           <div><label for="wTime">Start</label><input id="wTime" type="time" value="${esc(W.time||"")}"></div>
           <div><label for="wSport">Where</label><select id="wSport">
             ${["Ride","VirtualRide"].map(s=>`<option value="${s}"${W.sport===s?" selected":""}>${SPORT[s]}</option>`).join("")}</select></div>
