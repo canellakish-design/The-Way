@@ -91,14 +91,22 @@ function scoreDay(actual, target) {
    most. Nothing that pushes calories more than 5% past the day's target is
    allowed to win — closing a protein gap by blowing the energy budget isn't
    compliance, it's a different miss. */
-function suggestSnack(actual, target) {
+// opts.day: 'rest' | 'normal' | 'high' (food-math). A sugar drink is a
+// post-ride tool on a hard day, not a rest-day snack: the carbs a snack may
+// carry are capped by the day. opts.post: true inside the post-ride window
+// lifts the cap. One serving, two at most; nobody wants three pints of
+// anything.
+function suggestSnack(actual, target, opts) {
   if (!target) return null;
+  const o = opts || {};
   const base = scoreDay(actual, target);
   if (!base || base.overall == null) return null;
   const kcalCeiling = target.kcal ? target.kcal * 1.05 : Infinity;
+  const carbCap = o.post ? Infinity : o.day === 'rest' ? 15 : o.day === 'normal' ? 30 : Infinity;
   let best = null;
   for (const s of (SNACKS.snacks || [])) {
-    for (let n = 1; n <= 3; n++) {
+    if (s.carbs_g > carbCap) continue;
+    for (let n = 1; n <= 2; n++) {
       const after = {
         kcal: (actual.kcal || 0) + s.kcal * n,
         carbs_g: (actual.carbs_g || 0) + s.carbs_g * n,
@@ -147,7 +155,8 @@ async function compliance(date) {
     actual: actual || null,
     source: actual ? actual.from : null,
     compliance: scored,
-    suggestion: actual ? suggestSnack(actual, food.target) : null,
+    // Nothing to close a gap against until something has been eaten.
+    suggestion: actual && (actual.kcal > 0 || food.entries.length) ? suggestSnack(actual, food.target, { day: food.day, post: !!(food.cue && food.cue.key === 'post') }) : null,
     meals: food.entries.length,
     // Mid-morning you are "under" on everything and that is not a failure.
     // Say what the number means rather than letting it be read as a verdict.

@@ -204,7 +204,7 @@ async function dayReport(date) {
     meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
     actual, entries,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide },
-    suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target) : null,
+    suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,
     basis: 'day-to-date photos against the day\'s guidelines and the whole-day target'
   };
 }
