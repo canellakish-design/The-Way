@@ -39,7 +39,7 @@ ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
 
 ok('guidelines: every day has protein and plants; the carb rule follows the day', () => {
   assert.ok(F.guidelines('high').some(g => g.key === 'pre'));
-  assert.ok(F.guidelines('rest').some(g => /no extra carbs/i.test(g.text)));
+  assert.ok(F.guidelines('rest').some(g => /one meal only/i.test(g.text)));
   assert.ok(F.guidelines('high').some(g => /2 hours/i.test(g.text)));
   assert.ok(F.guidelines('normal').every(g => g.text.length < 120));
 });
