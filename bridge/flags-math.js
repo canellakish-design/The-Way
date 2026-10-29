@@ -105,12 +105,21 @@ function classify(tags) {
 }
 // The Overpass query for named features within 200 m of the route polyline (vertices every 600 m; the
 // snap to the road in placeFlags is the fine filter). Sent by POST, so its size only costs bandwidth.
-function overpassQuery(points) {
-  const pts = downsample(points, 600).map(p => p.lat.toFixed(5) + ',' + p.lng.toFixed(5)).join(',');
+function overpassQuery(points, shape) {
   // Nodes and ways only (relations need their whole geometry and are slow); the kinds that make a spot iconic.
   const node = ['natural~"^(peak|saddle)$"', 'tourism~"^(viewpoint|attraction)$"', 'man_made~"^(lighthouse|tower)$"', 'place~"^(town|village|hamlet)$"', 'historic', 'amenity=cafe'];
   const way = ['waterway=dam', 'man_made=dam', 'natural~"^(water|beach)$"', 'leisure~"^(nature_reserve|park)$"', 'historic', 'man_made=bridge'];
-  return `[out:json][timeout:6];(${node.map(s => `node[name][${s}](around:200,${pts});`).join('')}${way.map(s => `way[name][${s}](around:200,${pts});`).join('')});out center tags 150;`;
+  let where;
+  if (shape === 'line') {
+    const pts = downsample(points, 600).map(p => p.lat.toFixed(5) + ',' + p.lng.toFixed(5)).join(',');
+    where = `(around:200,${pts})`;
+  } else {
+    // The route's box, padded 300 m; the snap to the road in placeFlags is the fine filter.
+    const lats = points.map(p => p.lat), lngs = points.map(p => p.lng);
+    const pad = 0.003;
+    where = `(${(Math.min(...lats) - pad).toFixed(4)},${(Math.min(...lngs) - pad).toFixed(4)},${(Math.max(...lats) + pad).toFixed(4)},${(Math.max(...lngs) + pad).toFixed(4)})`;
+  }
+  return `[out:json][timeout:6];(${node.map(s => `node[name][${s}]${where};`).join('')}${way.map(s => `way[name][${s}]${where};`).join('')});out center tags 300;`;
 }
 function parsePois(json) {
   const out = [];

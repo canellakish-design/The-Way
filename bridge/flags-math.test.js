@@ -75,8 +75,9 @@ ok('routesFromTracks groups rides by name; worldOf names the Zwift world; the Ga
   const tcx = G.tcxCourse(main, flags);
   assert.ok(/<CoursePoint><Name>Loch Raven<\/Name>/.test(tcx) && /<Track>/.test(tcx));
   assert.ok(/<PointType>Summit<\/PointType>/.test(tcx));
-  const q = G.overpassQuery(main.points);
+  const q = G.overpassQuery(main.points, 'line');
   assert.ok(/around:200/.test(q) && q.length < 40000, 'query size ' + q.length);
+  assert.ok(/\(39\.397/.test(G.overpassQuery(main.points)), 'bbox by default');
   assert.deepStrictEqual(G.parsePois({ elements: [{ lat: 1, lon: 2, tags: { name: 'Hill', natural: 'peak' } }, { center: { lat: 3, lon: 4 }, tags: { name: 'Big Park', leisure: 'park' } }, { lat: 5, lon: 6, tags: { natural: 'peak' } }] }).map(p => p.kind), ['summit', 'park']);
 });
 console.log(n + ' passed');

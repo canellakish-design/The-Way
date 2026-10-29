@@ -78,8 +78,8 @@ async function rides(from, to) {
 
 // ---- naming from OpenStreetMap ----
 const MIRRORS = [OVERPASS, 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
-async function namesFor(route, which) {
-  const body = 'data=' + encodeURIComponent(G.overpassQuery(route.points));
+async function namesFor(route, which, shape) {
+  const body = 'data=' + encodeURIComponent(G.overpassQuery(route.points, shape));
   const errs = [];
   for (const url of [MIRRORS[(which || 0) % MIRRORS.length]]) {   // one mirror per call: a function has ten seconds
     try {
@@ -342,6 +342,16 @@ function attach(app) {
       const d = await getJSON(routeKey(req.params.id), null);
       if (!d) return res.status(404).json({ error: 'no such route' });
       res.json({ id: d.id, name: d.name, virtual: !!d.virtual, points: G.downsample(d.points, 120).map(p => ({ lat: +p.lat.toFixed(5), lng: +p.lng.toFixed(5) })) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+
+  // Which map mirror answers, and how fast: for tuning the naming step.
+  app.get('/flags/overpass-test', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const d = await getJSON(routeKey(req.query.route || ''), null);
+      if (!d) return res.status(404).json({ error: 'no such route' });
+      const t0 = Date.now();
+      try { const pois = await namesFor(d, +(req.query.mirror || 0), req.query.shape || 'bbox'); res.json({ ok: true, ms: Date.now() - t0, pois: pois.length, sample: pois.slice(0, 12) }); }
+      catch (e) { res.json({ ok: false, ms: Date.now() - t0, error: e.message }); }
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/flags/course/:route.tcx', async (req, res) => { if (!auth(req, res)) return;
