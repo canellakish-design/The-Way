@@ -40,7 +40,29 @@ function thumbStrip(entries){
     return `<a class="thumb" href="#food" title="${esc(e.name)}" style="border-color:${toneC(f.tone)}">${img}<span class="small">${esc(clock(e.at))}</span></a>`;
   }).join("")}</div>`;
 }
-window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT };
+function microHTML(m, day){
+  if (!m) return `<div class="small">No photos on the journal yet. The score starts with the first meal.</div>`;
+  const bar = p => `<li><span class="n">${esc(p.label)}<span class="small"> ${p.value} of ${p.target} ${esc(p.unit)}</span></span>
+    <span class="tag"><span class="mbar"><i style="width:${p.pct}%;background:${p.pct>=80?"var(--green)":p.pct>=50?"var(--amber)":"var(--red)"}"></i></span><b>${p.pct}</b></span></li>`;
+  const sg = m.suggest || {};
+  const foods = (sg.foods||[]).map(f=>`<li><span class="n">${esc(f.name)}<span class="small"> ${f.serving_g} g · ${f.kcal} kcal · ${esc((f.closes||[]).join(", "))}</span></span><span class="tag">${m.score} → <b>${f.score_after}</b></span></li>`).join("");
+  const supps = (sg.supplements||[]).map(x=>`<li><span class="n">${esc(x.name)}<span class="small"> ${esc(x.note||"")}</span></span>
+    <span class="tag">${m.score} → <b>${x.score_after}</b> <button class="linkish" data-supp="${esc(x.key)}">log</button></span></li>`).join("");
+  return `<div class="recovery"><span class="recscore" style="color:${toneC(m.band.tone)}">${m.score}</span>
+      <span class="recmeta"><span class="recword" style="color:${toneC(m.band.tone)}">${esc(m.band.word)}</span>
+        <div class="small">${m.days_used} day${m.days_used===1?"":"s"} of photos${m.gaps&&m.gaps.length?` · low: ${esc(m.gaps.map(g=>g.label).join(", "))}`:""}</div></span></div>
+    <ul class="agenda totals micros">${m.per.map(bar).join("")}</ul>
+    ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b> — what lifts it most, fitting today's fuel day</div><ul class="agenda totals">${foods}</ul>`:""}
+    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}`;
+}
+function wireMicro(root, onChange){
+  root.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{
+    b.disabled = true; b.textContent = "logging…";
+    try{ await bridge("/food/supplement",{method:"POST",headers:J,body:JSON.stringify({key:b.dataset.supp})}); if (onChange) await onChange(); }
+    catch(e){ b.textContent = "failed — " + e.message; }
+  });
+}
+window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro };
 
 /* ---- the page ---- */
 V.food = async function(){
@@ -104,8 +126,10 @@ V.food = async function(){
           <div class="small">${day.suggestion.kcal} kcal · ${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P · ${day.suggestion.fat_g}F — ${esc(day.suggestion.why)}, score ${day.suggestion.score_before} → <b>${day.suggestion.score_after}</b></div></div>` : ""}
         <div class="small">${esc(day.basis)}. Half the score is the macros against the target, half is how each photo fits the rules.</div>
       </div>
+      <div class="card" id="fMicro"><h4>Micronutrients · three days</h4>${microHTML(day.micros, day)}</div>
       <span class="eyebrow">The journal · ${day.entries.length} ${day.entries.length===1?"meal":"meals"}</span>
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
+    wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
     el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
       if (!confirm("Remove this meal from the journal?")) return;
@@ -122,6 +146,9 @@ V.food = async function(){
     });
   };
   const entryHTML = (e)=>{
+    if (e.supplement) return `<div class="card jentry supp"><div class="jrow"><span class="jthumb nothumb">Rx</span>
+      <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · supplement</div><div class="jname">${esc(e.name)}</div><div class="small">${esc(e.notes||"")}</div></div>
+      <div class="jfit">${isToday?`<button class="pdanger" data-del="${esc(e.id)}">Remove</button>`:""}</div></div></div>`;
     const a = e.assessment || {};
     const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${esc((e.name||"?").slice(0,2))}</span>`;
     return `<div class="card jentry">

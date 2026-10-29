@@ -1330,6 +1330,7 @@ V.today = async function(){
       <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1473,7 +1474,13 @@ V.today = async function(){
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
-  let scoresData = null, complianceData = null, openScore = null;
+  let scoresData = null, complianceData = null, foodData = null, openScore = null;
+  const drawMicroTile = ()=>{
+    const m = foodData && foodData.micros;
+    if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : "bridge unreachable"); return; }
+    const gaps = (m.gaps||[]).map(g=>g.label).join(", ");
+    paintTile("micros", m.score, m.band.word, m.band.tone, gaps ? `low: ${gaps}` : "all covered");
+  };
   const drawWeightTile = ()=>{
     const w = bodyData;
     if (!w || !w.latest){ paintTile("weight", null, "", "", w ? (w.withings_connected ? "no reading yet" : "scale not connected") : "bridge unreachable"); return; }
@@ -1553,6 +1560,7 @@ V.today = async function(){
     if (vd) vd.textContent = verdictOf(d);
     drawFood();
     drawWeightTile();
+    drawMicroTile();
     drawScoreDetail();
   };
 
@@ -1561,9 +1569,17 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
+    if (openScore === "micros"){
+      const B = window.foodBits || {};
+      html = `<h4>Micronutrients · three days</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
+        <div class="small">Thirteen nutrients an endurance athlete in a deficit runs short of, each scored as intake against its daily target and capped at 100, averaged, on a three-day rolling window. The numbers come from the foods the camera saw, priced from a USDA-based table; a food the table does not know takes the model's estimate. Sodium is a floor, not a cap. Supplements log with one tap and count.</div>`;
+      box.innerHTML = html; box.hidden = false;
+      if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
+      return;
+    }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">The number on the box is the latest reading; the word is the week-over-week move of the 7-day average, down green, up red. ${bodyData && bodyData.start_lb ? "Measured against the " + bodyData.start_lb + " lb start." : ""}</div>`;
       box.innerHTML = html; box.hidden = false; wireBody(box); return;
@@ -1639,9 +1655,10 @@ V.today = async function(){
     drawScoreDetail();
   });
   const refreshScores = async ()=>{
-    [scoresData, complianceData] = await Promise.all([
+    [scoresData, complianceData, foodData] = await Promise.all([
       bridge("/scores").catch(()=>null),
-      bridge("/compliance").catch(()=>null)
+      bridge("/compliance").catch(()=>null),
+      bridge("/food/today").catch(()=>null)
     ]);
     drawScores();
   };

@@ -3,7 +3,7 @@
   "version": "1.1.0",
   "private": true,
   "scripts": {
-    "test": "node bridge/workout-math.test.js && node bridge/scores-math.test.js && node bridge/food-math.test.js && node bridge/workouts.test.js && node bridge/ride-math.test.js && node bridge/zones.test.js && node bridge/ics.test.js"
+    "test": "node bridge/workout-math.test.js && node bridge/scores-math.test.js && node bridge/food-math.test.js && node bridge/workouts.test.js && node bridge/ride-math.test.js && node bridge/micro-math.test.js && node bridge/zones.test.js && node bridge/ics.test.js"
   },
   "dependencies": {
     "@netlify/blobs": "^8.1.0",

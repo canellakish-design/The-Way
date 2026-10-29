@@ -24,6 +24,7 @@ const { auth, logMeal } = require('./fuel-log');
 const tz = require('./tz');
 const F = require('./food-math');
 const W = require('./workout-math');
+const MI = require('./micro-math');
 
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 const KEEP_DAYS = 60;
@@ -128,8 +129,15 @@ async function guidelinesFor(date) {
 const SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['food_name', 'meal_guess', 'portion', 'kcal', 'carbs_g', 'protein_g', 'fat_g', 'confidence',
-    'protein_source', 'carbs', 'vegetables', 'processed', 'fits', 'why'],
+    'protein_source', 'carbs', 'vegetables', 'processed', 'fits', 'why', 'ingredients', 'micronutrients'],
   properties: {
+    ingredients: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'grams'],
+      properties: { name: { type: 'string' }, grams: { type: 'integer' } } } },
+    micronutrients: { type: 'object', additionalProperties: false,
+      required: ['iron_mg', 'calcium_mg', 'magnesium_mg', 'potassium_mg', 'sodium_mg', 'zinc_mg', 'vitamin_d_ug', 'b12_ug', 'folate_ug', 'vitamin_c_mg', 'vitamin_a_ug', 'omega3_mg', 'fiber_g'],
+      properties: { iron_mg: { type: 'number' }, calcium_mg: { type: 'number' }, magnesium_mg: { type: 'number' }, potassium_mg: { type: 'number' },
+        sodium_mg: { type: 'number' }, zinc_mg: { type: 'number' }, vitamin_d_ug: { type: 'number' }, b12_ug: { type: 'number' }, folate_ug: { type: 'number' },
+        vitamin_c_mg: { type: 'number' }, vitamin_a_ug: { type: 'number' }, omega3_mg: { type: 'number' }, fiber_g: { type: 'number' } } },
     food_name: { type: 'string' },
     meal_guess: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
     portion: { type: 'string' },
@@ -155,6 +163,7 @@ ${(g.meals || []).map(m => `- ${m.time} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.k
 ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
+List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when there is a real protein serving (roughly 30 g or more); carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
@@ -191,19 +200,28 @@ async function dayReport(date) {
   const g = await guidelinesFor(date);
   const doc = await dayDoc(date);
   const entries = doc.entries.map(e => Object.assign({}, e, { photo: undefined }));
-  const sum = k => Math.round(entries.reduce((a, e) => a + (e[k] || 0), 0));
+  const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
   const { scoreDay, suggestSnack } = require('./intake');
   const macro = scoreDay(actual, g.target);
   const rides = g.sessions.filter(s => s.done && s.end_at);
-  const guide = F.guidelineScore(g.day, entries, rides);
+  const guide = F.guidelineScore(g.day, entries.filter(e => !e.supplement), rides);
   const overall = F.overall(macro ? macro.overall : null, guide.score);
+  // Micronutrients: today and the two days before, so one short day does not read as a crisis.
+  const microDays = [MI.sumDays(entries.map(e => e.micros).filter(Boolean))];
+  for (let i = 1; i <= 2; i++) {
+    const prev = await getJSON(dayKey(tz.shiftKey(date, -i)), null);
+    if (prev && prev.entries && prev.entries.length) microDays.push(MI.sumDays(prev.entries.map(e => e.micros).filter(Boolean)));
+  }
+  const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays) : null;
+  const microSuggest = micro ? MI.suggest(microDays, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null;
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
-    actual, entries,
+    actual: Object.assign(actual, { meals: entries.filter(e => !e.supplement).length }), entries,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide },
+    micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,
     basis: 'day-to-date photos against the day\'s guidelines and the whole-day target'
   };
@@ -229,8 +247,12 @@ async function addPhoto(body) {
     confidence: a.confidence || 'medium', notes,
     assessment: { protein_source: !!a.protein_source, carbs: a.carbs || 'some', vegetables: !!a.vegetables,
       processed: !!a.processed, fits: a.fits || 'partly', why: String(a.why || '').slice(0, 240) },
-    thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null
+    thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null,
+    ingredients: Array.isArray(a.ingredients) ? a.ingredients.slice(0, 20).map(i => ({ name: String(i.name || '').slice(0, 60), grams: Math.max(0, Math.round(i.grams || 0)) })) : [],
+    micros: null, micros_matched_pct: null, micros_unknown: []
   };
+  const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
+  entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.
   await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64 }).catch(() => {});
   const doc = await dayDoc(date);
@@ -274,6 +296,21 @@ function attach(app) {
     try {
       const entry = await addPhoto(req.body || {});
       res.json({ ok: true, entry, day: await dayReport(entry.date) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+
+  // A supplement is an entry without a photo: one tap, its nutrients counted.
+  app.post('/food/supplement', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const sm = MI.supplementMicros(String((req.body || {}).key || ''));
+      if (!sm) return res.status(400).json({ error: 'unknown supplement' });
+      const date = tz.todayKey();
+      const p = tz.parts(new Date());
+      const entry = { id: 'f_' + crypto.randomBytes(5).toString('hex'), at: new Date().toISOString(), date,
+        time: String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'), slot: null, meal: 'supplement', supplement: true, key: sm.key,
+        name: sm.name, portion: '', kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, confidence: 'high', notes: sm.note || '',
+        assessment: null, thumb: null, ingredients: [], micros: sm.micros, micros_matched_pct: 100, micros_unknown: [] };
+      const doc = await dayDoc(date); doc.entries.push(entry); await setJSON(dayKey(date), doc);
+      res.json({ ok: true, entry, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
   app.get('/food/photo/:id', async (req, res) => { if (!auth(req, res)) return;
