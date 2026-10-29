@@ -18,7 +18,11 @@
 //     HR are read against a personal baseline (Oura, Garmin do the same).
 // ============================================================
 
-const CTL_DAYS = 42, ATL_DAYS = 7;
+// 42 and 7 are TrainingPeaks' nominal constants. The fatigue constant is
+// what moves form, and the masters evidence (perceived recovery still down
+// at 48 h, neuromuscular function back at 48 h not 24; Coggan used 10 days
+// for himself at 57) says 10 for a 55-year-old, not 7.
+const CTL_DAYS = 42, ATL_DAYS = 10;
 const round1 = x => Math.round(x * 10) / 10;
 
 // days: [{date, tss}] in ascending date order, one entry per calendar day.
@@ -67,24 +71,55 @@ function formZone(tsb) {
     note: 'Deep in the hole. Back off before something breaks.' };
 }
 
+// Weekly fitness ramp. Friel's 5 to 8 is a pro-derived heuristic; for an
+// amateur in his fifties the coaching range is 3 to 5 (Couzens), so
+// building runs 2 to 6 and above 6 is too fast. No trial has tested either.
 function rampBand(ramp) {
   if (ramp == null) return null;
   if (ramp < -2) return { key: 'losing', word: 'losing', tone: 'warn' };
   if (ramp < 2) return { key: 'holding', word: 'holding', tone: 'neutral' };
-  if (ramp <= 8) return { key: 'building', word: 'building', tone: 'good' };
+  if (ramp <= 6) return { key: 'building', word: 'building', tone: 'good' };
   return { key: 'too-fast', word: 'too fast', tone: 'bad' };
 }
 
-function acwr(atl, ctl) {
-  if (!ctl || ctl < 5) return null;        // nothing to compare against yet
-  return Math.round(atl / ctl * 100) / 100;
+// The acute:chronic ratio is gone: Impellizzeri's reanalysis showed its
+// injury "signal" reproduces with a constant or random denominator. Foster's
+// monotony stays as an honest, individual flag: a week of same-sized days
+// carries more strain than the same load varied.
+function monotony(last7) {
+  const xs = (last7 || []).map(d => d.tss);
+  if (xs.length < 7) return null;
+  const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+  const sd = Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+  if (!sd) return mean ? { value: 9.9, strain: Math.round(mean * 7 * 9.9), band: 'high' } : null;
+  const m = Math.round(mean / sd * 100) / 100;
+  return { value: m, strain: Math.round(mean * 7 * m), band: m >= 2 ? 'high' : 'ok' };
 }
-function acwrBand(r) {
-  if (r == null) return null;
-  if (r < 0.8) return { key: 'under', word: 'under-loaded', tone: 'neutral' };
-  if (r <= 1.3) return { key: 'safe', word: 'safe', tone: 'good' };
-  if (r < 1.5) return { key: 'high', word: 'high', tone: 'warn' };
-  return { key: 'spike', word: 'spike', tone: 'bad' };
+
+// HRV-guided readiness, the rule the trials used (Vesterinen 2016, Javaloyes
+// 2019): the 7-day mean of ln(rMSSD) against the 28-day mean, with a band of
+// half a standard deviation. Inside or above the band: train as planned.
+// Below it: swap the hard session for easy, keep the volume. Below it two
+// days running: rest. Needs 14 nights before it speaks; 28 to be trusted.
+function hrvGuide(wellness, todayHrv) {
+  const hist = (wellness || []).map(w => w && w.hrv).filter(v => Number.isFinite(v) && v > 0);
+  const all = todayHrv > 0 ? hist.concat([todayHrv]) : hist.slice();
+  if (all.length < 14) return { state: 'warming', days: all.length, note: `HRV guide needs ${14 - all.length} more nights` };
+  const ln = all.map(Math.log);
+  const base = ln.slice(-28);
+  const mean = base.reduce((a, b) => a + b, 0) / base.length;
+  const sd = Math.sqrt(base.reduce((a, b) => a + (b - mean) ** 2, 0) / base.length);
+  const lo = mean - 0.5 * sd, hi = mean + 0.5 * sd;
+  const week = ln.slice(-7); const m7 = week.reduce((a, b) => a + b, 0) / week.length;
+  const prevWeek = ln.slice(-8, -1); const m7prev = prevWeek.length ? prevWeek.reduce((a, b) => a + b, 0) / prevWeek.length : m7;
+  const below = m7 < lo, belowYesterday = m7prev < lo;
+  const state = !below ? (m7 > hi ? 'high' : 'ok') : belowYesterday ? 'low2' : 'low';
+  return { state, days: all.length, trusted: all.length >= 28,
+    week_mean: Math.round(Math.exp(m7)), band_lo: Math.round(Math.exp(lo)), band_hi: Math.round(Math.exp(hi)),
+    note: state === 'ok' ? 'HRV inside your band: train as planned'
+      : state === 'high' ? 'HRV above your band: good week to go hard'
+      : state === 'low' ? 'HRV below your band: swap the hard session for easy, keep the volume'
+      : 'HRV below your band two days running: rest' };
 }
 
 function recoveryBand(score) {
@@ -130,10 +165,9 @@ function scores(input) {
     tss_7d: tss7, tss_today: now.tss, days_of_data: series.length
   } : null;
 
-  const ratio = now ? acwr(now.atl, now.ctl) : null;
   const fatigue = now ? {
     atl: Math.round(now.atl), tsb: Math.round(now.tsb), form: formZone(now.tsb),
-    acwr: ratio, acwr_band: acwrBand(ratio),
+    monotony: monotony(last7),
     tss_yesterday: yesterday ? yesterday.tss : 0
   } : null;
 
@@ -149,6 +183,7 @@ function scores(input) {
     band: recoveryBand(rec ? rec.score : null),
     hrv: rec ? rec.hrv ?? null : null, hrv_baseline: hrv.baseline, hrv_delta_pct: hrv.delta_pct,
     rhr: rec ? rec.rhr ?? null : null, rhr_baseline: rhr.baseline, rhr_delta: rhr.delta,
+    guide: hrvGuide(hist, rec ? rec.hrv : null),
     sleep_h: whoop && whoop.sleep ? whoop.sleep.hours ?? null : null,
     sleep_performance: whoop && whoop.sleep ? whoop.sleep.performance ?? null : null,
     baseline_days: hist.filter(w => Number.isFinite(w.hrv)).length
@@ -158,5 +193,5 @@ function scores(input) {
     series: series.slice(Math.max(0, i - 27), i + 1).map(r => ({ date: r.date, tss: r.tss, ctl: r.ctl, atl: r.atl })) };
 }
 
-module.exports = { CTL_DAYS, ATL_DAYS, pmc, dailyLoads, formZone, rampBand, acwr, acwrBand,
+module.exports = { CTL_DAYS, ATL_DAYS, pmc, dailyLoads, formZone, rampBand, monotony, hrvGuide,
   recoveryBand, median, vsBaseline, scores };

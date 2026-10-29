@@ -23,7 +23,7 @@ const KEY = envStr('INTERVALS_ICU_API_KEY');
 const ATHLETE = envStr('INTERVALS_ICU_ATHLETE_ID');
 const ICU = envStr('INTERVALS_ICU_BASE') || 'https://intervals.icu/api/v1';
 const PER_CALL = 4;
-const key = id => 'ride-v2-' + String(id).replace(/\D/g, '');
+const key = id => 'ride-v3-' + String(id).replace(/\D/g, '');
 
 async function icuGet(pathname) {
   if (!(KEY && ATHLETE)) throw new Error('intervals.icu not configured');
@@ -47,25 +47,33 @@ async function icuActivityFor(ride) {
   return near && near.d <= 10 ? near.a : (list.length === 1 ? list[0] : null);
 }
 
-// Whatever intervals.icu holds about breathing: a respiration stream if the
-// FIT carried one, else the activity's own average. Field names are read
-// loosely on purpose; the result says what it found.
-async function breathingFrom(icuActivity) {
-  if (!icuActivity) return { resp: null, source: 'no intervals.icu activity matched' };
-  const fields = Object.keys(icuActivity).filter(k => /resp|breath/i.test(k));
-  let resp = null, streamType = null;
+// Breathing through intervals.icu. Two sources land there: the Tymewear
+// Connect IQ data field writes tyme_breath_rate, tyme_minute_volume and
+// tyme_tidal_volume into the Garmin file, which intervals.icu parses as the
+// streams respiration, tidal_volume_min (VE, L/min) and tidal_volume; and a
+// Garmin chest strap with R-R gives a respiration stream of its own. VE is
+// read against the VT1/VT2 ventilation from the ramp test when those are set
+// (POST /fitness/test with vt1_ve, vt2_ve).
+async function breathingFrom(icuActivity, thresholds) {
+  if (!icuActivity) return { resp: null, ve: null, source: 'no intervals.icu activity matched' };
+  const t = thresholds || {};
+  const fields = Object.keys(icuActivity).filter(k => /resp|breath|tidal|ventil/i.test(k));
+  let resp = null, ve = null, streamTypes = [];
   try {
-    const streams = await icuGet(`/activity/${encodeURIComponent(icuActivity.id)}/streams`);
+    const streams = await icuGet(`/activity/${encodeURIComponent(icuActivity.id)}/streams.json?types=respiration,tidal_volume_min,tidal_volume,heartrate`);
     const list = Array.isArray(streams) ? streams : (streams && Array.isArray(streams.streams) ? streams.streams : []);
-    const s = list.find(x => /resp|breath/i.test(String(x.type || x.name || '')));
-    if (s && Array.isArray(s.data)) { streamType = s.type || s.name; resp = R.respSummary(s.data); }
+    const byType = {}; for (const x of list) byType[String(x.type || x.name || '')] = x;
+    const r = byType.respiration || list.find(x => /resp|breath/i.test(String(x.type || x.name || '')));
+    if (r && Array.isArray(r.data)) { streamTypes.push(r.type || r.name); resp = R.respSummary(r.data); }
+    const v = byType.tidal_volume_min || list.find(x => /minute_volume|tidal_volume_min|ventil/i.test(String(x.type || x.name || '')));
+    if (v && Array.isArray(v.data)) { streamTypes.push(v.type || v.name); ve = R.veSummary(v.data, t.vt2_ve, t.vt1_ve); }
   } catch (e) { /* no stream access: fall through to the activity fields */ }
   if (!resp && fields.length) {
     const avg = fields.map(k => Number(icuActivity[k])).find(v => Number.isFinite(v) && v > 4 && v < 90);
     if (avg != null) resp = { avg: Math.round(avg * 10) / 10, max: null, p90: null, min: null, samples: 0 };
   }
-  return { resp, source: resp ? (streamType ? `intervals.icu stream "${streamType}" (Garmin)` : `intervals.icu field ${fields.join(', ')} (Garmin)`)
-    : (fields.length ? `intervals.icu has ${fields.join(', ')} but no value` : 'the Garmin recorded no respiration for this ride') ,
+  return { resp, ve, source: (resp || ve) ? `intervals.icu stream${streamTypes.length > 1 ? 's' : ''} ${streamTypes.join(', ')} (Garmin${ve ? ' + Tymewear' : ''})`
+    : (fields.length ? `intervals.icu has ${fields.join(', ')} but no value` : 'no breathing on this ride: pair the Tymewear data field on the Garmin'),
     icu_id: icuActivity.id };
 }
 
@@ -103,8 +111,10 @@ async function analyze(ride, opts) {
   let icuAct = null;
   try {
     icuAct = await icuActivityFor(ride);
-    const b = await breathingFrom(icuAct);
-    out.resp = b.resp; out.sources.resp = b.source; out.icu_id = b.icu_id || null;
+    let thresholds = {};
+    try { const f = await getJSON('fitness', {}); thresholds = f.test ? { vt1_ve: f.test.vt1_ve, vt2_ve: f.test.vt2_ve } : {}; } catch (e) { /* none */ }
+    const b = await breathingFrom(icuAct, thresholds);
+    out.resp = b.resp; out.ve = b.ve; out.sources.resp = b.source; out.icu_id = b.icu_id || null;
     if (!out.hr && icuAct) {
       const avg = Number(icuAct.average_heartrate), max = Number(icuAct.max_heartrate);
       if (avg > 30) { out.hr = { avg: Math.round(avg), max: max > 30 ? Math.round(max) : null, seconds: null, minutes_above_hard: null, hard_bpm: R.HR.hard, zones: null, zone_pct: null, estimated: 'intervals.icu averages only' }; out.sources.hr = 'intervals.icu average heart rate (Garmin)'; }

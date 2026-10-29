@@ -13,16 +13,23 @@ ok('fuelDay: VO2 or 90 min or 80 TSS is a higher carb day; a short ride is norma
   assert.strictEqual(F.fuelDay([]), 'rest');
 });
 
-ok('targets: energy bank minus the deficit, protein fixed, carbs take what is left', () => {
+ok('targets: Mifflin energy, the deficit, protein per kg, carb floors by day', () => {
+  assert.strictEqual(F.bmr(F.PROFILE), 1883);
+  assert.strictEqual(F.baseBurn(F.PROFILE), 2542);
   const t = F.targets('high', 600);
-  assert.strictEqual(t.kcal, 2200);
-  assert.strictEqual(t.protein_g, 190);
-  assert.strictEqual(t.fat_g, Math.round(2200 * 0.2 / 9));
-  assert.strictEqual(t.carbs_g, Math.round((2200 - 760 - t.fat_g * 9) / 4));
+  assert.strictEqual(t.kcal, 2700);                 // the 3 g/kg floor trims the deficit by a few kcal
+  assert.ok(t.deficit_trimmed > 0 && t.deficit_trimmed < 20, 'trimmed ' + t.deficit_trimmed);
+  assert.strictEqual(t.protein_g, 198);
+  assert.ok(t.carbs_g >= 312, 'high day carbs at least 3 g/kg: ' + t.carbs_g);
+  assert.ok(t.fat_g >= 73, 'fat floor');
   assert.strictEqual(t.fuel_day, 'higher carb day');
   const r = F.targets('rest', 0);
-  assert.strictEqual(r.kcal, 1600);
-  assert.ok(r.carbs_g < t.carbs_g, 'rest day carries fewer carbs');
+  assert.strictEqual(r.kcal, 2090);
+  assert.ok(r.carbs_g >= 156 && r.carbs_g < t.carbs_g, 'rest day carbs ' + r.carbs_g);
+  assert.strictEqual(r.deficit_trimmed, 0);
+  // the scale moves the numbers; a rest-ordered day drops the deficit
+  assert.ok(F.targets('rest', 0, { kg: 98 }).protein_g < r.protein_g);
+  assert.strictEqual(F.targets('rest', 0, { deficit: 0 }).kcal, 2540);
 });
 
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
@@ -32,6 +39,7 @@ ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
 ok('guidelines: every day has protein and plants; the carb rule follows the day', () => {
   assert.ok(F.guidelines('high').some(g => g.key === 'pre'));
   assert.ok(F.guidelines('rest').some(g => /no extra carbs/i.test(g.text)));
+  assert.ok(F.guidelines('high').some(g => /2 hours/i.test(g.text)));
   assert.ok(F.guidelines('normal').every(g => g.text.length < 120));
 });
 
@@ -47,8 +55,9 @@ ok('guidelineScore: photos against the rules, with the post-ride window', () => 
   assert.ok(g.checks.find(c => c.key === 'protein').ok === false);
   assert.ok(g.checks.find(c => c.key === 'plants').ok === true);
   assert.ok(g.checks.find(c => c.key === 'processed').ok === false);
-  // the ride ended at 10:30 and lunch at 12:00 is outside the 60-minute window
-  assert.strictEqual(g.checks.find(c => c.key === 'post').ok, false);
+  // the ride ended at 9:30 and lunch at 12:00 is outside the two-hour window
+  const g0 = F.guidelineScore('normal', e, [{ end_at: at(9).replace('09:00', '09:30') }]);
+  assert.strictEqual(g0.checks.find(c => c.key === 'post').ok, false);
   const g2 = F.guidelineScore('normal', e, [{ end_at: at(11).replace('11:00', '11:30') }]);
   assert.strictEqual(g2.checks.find(c => c.key === 'post').ok, true);
   assert.ok(g.score > 0 && g.score < 100);
@@ -65,12 +74,13 @@ ok('cue: follows the next scheduled session and the post-ride window', () => {
   assert.strictEqual(F.cue('high', planned, at(4)).key, 'ahead');
   const done = [{ name: 'Zone 1, 60 min', done: true, end_at: at(10) }];
   assert.strictEqual(F.cue('normal', done, at(10).replace('10:00', '10:20')).key, 'post');
+  assert.strictEqual(F.cue('normal', done, at(11).replace('11:00', '11:50')).key, 'post');
   assert.strictEqual(F.cue('normal', done, at(13)).key, 'after');
   // a Zone 1 morning: low carb breakfast before it, a protein smoothie
   const z1 = [{ name: 'Zone 1, 60 min', start_at: at(9), time: '09:00' }];
   assert.ok(/low carb breakfast/i.test(F.cue('normal', z1, at(7)).text));
   const dawn = [{ name: 'Zone 1, 45 min', start_at: at(6), time: '06:00' }];
-  assert.ok(/coffee and go/i.test(F.cue('normal', dawn, at(4)).text));
+  assert.ok(/coffee and a 20 g whey/i.test(F.cue('normal', dawn, at(4)).text));
   assert.ok(F.guidelines('normal').some(g => /protein smoothie/i.test(g.text)));
   assert.strictEqual(F.cue('rest', [], at(13)).key, 'rest');
 });
@@ -81,10 +91,13 @@ ok('mealPlan: meals are timed around the session', () => {
   assert.deepStrictEqual(slots.slice(0, 3), ['breakfast', 'on the bike', 'after']);
   assert.strictEqual(vo2[0].time, '06:30');
   assert.ok(/oats/.test(vo2[0].what));
-  assert.strictEqual(vo2[2].time, '10:05');
+  assert.strictEqual(vo2[2].time, '10:20');
   const z1 = F.mealPlan('normal', [{ name: 'Zone 1, 60 min', time: '09:00', minutes: 60 }], F.targets('normal', 300));
   assert.ok(/low carb breakfast/i.test(z1[0].what) && /smoothie/i.test(z1[0].what));
   assert.ok(/water/i.test(z1.find(m => m.slot === 'on the bike').what));
+  const long = F.mealPlan('high', [{ name: 'Zone 1, 150 min', time: '08:00', minutes: 150 }], F.targets('high', 900));
+  assert.strictEqual(long.find(m => m.slot === 'on the bike').carbs_g, 150);
+  assert.ok(/2 hours/.test(long.find(m => m.slot === 'after').what));
   const early = F.mealPlan('normal', [{ name: 'Zone 1, 45 min', time: '05:30', minutes: 45 }], F.targets('normal', 200));
   assert.strictEqual(early[0].slot, 'before');
   assert.strictEqual(early[0].time, '04:45');

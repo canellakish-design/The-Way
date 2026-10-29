@@ -61,15 +61,23 @@ function sumDays(days) {
   return tot;
 }
 
-// days: [{...micros}] for today and up to two days before (today first).
-function dayScore(days) {
-  const n = Math.max(1, (days || []).length);
-  const avg = sumDays(days);
-  for (const k of KEYS) avg[k] = avg[k] / n;
+// days: [{...micros}] for today and up to six days before (today first).
+// Each nutrient is averaged over its own window: energy-type nutrients
+// settle in 3 days, iron, vitamin D, B12, zinc, sodium and omega-3 need 7.
+// opts.ride_hours adds sweat sodium to the floor.
+function dayScore(days, opts) {
+  const o = opts || {};
+  const list = (days || []).slice(0, 7);
+  const n = Math.max(1, list.length);
   const per = KEYS.map(k => {
-    const t = TABLE.targets[k];
-    const pct = Math.min(100, Math.round(avg[k] / t * 100));
-    return { key: k, label: TABLE.labels[k] || k, value: r1(avg[k]), target: t, pct,
+    const win = Math.min(n, (TABLE.windows && TABLE.windows[k]) || 3);
+    const slice = list.slice(0, win);
+    const avg = slice.reduce((s, d) => s + (Number(d && d[k]) || 0), 0) / win;
+    let t = TABLE.targets[k];
+    if (k === 'sodium_mg') t = Math.round(t + 1000 * (o.ride_hours || 0));
+    const pct = Math.min(100, Math.round(avg / t * 100));
+    return { key: k, label: TABLE.labels[k] || k, value: r1(avg), target: t, pct, window: win,
+      settled: n >= ((TABLE.windows && TABLE.windows[k]) || 3),
       unit: k.endsWith('_mg') ? 'mg' : k.endsWith('_ug') ? 'µg' : 'g' };
   });
   const score = Math.round(per.reduce((s, p) => s + p.pct, 0) / per.length);
@@ -100,11 +108,11 @@ const CARBS = { 'white rice, cooked': 56, 'brown rice, cooked': 46, 'oats, cooke
 
 function suggest(days, opts) {
   const o = opts || {};
-  const base = dayScore(days);
+  const base = dayScore(days, o);
   const carbCap = o.post ? Infinity : o.day === 'rest' ? 15 : o.day === 'normal' ? 30 : Infinity;
   const today = (days && days[0]) || zero();
   const rest = (days || []).slice(1);
-  const scoreWith = add => dayScore([Object.fromEntries(KEYS.map(k => [k, (today[k] || 0) + (add[k] || 0)]))].concat(rest)).score;
+  const scoreWith = add => dayScore([Object.fromEntries(KEYS.map(k => [k, (today[k] || 0) + (add[k] || 0)]))].concat(rest), o).score;
   const out = [];
   for (const f of TABLE.foods) {
     const carbs = CARBS[f.name] || 0;
@@ -128,7 +136,8 @@ function suggest(days, opts) {
   const foods = out.filter(x => x.kind === 'food').slice(0, 3);
   const supps = out.filter(x => x.kind === 'supplement').slice(0, 3);
   return { score: base.score, foods: foods.map(x => ({ ...x, score_after: base.score + x.gain })),
-    supplements: supps.map(x => ({ ...x, score_after: base.score + x.gain })) };
+    supplements: supps.map(x => ({ ...x, score_after: base.score + x.gain })),
+    performance: TABLE.performance || [] };
 }
 
 module.exports = { KEYS, TABLE, findFood, plateMicros, supplementMicros, sumDays, dayScore, band, suggest, zero };

@@ -1519,14 +1519,21 @@ V.today = async function(){
     const r = d.recovery, f = d.fatigue, t = d.training;
     const strava = d.sources && d.sources.strava && d.sources.strava.connected;
     if (!r.band && !strava) return "";
-    if ((r.band && r.band.key === "red") || (strava && f.form && f.form.key === "overreached") || (strava && f.acwr_band && f.acwr_band.key === "spike"))
-      return "Easy day: Zone 1 under 116, or off. The body is asking, not the plan.";
-    if (r.band && r.band.key === "yellow" && strava && f.tsb < -10)
+    const g = r.guide || {};
+    // The HRV-guided rule the trials used, once it has its 14 nights: below
+    // the band two days running is rest; below it once is easy, same volume.
+    if (g.state === "low2") return "Rest day. HRV has sat below your band two days running; that is the signal the trials rested on.";
+    if (g.state === "low") return "Easy day: Zone 1 under 117, full volume. HRV is below your band; swap the hard session, keep the hours.";
+    if ((r.band && r.band.key === "red") || (strava && f.form && f.form.key === "overreached"))
+      return "Easy day: Zone 1 under 117, or off. The body is asking, not the plan.";
+    if (strava && f.monotony && f.monotony.band === "high" && f.tsb < -10)
+      return "Vary the week: seven same-sized days carry more strain than the load says. Make one of them long and one of them nothing.";
+    if (r.band && r.band.key === "yellow" && strava && f.tsb < -10 && g.state !== "ok" && g.state !== "high")
       return "Zone 1 today. Save the 40/20s for a green morning.";
-    if (r.band && r.band.key === "green" && (!strava || f.tsb >= -10))
+    if ((g.state === "high" || g.state === "ok" || (r.band && r.band.key === "green")) && (!strava || f.tsb >= -10))
       return "Green light. If the plan says VO2, today is the day.";
     if (strava && t.ramp && t.ramp.key === "too-fast")
-      return "Fitness is climbing faster than +8 a week. Hold the volume this week.";
+      return "Fitness is climbing faster than +6 a week. Hold the volume this week.";
     return "Train as planned.";
   };
   const drawScores = ()=>{
@@ -1575,7 +1582,7 @@ V.today = async function(){
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · three days</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
-        <div class="small">Thirteen nutrients an endurance athlete in a deficit runs short of, each scored as intake against its daily target and capped at 100, averaged, on a three-day rolling window. The numbers come from the foods the camera saw, priced from a USDA-based table; a food the table does not know takes the model's estimate. Sodium is a floor, not a cap. Supplements log with one tap and count.</div>`;
+        <div class="small">Thirteen nutrients an endurance athlete in a deficit runs short of, each scored as intake against its daily target and capped at 100, then averaged. Each nutrient averages over its own window, the number of days it takes before an intake average means anything: 3 days for fibre, magnesium and folate; 5 for calcium, potassium and vitamins C and A; 7 for iron, vitamin D, B12, zinc, sodium and omega-3. The numbers come from the foods the camera saw, priced from a USDA-based table; a food the table does not know takes the model's estimate. Sodium is a floor of 1,500 mg plus about a gram per hour of riding. Supplements log with one tap and count; iron and zinc only come up after a week of reading low, and iron only belongs with a ferritin result.</div>`;
       box.innerHTML = html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
@@ -1589,7 +1596,7 @@ V.today = async function(){
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a meal</a>
-        <div class="small">Half the score is the macros against the day's target, carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. The other half is the photo journal against today's guidelines: protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, fed inside the post-ride window. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure.</div>`;
+        <div class="small">Half the score is the macros against the day's target, carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
     } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>
@@ -1599,7 +1606,7 @@ V.today = async function(){
           ${row("last 7 days", `${t.tss_7d} TSS`)}
           ${row("today so far", `${t.tss_today} TSS`)}
         </ul>` : `<div class="small">Strava isn't answering (${esc((d.sources.strava||{}).reason || "not connected")}), so there is no ride history to score.</div>`}
-        <div class="small">Fitness is a 42-day weighted average of daily training stress (TSS), the Banister model that TrainingPeaks, intervals.icu and Strava all use: each day adds (TSS − fitness) ÷ 42. A sustainable build is +5 to +8 a week (Friel); more than that and the injury and illness risk climbs.
+        <div class="small">Fitness is a 42-day weighted average of daily training stress (TSS), the Banister model that TrainingPeaks, intervals.icu and Strava all use: each day adds (TSS − fitness) ÷ 42. Rides without power are scored by Banister's TRIMP from heart rate, an hour at threshold counting 100. A sustainable build for an amateur in his fifties is +2 to +6 a week (Friel's +5 to +8 was written for pros); past that the illness risk climbs.
         <br>${esc((d.sources.strava||{}).basis || "")}. ${d.sources.strava && d.sources.strava.rides ? d.sources.strava.rides + " rides in the last 120 days." : ""}</div>`;
     } else if (openScore === "fatigue"){
       const f = d.fatigue;
@@ -1607,11 +1614,11 @@ V.today = async function(){
         ${strava ? `<ul class="agenda totals">
           ${row("fatigue (ATL)", `<b>${f.atl}</b> TSS/day`)}
           ${row("form (TSB)", `<b style="color:${toneC(f.form.tone)}">${sgn(f.tsb)}</b> · ${esc(f.form.word)}`)}
-          ${row("acute : chronic", f.acwr == null ? "— (not enough fitness yet)" : `<b style="color:${toneC(f.acwr_band.tone)}">${f.acwr}</b> · ${esc(f.acwr_band.word)}`)}
+          ${f.monotony ? row("monotony, this week", `<b style="color:${toneC(f.monotony.band === "high" ? "warn" : "good")}">${f.monotony.value}</b> · ${f.monotony.band === "high" ? "same-sized days" : "varied"} · strain ${f.monotony.strain}`) : ""}
           ${row("yesterday", `${f.tss_yesterday} TSS`)}
         </ul>
         <div class="small"><b>${esc(f.form.word)}</b> — ${esc(f.form.note)}</div>` : `<div class="small">Strava isn't answering, so there is no ride history to score.</div>`}
-        <div class="small">Fatigue is the same average over 7 days. Form is yesterday's fitness minus yesterday's fatigue: above +25 transition, +5 to +25 fresh, −10 to +5 neutral, −10 to −30 productive, below −30 overreached (Friel's zones). The acute : chronic ratio is fatigue ÷ fitness: 0.8 to 1.3 is the safe band, 1.5 and up is a spike (Gabbett).</div>`;
+        <div class="small">Fatigue is the same average over 10 days, not TrainingPeaks' 7: masters athletes recover more slowly at 48 hours (perceived recovery and neuromuscular function both), and the fatigue constant is what moves form. Form is yesterday's fitness minus yesterday's fatigue: above +25 transition, +5 to +25 fresh, −10 to +5 neutral, −10 to −30 productive, below −30 overreached (Friel's zones, coaching heuristics). Monotony is the week's mean daily load over its spread (Foster): above 2, seven same-sized days, carries more strain than the same load varied. The acute : chronic ratio is gone; its injury signal did not survive reanalysis.</div>`;
     } else {
       const r = d.recovery, w = d.sources.whoop || {};
       const age = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime())/3.6e6 : null;
@@ -1620,6 +1627,7 @@ V.today = async function(){
       html = `<h4>Recovery · last night</h4>
         ${r.score != null ? `<ul class="agenda totals">
           ${row("WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
+          ${r.guide ? row("HRV guide", r.guide.state === "warming" ? `<span class="small">${esc(r.guide.note)}</span>` : `<b style="color:${toneC(r.guide.state === "low2" ? "bad" : r.guide.state === "low" ? "warn" : "good")}">${esc(r.guide.state === "ok" ? "in band" : r.guide.state === "high" ? "above band" : r.guide.state === "low" ? "below band" : "below, 2 days")}</b> · 7-day ${r.guide.week_mean} vs ${r.guide.band_lo}–${r.guide.band_hi}${r.guide.trusted ? "" : " (settling)"}`) : ""}
           ${row("HRV", `${r.hrv ?? "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(r.hrv_delta_pct)}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
           ${row("resting HR", `${r.rhr ?? "—"} bpm${r.rhr_delta != null ? ` · <b style="color:${toneC(r.rhr_delta <= 0 ? "good" : r.rhr_delta >= 5 ? "bad" : "warn")}">${sgn(r.rhr_delta)}</b> vs ${r.rhr_baseline}` : ""}`)}
           ${r.resp != null ? row("breathing, overnight", `${r.resp} /min${r.resp_delta != null ? ` · <b style="color:${toneC(Math.abs(r.resp_delta) < 1 ? "good" : Math.abs(r.resp_delta) >= 2 ? "bad" : "warn")}">${sgn(r.resp_delta)}</b> vs ${r.resp_baseline}` : ""}`) : ""}
@@ -1631,7 +1639,7 @@ V.today = async function(){
             : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
             : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
         ${w.auth_error && r.score != null ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
-        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. HRV, resting HR and overnight breathing rate are also read here against your 30-day median, the way Oura and Garmin do it: HRV down 10%, resting HR up 5, or breathing up 2 a minute means the night did not do its job, or something is coming on.</div>`;
+        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. The verdict above the boxes follows the HRV-guided rule the training trials used, not the colour: the 7-day mean of HRV against your own 28-day band of half a standard deviation. Inside or above the band, train as planned; below it, swap the hard session for easy and keep the volume; below it two days running, rest. The WHOOP colour is the stand-in until 14 nights are in (28 to trust it), and a red morning still means easy. In independent testing WHOOP's HRV tracks ECG closely; its recovery score itself did not track how recovered people said they felt, which is why the raw HRV drives the rule. Resting HR up 5 or overnight breathing up 2 a minute against your median is the illness flag.</div>`;
     }
     box.innerHTML = html; box.hidden = false;
     const sb = document.getElementById("snackLog");
@@ -1898,6 +1906,7 @@ function foodCardHTML(day){
       <span class="tag">${(m.logged||[]).length?"✓":m.kcal?m.kcal+" kcal":""}</span></li>`).join("");
   return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
     ${B.targetsRow ? B.targetsRow(day.target) : ""}
+    ${day.target && day.target.deficit_note ? `<div class="small"><b>Deficit:</b> ${esc(day.target.deficit_note)}</div>` : ""}
     ${day.work && !day.work.compliant ? `<div class="cue" style="border-color:var(--amber);background:var(--amber-soft)"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
     ${day.cue ? `<div class="cue"><b>Now:</b> ${esc(day.cue.text)}</div>` : ""}
     <div class="macros"><span class="mfuel" style="${b?`background:${tone(b.tone)};border-color:${tone(b.tone)}`:""}">${c.overall==null?"No score yet":"Compliance "+c.overall+" · "+esc(b.word)}</span>

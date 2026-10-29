@@ -53,7 +53,8 @@ function microHTML(m, day){
         <div class="small">${m.days_used} day${m.days_used===1?"":"s"} of photos${m.gaps&&m.gaps.length?` · low: ${esc(m.gaps.map(g=>g.label).join(", "))}`:""}</div></span></div>
     <ul class="agenda totals micros">${m.per.map(bar).join("")}</ul>
     ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b> — what lifts it most, fitting today's fuel day</div><ul class="agenda totals">${foods}</ul>`:""}
-    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}`;
+    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}
+    ${(sg.performance||[]).length?`<details class="ridenotes"><summary>Performance aids with real evidence (IOC)</summary><ul class="rules">${sg.performance.map(x=>`<li><b>${esc(x.name)}</b> — ${esc(x.note)}</li>`).join("")}</ul></details>`:""}`;
 }
 function wireMicro(root, onChange){
   root.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{
@@ -103,6 +104,7 @@ V.food = async function(){
     el.innerHTML = `
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
+        ${day.target.base_burn?`<div class="small">${day.target.base_burn} kcal a day before riding (Mifflin-St Jeor at ${day.target.kg} kg, light-active) + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div>`:""}
         <div class="small">${sessions || "No training on the calendar, so a rest day."}</div>
         ${day.work ? `<div class="cue" style="border-color:${day.work.compliant?"var(--green)":"var(--amber)"};background:${day.work.compliant?"var(--green-soft)":"var(--amber-soft)"}"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
         <ul class="rules">${day.guidelines.map(g=>`<li>${esc(g.text)}</li>`).join("")}</ul>
@@ -155,7 +157,7 @@ V.food = async function(){
       <div class="jrow">${img}
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${esc(e.meal)}${e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}</div></div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.notes?"":" · photo only, ±35%"}</div></div>
         <div class="jfit">${fitBadge(a)}</div></div>
       <div class="small jwhy">${esc(a.why||"")}</div>
       <div class="jmore">

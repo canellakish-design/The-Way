@@ -162,6 +162,9 @@ function attach(app) {
       const d = await db();
       d.test = { vt2_power: Number(b.vt2_power), vt2_hr: b.vt2_hr ?? null,
         vt1_power: b.vt1_power ?? null, vt1_hr: b.vt1_hr ?? null,
+        // Tymewear reports the thresholds as ventilation too (L/min); with
+        // these set, a ride's VE stream is graded against them.
+        vt1_ve: b.vt1_ve ?? null, vt2_ve: b.vt2_ve ?? null,
         vo2max_power: b.vo2max_power ?? null, vo2max_hr: b.vo2max_hr ?? null,
         date: b.date || new Date().toISOString(), source: b.source || 'tymewear' };
       await setJSON('fitness', d);

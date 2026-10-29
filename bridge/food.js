@@ -112,10 +112,38 @@ async function sessionsFor(date) {
   return { sessions, ftp: st.ftp, work };
 }
 
+// The body's say on the deficit: a red WHOOP morning, or HRV below the band
+// two days running, means eat to maintenance today (the IOC's "adaptable"
+// low energy availability is the transient kind; prolonged is the problem).
+async function deficitFor(date) {
+  if (date !== tz.todayKey()) return { deficit: undefined, why: null };
+  try {
+    const s = await require('./whoop').sleepLatest({ sync: false });
+    const rec = s && s.recovery;
+    if (rec && rec.score != null && rec.score < 34) return { deficit: 0, why: `WHOOP recovery ${Math.round(rec.score)}: no deficit today, eat to maintenance` };
+    const fit = await getJSON('fitness', { wellness: [] });
+    const guide = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null);
+    if (guide.state === 'low2') return { deficit: 0, why: 'HRV below your band two days running: no deficit today, eat to maintenance' };
+  } catch (e) { /* no reading: the deficit stands */ }
+  return { deficit: undefined, why: null };
+}
+
+// The scale's latest reading sets the body mass the targets scale from.
+async function bodyKg() {
+  try {
+    const w = await getJSON('weigh-in', { entries: [] });
+    const latest = (w.entries || []).slice().sort((a, b) => a.ts - b.ts).pop();
+    return latest && latest.lb > 100 ? Math.round(latest.lb / 2.2046 * 10) / 10 : null;
+  } catch (e) { return null; }
+}
+
 async function guidelinesFor(date) {
   const { sessions, ftp, work } = await sessionsFor(date);
   const day = F.fuelDay(sessions);
-  const t = F.targets(day, F.workoutKcal(sessions, ftp));
+  const [{ deficit, why }, kg] = await Promise.all([deficitFor(date), bodyKg()]);
+  const t = F.targets(day, F.workoutKcal(sessions, ftp), { kg, deficit });
+  if (why) t.deficit_note = why;
+  if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
   return { date, day, fuel_day: t.fuel_day, target: t, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
@@ -207,14 +235,19 @@ async function dayReport(date) {
   const rides = g.sessions.filter(s => s.done && s.end_at);
   const guide = F.guidelineScore(g.day, entries.filter(e => !e.supplement), rides);
   const overall = F.overall(macro ? macro.overall : null, guide.score);
-  // Micronutrients: today and the two days before, so one short day does not read as a crisis.
+  // Micronutrients: today and up to six days before; each nutrient averages
+  // over its own window (3 days for the quick ones, 7 for iron, D, B12,
+  // zinc, sodium, omega-3). Sweat sodium is added from the day's riding.
   const microDays = [MI.sumDays(entries.map(e => e.micros).filter(Boolean))];
-  for (let i = 1; i <= 2; i++) {
+  for (let i = 1; i <= 6; i++) {
     const prev = await getJSON(dayKey(tz.shiftKey(date, -i)), null);
     if (prev && prev.entries && prev.entries.length) microDays.push(MI.sumDays(prev.entries.map(e => e.micros).filter(Boolean)));
+    else if (microDays.length > 1) break;   // the journal started here
   }
-  const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays) : null;
-  const microSuggest = micro ? MI.suggest(microDays, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null;
+  const rideHours = g.sessions.filter(s => s.done).reduce((a, s) => a + (s.minutes || 0), 0) / 60;
+  const microOpts = { day: g.day, post: !!(g.cue && g.cue.key === 'post'), ride_hours: Math.round(rideHours * 10) / 10 };
+  const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays, microOpts) : null;
+  const microSuggest = micro ? MI.suggest(microDays, microOpts) : null;
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,

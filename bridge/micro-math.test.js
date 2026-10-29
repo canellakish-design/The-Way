@@ -26,7 +26,13 @@ ok('dayScore: capped per nutrient, averaged, three-day rolling', () => {
   assert.strictEqual(M.dayScore([full]).score, 100);
   const half = Object.fromEntries(M.KEYS.map(k => [k, M.TABLE.targets[k] / 2]));
   assert.strictEqual(M.dayScore([half]).score, 50);
-  assert.strictEqual(M.dayScore([full, M.zero(), M.zero()]).score, 67);
+  // two empty days after a full one: 3-day nutrients read 33, 7-day ones read 100 (only three days held)
+  const exact = Object.fromEntries(M.KEYS.map(k => [k, M.TABLE.targets[k]]));
+  const s5 = M.dayScore([exact, M.zero(), M.zero(), M.zero(), M.zero()]);
+  assert.strictEqual(s5.per.find(p => p.key === 'fiber_g').pct, 33);   // 3-day window
+  assert.strictEqual(s5.per.find(p => p.key === 'iron_mg').pct, 20);   // 7-day window, five days held
+  assert.strictEqual(s5.per.find(p => p.key === 'iron_mg').settled, false);
+  assert.strictEqual(M.dayScore([half], { ride_hours: 2 }).per.find(p => p.key === 'sodium_mg').target, 3500);
   const s = M.dayScore([half]);
   assert.strictEqual(s.gaps.length, 3);
   assert.strictEqual(s.band.word, 'low');

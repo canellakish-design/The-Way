@@ -171,6 +171,17 @@ async function icuEvents(from, to) {
   return { configured: true, events: events.filter(e => e.date >= from && e.date <= to) };
 }
 
+// Banister TRIMP per second at a heart-rate reserve fraction x, men's
+// constants: x · 0.64 · e^(1.92x). Normalised to 100 for an hour at LTHR.
+const trimpRate = x => Math.max(0, x) * 0.64 * Math.exp(1.92 * Math.max(0, x));
+function hrLoad(seconds, avgHr, st) {
+  const maxHr = st.hr_max || 162;
+  const hrr = hr => (hr - st.hr_rest) / (maxHr - st.hr_rest);
+  const perHourAtLthr = trimpRate(hrr(st.lthr)) * 3600;
+  if (!perHourAtLthr) return 0;
+  return trimpRate(hrr(avgHr)) * seconds / perHourAtLthr * 100;
+}
+
 function epoch(dateKey, endOfDay) {
   const [y, m, d] = dateKey.split('-').map(Number);
   // A generous window either side; the activity's own local date decides the day.
@@ -205,7 +216,11 @@ async function stravaDone(from, to, st) {
     // still beats scoring the ride as nothing (it reads a little low on a
     // variable ride, which is the honest direction to be wrong in).
     else if (a.average_watts) { const IF = a.average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'average power'; }
-    else if (a.average_heartrate) { const IF = Math.max(0, (a.average_heartrate - st.hr_rest) / (st.lthr - st.hr_rest)); tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'heart rate'; }
+    // No power: Banister's TRIMP from the average heart rate, scaled so an
+    // hour at threshold scores 100 (the HRSS recipe; r ≈ 0.88 against power
+    // TSS in Hayes & Quinn). The old linear heart-rate-reserve square
+    // under-weighted everything above tempo.
+    else if (a.average_heartrate) { tss = Math.round(hrLoad(secs, a.average_heartrate, st)); basis = 'heart rate (TRIMP)'; }
     return { id: a.id, date, time: String(a.start_date_local || '').slice(11, 16), name: a.name || 'Activity',
       type: a.sport_type || a.type || null, minutes: Math.round(secs / 60),
       miles: a.distance ? Math.round(a.distance / 1609.34 * 10) / 10 : null,
@@ -239,35 +254,50 @@ function loggedPlanned(workouts, st, today, ridesByDate) {
 }
 
 // ---------- compliance: the plan against the ride ----------
-// A planned session is graded by the smaller of two fractions, time done and
-// training stress done, against what was planned. Green is 85% and up,
-// yellow 50% and up, red under that or nothing at all. A ride with no power
-// and no heart rate carries no TSS, so time alone grades it rather than a
-// missing number reading as a miss. The VO2 session's own yardstick, minutes
-// above 147 bpm, needs the heart-rate stream and is not read here yet.
-const bandOf = pct => pct == null ? null : pct >= 85 ? 'green' : pct >= 50 ? 'yellow' : 'red';
+// TrainingPeaks' bands, the one published scheme: green within 20% of the
+// plan either way, yellow at 50 to 79% or 121 to 150%, red beyond that or
+// nothing at all. The fraction is the smaller of time done and load done
+// against the plan (or the larger, when both run over). A ride with no
+// power and no heart rate carries no load, so time alone grades it rather
+// than a missing number reading as a miss.
+const bandOf = pct => pct == null ? null : (pct >= 80 && pct <= 120) ? 'green' : ((pct >= 50 && pct < 80) || (pct > 120 && pct <= 150)) ? 'yellow' : 'red';
 function gradeOne(w, rides) {
   const plannedMin = w.metrics.duration_s / 60, plannedTss = w.metrics.tss;
   if (w.logged) return Object.assign({}, w, { compliance: { pct: 100, band: 'green', basis: 'logged by hand' } });
   if (!rides.length) return Object.assign({}, w, { compliance: { pct: 0, band: 'red', basis: 'no ride on Strava' } });
-  // The VO2 session has its own yardstick: minutes above 147 bpm, 8 to 12.
-  // When the ride's heart rate has been read, that is the grade.
-  if (/vo2|40\s*\/\s*20/i.test(String(w.name || ''))) {
-    const R = require('./ride-math');
-    const withHr = rides.filter(r => r.analysis && r.analysis.hr);
-    if (withHr.length) {
-      const mins = Math.round(withHr.reduce((s, r) => s + r.analysis.hr.minutes_above_hard, 0) * 10) / 10;
-      return Object.assign({}, w, { compliance: R.vo2Grade(mins) });
-    }
+  const R = require('./ride-math');
+  const withHr = rides.filter(r => r.analysis && r.analysis.hr && r.analysis.hr.zones);
+  // The VO2 session has its own yardstick: minutes above the hard line
+  // (94% of max, where heart-rate time stops over-counting on short
+  // intervals). When the ride's heart rate has been read, that is the grade.
+  if (/vo2|40\s*\/\s*20/i.test(String(w.name || '')) && withHr.length) {
+    const mins = Math.round(withHr.reduce((s, r) => s + (r.analysis.hr.minutes_above_hard || 0), 0) * 10) / 10;
+    return Object.assign({}, w, { compliance: R.vo2Grade(mins) });
   }
   const doneMin = rides.reduce((s, r) => s + r.minutes, 0);
   const doneTss = rides.reduce((s, r) => s + (r.tss || 0), 0);
   const tPct = plannedMin ? doneMin / plannedMin : 1;
   const hasLoad = rides.some(r => r.tss != null);
   const lPct = hasLoad && plannedTss ? doneTss / plannedTss : null;
-  const pct = Math.round(100 * Math.min(1, lPct == null ? tPct : Math.min(tPct, lPct)));
-  return Object.assign({}, w, { compliance: { pct, band: bandOf(pct),
-    basis: `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)') } });
+  const both = lPct == null ? [tPct] : [tPct, lPct];
+  const frac = both.every(x => x > 1) ? Math.max(...both) : Math.min(...both);
+  const pct = Math.round(100 * frac);
+  let band = bandOf(pct);
+  let basis = `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)');
+  // A Zone 1 ride is also judged on discipline: the share of it under VT1.
+  // Elite logs put a Zone 1 session at 0 to 2% above the ceiling; up to 10%
+  // passes here, 10 to 20% is a warning, more is a different ride.
+  if (/zone\s*1|z1/i.test(String(w.name || '')) && withHr.length && band !== 'red') {
+    const secs = withHr.reduce((s, r) => s + (r.analysis.hr.seconds || 0), 0);
+    const under = withHr.reduce((s, r) => s + (r.analysis.hr.zone_pct.z1 / 100) * (r.analysis.hr.seconds || 0), 0);
+    const over = secs ? Math.round(100 - under / secs * 100) : null;
+    if (over != null) {
+      const zb = over <= 10 ? 'green' : over <= 20 ? 'yellow' : 'red';
+      if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) band = zb;
+      basis += `; ${over}% above ${R.HR.vt1} bpm`;
+    }
+  }
+  return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis } });
 }
 // Every planned session on the day is graded against the day's rides: with
 // one ride and one plan that is exact; with two plans the ride counts for
@@ -279,15 +309,16 @@ function dayCompliance(planned, totals, dayOver, rideCount) {
   const graded = planned.filter(w => w.compliance);
   if (graded.length) {
     const pct = Math.round(graded.reduce((s, w) => s + w.compliance.pct, 0) / graded.length);
-    return { pct, band: bandOf(pct), basis: 'planned sessions against the day\'s rides' };
+    return { pct, band: bandOf(pct), over: pct > 120, basis: 'planned sessions against the day\'s rides' };
   }
   if (!totals.planned_min) return rideCount ? { pct: null, band: 'extra', basis: 'ridden with nothing planned' } : null;
   // The plan that day lives in intervals.icu: grade the day's totals instead.
   if (rideCount) {
     const t = totals.done_min / totals.planned_min;
     const l = totals.planned_tss && totals.done_tss ? totals.done_tss / totals.planned_tss : null;
-    const pct = Math.round(100 * Math.min(1, l == null ? t : Math.min(t, l)));
-    return { pct, band: bandOf(pct), basis: `${totals.done_min} of ${totals.planned_min} min planned in intervals.icu` };
+    const both = l == null ? [t] : [t, l];
+    const pct = Math.round(100 * (both.every(x => x > 1) ? Math.max(...both) : Math.min(...both)));
+    return { pct, band: bandOf(pct), over: pct > 120, basis: `${totals.done_min} of ${totals.planned_min} min planned in intervals.icu` };
   }
   if (!dayOver) return null;
   return { pct: 0, band: 'red', basis: 'nothing ridden' };
@@ -308,9 +339,9 @@ async function calendar(from, to) {
   let fresh = 0;
   for (const r of doneR.rides) {
     try {
-      const c = await getJSON('ride-v2-' + String(r.id).replace(/\D/g, ''), null);
-      if (c) r.analysis = { hr: c.hr, resp: c.resp, sources: c.sources };
-      else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, sources: a.sources }; }
+      const c = await getJSON('ride-v3-' + String(r.id).replace(/\D/g, ''), null);
+      if (c) r.analysis = { hr: c.hr, resp: c.resp, ve: c.ve || null, sources: c.sources };
+      else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, ve: a.ve || null, sources: a.sources }; }
     } catch (e) { /* unread stays unread */ }
   }
   const ridesByDate = {};
@@ -452,4 +483,4 @@ function attach(app) {
     res.json({ ok: true, removed: w.id, removed_from_intervals: !!(w.sync && w.sync.intervals_event_id) }); });
 }
 
-module.exports = { attach, calendar, preflight, descriptorFor: descriptionFor, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance };
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad };

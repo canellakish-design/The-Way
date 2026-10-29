@@ -7,7 +7,12 @@
 // the Garmin's respiration stream when the device recorded one; the same
 // summary applies.
 // ============================================================
-const HR = { vt1: 117, vt2: 139, hard: 147 };
+// vt1 and vt2 are measured (Tymewear). hard is the VO2 line: 90% of max
+// (146) is the textbook marker, but on 30/15 and 40/20 intervals heart-rate
+// time above 90% over-counts (Fleckenstein 2025: more time above 90% HRmax,
+// less above 90% VO2max than long intervals), so the line sits at 94% of a
+// 162 max. Target minutes stay Harry's 8 to 12.
+const HR = { vt1: 117, vt2: 139, hard: 152, max: 162 };
 const VO2_TARGET = { lo: 8, hi: 12 };
 
 const r1 = x => Math.round(x * 10) / 10;
@@ -62,6 +67,20 @@ function hrSummaryFromZones(z, avg, max, maxHr) {
   };
 }
 
+// Minute ventilation from the Tymewear data field (L/min), read through
+// intervals.icu. With the VT2 ventilation from the ramp test, minutes above
+// it are the cleanest "hard" measure there is: breathing responds in
+// seconds where heart rate lags.
+function veSummary(ve, vt2Ve, vt1Ve) {
+  const xs = (ve || []).map(Number).filter(v => v > 3 && v < 250);
+  if (xs.length < 30) return null;
+  const sorted = xs.slice().sort((a, b) => a - b);
+  const out = { avg: r1(xs.reduce((a, b) => a + b, 0) / xs.length), max: r1(sorted[sorted.length - 1]), p90: r1(sorted[Math.floor(sorted.length * 0.9)]), samples: xs.length };
+  if (vt2Ve > 0) out.minutes_above_vt2 = r1(xs.filter(v => v > vt2Ve).length / 60);
+  if (vt1Ve > 0) out.pct_under_vt1 = Math.round(xs.filter(v => v <= vt1Ve).length / xs.length * 100);
+  return out;
+}
+
 // breaths per minute, 1 Hz or sparser; zeros and nonsense dropped.
 function respSummary(resp) {
   const xs = (resp || []).map(Number).filter(v => v > 4 && v < 90);
@@ -95,4 +114,4 @@ function zone1Grade(summary) {
     basis: `${pct}% under ${HR.vt1} bpm, avg ${summary.avg}, max ${summary.max}` };
 }
 
-module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, vo2Grade, zone1Grade };
+module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, veSummary, vo2Grade, zone1Grade };

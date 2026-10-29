@@ -10,7 +10,9 @@ ok('hrSummary: average, max, minutes above 147, Seiler zones', () => {
   const s = R.hrSummary(hr);
   assert.strictEqual(s.seconds, 1140);
   assert.strictEqual(s.max, 150);
-  assert.strictEqual(s.minutes_above_hard, 4);
+  assert.strictEqual(s.minutes_above_hard, 0);   // 150 is under the 152 line
+  const hard = R.hrSummary(Array(300).fill(155));
+  assert.strictEqual(hard.minutes_above_hard, 5);
   assert.deepStrictEqual(s.zones, { z1_min: 10, z2_min: 5, z3_min: 4 });
   assert.strictEqual(s.zone_pct.z1, 53);
   assert.strictEqual(R.hrSummary([]), null);
@@ -42,10 +44,18 @@ ok('hrSummaryFromZones: WHOOP zone times mapped onto the Seiler zones', () => {
   const s = R.hrSummaryFromZones(z, 128, 158, 162);
   assert.strictEqual(s.seconds, 2640);
   assert.strictEqual(s.minutes_above_hard, 9);
-  assert.strictEqual(s.hard_bpm, 146);
+  assert.strictEqual(s.hard_bpm, 146);           // WHOOP's zone-five cut, the only one it offers
   assert.ok(s.zones.z1_min > 20 && s.zones.z1_min < 24, 'below VT1 ' + s.zones.z1_min);
   assert.ok(/WHOOP/.test(s.estimated));
   assert.strictEqual(R.hrSummaryFromZones(null), null);
+});
+
+ok('veSummary: ventilation against the ramp-test thresholds', () => {
+  const ve = [].concat(Array(600).fill(40), Array(300).fill(95));
+  const v = R.veSummary(ve, 80, 50);
+  assert.strictEqual(v.minutes_above_vt2, 5);
+  assert.strictEqual(v.pct_under_vt1, 67);
+  assert.strictEqual(R.veSummary([40, 41], 80), null);
 });
 
 console.log(n + ' passed');
