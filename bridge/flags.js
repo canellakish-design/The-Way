@@ -83,7 +83,8 @@ async function namesFor(route) {
   const errs = [];
   for (const url of MIRRORS) {
     try {
-      const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body });
+      const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 7000);
+      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body }).finally(() => clearTimeout(timer));
       const text = await r.text();
       if (!r.ok) { errs.push(new URL(url).host + ' ' + r.status + ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)); continue; }
       return G.parsePois(JSON.parse(text));
@@ -170,11 +171,17 @@ async function buildStep() {
 
   // 3. names from the map, one route per step (Overpass is a shared, free server)
   if (s.phase === 'names') {
+    // One route per step. 'pending' is written before the query, so a query
+    // that outlives the function counts as failed next time instead of
+    // stalling the build; the flags then fall back to the high point and far turn.
+    const stuck = s.routes.find(x => x.named === 'pending');
+    if (stuck) { stuck.named = 'failed'; log.push('names for ' + stuck.name + ': the map did not answer in time'); }
     const r = s.routes.find(x => !x.named && !x.virtual);
     if (r) {
       const d = await getJSON(routeKey(r.id), null);
       if (!d) r.named = true;
       else {
+        r.named = 'pending'; await save(s);
         try { d.pois = (d.pois || []).concat(await namesFor(d)); await setJSON(routeKey(r.id), d); r.named = true; }
         catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = 'failed'; }
       }

@@ -107,10 +107,10 @@ function classify(tags) {
 // snap to the road in placeFlags is the fine filter). Sent by POST, so its size only costs bandwidth.
 function overpassQuery(points) {
   const pts = downsample(points, 600).map(p => p.lat.toFixed(5) + ',' + p.lng.toFixed(5)).join(',');
-  const sel = ['natural~"^(peak|saddle|water|beach)$"', 'tourism~"^(viewpoint|attraction)$"', 'waterway=dam', 'man_made~"^(dam|lighthouse|tower|bridge)$"',
-    'historic', 'bridge', 'leisure~"^(nature_reserve|park)$"', 'boundary=national_park', 'place~"^(town|village|hamlet|suburb)$"', 'amenity~"^(cafe|place_of_worship)$"',
-    'aeroway=aerodrome', 'railway=station'];
-  return `[out:json][timeout:12];(${sel.map(s => `nwr[name][${s}](around:200,${pts});`).join('')});out center tags;`;
+  // Nodes and ways only (relations need their whole geometry and are slow); the kinds that make a spot iconic.
+  const node = ['natural~"^(peak|saddle)$"', 'tourism~"^(viewpoint|attraction)$"', 'man_made~"^(lighthouse|tower)$"', 'place~"^(town|village|hamlet)$"', 'historic', 'amenity=cafe'];
+  const way = ['waterway=dam', 'man_made=dam', 'natural~"^(water|beach)$"', 'leisure~"^(nature_reserve|park)$"', 'historic', 'man_made=bridge'];
+  return `[out:json][timeout:6];(${node.map(s => `node[name][${s}](around:200,${pts});`).join('')}${way.map(s => `way[name][${s}](around:200,${pts});`).join('')});out center tags 150;`;
 }
 function parsePois(json) {
   const out = [];
