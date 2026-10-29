@@ -53,7 +53,9 @@ function microHTML(m, day){
         <div class="small">${m.days_used} day${m.days_used===1?"":"s"} of photos${m.gaps&&m.gaps.length?` · low: ${esc(m.gaps.map(g=>g.label).join(", "))}`:""}</div></span></div>
     <ul class="agenda totals micros">${m.per.map(bar).join("")}</ul>
     ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b> — what lifts it most, fitting today's fuel day</div><ul class="agenda totals">${foods}</ul>`:""}
-    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}
+    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — what would lift the score; one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}
+    ${(m.supplements_available||[]).length?`<details class="ridenotes"><summary>Took something else? Log any supplement</summary><div class="supprow">${m.supplements_available.map(x=>`<button class="suppbtn" data-supp="${esc(x.key)}" title="${esc(x.note||"")}">${esc(x.name)}</button>`).join("")}</div>
+      <div class="small">Iron only makes sense with a ferritin result; taken when it is not needed it does more harm than good.</div></details>`:""}
     ${(sg.performance||[]).length?`<details class="ridenotes"><summary>Performance aids with real evidence (IOC)</summary><ul class="rules">${sg.performance.map(x=>`<li><b>${esc(x.name)}</b> — ${esc(x.note)}</li>`).join("")}</ul></details>`:""}`;
 }
 function wireMicro(root, onChange){

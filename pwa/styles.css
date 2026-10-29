@@ -391,3 +391,6 @@ a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; m
 .vrow{display:flex; gap:8px; margin:8px 0}
 .vreply{font-size:18px; line-height:1.35; margin:10px 0 4px}
 .vhint{margin-top:10px}
+
+.supprow{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
+.suppbtn{margin:0; padding:6px 10px; font-size:13px}
