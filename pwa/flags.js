@@ -9,7 +9,7 @@
 
 const J = {"Content-Type":"application/json"};
 const RARITY = { common:["Common","rc"], uncommon:["Uncommon","ru"], rare:["Rare","rr"], legendary:["Legendary","rl"] };
-const KIND = { summit:"▲", view:"◉", dam:"≋", water:"≈", bridge:"⌒", park:"✿", town:"⌂", landmark:"★", historic:"†", cafe:"☕", church:"✝", turn:"↻" };
+const KIND = { summit:"▲", view:"◉", dam:"≋", water:"≈", bridge:"⌒", park:"✿", town:"⌂", landmark:"★", historic:"†", cafe:"☕", church:"✝", turn:"↻", segment:"⚡" };
 const rbadge = r => { const [w,c] = RARITY[r] || RARITY.common; return `<span class="rb ${c}">${w}</span>`; };
 const icon = k => KIND[k] || "⚑";
 function hm(min){ min=Math.round(min||0); return Math.floor(min/60)+":"+String(min%60).padStart(2,"0"); }

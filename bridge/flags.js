@@ -98,6 +98,32 @@ async function namesFor(route, which, shape, o) {
   throw new Error('overpass: ' + errs.join(' | '));
 }
 
+// ---- naming from Strava segments ----
+// The segments on his own ride along the route (name, climb category, where
+// they end) and the popular segments in the route's box: what locals ride
+// for is iconic by definition, and Zwift's KOMs and sprints are segments too.
+function segPoi(seg, popular) {
+  const end = seg.end_latlng || seg.start_latlng; if (!end || end.length < 2) return null;
+  const climb = (seg.climb_category || 0) > 0 || (seg.average_grade || seg.avg_grade || 0) >= 3;
+  return { name: seg.name, kind: climb ? 'summit' : 'segment', rank: (climb ? 8 + Math.min(4, seg.climb_category || 1) : 5) + (popular ? 1 : 0) + Math.min(2, (seg.distance || 0) / 5000),
+    lat: end[0], lng: end[1] };
+}
+async function stravaSegments(d, r) {
+  const { apiFetch } = require('./strava');
+  const out = [];
+  if (/^ride-\d+$/.test(r.id)) {
+    const act = await apiFetch(`/activities/${r.id.slice(5)}?include_all_efforts=true`);
+    for (const e of act.segment_efforts || []) { const p = e.segment && segPoi(e.segment, false); if (p) out.push(p); }
+  }
+  try {
+    const lats = d.points.map(p => p.lat), lngs = d.points.map(p => p.lng);
+    const j = await apiFetch(`/segments/explore?bounds=${Math.min(...lats).toFixed(4)},${Math.min(...lngs).toFixed(4)},${Math.max(...lats).toFixed(4)},${Math.max(...lngs).toFixed(4)}&activity_type=riding`);
+    for (const sg of j.segments || []) { const p = segPoi(sg, true); if (p) out.push(p); }
+  } catch (e) { /* explore is a bonus */ }
+  const seen = new Set();
+  return out.filter(p => { const k = p.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; });
+}
+
 // ---- the build: one small step per call (a function has about ten
 // seconds), so the page calls it until done: tracks → routes → names →
 // place → history → done.
@@ -162,10 +188,10 @@ async function buildStep() {
       const fromRides = G.routesFromTracks(full).filter(r => r.virtual || !rwOn);
       for (const r of fromRides) {
         const name = r.virtual ? `${G.worldOf(r.points[0].lat, r.points[0].lng)} · ${r.name}` : r.name;
-        await setJSON(routeKey(r.id), { id: r.id, name, virtual: r.virtual, points: r.points, pois: [] });
+        await setJSON(routeKey(r.id), { id: r.id, name, virtual: r.virtual, points: r.points, pois: [] });   // pois are re-read in the names phase
         const known = s.routes.find(x => x.id === r.id);
         if (known) Object.assign(known, { rides: r.rides, name });
-        else s.routes.push({ id: r.id, name, source: 'strava', virtual: r.virtual, rides: r.rides, named: r.virtual, km: null });
+        else s.routes.push({ id: r.id, name, source: 'strava', virtual: r.virtual, rides: r.rides, named: false, km: null });
       }
       s.routes = s.routes.filter(r => (r.source === 'rwgps' && rwOn) || fromRides.some(x => x.id === r.id));
       s.phase = 'names';
@@ -174,24 +200,31 @@ async function buildStep() {
     return progress({ routes_pending: pending });
   }
 
-  // 3. names from the map, one route per step (Overpass is a shared, free server)
+  // 3. names, one route per step: Strava's segments first (his own efforts
+  // on the ride, and the popular segments in the box), then OpenStreetMap's
+  // named features if the map answers in time (it often does not from here).
+  // 'pending' is written before the slow part, so a step that outlives the
+  // function counts as done next time instead of stalling the build.
   if (s.phase === 'names') {
-    // One route per step. 'pending' is written before the query, so a query
-    // that outlives the function counts as failed next time instead of
-    // stalling the build; the flags then fall back to the high point and far turn.
     const stuck = s.routes.find(x => x.named === 'pending');
-    if (stuck) { stuck.named = (stuck.tries || 0) >= 3 ? 'failed' : false; log.push('names for ' + stuck.name + ': the map did not answer in time'); }
-    const r = s.routes.find(x => !x.named && !x.virtual);
+    if (stuck) { stuck.named = true; log.push('names for ' + stuck.name + ': the map did not answer in time'); }
+    const r = s.routes.find(x => !x.named);
     if (r) {
       const d = await getJSON(routeKey(r.id), null);
       if (!d) r.named = true;
       else {
-        r.tries = (r.tries || 0) + 1; r.named = 'pending'; await save(s);
-        try { d.pois = (d.pois || []).concat(await namesFor(d, r.tries - 1)); await setJSON(routeKey(r.id), d); r.named = true; }
-        catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = r.tries >= 3 ? 'failed' : false; }
+        d.pois = d.pois || [];
+        try { d.pois.push(...await stravaSegments(d, r)); } catch (e) { log.push('segments for ' + r.name + ': ' + e.message); }
+        await setJSON(routeKey(r.id), d);
+        r.named = 'pending'; await save(s);
+        if (!r.virtual) {
+          try { d.pois.push(...await namesFor(d, 0, 'bbox', { timeout: 5000 })); await setJSON(routeKey(r.id), d); }
+          catch (e) { log.push('map for ' + r.name + ': ' + e.message.slice(0, 80)); }
+        }
+        r.named = true; r.pois = d.pois.length;
       }
     }
-    const pending = s.routes.filter(x => !x.named && !x.virtual).length;
+    const pending = s.routes.filter(x => !x.named).length;
     if (!pending) s.phase = 'place';
     await save(s);
     return progress({ names_pending: pending });
@@ -323,7 +356,7 @@ function attach(app) {
   app.post('/flags/build', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await buildStep()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/rebuild', async (req, res) => { if (!auth(req, res)) return;
-    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: r.virtual, tries: 0 })); s.phase = 'tracks'; await save(s); res.json(await buildStep()); }
+    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: false })); s.phase = 'tracks'; await save(s); res.json(await buildStep()); }
     catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/scan', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await scan(SCAN_PER_CALL)); } catch (e) { res.status(500).json({ error: e.message }); } });
