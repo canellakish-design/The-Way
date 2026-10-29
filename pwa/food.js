@@ -264,4 +264,6 @@ V.food = async function(){
   };
 };
 
+// app.js ran nav() before this file loaded; if the page opened on #food, draw it now.
+if (location.hash.replace(/^#/, "").split("?")[0] === "food") nav();
 })();
