@@ -41,7 +41,7 @@ function thumbStrip(entries){
   }).join("")}</div>`;
 }
 function microHTML(m, day){
-  if (!m) return `<div class="small">No photos on the journal yet. The score starts with the first meal.</div>`;
+  if (!m) return `<div class="small">Starts with the first meal.</div>`;
   const bar = p => `<li><span class="n">${esc(p.label)}<span class="small"> ${p.value} of ${p.target} ${esc(p.unit)}</span></span>
     <span class="tag"><span class="mbar"><i style="width:${p.pct}%;background:${p.pct>=80?"var(--green)":p.pct>=50?"var(--amber)":"var(--red)"}"></i></span><b>${p.pct}</b></span></li>`;
   const sg = m.suggest || {};
@@ -52,10 +52,10 @@ function microHTML(m, day){
       <span class="recmeta"><span class="recword" style="color:${toneC(m.band.tone)}">${esc(m.band.word)}</span>
         <div class="small">${m.days_used} day${m.days_used===1?"":"s"} of photos${m.gaps&&m.gaps.length?` · low: ${esc(m.gaps.map(g=>g.label).join(", "))}`:""}</div></span></div>
     <ul class="agenda totals micros">${m.per.map(bar).join("")}</ul>
-    ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b> — what lifts it most, fitting today's fuel day</div><ul class="agenda totals">${foods}</ul>`:""}
-    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b> — what would lift the score; one tap logs it</div><ul class="agenda totals">${supps}</ul>`:""}
-    ${(m.supplements_available||[]).length?`<details class="ridenotes"><summary>Took something else? Log any supplement</summary><div class="supprow">${m.supplements_available.map(x=>`<button class="suppbtn" data-supp="${esc(x.key)}" title="${esc(x.note||"")}">${esc(x.name)}</button>`).join("")}</div>
-      <div class="small">Iron only makes sense with a ferritin result; taken when it is not needed it does more harm than good.</div></details>`:""}
+    ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b></div><ul class="agenda totals">${foods}</ul>`:""}
+    ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b></div><ul class="agenda totals">${supps}</ul>`:""}
+    ${(m.supplements_available||[]).length?`<details class="ridenotes"><summary>log any supplement</summary><div class="supprow">${m.supplements_available.map(x=>`<button class="suppbtn" data-supp="${esc(x.key)}" title="${esc(x.note||"")}">${esc(x.name)}</button>`).join("")}</div>
+      <div class="small">Iron: only with a ferritin result.</div></details>`:""}
     ${(sg.performance||[]).length?`<details class="ridenotes"><summary>Performance aids with real evidence (IOC)</summary><ul class="rules">${sg.performance.map(x=>`<li><b>${esc(x.name)}</b> — ${esc(x.note)}</li>`).join("")}</ul></details>`:""}`;
 }
 function wireMicro(root, onChange){
@@ -78,7 +78,6 @@ V.food = async function(){
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     ${isToday ? `<div class="card day snapcard" id="snap">
       <div class="snaprow"><button class="primary big snapbtn" id="snapBtn">Snap a meal</button><button class="big snapbtn" id="rollBtn">From camera roll</button></div>
-      <div class="small snaphint">Drinks count: a glass, a mug or the bottle in the frame is read as millilitres for the hydration score. A photo of the bottle alone works too.</div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
       <input id="rollFile" type="file" accept="image/*" hidden>
       <div id="snapForm" hidden>
@@ -91,7 +90,7 @@ V.food = async function(){
       <div id="writeForm" hidden>
         <label for="writeText">What is on the plate, in your words</label>
         <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
-        <div class="small">Weights from the kitchen scale make it exact: "rice 200 g, salmon 150 g". Without them the coach assumes your usual portions, about ±35% on calories; with them, about ±15%.</div>
+        <div class="small">Add weights when you have them: "rice 200 g, salmon 150 g".</div>
         <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
           <span><label>&nbsp;</label><button class="primary" id="writeLog">Log it</button> <button id="writeCancel">Cancel</button></span></div>
         <div class="small" id="writeMsg"></div></div>
@@ -116,7 +115,7 @@ V.food = async function(){
     el.innerHTML = `
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
-        ${day.target.base_burn?`<div class="small">${day.target.base_burn} kcal a day before riding (Mifflin-St Jeor at ${day.target.kg} kg, light-active) + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div>`:""}
+        ${day.target.base_burn?`<details class="why"><summary>how the target is set</summary><div class="small">${day.target.base_burn} kcal before riding at ${day.target.kg} kg + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div></details>`:""}
         <div class="small">${sessions || "No training on the calendar, so a rest day."}</div>
         ${day.work ? `<div class="cue" style="border-color:${day.work.compliant?"var(--green)":"var(--amber)"};background:${day.work.compliant?"var(--green-soft)":"var(--amber-soft)"}"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
         <ul class="rules">${day.guidelines.map(g=>`<li>${esc(g.text)}</li>`).join("")}</ul>
@@ -138,7 +137,6 @@ V.food = async function(){
         ${m ? `<ul class="agenda totals">${macroRow("carbs","carbs_g")}${macroRow("protein","protein_g")}${macroRow("fat","fat_g")}${macroRow("kcal","kcal")}</ul>` : ""}
         ${day.suggestion && !day.suggestion.none ? `<div class="snack"><b>Suggested next</b> — ${esc(day.suggestion.name)}${day.suggestion.servings>1?` ×${day.suggestion.servings}`:""}
           <div class="small">${day.suggestion.kcal} kcal · ${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P · ${day.suggestion.fat_g}F — ${esc(day.suggestion.why)}, score ${day.suggestion.score_before} → <b>${day.suggestion.score_after}</b></div></div>` : ""}
-        <div class="small">${esc(day.basis)}. Half the score is the macros against the target, half is how each photo fits the rules.</div>
       </div>
       <div class="card" id="fMicro"><h4>Micronutrients · three days</h4>${microHTML(day.micros, day)}</div>
       <span class="eyebrow">The journal · ${day.entries.length} ${day.entries.length===1?"meal":"meals"}</span>

@@ -89,7 +89,7 @@ V.calendar = async function(){
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?" · today":""}</h4>
         <span class="small">${d.totals.planned_min?hm(d.totals.planned_min)+" planned":""}${d.totals.done_min?" · "+hm(d.totals.done_min)+" done":""} ${verdict}</span></div>
       ${rows.join("") || `<div class="small pempty">Rest${past?"":", or nothing planned yet"}.</div>`}
-      ${past ? `<div class="small">What was ridden comes in from the Garmin through Strava.</div>` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
+      ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
   }
   html += `<div class="card"><h4>Planning numbers</h4><div id="pSettings" class="small">loading…</div></div>`;
@@ -99,7 +99,7 @@ V.calendar = async function(){
 
 async function drawSettings(st){
   const el = document.getElementById("pSettings"); if (!el) return;
-  el.innerHTML = `<div class="small">Power targets go to the Garmin as a percentage of FTP and heart rate as a percentage of threshold heart rate, so these must match what intervals.icu holds.</div>
+  el.innerHTML = `<div class="small">Must match intervals.icu.</div>
     <div class="row3"><div><label for="sFtp">FTP (W)</label><input id="sFtp" type="number" inputmode="numeric" value="${st.ftp}"></div>
     <div><label for="sLthr">Threshold HR</label><input id="sLthr" type="number" inputmode="numeric" value="${st.lthr}"></div>
     <div><label for="sRest">Resting HR</label><input id="sRest" type="number" inputmode="numeric" value="${st.hr_rest}"></div></div>
@@ -120,7 +120,7 @@ async function preflight(){
     if (!r.configured) { el.textContent = "intervals.icu isn't connected, so there is nothing to compare against yet."; return; }
     if (r.reason) { el.textContent = "Couldn't read intervals.icu: "+r.reason; return; }
     el.innerHTML = r.ok ? `<span class="pbadge ok">Matches intervals.icu</span>`
-      : `<span class="pbadge bad">Doesn't match intervals.icu</span><ul class="pissues">${r.issues.map(i=>`<li>${esc(i)}</li>`).join("")}</ul><div class="small">Change it in intervals.icu → Settings → Cycling, or change the number here. Until they match, the Garmin shows different targets from the ones planned.</div>`;
+      : `<span class="pbadge bad">Doesn't match intervals.icu</span><ul class="pissues">${r.issues.map(i=>`<li>${esc(i)}</li>`).join("")}</ul><div class="small">Fix it in intervals.icu → Settings → Cycling, or here.</div>`;
   }catch(e){ el.textContent = "Couldn't check: "+e.message; }
 }
 
@@ -303,7 +303,7 @@ V.workout = async function(){
           <div><label>Load</label><div class="pbig">${m.tss}</div><div class="small">TSS</div></div>
           <div><label>Intensity</label><div class="pbig">${m.if.toFixed(2)}</div><div class="small">IF</div></div>
         </div>${profileSVG(r.profile)}
-        <div class="small">Estimated from ${esc(m.estimated_from)}, at FTP ${settings?settings.ftp:"—"} W and threshold ${settings?settings.lthr:"—"} bpm.</div>`;
+`;
       const pre = document.getElementById("wText"); if (pre) pre.textContent = r.intervals_text;
     }catch(e){ el.innerHTML = `<div class="small">Couldn't preview: ${esc(e.message)}</div>`; }
   }

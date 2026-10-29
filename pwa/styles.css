@@ -394,3 +394,6 @@ a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; m
 
 .supprow{display:flex; flex-wrap:wrap; gap:6px; margin:8px 0}
 .suppbtn{margin:0; padding:6px 10px; font-size:13px}
+
+/* explanations fold away: the card shows the number and the next move */
+details.why{margin-top:8px} details.why summary{font-family:var(--mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); cursor:pointer; list-style:none} details.why summary::-webkit-details-marker{display:none} details.why summary::before{content:"+ "} details.why[open] summary::before{content:"− "} details.why .small{margin-top:6px}

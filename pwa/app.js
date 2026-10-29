@@ -1430,13 +1430,10 @@ V.today = async function(){
         : `<div class="small">${w.withings_connected
             ? "Connected — the numbers land here with your next reading."
             : "Withings isn't connected. Starting weight " + (w.start_lb || 210) + " lb."}</div>`}
-      ${w.withings_connected ? "" : `<div class="small">The Withings scale pushes every weigh-in here once it is connected —
-        <a href="${DEFAULT_API}/withings/auth"><b>connect the scale</b></a> (one approval, in your Withings account).</div>`}
+      ${w.withings_connected ? "" : `<div class="small"><a href="${DEFAULT_API}/withings/auth"><b>Connect the Withings scale</b></a></div>`}
       ${(w.latest && w.latest.logged_today) ? "" : `
         <div class="weighin">
-          <div class="small">${w.withings_connected
-            ? "Nothing from the scale today — it fills in when you step on, or enter it:"
-            : "Enter this morning's number:"}</div>
+          <div class="small">This morning's number:</div>
           <div class="row2"><span><input class="wiLb" type="number" step="0.1" placeholder="${w.start_lb || 210}"></span>
             <span><button class="primary wiSave">Log weigh-in</button></span></div>
           <div class="small wiMsg"></div></div>`}`;
@@ -1628,7 +1625,7 @@ V.today = async function(){
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · three days</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
-        <div class="small">Thirteen nutrients an endurance athlete in a deficit runs short of, each scored as intake against its daily target and capped at 100, then averaged. Today owes only the share of its target the meal plan has reached by now, so one breakfast is read against breakfast's share, not a whole day. Each nutrient averages over its own window, the number of days it takes before an intake average means anything: 3 days for fibre, magnesium and folate; 5 for calcium, potassium and vitamins C and A; 7 for iron, vitamin D, B12, zinc, sodium and omega-3. The numbers come from the foods the camera saw, priced from a USDA-based table; a food the table does not know takes the model's estimate. Sodium is a floor of 1,500 mg plus about a gram per hour of riding. Supplements log with one tap and count; iron and zinc only come up after a week of reading low, and iron only belongs with a ferritin result.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Thirteen nutrients against their daily targets, averaged; today owes only the share of the day reached so far. Iron and zinc are suggested only after a week low.</div></details>`;
       box.innerHTML = html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
@@ -1644,7 +1641,7 @@ V.today = async function(){
           ${!t.planned.length && !t.rides.length ? `<li><span class="n">Nothing planned</span><span class="tag">rest day</span></li>` : ""}
         </ul>`}
         <a class="btn primary" href="#calendar">The calendar</a>
-        <div class="small">Done over planned for the day: a ride and a gym session read 0/2, then 1/2, then 2/2. A planned session counts as done when Strava has the ride (graded green, yellow or over against the plan) or when it was logged by hand; a ride nobody planned counts too. Green when everything is done, amber part-way, red once the last session's time has passed with nothing recorded. The flag game still lives at <a href="#flags">#flags</a>.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
       box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "hydration"){
@@ -1657,11 +1654,11 @@ V.today = async function(){
           ${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}
         </ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a drink</a>
-        <div class="small">Every glass, mug, bottle or bowl of broth the camera sees is read as millilitres and added up; a photo of the bottle alone counts too, and so does a drink you write down. The target is drinks only: 30 ml per kg of body weight (EFSA's 2.5 L of water a day for men, four fifths of it from drinks, and the 30 to 35 ml/kg sports-medicine rule agree on it), plus 600 ml for every hour ridden, the middle of the ACSM's 0.4 to 0.8 L an hour of cycling sweat. The score paces the base target over the waking day, 06:00 to 22:00, and adds a ride's fluid when the ride ends, so a glass at breakfast is judged against breakfast's share, not the whole day. 80% of what is due is green, 50% amber, under that red. Coffee and tea count in full, habitual caffeine does not dry you out; alcohol counts nothing.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Drinks in the photos, added up, against 30 ml/kg plus 600 ml an hour ridden, paced over the waking day. Green from 80% of what is due, amber from 50%.</div></details>`;
       box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "weight"){
-      html = bodyHTML(bodyData) + `<div class="small">The number on the box is the latest reading; the word is the week-over-week move of the 7-day average, down green, up red. ${bodyData && bodyData.start_lb ? "Measured against the " + bodyData.start_lb + " lb start." : ""}</div>`;
+      html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
       box.innerHTML = html; box.hidden = false; wireBody(box); return;
     }
     if (openScore === "food"){
@@ -1669,7 +1666,7 @@ V.today = async function(){
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a meal</a>
-        <div class="small">Half the score is the macros against what the meal plan says should be in by now (the meals whose time has come, as a share of the day), carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. Before the first planned meal only the journal half counts. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 80 and up is on target, 60 to 79 close, under 60 off, the same bands as the other boxes. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Half is the macros against what the plan says should be in by now, half is the journal against today's rules. 80 on target, 60 close.</div></details>`;
     } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>
@@ -1679,8 +1676,7 @@ V.today = async function(){
           ${row("last 7 days", `${t.tss_7d} TSS`)}
           ${row("today so far", `${t.tss_today} TSS`)}
         </ul>` : `<div class="small">Strava isn't answering (${esc((d.sources.strava||{}).reason || "not connected")}), so there is no ride history to score.</div>`}
-        <div class="small">Fitness is a 42-day weighted average of daily training stress (TSS), the Banister model that TrainingPeaks, intervals.icu and Strava all use: each day adds (TSS − fitness) ÷ 42. Rides without power are scored by Banister's TRIMP from heart rate, an hour at threshold counting 100. A sustainable build for an amateur in his fifties is +2 to +6 a week (Friel's +5 to +8 was written for pros); past that the illness risk climbs.
-        <br>${esc((d.sources.strava||{}).basis || "")}. ${d.sources.strava && d.sources.strava.rides ? d.sources.strava.rides + " rides in the last 120 days." : ""}</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Fitness is a 42-day average of daily training stress. +2 to +6 a week is a sustainable build.</div></details>`;
     } else if (openScore === "fatigue"){
       const f = d.fatigue;
       html = `<h4>Fatigue · form</h4>
@@ -1691,7 +1687,7 @@ V.today = async function(){
           ${row("yesterday", `${f.tss_yesterday} TSS`)}
         </ul>
         <div class="small"><b>${esc(f.form.word)}</b> — ${esc(f.form.note)}</div>` : `<div class="small">Strava isn't answering, so there is no ride history to score.</div>`}
-        <div class="small">Fatigue is the same average over 10 days, not TrainingPeaks' 7: masters athletes recover more slowly at 48 hours (perceived recovery and neuromuscular function both), and the fatigue constant is what moves form. Form is yesterday's fitness minus yesterday's fatigue: above +25 transition, +5 to +25 fresh, −10 to +5 neutral, −10 to −30 productive, below −30 overreached (Friel's zones, coaching heuristics). Monotony is the week's mean daily load over its spread (Foster): above 2, seven same-sized days, carries more strain than the same load varied. The acute : chronic ratio is gone; its injury signal did not survive reanalysis.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Fatigue is the 10-day average. Form is fitness minus fatigue: +5 to +25 fresh, −10 to −30 productive, below −30 overreached.</div></details>`;
     } else {
       const r = d.recovery, w = d.sources.whoop || {};
       const age = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime())/3.6e6 : null;
@@ -1712,7 +1708,7 @@ V.today = async function(){
             : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
             : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
         ${w.auth_error && r.score != null ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
-        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. The verdict above the boxes follows the HRV-guided rule the training trials used, not the colour: the 7-day mean of HRV against your own 28-day band of half a standard deviation. Inside or above the band, train as planned; below it, swap the hard session for easy and keep the volume; below it two days running, rest. The WHOOP colour is the stand-in until 14 nights are in (28 to trust it), and a red morning still means easy. In independent testing WHOOP's HRV tracks ECG closely; its recovery score itself did not track how recovered people said they felt, which is why the raw HRV drives the rule. Resting HR up 5 or overnight breathing up 2 a minute against your median is the illness flag.</div>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">WHOOP's score for the night. The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
     box.innerHTML = html; box.hidden = false;
     const sb = document.getElementById("snackLog");
@@ -1886,11 +1882,11 @@ V.today = async function(){
            ${esc(snap.captured_at)}, good through ${esc(snap.covers.to)} — connect a
            calendar in Settings to replace it with the live one.`
         : "";
-      document.getElementById("daySources").innerHTML = (missing.length
+      document.getElementById("daySources").innerHTML = `<details class="why"><summary>sources</summary><div class="small">` + (missing.length
         ? "Feeding this page: " + (feeding.join(" · ") || "nothing yet") + esc(accounts)
           + "<br>Missing — " + missing.map(esc).join("; ")
         : "Feeding this page: " + feeding.join(" · ") + esc(accounts) + " · classes · intervals.icu")
-        + snapNote;
+        + snapNote + `</div></details>`;
     }catch(e){
       const list = document.getElementById("dayList");
       // Keep the last good day on screen if there is one — a passing network

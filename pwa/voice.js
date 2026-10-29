@@ -23,7 +23,7 @@ function sheet(){
     <div class="vrow"><button class="primary" id="vSend">Do it</button> ${SR ? `<button id="vAgain">Listen again</button>` : ""}</div>
     <div class="small" id="vStatus"></div>
     <div id="vResult"></div>
-    <div class="small vhint">Examples: "I had two eggs and toast for breakfast" · "drank a 750 bottle of water" · "took fish oil and vitamin D" · "weighed 215 this morning" · "put a 90 minute zone one ride on Saturday at 7" · "what should I eat before the ride?"</div>
+    <div class="small vhint">"two eggs and toast" · "took fish oil" · "weighed 215" · "zone one ride Saturday at 7"</div>
   </div>`;
   document.body.appendChild(s);
   document.getElementById("vClose").onclick = close;
