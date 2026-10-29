@@ -195,6 +195,7 @@ async function buildStep() {
   // 4. place the flags
   if (s.phase === 'place') {
     const full = await loadTracks(s);
+    const road = full.filter(t => !t.virtual);
     const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : null;
     const list = await rides(from, today);
     const cal = virtual => {
