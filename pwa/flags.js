@@ -106,7 +106,7 @@ V.flags = async function(){
       for (let i = 0; i < 40; i++){
         const r = await bridge(built && i === 0 ? "/flags/rebuild" : "/flags/build", { method:"POST", headers:J, body:"{}" });
         if (r.done){ msg.textContent = `Done: ${r.flags} flags on ${r.routes} routes from ${r.tracks} rides.`; setTimeout(V.flags, 800); return; }
-        msg.textContent = `Reading… ${r.tracks} rides in${r.tracks_pending ? `, ${r.tracks_pending} to go` : ""}; ${r.routes} routes${r.routes_pending ? `, ${r.routes_pending} to fetch` : ""}${r.names_pending ? `; naming ${r.names_pending}` : ""}.${r.log && r.log.length ? " " + r.log[r.log.length-1] : ""}`;
+        msg.textContent = `${r.phase === "tracks" ? `Reading rides: ${r.tracks} in${r.tracks_pending ? `, ${r.tracks_pending} to go` : ""}` : r.phase === "routes" ? `Routes: ${r.routes}${r.routes_pending ? `, ${r.routes_pending} to fetch` : ""}` : r.phase === "names" ? `Naming the spots from the map: ${r.names_pending} route${r.names_pending===1?"":"s"} left` : r.phase === "place" ? `Placing ${r.flags} flags` : r.phase === "history" ? `Counting past catches: ${r.history_pending} rides left` : "Working"}.${r.log && r.log.length ? " " + r.log[r.log.length-1] : ""}`;
         if (r.log && r.log.some(l => /429/.test(l))){ msg.textContent += " Strava's rate limit: wait 15 minutes and tap again; it carries on from here."; break; }
       }
     } catch(e){ msg.textContent = e.message; }

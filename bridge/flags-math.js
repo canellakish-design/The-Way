@@ -107,7 +107,7 @@ function overpassQuery(points) {
   const sel = ['natural~"^(peak|saddle|water|beach)$"', 'tourism~"^(viewpoint|attraction)$"', 'waterway=dam', 'man_made~"^(dam|lighthouse|tower|bridge)$"',
     'historic', 'bridge', 'leisure~"^(nature_reserve|park)$"', 'boundary=national_park', 'place~"^(town|village|hamlet|suburb)$"', 'amenity~"^(cafe|place_of_worship)$"',
     'aeroway=aerodrome', 'railway=station'];
-  return `[out:json][timeout:25];(${sel.map(s => `nwr[name][${s}](around:200,${pts});`).join('')});out center tags;`;
+  return `[out:json][timeout:12];(${sel.map(s => `nwr[name][${s}](around:200,${pts});`).join('')});out center tags;`;
 }
 function parsePois(json) {
   const out = [];

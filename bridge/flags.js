@@ -91,95 +91,132 @@ async function namesFor(route) {
   throw last || new Error('overpass unreachable');
 }
 
-// ---- the build: one step per call, so no call outlives a function's budget ----
+// ---- the build: one small step per call (a function has about ten
+// seconds), so the page calls it until done: tracks → routes → names →
+// place → history → done.
+async function loadTracks(s, ids) {
+  const out = [];
+  const want = ids || s.tracks.map(t => t.id);
+  for (let i = 0; i < want.length; i += 10) {
+    const part = await Promise.all(want.slice(i, i + 10).map(id => getJSON(trackKey(id), null)));
+    for (const d of part) if (d) out.push(d);
+  }
+  return out;
+}
 async function buildStep() {
   const s = await state();
   const today = tz.todayKey(), from = tz.shiftKey(today, -HISTORY_DAYS);
   const log = [];
-  // 1. the ride history, a few tracks per step
-  const list = await rides(from, today);
-  const have = new Set(s.tracks.map(t => t.id));
-  let fetched = 0;
-  for (const r of list) {
-    if (have.has(r.id)) continue;
-    if (fetched >= TRACKS_PER_STEP) break;
-    try { const t = await track(r); s.tracks.push({ id: t.id, date: t.date, name: t.name, virtual: t.virtual, n: t.points.length }); fetched++; }
-    catch (e) { log.push('track ' + r.id + ': ' + e.message); if (/429/.test(e.message)) break; }
-  }
-  const tracksPending = list.filter(r => !s.tracks.some(t => t.id === r.id)).length;
-  // 2. the routes: RideWithGPS when connected, else the rides grouped by name
   const rw = await rwgps();
-  let routesPending = 0;
-  if (rw.token && envStr('RWGPS_API_KEY')) {
-    try {
-      const lib = await rwgpsRoutes();
-      let got = 0;
-      for (const r of lib) {
-        const known = s.routes.find(x => x.id === r.id);
-        if (known && known.updated === r.updated) continue;
-        if (got >= ROUTES_PER_STEP) { routesPending++; continue; }
-        try {
-          const d = await rwgpsRoutePoints(r.rwgps_id);
-          await setJSON(routeKey(r.id), { id: r.id, name: r.name, virtual: false, points: d.points, pois: d.pois });
-          s.routes = s.routes.filter(x => x.id !== r.id).concat([Object.assign({ source: 'rwgps', named: false, virtual: false }, r)]);
-          got++;
-        } catch (e) { log.push('route ' + r.name + ': ' + e.message); }
-      }
-      s.rwgps_routes = lib.length;
-    } catch (e) { log.push('ridewithgps: ' + e.message); }
-  }
-  // Rides grouped by name are routes too (every Zwift world comes from here).
-  if (tracksPending === 0 && s.tracks.length) {
-    const full = [];
-    for (const t of s.tracks) { const d = await getJSON(trackKey(t.id), null); if (d) full.push(d); }
-    const fromRides = G.routesFromTracks(full).filter(r => r.virtual || !(rw.token && envStr('RWGPS_API_KEY')));
-    for (const r of fromRides) {
-      if (s.routes.some(x => x.id === r.id)) continue;
-      await setJSON(routeKey(r.id), { id: r.id, name: r.virtual ? `${G.worldOf(r.points[0].lat, r.points[0].lng)} · ${r.name}` : r.name, virtual: r.virtual, points: r.points, pois: [] });
-      s.routes.push({ id: r.id, name: r.virtual ? `${G.worldOf(r.points[0].lat, r.points[0].lng)} · ${r.name}` : r.name, source: 'strava', virtual: r.virtual, rides: r.rides, named: r.virtual, km: null });
+  const rwOn = !!(rw.token && envStr('RWGPS_API_KEY'));
+  const progress = extra => Object.assign({ done: false, phase: s.phase, tracks: s.tracks.length, routes: s.routes.length, log }, extra);
+  if (!s.phase || s.phase === 'done') s.phase = 'tracks';
+
+  // 1. the ride history, a few tracks per step
+  if (s.phase === 'tracks') {
+    const list = await rides(from, today);
+    const have = new Set(s.tracks.map(t => t.id));
+    let fetched = 0;
+    for (const r of list) {
+      if (have.has(r.id)) continue;
+      if (fetched >= TRACKS_PER_STEP) break;
+      try { const t = await track(r); s.tracks.push({ id: t.id, date: t.date, name: t.name, virtual: t.virtual, n: t.points.length }); fetched++; }
+      catch (e) { log.push('track ' + r.id + ': ' + e.message); if (/429/.test(e.message)) break; }
     }
-    s.routes = s.routes.filter(r => r.source === 'rwgps' || fromRides.some(x => x.id === r.id) || r.virtual);
+    const pending = list.filter(r => !s.tracks.some(t => t.id === r.id)).length;
+    if (pending === 0 || log.some(l => /429/.test(l))) { if (pending === 0) s.phase = 'routes'; }
+    await save(s);
+    return progress({ tracks_pending: pending });
   }
-  // 3. names from the map, a few routes per step (Overpass is a shared, free server)
-  let named = 0;
-  for (const r of s.routes) {
-    if (r.named || r.virtual) continue;
-    if (named >= NAMES_PER_STEP) break;
-    const d = await getJSON(routeKey(r.id), null); if (!d) { r.named = true; continue; }
-    try { d.pois = (d.pois || []).concat(await namesFor(d)); await setJSON(routeKey(r.id), d); r.named = true; named++; }
-    catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = 'failed'; }
+
+  // 2. the routes: RideWithGPS when connected, plus the rides grouped by name (every Zwift world comes from here)
+  if (s.phase === 'routes') {
+    let pending = 0;
+    if (rwOn) {
+      try {
+        const lib = await rwgpsRoutes();
+        let got = 0;
+        for (const r of lib) {
+          const known = s.routes.find(x => x.id === r.id);
+          if (known && known.updated === r.updated) continue;
+          if (got >= ROUTES_PER_STEP) { pending++; continue; }
+          try {
+            const d = await rwgpsRoutePoints(r.rwgps_id);
+            await setJSON(routeKey(r.id), { id: r.id, name: r.name, virtual: false, points: d.points, pois: d.pois });
+            s.routes = s.routes.filter(x => x.id !== r.id).concat([Object.assign({ source: 'rwgps', named: false, virtual: false }, r)]);
+            got++;
+          } catch (e) { log.push('route ' + r.name + ': ' + e.message); }
+        }
+        s.rwgps_routes = lib.length;
+      } catch (e) { log.push('ridewithgps: ' + e.message); }
+    }
+    if (pending === 0) {
+      const full = await loadTracks(s);
+      const fromRides = G.routesFromTracks(full).filter(r => r.virtual || !rwOn);
+      for (const r of fromRides) {
+        const name = r.virtual ? `${G.worldOf(r.points[0].lat, r.points[0].lng)} · ${r.name}` : r.name;
+        await setJSON(routeKey(r.id), { id: r.id, name, virtual: r.virtual, points: r.points, pois: [] });
+        const known = s.routes.find(x => x.id === r.id);
+        if (known) Object.assign(known, { rides: r.rides, name });
+        else s.routes.push({ id: r.id, name, source: 'strava', virtual: r.virtual, rides: r.rides, named: r.virtual, km: null });
+      }
+      s.routes = s.routes.filter(r => (r.source === 'rwgps' && rwOn) || fromRides.some(x => x.id === r.id));
+      s.phase = 'names';
+    }
+    await save(s);
+    return progress({ routes_pending: pending });
   }
-  const namesPending = s.routes.filter(r => !r.named).length;
-  // 4. place the flags when everything is in
-  const done = tracksPending === 0 && routesPending === 0 && namesPending === 0 && s.routes.length > 0;
-  if (done) {
-    const full = [];
-    for (const t of s.tracks) { const d = await getJSON(trackKey(t.id), null); if (d) full.push(d); }
+
+  // 3. names from the map, one route per step (Overpass is a shared, free server)
+  if (s.phase === 'names') {
+    const r = s.routes.find(x => !x.named && !x.virtual);
+    if (r) {
+      const d = await getJSON(routeKey(r.id), null);
+      if (!d) r.named = true;
+      else {
+        try { d.pois = (d.pois || []).concat(await namesFor(d)); await setJSON(routeKey(r.id), d); r.named = true; }
+        catch (e) { log.push('names for ' + r.name + ': ' + e.message); r.named = 'failed'; }
+      }
+    }
+    const pending = s.routes.filter(x => !x.named && !x.virtual).length;
+    if (!pending) s.phase = 'place';
+    await save(s);
+    return progress({ names_pending: pending });
+  }
+
+  // 4. place the flags
+  if (s.phase === 'place') {
+    const full = await loadTracks(s);
     const road = full.filter(t => !t.virtual);
     const speeds = road.filter(t => t.miles && t.minutes).map(t => t.miles * 1.609 / (t.minutes / 60)).sort((a, b) => a - b);
     s.speed_kmh = speeds.length ? Math.round(speeds[Math.floor(speeds.length / 2)] * 10) / 10 : null;
     const kept = {};
-    for (const f of s.flags) kept[f.id] = { name: f.renamed ? f.name : null, hidden: f.hidden || false, caught: f.caught || 0, first_at: f.first_at || null, last_at: f.last_at || null };
+    for (const f of s.flags) kept[f.id] = { name: f.renamed ? f.name : null, hidden: f.hidden || false };
     const flags = [];
     for (const r of s.routes) {
       const d = await getJSON(routeKey(r.id), null); if (!d) continue;
       const placed = G.placeFlags(d, d.pois || [], full.filter(t => !!t.virtual === !!d.virtual), { speed_kmh: s.speed_kmh });
-      for (const f of placed) {
-        const k = kept[f.id] || {};
-        flags.push(Object.assign(f, { name: k.name || f.name, renamed: !!k.name, hidden: !!k.hidden, caught: k.caught || 0, first_at: k.first_at || null, last_at: k.last_at || null }));
-      }
+      for (const f of placed) { const k = kept[f.id] || {}; flags.push(Object.assign(f, { name: k.name || f.name, renamed: !!k.name, hidden: !!k.hidden, caught: 0, first_at: null, last_at: null })); }
     }
     s.flags = flags; s.built_at = new Date().toISOString();
-    // Past catches count for the rides already in hand.
-    s.scanned = [];
-    s.catches = [];
-    s.xp = 0;
-    for (const t of full.sort((a, b) => a.date < b.date ? -1 : 1)) await scanTrack(s, t, { quiet: true });
+    s.scanned = []; s.catches = []; s.xp = 0; s.hunt_bonus_days = [];
+    s.phase = 'history';
     await save(s);
-    return { done: true, flags: s.flags.length, routes: s.routes.length, tracks: s.tracks.length, log };
+    return progress({ flags: flags.length });
+  }
+
+  // 5. the catches already in the history, a few rides per step, oldest first
+  if (s.phase === 'history') {
+    const todo = s.tracks.filter(t => !s.scanned.includes(t.id)).sort((a, b) => a.date < b.date ? -1 : 1).slice(0, 12);
+    const full = await loadTracks(s, todo.map(t => t.id));
+    for (const t of full.sort((a, b) => a.date < b.date ? -1 : 1)) await scanTrack(s, t, { quiet: true });
+    const pending = s.tracks.filter(t => !s.scanned.includes(t.id)).length;
+    if (!pending) s.phase = 'done';
+    await save(s);
+    return pending ? progress({ history_pending: pending }) : { done: true, flags: s.flags.length, routes: s.routes.length, tracks: s.tracks.length, xp: s.xp, log };
   }
   await save(s);
-  return { done: false, tracks: s.tracks.length, tracks_pending: tracksPending, routes: s.routes.length, routes_pending: routesPending, names_pending: namesPending, log };
+  return progress({});
 }
 
 // Catches on one track, credited once per ride.
@@ -264,7 +301,7 @@ function attach(app) {
   app.post('/flags/build', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await buildStep()); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/rebuild', async (req, res) => { if (!auth(req, res)) return;
-    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: r.virtual })); s.built_at = null; await save(s); res.json(await buildStep()); }
+    try { const s = await state(); s.routes = s.routes.map(r => Object.assign(r, { named: r.virtual })); s.phase = 'tracks'; await save(s); res.json(await buildStep()); }
     catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/flags/scan', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await scan(SCAN_PER_CALL)); } catch (e) { res.status(500).json({ error: e.message }); } });
