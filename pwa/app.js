@@ -1879,6 +1879,7 @@ function foodCardHTML(day){
       <span class="tag">${(m.logged||[]).length?"✓":m.kcal?m.kcal+" kcal":""}</span></li>`).join("");
   return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
     ${B.targetsRow ? B.targetsRow(day.target) : ""}
+    ${day.work && day.work.changed ? `<div class="cue" style="border-color:var(--amber);background:var(--amber-soft)"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
     ${day.cue ? `<div class="cue"><b>Now:</b> ${esc(day.cue.text)}</div>` : ""}
     <div class="macros"><span class="mfuel" style="${b?`background:${tone(b.tone)};border-color:${tone(b.tone)}`:""}">${c.overall==null?"No score yet":"Compliance "+c.overall+" · "+esc(b.word)}</span>
       <span class="small">${c.guidelines.meals||0} on the journal</span></div>

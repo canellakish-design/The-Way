@@ -217,6 +217,44 @@ function loggedPlanned(workouts, st, today, ridesByDate) {
     .map(w => Object.assign(withMetrics(w, st), { logged: true }));
 }
 
+// ---------- compliance: the plan against the ride ----------
+// A planned session is graded by the smaller of two fractions, time done and
+// training stress done, against what was planned. Green is 85% and up,
+// yellow 50% and up, red under that or nothing at all. A ride with no power
+// and no heart rate carries no TSS, so time alone grades it rather than a
+// missing number reading as a miss. The VO2 session's own yardstick, minutes
+// above 147 bpm, needs the heart-rate stream and is not read here yet.
+const bandOf = pct => pct == null ? null : pct >= 85 ? 'green' : pct >= 50 ? 'yellow' : 'red';
+function gradeOne(w, rides) {
+  const plannedMin = w.metrics.duration_s / 60, plannedTss = w.metrics.tss;
+  if (w.logged) return Object.assign({}, w, { compliance: { pct: 100, band: 'green', basis: 'logged by hand' } });
+  if (!rides.length) return Object.assign({}, w, { compliance: { pct: 0, band: 'red', basis: 'no ride on Strava' } });
+  const doneMin = rides.reduce((s, r) => s + r.minutes, 0);
+  const doneTss = rides.reduce((s, r) => s + (r.tss || 0), 0);
+  const tPct = plannedMin ? doneMin / plannedMin : 1;
+  const hasLoad = rides.some(r => r.tss != null);
+  const lPct = hasLoad && plannedTss ? doneTss / plannedTss : null;
+  const pct = Math.round(100 * Math.min(1, lPct == null ? tPct : Math.min(tPct, lPct)));
+  return Object.assign({}, w, { compliance: { pct, band: bandOf(pct),
+    basis: `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)') } });
+}
+// Every planned session on the day is graded against the day's rides: with
+// one ride and one plan that is exact; with two plans the ride counts for
+// both, which is generous but never hides a miss on a one-session day.
+function gradeDay(planned, rides) {
+  return planned.map(w => gradeOne(w, rides));
+}
+function dayCompliance(planned, totals, dayOver, rideCount) {
+  const graded = planned.filter(w => w.compliance);
+  if (graded.length) {
+    const pct = Math.round(graded.reduce((s, w) => s + w.compliance.pct, 0) / graded.length);
+    return { pct, band: bandOf(pct), basis: 'planned sessions against the day\'s rides' };
+  }
+  if (!totals.planned_min) return rideCount ? { pct: null, band: 'extra', basis: 'ridden with nothing planned' } : null;
+  if (!dayOver) return null;
+  return { pct: 0, band: 'red', basis: 'nothing ridden' };
+}
+
 async function calendar(from, to) {
   const st = await settings();
   const d = await db();
@@ -237,10 +275,14 @@ async function calendar(from, to) {
     const logged = p.filter(w => w.logged);
     const plannedMin = Math.round(p.reduce((s, w) => s + w.metrics.duration_s, 0) / 60) + i.reduce((s, e) => s + (e.minutes || 0), 0);
     const doneMin = done.reduce((s, r) => s + r.minutes, 0) + Math.round(logged.reduce((s, w) => s + w.metrics.duration_s, 0) / 60);
-    days.push({ date: k, planned: p, intervals: i, done,
-      totals: { planned_min: plannedMin, done_min: doneMin,
-        planned_tss: p.reduce((s, w) => s + w.metrics.tss, 0) + i.reduce((s, e) => s + (e.tss || 0), 0),
-        done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0) } });
+    const totals = { planned_min: plannedMin, done_min: doneMin,
+      planned_tss: p.reduce((s, w) => s + w.metrics.tss, 0) + i.reduce((s, e) => s + (e.tss || 0), 0),
+      done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0) };
+    // Once the day has a ride (or the day is over), each planned session is
+    // graded against what Strava recorded.
+    const graded = (k < today || done.length) ? gradeDay(p, done, k < today) : p;
+    days.push({ date: k, planned: graded, intervals: i, done,
+      totals, compliance: dayCompliance(graded, totals, k < today, done.length) });
     if (days.length > 62) break;
   }
   return { from, to, today, settings: st, days,
@@ -361,4 +403,4 @@ function attach(app) {
     res.json({ ok: true, removed: w.id, removed_from_intervals: !!(w.sync && w.sync.intervals_event_id) }); });
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow };
+module.exports = { attach, calendar, preflight, descriptorFor: descriptionFor, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance };

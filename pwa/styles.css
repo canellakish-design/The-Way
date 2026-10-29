@@ -347,3 +347,11 @@ ul.agenda.mealplan li.past{opacity:.55}
 .jfix{margin-top:8px}
 .jfix input,.jfix select{width:100%}
 a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; margin-top:10px}
+
+/* compliance: once the day has a ride, the plan is graded against it */
+.pitem.graded.green{border-left-color:var(--green); background:#17331F}
+.pitem.graded.yellow{border-left-color:var(--amber); background:#3A2D0E}
+.pitem.graded.red{border-left-color:var(--red); background:#42201B}
+.pday.graded.green{border-color:var(--green)}
+.pday.graded.yellow{border-color:var(--amber)}
+.pday.graded.red{border-color:var(--red)}

@@ -62,10 +62,13 @@ V.calendar = async function(){
   for (const d of cal.days){
     const isToday = d.date === today, past = d.date < today;
     const rows = [];
-    for (const w of d.planned) rows.push(`<a class="pitem planned" href="#workout?id=${encodeURIComponent(w.id)}">
-        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}</span>
+    for (const w of d.planned){
+      const c = w.compliance;
+      rows.push(`<a class="pitem planned${c?" graded "+c.band:""}" href="#workout?id=${encodeURIComponent(w.id)}">
+        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
         <span class="pn">${esc(w.name)}</span>
-        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:syncBadge(w)}</span></a>`);
+        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${c.band==="green"?"Done":c.band==="yellow"?"Partly":"Missed"}</span>`:syncBadge(w)}</span></a>`);
+    }
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
         <span class="pn">${esc(e.name)}</span>
@@ -75,11 +78,10 @@ V.calendar = async function(){
         <span class="pn">${esc(r.name)}</span>
         <span class="pm">${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span></div>`);
     let verdict = "";
-    if (past && d.totals.planned_min){
-      const f = d.totals.done_min / d.totals.planned_min;
-      verdict = f >= .8 ? `<span class="pbadge ok">Done</span>` : f > 0 ? `<span class="pbadge warn">Partly done</span>` : `<span class="pbadge bad">Missed</span>`;
-    }
-    html += `<div class="card pday${isToday?" today":""}${past?" past":""}">
+    const dc = d.compliance;
+    if (dc && dc.band === "extra") verdict = `<span class="pbadge">Unplanned ride</span>`;
+    else if (dc) verdict = `<span class="pbadge ${dc.band==="green"?"ok":dc.band==="yellow"?"warn":"bad"}">${dc.pct}% · ${dc.band==="green"?"done":dc.band==="yellow"?"partly":"missed"}</span>`;
+    html += `<div class="card pday${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}">
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?" · today":""}</h4>
         <span class="small">${d.totals.planned_min?hm(d.totals.planned_min)+" planned":""}${d.totals.done_min?" · "+hm(d.totals.done_min)+" done":""} ${verdict}</span></div>
       ${rows.join("") || `<div class="small pempty">Rest${past?"":", or nothing planned yet"}.</div>`}

@@ -70,19 +70,34 @@ async function sessionsFor(date) {
       }
     }
   } catch (e) { /* calendar unreachable: plan store alone decides the day */ }
-  // A planned session that was then ridden would count twice.
+  // Once Strava has a ride, the day is what was ridden, not what was planned:
+  // every planned session up to the end of the last ride is taken as covered
+  // by it (ridden long, short, or not at all), and only sessions still ahead
+  // in the day stay on the plan. So the food for the rest of the day follows
+  // the work actually done.
   const done = out.filter(s => s.done), planned = out.filter(s => !s.done);
-  const sessions = done.concat(planned.filter(p => !done.some(d => Math.abs((d.minutes || 0) - (p.minutes || 0)) <= 15)));
-  return { sessions, ftp: st.ftp };
+  let sessions = out, work = null;
+  if (done.length) {
+    const lastEnd = Math.max(...done.map(d => F.toMin(d.end_time) ?? 0));
+    const ahead = planned.filter(p => F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30);
+    sessions = done.concat(ahead);
+    const plannedDay = F.fuelDay(planned), actualDay = F.fuelDay(sessions);
+    const pm = planned.reduce((a, p) => a + (p.minutes || 0), 0), dm = done.reduce((a, d) => a + (d.minutes || 0), 0);
+    work = { planned_min: pm, done_min: dm, planned_day: plannedDay, day: actualDay, changed: plannedDay !== actualDay,
+      note: !pm ? `Ridden ${dm} min with nothing planned: today is a ${F.LABEL[actualDay]}.`
+        : plannedDay === actualDay ? `Ridden ${dm} of ${pm} min planned: still a ${F.LABEL[actualDay]}.`
+        : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min, so the rest of today is a ${F.LABEL[actualDay]}.` };
+  }
+  return { sessions, ftp: st.ftp, work };
 }
 
 async function guidelinesFor(date) {
-  const { sessions, ftp } = await sessionsFor(date);
+  const { sessions, ftp, work } = await sessionsFor(date);
   const day = F.fuelDay(sessions);
   const t = F.targets(day, F.workoutKcal(sessions, ftp));
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
-  return { date, day, fuel_day: t.fuel_day, target: t, guidelines: F.guidelines(day), ride_notes: rideNotes,
+  return { date, day, fuel_day: t.fuel_day, target: t, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
     sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null,
@@ -115,7 +130,7 @@ function promptFor(g, meal, notes) {
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's guidelines:
 ${rules}
-Today's meal plan, timed around the training:
+${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan, timed around the training:
 ${(g.meals || []).map(m => `- ${m.time} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
 ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
@@ -165,7 +180,7 @@ async function dayReport(date) {
   const overall = F.overall(macro ? macro.overall : null, guide.score);
   return {
     date, today: date === tz.todayKey(),
-    fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue,
+    fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
     actual, entries,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide },

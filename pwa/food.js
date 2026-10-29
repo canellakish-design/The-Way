@@ -82,6 +82,7 @@ V.food = async function(){
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
         <div class="small">${sessions || "No training on the calendar, so a rest day."}</div>
+        ${day.work ? `<div class="cue" style="border-color:${day.work.changed?"var(--amber)":"var(--green)"};background:${day.work.changed?"var(--amber-soft)":"var(--green-soft)"}"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
         <ul class="rules">${day.guidelines.map(g=>`<li>${esc(g.text)}</li>`).join("")}</ul>
         ${(day.ride_notes||[]).map(n=>`<details class="ridenotes"><summary>${esc(n.name)} · eating guidelines</summary><div class="ptext">${esc(n.notes)}</div></details>`).join("")}
       </div>
