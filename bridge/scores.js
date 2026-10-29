@@ -35,9 +35,13 @@ async function build() {
   } catch (e) { logged = []; }
   const loads = (done.rides || []).concat(logged);
 
-  // Passive WHOOP read: the webhook keeps it fresh; the page can force a sync.
+  // WHOOP: the webhook pushes a new night when it is scored; failing that,
+  // this read pulls when the stored copy is more than ten minutes old (the
+  // sync has its own cache and in-flight guard, so a page's several calls
+  // cost one request). The front page used to get this from the old
+  // recovery card; the tiles need it here.
   let whoop = null;
-  try { whoop = await require('./whoop').sleepLatest({ sync: false }); } catch (e) { whoop = null; }
+  try { whoop = await require('./whoop').sleepLatest(); } catch (e) { whoop = null; }
 
   // Snapshot today's HRV/RHR into the wellness log so the baseline builds
   // even on days nobody opens the analysis page.
