@@ -57,6 +57,10 @@ ok('hunt: the flags the day\'s TSS reaches, on the route the work fills best', (
   const h = G.hunt(flags, 40, false);
   assert.ok(h && h.size >= 2 && h.flags.every(f => f.work_tss <= 44), JSON.stringify(h));
   assert.strictEqual(G.hunt(flags, 0, false), null);
+  const home = G.homeOf([{ id: 1, points: main.points }, { id: 2, points: main.points }, { id: 3, points: [{ lat: 38.25, lng: -122.3 }] }]);
+  assert.ok(Math.abs(home.lat - 39.4) < 0.01 && home.rides === 2, JSON.stringify(home));
+  assert.strictEqual(G.hunt(flags, 40, false, { home: { lat: 38.25, lng: -122.3 } }), null, 'flags 4,000 km from home are not the hunt');
+  assert.ok(G.hunt(flags, 40, false, { home }));
   assert.strictEqual(G.hunt(flags, 60, true), null);   // no Zwift flags
 });
 

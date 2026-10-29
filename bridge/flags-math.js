@@ -240,9 +240,25 @@ function level(xp) {
 
 // Today's hunt: the route whose flags fit the day's work, and the flags
 // on it that the planned TSS reaches. virtual picks Zwift routes.
-function hunt(flags, tssTarget, virtual) {
+// Where he rides from: the 2 km cell most road rides start in, so a loop
+// ridden on a trip is not today's hunt.
+const HOME_KM = 60;
+function homeOf(tracks) {
+  const cells = new Map();
+  for (const t of tracks || []) {
+    const p = t.points && t.points[0]; if (!p) continue;
+    const k = Math.round(p.lat * 50) + ':' + Math.round(p.lng * 50);
+    if (!cells.has(k)) cells.set(k, []); cells.get(k).push(p);
+  }
+  let best = null;
+  for (const list of cells.values()) if (!best || list.length > best.length) best = list;
+  if (!best) return null;
+  return { lat: +(best.reduce((a, p) => a + p.lat, 0) / best.length).toFixed(4), lng: +(best.reduce((a, p) => a + p.lng, 0) / best.length).toFixed(4), rides: best.length };
+}
+function hunt(flags, tssTarget, virtual, opts) {
   if (!tssTarget || tssTarget < 15) return null;
-  const pool = flags.filter(f => !!f.virtual === !!virtual && !f.hidden);
+  const home = opts && opts.home;
+  const pool = flags.filter(f => !!f.virtual === !!virtual && !f.hidden && (virtual || !home || dist(f, home) <= HOME_KM * 1000));
   const byRoute = new Map();
   for (const f of pool) { if (!byRoute.has(f.route_id)) byRoute.set(f.route_id, []); byRoute.get(f.route_id).push(f); }
   let best = null;
@@ -276,4 +292,4 @@ function tcxCourse(route, flags) {
 }
 
 module.exports = { CATCH_M, VISIT_M, MIN_GAP_M, XP, HUNT_BONUS, dist, annotate, downsample, index, nearest, workAt, classify, overpassQuery, parsePois,
-  placeFlags, visitCount, rarity, routesFromTracks, overlap, worldOf, catchesIn, xpFor, level, hunt, tcxCourse };
+  placeFlags, visitCount, rarity, routesFromTracks, overlap, worldOf, catchesIn, xpFor, level, hunt, homeOf, HOME_KM, tcxCourse };

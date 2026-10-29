@@ -84,7 +84,7 @@ async function namesFor(route, which) {
   for (const url of [MIRRORS[(which || 0) % MIRRORS.length]]) {   // one mirror per call: a function has ten seconds
     try {
       const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 7000);
-      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body }).finally(() => clearTimeout(timer));
+      const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: '*/*', 'User-Agent': 'TheWay/1.1 (personal cycling app; https://thewayforward.netlify.app)' }, body }).finally(() => clearTimeout(timer));
       const text = await r.text();
       if (!r.ok) { errs.push(new URL(url).host + ' ' + r.status + ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)); continue; }
       return G.parsePois(JSON.parse(text));
@@ -205,6 +205,7 @@ async function buildStep() {
     };
     s.cal = { road: cal(false), zwift: cal(true) };
     s.speed_kmh = s.cal.road.speed_kmh;
+    s.home = G.homeOf(road);
     const kept = {};
     for (const f of s.flags) kept[f.id] = { name: f.renamed ? f.name : null, hidden: f.hidden || false };
     const flags = [];
@@ -285,7 +286,7 @@ async function todayHunt(s) {
   const rides_ = sessions.filter(x => !/lift|weight|strength|run/i.test(x.name || ''));
   const tss = rides_.reduce((a, x) => a + (x.tss || 0), 0);
   const virtual = rides_.some(x => /zwift|trainer|indoor|40\/20|vo2/i.test(x.name || ''));
-  const hunt = G.hunt(s.flags, tss, virtual);
+  const hunt = G.hunt(s.flags, tss, virtual, { home: s.home });
   const caughtToday = s.catches.filter(c => c.date === today);
   const caught = hunt ? hunt.flags.filter(f => caughtToday.some(c => c.flag_id === f.id)).length : caughtToday.length;
   return { date: today, tss, virtual, hunt: hunt ? Object.assign(hunt, { flags: hunt.flags.map(f => Object.assign({}, f, { caught_today: caughtToday.some(c => c.flag_id === f.id) })) }) : null,
@@ -299,7 +300,7 @@ function attach(app) {
       let fresh = [];
       if (s.flags.length) { const r = await scan(2); fresh = r.new_catches; s = await state(); }
       const rw = await rwgps();
-      res.json({ built_at: s.built_at, level: G.level(s.xp), flags: s.flags, routes: s.routes, tracks: s.tracks.length, speed_kmh: s.speed_kmh, cal: s.cal || null,
+      res.json({ built_at: s.built_at, level: G.level(s.xp), flags: s.flags, routes: s.routes, tracks: s.tracks.length, speed_kmh: s.speed_kmh, cal: s.cal || null, home: s.home || null,
         catches: s.catches.slice(-40).reverse(), new_catches: fresh, today: await todayHunt(s),
         sources: { rwgps: { configured: !!envStr('RWGPS_API_KEY'), connected: !!rw.token, user: rw.user, routes: s.rwgps_routes || 0 }, strava_tracks: s.tracks.length } });
     } catch (e) { res.status(500).json({ error: e.message }); } });
