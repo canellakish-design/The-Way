@@ -1327,13 +1327,18 @@ V.today = async function(){
     </div>
     <div class="upnext" id="upnext"><div class="label">Next</div>
       <div class="what">reaching the bridge…</div></div>
+    <div class="scores" id="scores">
+      <button class="score" data-k="training"><span class="slabel">Training</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
+      <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+    </div>
+    <div class="scoreverdict small" id="scoreVerdict"></div>
+    <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
       <div class="daystep-label" id="dayLabel"></div>
       <button id="dayNext" aria-label="Next day">›</button>
     </div>
-    <div class="card" id="readiness"><h4>Recovery · last night</h4>
-      <div class="small">reaching the bridge…</div></div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="body"><h4>The scale</h4>
@@ -1376,10 +1381,9 @@ V.today = async function(){
     return h*60 + m;
   };
 
-  /* ---- the top strip: how the night went ----
-     Recovery only. The scale reads into its own card further down the page —
-     what the morning is decided on is how the night went, and a weight next
-     to it competes with that for the same glance. */
+  /* ---- the top strip: the three scores ----
+     Training, Recovery, Fatigue — drawn by refreshScores below. The scale
+     reads into its own card further down the page. */
 
   /* ---- the scale, below the day ----
      One arrow per number Withings reports, coloured by one rule: down green,
@@ -1439,57 +1443,135 @@ V.today = async function(){
   const reconnectLink = ()=>
     `<a href="${DEFAULT_API}/whoop/auth"><b>reconnect WHOOP</b></a>`;
 
-  const recBand =s=> s>=67 ? {name:"green",c:"var(--green)"} : s>=34 ? {name:"yellow",c:"var(--amber)"} : {name:"red",c:"var(--red)"};
-  const refreshReadiness = async ()=>{
-    const el = document.getElementById("readiness");
+  /* ---- the three scores: Training, Recovery, Fatigue ----
+     Training and Fatigue are Fitness (CTL) and Fatigue (ATL) from the
+     Banister model TrainingPeaks, intervals.icu and Strava all run — 42-day
+     and 7-day weighted averages of daily TSS. Recovery is WHOOP's score, with
+     HRV and resting HR against the 30-day median. The bridge does the
+     arithmetic (bridge/scores-math.js); this draws it and explains it. */
+  const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
+  const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
+  let scoresData = null, openScore = null;
+  const paintTile = (k, num, word, tone, sub)=>{
+    const el = view.querySelector(`.score[data-k="${k}"]`);
     if (!el) return;
-    const s = await bridge("/sleep/latest").catch(()=>null);
-    let sleepHTML;
-    if (s && s.recovery && s.recovery.score != null){
-      const b = recBand(s.recovery.score);
-      // Say when it last synced. A stale reading looks identical to a fresh
-      // one otherwise, and this is the number the day gets planned around.
-      const age = s.synced_at ? (Date.now() - new Date(s.synced_at).getTime())/3.6e6 : null;
-      const when = age == null ? "" : age < 1 ? "just synced"
-        : age < 24 ? `synced ${Math.round(age)}h ago` : `synced ${Math.round(age/24)}d ago`;
-      sleepHTML = `<div class="recovery">
-          <span class="recscore" style="color:${b.c}">${s.recovery.score}</span>
-          <span class="recmeta"><span class="recword" style="color:${b.c}">${b.name}</span>
-            <div class="small">HRV ${s.recovery.hrv ?? "—"} ms · resting HR ${s.recovery.rhr ?? "—"}</div></span>
-        </div>
-        <ul class="agenda totals">
-          <li><span class="n">slept</span><span class="tag">${s.sleep?.hours ?? "—"} h${
-            s.sleep?.in_bed ? ` <span class="small">(${s.sleep.in_bed} in bed)</span>` : ""}</span></li>
-          <li><span class="n">sleep performance</span><span class="tag">${
-            s.sleep?.performance != null ? s.sleep.performance + "%" : "—"}</span></li>
-          ${s.nap && s.nap.hours ? `<li><span class="n">nap</span><span class="tag">${s.nap.hours} h</span></li>` : ""}
-        </ul>
-        <div class="small">${esc(when)}${
-          age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}</div>
-        ${s.auth_error?`<div class="small"><b>WHOOP needs reconnecting</b> —
-          ${reconnectLink()} (${esc(s.auth_error.detail||"")})</div>`:""}`;
-    } else {
-      // "visit /whoop/auth on the bridge" was a path, not a way in — there was
-      // no way to act on it from the phone the message was on. It's a link now.
-      const why = !s ? "bridge unreachable"
-        : s.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()}
-            <div class="small">${esc(s.auth_error.detail || "")}${
-              s.auth_error.at ? " · since " + new Date(s.auth_error.at).toLocaleString() : ""}</div>`
-        : s.connected ? `connected, but no sleep record yet —
-            <button class="linkish" id="whoopSync">sync now</button>`
-        : `WHOOP not connected — ${reconnectLink()}`;
-      sleepHTML = `<div class="recovery"><span class="recscore" style="color:var(--muted)">—</span>
-        <span class="recmeta"><div class="small">${why}</div></span></div>`;
+    el.querySelector(".snum").textContent = num == null ? "—" : num;
+    el.querySelector(".snum").style.color = num == null ? "var(--muted)" : toneC(tone);
+    const w = el.querySelector(".sword"); w.textContent = word || " "; w.style.color = toneC(tone);
+    el.querySelector(".ssub").innerHTML = sub || "&nbsp;";
+  };
+  const verdictOf = (d)=>{
+    const r = d.recovery, f = d.fatigue, t = d.training;
+    const strava = d.sources && d.sources.strava && d.sources.strava.connected;
+    if (!r.band && !strava) return "";
+    if ((r.band && r.band.key === "red") || (strava && f.form && f.form.key === "overreached") || (strava && f.acwr_band && f.acwr_band.key === "spike"))
+      return "Easy day: Zone 1 under 116, or off. The body is asking, not the plan.";
+    if (r.band && r.band.key === "yellow" && strava && f.tsb < -10)
+      return "Zone 1 today. Save the 40/20s for a green morning.";
+    if (r.band && r.band.key === "green" && (!strava || f.tsb >= -10))
+      return "Green light. If the plan says VO2, today is the day.";
+    if (strava && t.ramp && t.ramp.key === "too-fast")
+      return "Fitness is climbing faster than +8 a week. Hold the volume this week.";
+    return "Train as planned.";
+  };
+  const drawScores = ()=>{
+    const d = scoresData;
+    const vd = document.getElementById("scoreVerdict");
+    if (!d){
+      paintTile("training", null, "", "", "bridge unreachable");
+      paintTile("recovery", null, "", "", "");
+      paintTile("fatigue", null, "", "", "");
+      if (vd) vd.textContent = "";
+      return;
     }
-    el.innerHTML = `<h4>Recovery · last night</h4>${sleepHTML}`;
+    const strava = d.sources && d.sources.strava && d.sources.strava.connected;
+    const t = d.training, f = d.fatigue, r = d.recovery;
+    if (strava && t){
+      paintTile("training", t.ctl, t.ramp ? t.ramp.word : "", t.ramp ? t.ramp.tone : "",
+        `${sgn(t.ramp_7d)} this week`);
+      paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
+        `form ${sgn(f.tsb)}`);
+    } else {
+      paintTile("training", null, "", "", "Strava not connected");
+      paintTile("fatigue", null, "", "", "");
+    }
+    if (r.score != null){
+      const hrv = r.hrv != null ? `HRV ${r.hrv}${r.hrv_delta_pct != null ? ` (${sgn(r.hrv_delta_pct)}%)` : ""}` : "";
+      paintTile("recovery", r.score, r.band.word, r.band.tone, hrv);
+    } else {
+      const w = d.sources && d.sources.whoop;
+      paintTile("recovery", null, "", "", w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "WHOOP not connected");
+    }
+    if (vd) vd.textContent = verdictOf(d);
+    drawScoreDetail();
+  };
+
+  const row = (n, v)=> `<li><span class="n">${n}</span><span class="tag">${v}</span></li>`;
+  const drawScoreDetail = ()=>{
+    const box = document.getElementById("scoreDetail");
+    if (!box) return;
+    view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
+    if (!openScore || !scoresData){ box.hidden = true; box.innerHTML = ""; return; }
+    const d = scoresData, strava = d.sources && d.sources.strava && d.sources.strava.connected;
+    let html = "";
+    if (openScore === "training"){
+      const t = d.training;
+      html = `<h4>Training · fitness</h4>
+        ${strava ? `<ul class="agenda totals">
+          ${row("fitness (CTL)", `<b>${t.ctl}</b> TSS/day`)}
+          ${row("change this week", `<b style="color:${toneC(t.ramp.tone)}">${sgn(t.ramp_7d)}</b> · ${esc(t.ramp.word)}`)}
+          ${row("last 7 days", `${t.tss_7d} TSS`)}
+          ${row("today so far", `${t.tss_today} TSS`)}
+        </ul>` : `<div class="small">Strava isn't answering (${esc((d.sources.strava||{}).reason || "not connected")}), so there is no ride history to score.</div>`}
+        <div class="small">Fitness is a 42-day weighted average of daily training stress (TSS), the Banister model that TrainingPeaks, intervals.icu and Strava all use: each day adds (TSS − fitness) ÷ 42. A sustainable build is +5 to +8 a week (Friel); more than that and the injury and illness risk climbs.
+        <br>${esc((d.sources.strava||{}).basis || "")}. ${d.sources.strava && d.sources.strava.rides ? d.sources.strava.rides + " rides in the last 120 days." : ""}</div>`;
+    } else if (openScore === "fatigue"){
+      const f = d.fatigue;
+      html = `<h4>Fatigue · form</h4>
+        ${strava ? `<ul class="agenda totals">
+          ${row("fatigue (ATL)", `<b>${f.atl}</b> TSS/day`)}
+          ${row("form (TSB)", `<b style="color:${toneC(f.form.tone)}">${sgn(f.tsb)}</b> · ${esc(f.form.word)}`)}
+          ${row("acute : chronic", f.acwr == null ? "— (not enough fitness yet)" : `<b style="color:${toneC(f.acwr_band.tone)}">${f.acwr}</b> · ${esc(f.acwr_band.word)}`)}
+          ${row("yesterday", `${f.tss_yesterday} TSS`)}
+        </ul>
+        <div class="small"><b>${esc(f.form.word)}</b> — ${esc(f.form.note)}</div>` : `<div class="small">Strava isn't answering, so there is no ride history to score.</div>`}
+        <div class="small">Fatigue is the same average over 7 days. Form is yesterday's fitness minus yesterday's fatigue: above +25 transition, +5 to +25 fresh, −10 to +5 neutral, −10 to −30 productive, below −30 overreached (Friel's zones). The acute : chronic ratio is fatigue ÷ fitness: 0.8 to 1.3 is the safe band, 1.5 and up is a spike (Gabbett).</div>`;
+    } else {
+      const r = d.recovery, w = d.sources.whoop || {};
+      const age = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime())/3.6e6 : null;
+      const when = age == null ? "" : age < 1 ? "just synced" : age < 24 ? `synced ${Math.round(age)}h ago` : `synced ${Math.round(age/24)}d ago`;
+      const base = r.baseline_days >= 7 ? `30-day median` : `baseline after ${7 - r.baseline_days} more morning${7 - r.baseline_days === 1 ? "" : "s"}`;
+      html = `<h4>Recovery · last night</h4>
+        ${r.score != null ? `<ul class="agenda totals">
+          ${row("WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
+          ${row("HRV", `${r.hrv ?? "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(r.hrv_delta_pct)}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
+          ${row("resting HR", `${r.rhr ?? "—"} bpm${r.rhr_delta != null ? ` · <b style="color:${toneC(r.rhr_delta <= 0 ? "good" : r.rhr_delta >= 5 ? "bad" : "warn")}">${sgn(r.rhr_delta)}</b> vs ${r.rhr_baseline}` : ""}`)}
+          ${row("slept", `${r.sleep_h ?? "—"} h${r.sleep_performance != null ? ` · ${r.sleep_performance}% of need` : ""}`)}
+        </ul>
+        <div class="small">${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}</div>`
+        : `<div class="small">${!w.connected ? `WHOOP not connected — ${reconnectLink()}`
+            : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
+            : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
+        ${w.auth_error && r.score != null ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
+        <div class="small">WHOOP scores the night 0 to 100 from HRV, resting heart rate, respiratory rate and sleep against your own baseline: 67 and up green, 34 to 66 yellow, under 34 red. HRV and resting HR are also read here against your 30-day median, the way Oura and Garmin do it: HRV down 10% or resting HR up 5 means the night did not do its job.</div>`;
+    }
+    box.innerHTML = html; box.hidden = false;
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");
     if (sync) sync.onclick = async ()=>{
       sync.textContent = "syncing…"; sync.disabled = true;
-      try{ await bridge("/whoop/sync"); await refreshReadiness(); }
+      try{ await bridge("/whoop/sync"); await refreshScores(); }
       catch(e){ sync.disabled = false; sync.textContent = "sync failed — " + e.message; }
     };
+  };
+  view.querySelectorAll(".score").forEach(b => b.onclick = ()=>{
+    openScore = openScore === b.dataset.k ? null : b.dataset.k;
+    drawScoreDetail();
+  });
+  const refreshScores = async ()=>{
+    scoresData = await bridge("/scores").catch(()=>null);
+    drawScores();
   };
 
 
@@ -1555,9 +1637,12 @@ credentials — if Hexis isn't already signed in, stop and say so.`;
     // today's eating. Hide them rather than show
     // today's numbers under yesterday's date.
     const isToday = offset === 0;
-    const rd = document.getElementById("readiness"), fl = document.getElementById("foodLog");
+    const fl = document.getElementById("foodLog");
     const bd = document.getElementById("body");
-    if (rd) rd.style.display = isToday ? "" : "none";
+    for (const id of ["scores", "scoreVerdict", "scoreDetail"]){
+      const el = document.getElementById(id);
+      if (el) el.style.display = isToday ? "" : "none";
+    }
     if (fl) fl.style.display = isToday ? "" : "none";
     if (bd) bd.style.display = isToday ? "" : "none";
 
@@ -1720,7 +1805,7 @@ credentials — if Hexis isn't already signed in, stop and say so.`;
       if (syncing) return;                       // never stack fetches
       syncing = true;
       try{
-        await Promise.all([loadDay(), refreshReadiness(), refreshFood(), refreshBody()]);
+        await Promise.all([loadDay(), refreshScores(), refreshFood(), refreshBody()]);
         lastSync = Date.now();
       } finally { syncing = false; }
     };

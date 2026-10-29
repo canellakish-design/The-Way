@@ -17,6 +17,8 @@ require('./intervals').attach(app);
 // The plan: workouts authored here, sent to the Garmin through intervals.icu,
 // and the week calendar that puts planned next to done.
 require('./workouts').attach(app);
+// The front page: Training, Recovery, Fatigue.
+require('./scores').attach(app);
 require('./macros').attach(app);
 require('./intake').attach(app);
 require('./status').attach(app);

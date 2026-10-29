@@ -171,7 +171,7 @@ async function stravaDone(from, to, st) {
   if (c && c.from === from && c.to === to && Date.now() - c.at < TTL_MS) return { connected: true, rides: c.rides };
   let list;
   try {
-    list = await require('./strava').apiFetch(`/athlete/activities?after=${epoch(from)}&before=${epoch(to, true)}&per_page=100`);
+    list = await require('./strava').apiFetch(`/athlete/activities?after=${epoch(from)}&before=${epoch(to, true)}&per_page=200`);
   } catch (e) { return { connected: false, reason: e.message, rides: [] }; }
   const rides = (Array.isArray(list) ? list : []).map(a => {
     const date = String(a.start_date_local || '').slice(0, 10);
@@ -301,4 +301,4 @@ function attach(app) {
     res.json({ ok: true, removed: w.id, removed_from_intervals: !!(w.sync && w.sync.intervals_event_id) }); });
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor };
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone };

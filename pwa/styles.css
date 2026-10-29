@@ -195,12 +195,30 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 #alarmOverlay .bignum{font-size:72px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
-/* recovery, given the room the first card used to share with the scale */
-.recovery{display:flex; align-items:center; gap:16px; margin:6px 0 4px}
-.recscore{font-family:var(--mono); font-size:52px; font-weight:700; line-height:1; letter-spacing:-2px;
-  font-variant-numeric:tabular-nums;}
-.recmeta{min-width:0}
-.recword{font-family:var(--mono); font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase}
+/* the three scores: Training, Recovery, Fatigue. Tiles are buttons — tap one
+   and the card beneath explains the number and how it was made. */
+.scores{display:grid; grid-template-columns:repeat(3,1fr); gap:0; margin:14px 0 0; border:1px solid var(--ink);
+  background:var(--card); box-shadow:var(--shadow)}
+.score{display:flex; flex-direction:column; align-items:flex-start; gap:2px; margin:0; padding:12px 12px 10px;
+  background:none; border:0; border-right:1px solid var(--line); box-shadow:none; text-align:left; min-width:0;
+  font:inherit; text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer; width:100%; min-height:0}
+.score:active{transform:none; box-shadow:none}
+.score:last-child{border-right:0}
+.score.on{background:var(--paper)}
+.score .slabel{font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted)}
+.score .snum{font-family:var(--mono); font-size:44px; font-weight:700; line-height:1; letter-spacing:-2px;
+  font-variant-numeric:tabular-nums; margin-top:4px}
+.score .sword{font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+.score .ssub{font-size:12.5px; color:var(--muted); line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+.scoreverdict{margin:8px 2px 0; color:var(--ink); font-weight:500; min-height:0}
+.scoreverdict:empty{display:none}
+.scoredetail{margin-top:10px}
+@media (max-width:400px){
+  .score{padding:10px 8px 8px}
+  .score .snum{font-size:34px}
+  .score .slabel{letter-spacing:1px}
+}
 .weighin{border-top:1px dashed var(--line); margin-top:12px; padding-top:10px}
 
 /* an action worded as prose — it belongs in a sentence, not in a button box */
