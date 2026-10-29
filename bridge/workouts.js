@@ -308,7 +308,7 @@ async function calendar(from, to) {
   let fresh = 0;
   for (const r of doneR.rides) {
     try {
-      const c = await getJSON('ride-' + String(r.id).replace(/\D/g, ''), null);
+      const c = await getJSON('ride-v2-' + String(r.id).replace(/\D/g, ''), null);
       if (c) r.analysis = { hr: c.hr, resp: c.resp, sources: c.sources };
       else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, sources: a.sources }; }
     } catch (e) { /* unread stays unread */ }

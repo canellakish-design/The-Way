@@ -166,13 +166,25 @@ async function sleepLatest(opts) {
                     skin_temp_c: r.score && r.score.skin_temp_celsius != null ? Math.round(r.score.skin_temp_celsius * 10) / 10 : null } : null
   };
 }
+// An authenticated GET against WHOOP for other modules (rides.js reads the
+// workouts). Refreshes the token the same way the sync does.
+async function apiGet(path) {
+  const d = await db();
+  let t = await tok(d);
+  let r = await fetch(API + path, { headers: { Authorization: 'Bearer ' + t } });
+  if (r.status === 401) { d.tokens.expires_at = 0; t = await tok(d); r = await fetch(API + path, { headers: { Authorization: 'Bearer ' + t } }); }
+  if (!r.ok) throw new Error('whoop ' + r.status + ' on ' + path.split('?')[0]);
+  return r.json();
+}
+
 function attach(app) {
   app.get('/whoop/auth', (req, res) => {
     const u = new URL(API + '/oauth/oauth2/auth');
     u.searchParams.set('response_type', 'code');
     u.searchParams.set('client_id', CID);
     u.searchParams.set('redirect_uri', BASE + '/whoop/callback');
-    u.searchParams.set('scope', 'read:sleep read:recovery offline');
+    // read:workout is new: an older authorisation lacks it until /whoop/auth is visited again.
+    u.searchParams.set('scope', 'read:sleep read:recovery read:workout offline');
     u.searchParams.set('state', 'the-way-2026');
     res.redirect(u.toString());
   });
@@ -218,4 +230,4 @@ function attach(app) {
   app.get('/sleep/latest', async (req, res) => { if (!auth(req, res)) return;
     res.json(await sleepLatest()); });
 }
-module.exports = { attach, sleepLatest };
+module.exports = { attach, sleepLatest, apiGet };

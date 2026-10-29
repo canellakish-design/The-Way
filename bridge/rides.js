@@ -23,7 +23,7 @@ const KEY = envStr('INTERVALS_ICU_API_KEY');
 const ATHLETE = envStr('INTERVALS_ICU_ATHLETE_ID');
 const ICU = envStr('INTERVALS_ICU_BASE') || 'https://intervals.icu/api/v1';
 const PER_CALL = 4;
-const key = id => 'ride-' + String(id).replace(/\D/g, '');
+const key = id => 'ride-v2-' + String(id).replace(/\D/g, '');
 
 async function icuGet(pathname) {
   if (!(KEY && ATHLETE)) throw new Error('intervals.icu not configured');
@@ -69,11 +69,29 @@ async function breathingFrom(icuActivity) {
     icu_id: icuActivity.id };
 }
 
+// The Garmin without a strap records no heart rate, but the WHOOP on the
+// wrist does, all day. Its workout record for the ride carries average, max
+// and time in five zones (no stream). Matched by start time.
+async function whoopWorkoutFor(ride) {
+  const { apiGet } = require('./whoop');
+  const [y, m, d] = ride.date.split('-').map(Number);
+  const start = tz.zonedToUTC(y, m, d, 0, 0), end = tz.zonedToUTC(y, m, d, 23, 59);
+  const j = await apiGet(`/developer/v2/activity/workout?start=${start.toISOString()}&end=${end.toISOString()}&limit=25`);
+  const list = (j && j.records) || [];
+  const startMin = ride.time ? (+ride.time.slice(0, 2)) * 60 + (+ride.time.slice(3, 5)) : null;
+  const near = list.map(w => {
+    const mm = w.start ? tz.minutesOf(new Date(w.start)) : null;
+    return { w, d: startMin == null || mm == null ? 999 : Math.abs(mm - startMin) };
+  }).sort((a, b) => a.d - b.d)[0];
+  return near && near.d <= 20 ? near.w : null;
+}
+
 async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
   if (cached && !o.force) return cached;
   const out = { id: ride.id, date: ride.date, name: ride.name, at: new Date().toISOString(), hr: null, resp: null, sources: {} };
+  // 1. Strava's stream, the full read
   try {
     const s = await require('./strava').apiFetch(`/activities/${ride.id}/streams?keys=time,heartrate,watts&key_by_type=true`);
     const time = s && s.time && s.time.data;
@@ -81,10 +99,32 @@ async function analyze(ride, opts) {
     if (hr && hr.length) { out.hr = R.hrSummary(Z.resample1Hz(time, hr)); out.sources.hr = 'Strava heart-rate stream (Garmin)'; }
     else out.sources.hr = 'no heart-rate stream on Strava';
   } catch (e) { out.sources.hr = 'Strava: ' + e.message; out.error = e.message; }
+  // 2. intervals.icu's copy of the Garmin file, for breathing and, failing Strava, heart rate
+  let icuAct = null;
   try {
-    const b = await breathingFrom(await icuActivityFor(ride));
+    icuAct = await icuActivityFor(ride);
+    const b = await breathingFrom(icuAct);
     out.resp = b.resp; out.sources.resp = b.source; out.icu_id = b.icu_id || null;
+    if (!out.hr && icuAct) {
+      const avg = Number(icuAct.average_heartrate), max = Number(icuAct.max_heartrate);
+      if (avg > 30) { out.hr = { avg: Math.round(avg), max: max > 30 ? Math.round(max) : null, seconds: null, minutes_above_hard: null, hard_bpm: R.HR.hard, zones: null, zone_pct: null, estimated: 'intervals.icu averages only' }; out.sources.hr = 'intervals.icu average heart rate (Garmin)'; }
+    }
   } catch (e) { out.sources.resp = 'intervals.icu: ' + e.message; }
+  // 3. the WHOOP's workout record: zone times, no stream
+  if (!out.hr || out.hr.zones == null) {
+    try {
+      const w = await whoopWorkoutFor(ride);
+      const sc = w && w.score;
+      if (sc) {
+        const fromZones = R.hrSummaryFromZones(sc.zone_durations || sc.zone_duration, sc.average_heart_rate, sc.max_heart_rate, 162);
+        if (fromZones) { out.hr = fromZones; out.sources.hr = 'WHOOP workout record (zone times, estimated)'; }
+        else if (sc.average_heart_rate) { out.hr = { avg: Math.round(sc.average_heart_rate), max: Math.round(sc.max_heart_rate || 0) || null, seconds: null, minutes_above_hard: null, hard_bpm: R.HR.hard, zones: null, zone_pct: null, estimated: 'WHOOP averages only' }; out.sources.hr = 'WHOOP workout record (averages)'; }
+        out.whoop = { strain: sc.strain != null ? Math.round(sc.strain * 10) / 10 : null, kilojoule: sc.kilojoule != null ? Math.round(sc.kilojoule) : null, id: w.id };
+      } else if (!out.hr) out.sources.hr += '; no WHOOP workout matched this ride';
+    } catch (e) {
+      out.sources.whoop = /403|401/.test(e.message) ? 'WHOOP needs reconnecting with workout access (visit /whoop/auth)' : 'WHOOP: ' + e.message;
+    }
+  }
   // A Strava failure (a rate limit) is not a result: do not cache it as one.
   if (!out.error) await setJSON(key(ride.id), out).catch(() => {});
   return out;

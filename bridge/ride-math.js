@@ -32,6 +32,36 @@ function hrSummary(hr, thresholds) {
   };
 }
 
+// WHOOP gives no stream, only time in its five zones, cut at 50/60/70/80/90%
+// of max heart rate. With max 162 the cuts fall at 81, 97, 113, 130 and 146
+// bpm. VT1 117 sits inside zone 3 (113 to 130) and VT2 139 inside zone 4
+// (130 to 146), so those two zones are split in proportion; 147 is zone 5
+// to within a beat. Labelled as an estimate wherever it is shown.
+function hrSummaryFromZones(z, avg, max, maxHr) {
+  if (!z) return null;
+  const mh = maxHr || 162;
+  const ms = k => Number(z[k]) || 0;
+  const cuts = [0.5, 0.6, 0.7, 0.8, 0.9].map(f => f * mh);
+  const zone = [ms('zone_zero_milli'), ms('zone_one_milli'), ms('zone_two_milli'), ms('zone_three_milli'), ms('zone_four_milli'), ms('zone_five_milli')];
+  const total = zone.reduce((a, b) => a + b, 0);
+  if (!total) return null;
+  // seconds below VT1: zones 0 to 2 whole, plus the share of zone 3 under 117
+  const z3Lo = Math.max(0, Math.min(1, (HR.vt1 - cuts[2]) / (cuts[3] - cuts[2])));
+  const z4Lo = Math.max(0, Math.min(1, (HR.vt2 - cuts[3]) / (cuts[4] - cuts[3])));
+  const below = zone[0] + zone[1] + zone[2] + zone[3] * z3Lo;
+  const mid = zone[3] * (1 - z3Lo) + zone[4] * z4Lo;
+  const above = zone[4] * (1 - z4Lo) + zone[5];
+  const m = x => r1(x / 60000);
+  return {
+    avg: avg != null ? Math.round(avg) : null, max: max != null ? Math.round(max) : null,
+    seconds: Math.round(total / 1000),
+    minutes_above_hard: m(zone[5]), hard_bpm: Math.round(cuts[4]),
+    zones: { z1_min: m(below), z2_min: m(mid), z3_min: m(above) },
+    zone_pct: { z1: Math.round(below / total * 100), z2: Math.round(mid / total * 100), z3: Math.round(above / total * 100) },
+    estimated: 'from WHOOP zone times, not a stream'
+  };
+}
+
 // breaths per minute, 1 Hz or sparser; zeros and nonsense dropped.
 function respSummary(resp) {
   const xs = (resp || []).map(Number).filter(v => v > 4 && v < 90);
@@ -65,4 +95,4 @@ function zone1Grade(summary) {
     basis: `${pct}% under ${HR.vt1} bpm, avg ${summary.avg}, max ${summary.max}` };
 }
 
-module.exports = { HR, VO2_TARGET, hrSummary, respSummary, vo2Grade, zone1Grade };
+module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, vo2Grade, zone1Grade };

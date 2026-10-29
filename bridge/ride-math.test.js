@@ -37,4 +37,15 @@ ok('zone1Grade: the share of the ride under VT1', () => {
   assert.strictEqual(R.zone1Grade(s).band, 'green');
 });
 
+ok('hrSummaryFromZones: WHOOP zone times mapped onto the Seiler zones', () => {
+  const z = { zone_zero_milli: 0, zone_one_milli: 600000, zone_two_milli: 600000, zone_three_milli: 600000, zone_four_milli: 300000, zone_five_milli: 540000 };
+  const s = R.hrSummaryFromZones(z, 128, 158, 162);
+  assert.strictEqual(s.seconds, 2640);
+  assert.strictEqual(s.minutes_above_hard, 9);
+  assert.strictEqual(s.hard_bpm, 146);
+  assert.ok(s.zones.z1_min > 20 && s.zones.z1_min < 24, 'below VT1 ' + s.zones.z1_min);
+  assert.ok(/WHOOP/.test(s.estimated));
+  assert.strictEqual(R.hrSummaryFromZones(null), null);
+});
+
 console.log(n + ' passed');

@@ -79,7 +79,7 @@ V.calendar = async function(){
         <span class="pk">Done${r.time?" · "+esc(r.time):""}</span>
         <span class="pn">${esc(r.name)}</span>
         <span class="pm">${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
-        ${h?`<span class="pm small">${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}</span>`:""}</div>`);
+        ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}</div>`);
     }
     let verdict = "";
     const dc = d.compliance;
