@@ -141,12 +141,24 @@ async function preflight() {
 }
 
 // ---------- the calendar: planned + intervals.icu + done ----------
+// Every caller asks for a slice of the same few months, and some ask one day
+// at a time (the day page builds a fuel target per day). So the fetch is
+// always the whole window, 120 days back to 60 ahead, cached once, and each
+// request is served from that. One call to intervals.icu per ten minutes
+// instead of one per day drawn.
+function wideWindow(from, to) {
+  const today = tz.todayKey();
+  return { wfrom: from < tz.shiftKey(today, -120) ? from : tz.shiftKey(today, -120),
+           wto: to > tz.shiftKey(today, 60) ? to : tz.shiftKey(today, 60) };
+}
 async function icuEvents(from, to) {
   if (!icuConfigured()) return { configured: false, events: [] };
   const key = 'calendar-icu-cache';
+  const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
-  if (c && c.from === from && c.to === to && Date.now() - c.at < TTL_MS) return { configured: true, events: c.events };
-  const raw = await icu('GET', `/events?oldest=${from}&newest=${to}`);
+  if (c && c.from <= from && c.to >= to && Date.now() - c.at < TTL_MS)
+    return { configured: true, events: c.events.filter(e => e.date >= from && e.date <= to) };
+  const raw = await icu('GET', `/events?oldest=${wfrom}&newest=${wto}`);
   const events = (Array.isArray(raw) ? raw : [])
     .filter(e => /^(WORKOUT|RACE)/i.test(String(e.category || '')))
     .filter(e => !String(e.external_id || '').startsWith(EXT))   // our own come from the store
@@ -155,8 +167,8 @@ async function icuEvents(from, to) {
       name: e.name || 'Session', type: e.type || null,
       minutes: Math.round((e.moving_time || e.icu_planned_duration || 0) / 60) || null,
       tss: e.icu_training_load || null }));
-  await setJSON(key, { from, to, at: Date.now(), events }).catch(() => {});
-  return { configured: true, events };
+  await setJSON(key, { from: wfrom, to: wto, at: Date.now(), events }).catch(() => {});
+  return { configured: true, events: events.filter(e => e.date >= from && e.date <= to) };
 }
 
 function epoch(dateKey, endOfDay) {
@@ -165,14 +177,23 @@ function epoch(dateKey, endOfDay) {
   return Math.floor(Date.UTC(y, m - 1, d) / 1000) + (endOfDay ? 86400 + 6 * 3600 : -6 * 3600);
 }
 
+// Same shape for Strava, whose limit is 100 calls per 15 minutes: the whole
+// window once, then slices from the cache. The fitness line reads 120 days,
+// so that is the window.
 async function stravaDone(from, to, st) {
   const key = 'calendar-strava-cache';
+  const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
-  if (c && c.from === from && c.to === to && Date.now() - c.at < TTL_MS) return { connected: true, rides: c.rides };
+  if (c && c.from <= from && c.to >= to && Date.now() - c.at < TTL_MS)
+    return { connected: true, rides: c.rides.filter(r => r.date >= from && r.date <= to), cached: true };
   let list;
   try {
-    list = await require('./strava').apiFetch(`/athlete/activities?after=${epoch(from)}&before=${epoch(to, true)}&per_page=200`);
-  } catch (e) { return { connected: false, reason: e.message, rides: [] }; }
+    list = await require('./strava').apiFetch(`/athlete/activities?after=${epoch(wfrom)}&before=${epoch(wto, true)}&per_page=200`);
+  } catch (e) {
+    // Rate-limited or down: the last good copy beats an empty day that reads as "nothing ridden".
+    if (c && c.from <= from && c.to >= to) return { connected: true, stale: true, reason: e.message, rides: c.rides.filter(r => r.date >= from && r.date <= to) };
+    return { connected: false, reason: e.message, rides: [] };
+  }
   const rides = (Array.isArray(list) ? list : []).map(a => {
     const date = String(a.start_date_local || '').slice(0, 10);
     const secs = a.moving_time || 0;
@@ -192,9 +213,9 @@ async function stravaDone(from, to, st) {
       np_w: a.weighted_average_watts ? Math.round(a.weighted_average_watts) : null,
       avg_hr: a.average_heartrate ? Math.round(a.average_heartrate) : null,
       tss, tss_basis: basis };
-  }).filter(r => r.date >= from && r.date <= to);
-  await setJSON(key, { from, to, at: Date.now(), rides }).catch(() => {});
-  return { connected: true, rides };
+  }).filter(r => r.date >= wfrom && r.date <= wto);
+  await setJSON(key, { from: wfrom, to: wto, at: Date.now(), rides }).catch(() => {});
+  return { connected: true, rides: rides.filter(r => r.date >= from && r.date <= to) };
 }
 
 // A workout saved after its own date has passed is the rider logging what he

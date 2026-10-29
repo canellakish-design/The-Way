@@ -59,8 +59,8 @@ async function sessionsFor(date) {
         const start = e.time ? tz.zonedToUTC(...date.split('-').map(Number), +e.time.slice(0, 2), +e.time.slice(3, 5)) : null;
         out.push({ name: e.name, sport: e.type, minutes: e.minutes, tss: e.tss, planned: true, time: e.time || null, start_at: start ? start.toISOString() : null });
       }
+      const strava = day.done.length ? await getJSON('strava', { rides: [] }) : { rides: [] };
       for (const r of day.done) {
-        const strava = await getJSON('strava', { rides: [] });
         const ride = (strava.rides || []).find(x => x.id === r.id);
         const kcal = ride ? (ride.calories || ride.kilojoules || null) : null;
         const start = r.time ? tz.zonedToUTC(...date.split('-').map(Number), +r.time.slice(0, 2), +r.time.slice(3, 5)) : null;
@@ -75,18 +75,38 @@ async function sessionsFor(date) {
   // by it (ridden long, short, or not at all), and only sessions still ahead
   // in the day stay on the plan. So the food for the rest of the day follows
   // the work actually done.
+  // The plan stands when the ride matched it. Each planned session up to the
+  // end of the last ride is graded against the day's rides (workouts.js,
+  // the same grade the calendar shows): at 85% and up the plan is kept as
+  // written and simply marked done, so the food plan does not move. Short
+  // of that, the rest of the day is rebuilt from the work actually done.
   const done = out.filter(s => s.done), planned = out.filter(s => !s.done);
   let sessions = out, work = null;
   if (done.length) {
+    const { gradeOne } = require('./workouts');
     const lastEnd = Math.max(...done.map(d => F.toMin(d.end_time) ?? 0));
+    const lastRide = done.slice().sort((a, b) => (F.toMin(a.end_time) ?? 0) - (F.toMin(b.end_time) ?? 0)).pop();
+    const covered = planned.filter(p => !(F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
     const ahead = planned.filter(p => F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30);
-    sessions = done.concat(ahead);
-    const plannedDay = F.fuelDay(planned), actualDay = F.fuelDay(sessions);
+    const rides = done.map(r => ({ minutes: r.minutes, tss: r.tss }));
+    const graded = covered.map(p => Object.assign({}, p, { compliance: gradeOne({ metrics: { duration_s: (p.minutes || 0) * 60, tss: p.tss || 0 } }, rides).compliance }));
+    const compliant = graded.length > 0 && graded.every(p => p.compliance.pct >= 85);
     const pm = planned.reduce((a, p) => a + (p.minutes || 0), 0), dm = done.reduce((a, d) => a + (d.minutes || 0), 0);
-    work = { planned_min: pm, done_min: dm, planned_day: plannedDay, day: actualDay, changed: plannedDay !== actualDay,
-      note: !pm ? `Ridden ${dm} min with nothing planned: today is a ${F.LABEL[actualDay]}.`
-        : plannedDay === actualDay ? `Ridden ${dm} of ${pm} min planned: still a ${F.LABEL[actualDay]}.`
-        : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min, so the rest of today is a ${F.LABEL[actualDay]}.` };
+    const pct = graded.length ? Math.round(graded.reduce((a, p) => a + p.compliance.pct, 0) / graded.length) : null;
+    if (compliant) {
+      sessions = graded.map(p => Object.assign({}, p, { planned: false, done: true, kept: true,
+        end_time: lastRide.end_time || p.end_time, end_at: lastRide.end_at || p.end_at })).concat(ahead);
+      const day = F.fuelDay(sessions);
+      work = { planned_min: pm, done_min: dm, pct, compliant: true, planned_day: day, day, changed: false,
+        note: `Ridden as planned (${pct}%): today's plan stands.` };
+    } else {
+      sessions = done.concat(ahead);
+      const plannedDay = F.fuelDay(planned), actualDay = F.fuelDay(sessions);
+      work = { planned_min: pm, done_min: dm, pct, compliant: false, planned_day: plannedDay, day: actualDay, changed: plannedDay !== actualDay,
+        note: !pm ? `Ridden ${dm} min with nothing planned: today is a ${F.LABEL[actualDay]}.`
+          : plannedDay === actualDay ? `Ridden ${dm} of ${pm} min planned (${pct}%): still a ${F.LABEL[actualDay]}, sized to the ride.`
+          : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min (${pct}%), so the rest of today is a ${F.LABEL[actualDay]}.` };
+    }
   }
   return { sessions, ftp: st.ftp, work };
 }
