@@ -75,9 +75,10 @@ V.food = async function(){
     <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     ${isToday ? `<div class="card day snapcard" id="snap">
-      <button class="primary big snapbtn" id="snapBtn">Snap a meal</button>
+      <div class="snaprow"><button class="primary big snapbtn" id="snapBtn">Snap a meal</button><button class="big snapbtn" id="rollBtn">From camera roll</button></div>
       <div class="small snaphint">Drinks count: a glass, a mug or the bottle in the frame is read as millilitres for the hydration score. A photo of the bottle alone works too.</div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
+      <input id="rollFile" type="file" accept="image/*" hidden>
       <div id="snapForm" hidden>
         <img id="snapPreview" class="snappreview" alt="">
         <div class="row2"><span><label>Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
@@ -205,17 +206,22 @@ V.food = async function(){
 
   /* ---- the camera ---- */
   if (!isToday) return;
-  const fileEl = document.getElementById("snapFile"), form = document.getElementById("snapForm");
+  // Two ways in: the camera (capture forces it on a phone) and the camera
+  // roll (no capture, so the phone offers the library). Same form after.
+  const fileEl = document.getElementById("snapFile"), rollEl = document.getElementById("rollFile"), form = document.getElementById("snapForm");
   let file = null;
   document.getElementById("snapBtn").onclick = ()=> fileEl.click();
-  fileEl.onchange = ()=>{
-    file = fileEl.files && fileEl.files[0];
+  document.getElementById("rollBtn").onclick = ()=> rollEl.click();
+  const picked = (el)=>{
+    file = el.files && el.files[0];
     if (!file) return;
     document.getElementById("snapPreview").src = URL.createObjectURL(file);
     document.getElementById("snapResult").innerHTML = "";
     form.hidden = false;
   };
-  document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; };
+  fileEl.onchange = ()=> picked(fileEl);
+  rollEl.onchange = ()=> picked(rollEl);
+  document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; };
   const showVerdict = (e)=>{
     const a = e.assessment;
     document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC((FIT[a.fits]||FIT.partly).tone)}">
