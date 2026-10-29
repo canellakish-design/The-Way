@@ -248,6 +248,17 @@ function windowsForDate(events, dateStr, extraBusy) {
   };
 }
 
+// One target per day on the page, computed from that day's sessions. Days are
+// independent, so they run together; a failure leaves that day without a row
+// rather than taking the page down.
+async function attachMacros(days) {
+  const { guidelinesFor } = require('./food');
+  await Promise.all(days.map(async day => {
+    try { const g = await guidelinesFor(day.date); day.macros = Object.assign({ source: 'the way' }, g.target); }
+    catch (e) { day.macros = null; }
+  }));
+}
+
 function recommendToday(day, recovery, remaining) {
   const rec = recovery == null ? null : (recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red');
   const best = day.windows.reduce((a, w) => Math.max(a, w.minutes), 0);
@@ -441,9 +452,8 @@ function attach(app) {
           category: classify(e.summary, d.manual, calDefault) };
       });
       const days = scheduleDays(liveEvents.concat(snapEvents), n, iv.days, back);
-      // Hexis macros, posted each morning by the Chrome run.
-      const macros = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
-      for (const day of days) day.macros = macros[day.date] || null;
+      // The day's fuel targets, from the day's training (food-math.js).
+      await attachMacros(days);
       const sources = {
         timezone: tz.ZONE,
         calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))
@@ -473,8 +483,7 @@ function attach(app) {
         const { weekState } = require('./race');
         const s0 = await sleepLatest({ sync: false }).catch(() => null);
         const w0 = await weekState().catch(() => null);
-        const macros0 = await require('./macros').forDates(days.map(x => x.date)).catch(() => ({}));
-        for (const day of days) day.macros = macros0[day.date] || null;
+        await attachMacros(days);
         return res.json({ connected: true, synced_at: null, days, sources, today_index: todayIdx0,
           ...recommendToday(days[todayIdx0], s0 && s0.recovery ? s0.recovery.score : null,
             w0 ? w0.remaining : null) });

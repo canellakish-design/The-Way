@@ -1,6 +1,6 @@
-// The Way — service worker v9. Network-first, and it only caches genuine
+// The Way — service worker v10. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v9";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v10";   // bumped whenever the shell changes, so a held copy is dropped on activate
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys =>
@@ -9,7 +9,7 @@ self.addEventListener("activate", e => {
 });
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  const shellPaths = ["/", "/index.html", "/app.js", "/plan.js", "/styles.css"];
+  const shellPaths = ["/", "/index.html", "/app.js", "/plan.js", "/food.js", "/styles.css"];
   if (shellPaths.includes(u.pathname)) {
     e.respondWith(fetch(e.request).then(r => {
       // Only cache a real success. A 404 page, or the API function answering
@@ -18,7 +18,7 @@ self.addEventListener("fetch", e => {
       const type = r.headers.get("content-type") || "";
       const cacheable = r.ok && r.status === 200
         && (u.pathname === "/styles.css" ? type.includes("css")
-          : (u.pathname === "/app.js" || u.pathname === "/plan.js") ? type.includes("javascript")
+          : (u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js") ? type.includes("javascript")
           : type.includes("html"));
       if (cacheable) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
       return r;

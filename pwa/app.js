@@ -177,7 +177,7 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan" };
+const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan", hexis:"food" };
 function nav(){
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
@@ -186,7 +186,13 @@ function nav(){
   // (the alarm lands on the morning routine, the routines link to their
   // groups), so those views get one way back rather than being dead ends.
   const navEl = document.querySelector("nav");
-  if (navEl) navEl.innerHTML = (h === "today" || h === "bedroom") ? "" : `<a href="#today" class="on">← The day</a>`;
+  // Three places the day is run from: the day itself, the calendar where the
+  // workouts are planned ahead, and the food journal. Everything else is a
+  // tap away from one of them.
+  const NAV = [["today","The day"],["calendar","Calendar"],["food","Food"]];
+  const cur = h === "workout" ? "calendar" : h;
+  if (navEl) navEl.innerHTML = h === "bedroom" ? "" :
+    NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
 }
 /* The front page is the day, on every device. The bedside clock is still a
@@ -1290,9 +1296,8 @@ function dayCard(d, plan, nowMin, rec, solo){
     ? `<div class="macros">${m.fuel_day?`<span class="mfuel">${esc(m.fuel_day)}</span>`:""}
         <span class="unit">${m.kcal ?? "—"} kcal</span><span class="unit c">${m.carbs_g ?? "—"}C</span>
         <span class="unit p">${m.protein_g ?? "—"}P</span><span class="unit f">${m.fat_g ?? "—"}F</span>
-        <span class="small">Hexis</span></div>`
-    : (isToday ? `<div class="macros"><span class="small">No Hexis macros yet —
-        <button class="linkish" id="hexisRun">copy the morning run</button></span></div>` : "");
+        <span class="small">from the day's training</span></div>`
+    : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
     ${macroRow}
@@ -1459,12 +1464,12 @@ V.today = async function(){
     if (!c){ paintTile("food", null, "", "", scoresData ? "no answer" : "bridge unreachable"); return; }
     const o = c.compliance ? c.compliance.overall : null;
     if (o == null){
-      paintTile("food", null, "", "", !c.target ? "no Hexis target" : "nothing logged yet");
+      paintTile("food", null, "", "", !c.target ? "no target" : "snap the first meal");
       return;
     }
     const b = foodBand(o);
     const k = c.compliance.per_macro && c.compliance.per_macro.kcal;
-    paintTile("food", o, b.word, b.tone, k && k.target ? `${Math.round(k.actual / k.target * 100)}% of kcal` : "");
+    paintTile("food", o, b.word, b.tone, `${c.meals||0} photo${c.meals===1?"":"s"}${k && k.target ? ` · ${Math.round(k.actual / k.target * 100)}% kcal` : ""}`);
   };
   const paintTile = (k, num, word, tone, sub)=>{
     const el = view.querySelector(`.score[data-k="${k}"]`);
@@ -1533,7 +1538,8 @@ V.today = async function(){
       const c = complianceData;
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
-        <div class="small">Scored per macro, carbs, protein, fat and kcal each 0 to 100 against the Hexis target for the day, then averaged, so a good calorie total cannot hide a protein miss. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure: it is day-to-date intake against the whole day.</div>`;
+        <a class="btn primary" href="#food">Snap a meal</a>
+        <div class="small">Half the score is the macros against the day's target, carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. The other half is the photo journal against today's guidelines: protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, fed inside the post-ride window. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure.</div>`;
     } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>
@@ -1630,30 +1636,6 @@ V.today = async function(){
       ? dayCard(day, cached.plan, nowMin(), cached.recommendation, true)
       : `<div class="card"><div class="small">No data for that day — the schedule reaches
           ${cached.days.length} days from ${esc(cached.days[0].date)}.</div></div>`;
-
-    // The morning Hexis run, ready to hand to Claude in Chrome. Hexis has no
-    // API, so a browser already signed in is the only way in — which means
-    // this instruction is only ever runnable in Harry's own browser, never by
-    // an assistant somewhere else. It points at the #hexis form rather than a
-    // console: same post, but something a person or a browser agent can both
-    // do without being handed a snippet to paste.
-    const hx = document.getElementById("hexisRun");
-    if (hx) hx.onclick = async ()=>{
-      const day = (cached.days[cached.todayIndex || 0] || {}).date || "today";
-      const text =
-`1. Open hexis.live and go to ${day}. Read the day's macro targets:
-   kcal, carbs (g), protein (g), fat (g), and the fuelling label.
-2. Open ${location.origin}/#hexis
-3. Type the numbers into the form and press Save.
-4. Tell me what the targets were.
-
-Don't log into anything I'm not already signed into, and don't create any
-credentials — if Hexis isn't already signed in, stop and say so.`;
-      try{
-        await navigator.clipboard.writeText(text);
-        hx.textContent = "copied — paste it to Claude in Chrome";
-      }catch(e){ hx.textContent = "copy failed — " + e.message; }
-    };
 
     const lab = document.getElementById("dayLabel");
     if (lab) lab.textContent = offset === 0 ? "Today"
@@ -1786,47 +1768,15 @@ credentials — if Hexis isn't already signed in, stop and say so.`;
   };
 
   {
+    // The food card is the journal in brief: where the day stands, what to
+    // eat next and when, the photos so far. The camera lives on #food.
     const refreshFood = async ()=>{
       const el = document.getElementById("foodLog");
       if (!el) return;
-      let meals = [];
-      try{ meals = (await bridge("/meals/today")).meals || []; }
-      catch(e){ el.innerHTML = `<h4>Food log · today</h4><div class="small">bridge unreachable — entries queue locally</div>`; return; }
-      el.innerHTML = foodLogHTML(meals, cached.macros);
-      // Compliance is its own call: it reconciles the Hexis target with Alma's
-      // tracking, which may have landed after the day payload was built.
-      bridge("/compliance").then(c=>{
-        const box = document.getElementById("complianceBlock");
-        if (!box) return;
-        box.innerHTML = complianceHTML(c);
-        const sb = document.getElementById("snackLog");
-        if (sb) sb.onclick = ()=> add({ name: sb.dataset.name, meal:"snack",
-          kcal:+sb.dataset.k, carbs_g:+sb.dataset.c, protein_g:+sb.dataset.p, fat_g:+sb.dataset.f });
-      }).catch(()=>{});
-      const add = async (m)=>{
-        const r = await logMealQueued(m);
-        const msg = document.getElementById("flMsg");
-        if (r.ok){ refreshFood(); }
-        else if (msg) msg.textContent = "Bridge offline — queued locally (" + r.queued + ").";
-      };
-      const tog = document.getElementById("flToggle");
-      if (tog) tog.onclick = ()=>{
-        const f = document.getElementById("flForm");
-        if (f) { f.hidden = !f.hidden; tog.textContent = f.hidden ? "Log something" : "Close"; }
-      };
-      const addBtn = document.getElementById("flAdd");
-      if (!addBtn) return;                    // view swapped mid-render
-      addBtn.onclick = ()=> add({
-        name: document.getElementById("flName").value || "meal",
-        meal: document.getElementById("flMeal").value,
-        kcal: +document.getElementById("flK").value || 0,
-        carbs_g: +document.getElementById("flC").value || 0,
-        protein_g: +document.getElementById("flP").value || 0,
-        fat_g: +document.getElementById("flF").value || 0 });
-      document.getElementById("flSmoothie").onclick = ()=> add(
-        {name:"Blueberry oatmeal smoothie",meal:"breakfast",kcal:520,protein_g:40,carbs_g:85,fat_g:8});
-      document.getElementById("flBowl").onclick = ()=> add(
-        {name:"Post-ride bowl",meal:"lunch",kcal:750,protein_g:52,carbs_g:98,fat_g:16});
+      let day = null;
+      try{ day = await bridge("/food/today"); }
+      catch(e){ el.innerHTML = `<h4>Food · today</h4><div class="small">bridge unreachable</div>`; return; }
+      el.innerHTML = foodCardHTML(day);
     };
 
     /* ---- keeping it current ---- */
@@ -1868,10 +1818,9 @@ credentials — if Hexis isn't already signed in, stop and say so.`;
   }
 };
 
-/* ---------------- FOOD LOG (front page) ----------------
-   Additive: every entry adds to a running total that is carried down the
-   list, so the day reads as an accumulation, not a pile of separate meals.
-   When Hexis macros are in, the same totals are shown as what's left. */
+/* ---------------- FOOD (front page) ----------------
+   The journal in brief. Hexis and Alma are gone: the target comes from the
+   day's training (bridge/food-math.js), the intake from the photos. */
 async function logMealQueued(m){
   try{
     await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)});
@@ -1882,56 +1831,31 @@ async function logMealQueued(m){
     return { ok:false, queued:q.length };
   }
 }
-function mealTime(m){
-  if (!m.logged_at) return "";
-  const d = new Date(m.logged_at);
-  if (isNaN(d)) return "";
-  let h=d.getHours(); const mm=String(d.getMinutes()).padStart(2,"0"); const ap=h<12?"a":"p";
-  h=h%12; if(h===0)h=12; return h+":"+mm+ap;
-}
-function foodLogHTML(meals, macros){
-  const run = { kcal:0, carbs_g:0, protein_g:0, fat_g:0 };
-  const rows = meals.map(m=>{
-    run.kcal += m.kcal||0; run.carbs_g += m.carbs_g||0;
-    run.protein_g += m.protein_g||0; run.fat_g += m.fat_g||0;
-    return `<li><span class="t">${esc(mealTime(m))}</span>
-      <span class="n">${esc(m.name)}<span class="small"> ${esc(m.meal||"")}${m.carbs_g?` · ${Math.round(m.carbs_g)}C`:""}${m.protein_g?` · ${Math.round(m.protein_g)}P`:""}${m.fat_g?` · ${Math.round(m.fat_g)}F`:""}</span></span>
-      <span class="tag">+${m.kcal||0}<br><b>${Math.round(run.kcal)}</b></span></li>`;
-  }).join("");
-  const line = (label, got, target)=>{
-    const left = target != null ? Math.round(target - got) : null;
-    return `<li><span class="n">${label}</span><span class="tag">${Math.round(got)}${target!=null?` / ${target}`:""}${
-      left!=null?` <b>${left>=0?left+" left":Math.abs(left)+" over"}</b>`:""}</span></li>`;
-  };
-  const totals = `<ul class="agenda totals">
-    ${line("kcal", run.kcal, macros?macros.kcal:null)}
-    ${line("carbs g", run.carbs_g, macros?macros.carbs_g:null)}
-    ${line("protein g", run.protein_g, macros?macros.protein_g:null)}
-    ${line("fat g", run.fat_g, macros?macros.fat_g:null)}</ul>`;
-  return `<h4>Food log · today${meals.length?` · ${meals.length} entries`:""}</h4>
-    <div id="complianceBlock"></div>
-    <ul class="agenda foodlog">${rows || `<li><span class="t"></span><span class="n">Nothing logged yet</span><span class="tag">0</span></li>`}</ul>
-    ${totals}
-    ${macros ? "" : `<div class="small">No Hexis targets today — totals only.</div>`}
-    <button id="flToggle">Log something</button>
-    <div id="flForm" hidden>
-    <div class="row2"><span><label>What</label><input id="flName" placeholder="Rice balls"></span>
-      <span><label>Meal</label><select id="flMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
-    <div class="row2"><span><label>kcal</label><input id="flK" type="number"></span>
-      <span><label>carbs g</label><input id="flC" type="number"></span></div>
-    <div class="row2"><span><label>protein g</label><input id="flP" type="number"></span>
-      <span><label>fat g</label><input id="flF" type="number"></span></div>
-    <button class="primary" id="flAdd">Add to the day</button>
-    <button id="flSmoothie">Smoothie (520)</button>
-    <button id="flBowl">Post-ride bowl (750)</button>
-    <div class="small" id="flMsg"></div></div>`;
+function hm12(t){ const m=/^(\d{2}):(\d{2})$/.exec(t||""); if(!m) return t||""; let h=+m[1]; const ap=h<12?"a":"p"; h=h%12; if(h===0)h=12; return h+":"+m[2]+ap; }
+function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function foodCardHTML(day){
+  const B = window.foodBits || {};
+  const c = day.compliance, b = c.band;
+  const tone = t => t==="good"?"var(--green)":t==="warn"?"var(--amber)":t==="bad"?"var(--red)":"var(--ink)";
+  const now = nowHM();
+  const next = (day.meals||[]).find(m => m.time >= now && !(m.logged||[]).length) || null;
+  const plan = (day.meals||[]).map(m => `<li class="${(m.logged||[]).length?"done":m===next?"next":(m.time<now?"past":"")}">
+      <span class="t">${esc(hm12(m.time))}</span>
+      <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span></span>
+      <span class="tag">${(m.logged||[]).length?"✓":m.kcal?m.kcal+" kcal":""}</span></li>`).join("");
+  return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
+    ${B.targetsRow ? B.targetsRow(day.target) : ""}
+    ${day.cue ? `<div class="cue"><b>Now:</b> ${esc(day.cue.text)}</div>` : ""}
+    <div class="macros"><span class="mfuel" style="${b?`background:${tone(b.tone)};border-color:${tone(b.tone)}`:""}">${c.overall==null?"No score yet":"Compliance "+c.overall+" · "+esc(b.word)}</span>
+      <span class="small">${c.guidelines.meals||0} on the journal</span></div>
+    ${B.thumbStrip ? B.thumbStrip(day.entries) : ""}
+    <ul class="agenda mealplan">${plan}</ul>
+    <a class="btn primary" href="#food">Snap a meal</a>`;
 }
 
-/* ---- compliance: Hexis asked, Alma tracked, how close ----
-   Scored per macro so a good calorie total can't paper over a protein miss,
-   with the snack that would move the number most. */
+/* ---- compliance, for the Food tile's detail ---- */
 function complianceHTML(c){
-  if (!c || !c.target) return `<div class="small">No Hexis target today — nothing to score against.</div>`;
+  if (!c || !c.target) return `<div class="small">No target for today — the bridge couldn't build one.</div>`;
   const p = c.compliance && c.compliance.per_macro;
   if (!p) return "";
   const band = s => s >= 90 ? "var(--green)" : s >= 70 ? "var(--amber)" : "var(--red)";
@@ -1950,8 +1874,12 @@ function complianceHTML(c){
         <div class="small">${s.kcal} kcal · ${s.carbs_g}C · ${s.protein_g}P · ${s.fat_g}F —
           ${esc(s.why)}, compliance ${s.score_before} → <b>${s.score_after}</b></div>
         <button id="snackLog" data-name="${esc(s.name)}" data-k="${s.kcal}" data-c="${s.carbs_g}" data-p="${s.protein_g}" data-f="${s.fat_g}">Log this snack</button></div>`;
-  return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall}</span>
-      <span class="small">${esc(c.source||"")} vs Hexis${c.target.fuel_day?` · ${esc(c.target.fuel_day)}`:""}</span></div>
+  const B = window.foodBits || {};
+  return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall ?? "—"}</span>
+      <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}${
+        c.compliance.guideline_overall!=null?` · guidelines ${c.compliance.guideline_overall}`:""}${
+        c.compliance.macro_overall!=null?` · macros ${c.compliance.macro_overall}`:""}</span></div>
+    ${B.checksList ? B.checksList(c.compliance.checks) : ""}
     <ul class="agenda totals">
       ${row("carbs","carbs_g")}${row("protein","protein_g")}${row("fat","fat_g")}${row("kcal","kcal")}
     </ul>
@@ -2005,74 +1933,6 @@ function demoSchedule(){
    Every integration fails in three different places — no credentials, no
    authorization, no data yet — and each needs a different move. The list says
    which, per source, with the link that fixes it. */
-/* ---------------- HEXIS (the morning run's landing page) ----------------
-   Hexis has no API, so today's targets arrive by hand every morning: read
-   them in a browser that's already signed in, then land here. This exists so
-   that step is typing four numbers into a form — something a person or Claude
-   in Chrome can both do reliably — instead of pasting a fetch() into a
-   console. Same origin, so it needs no key and nothing has to invent one. */
-V.hexis = async function(){
-  // Which day this is has to come from the bridge, not from the browser. A
-  // phone in another zone — or this one at 9pm Eastern, where UTC has already
-  // rolled over — would otherwise file the morning's targets under tomorrow
-  // and the day would still show none.
-  const key = "";
-  view.innerHTML = `<span class="eyebrow">Hexis</span>
-    <div class="card"><h4>Today's macro targets</h4>
-      <div class="small" id="hxNow">checking what's already in…</div>
-      <ul class="agenda totals" style="margin-top:10px">
-        <li><span class="n"><label for="hxDate">date</label></span>
-          <span class="tag"><input id="hxDate" type="date" value="${key}"></span></li>
-        <li><span class="n"><label for="hxKcal">kcal</label></span>
-          <span class="tag"><input id="hxKcal" type="number" inputmode="numeric" placeholder="2800"></span></li>
-        <li><span class="n"><label for="hxCarb">carbs (g)</label></span>
-          <span class="tag"><input id="hxCarb" type="number" inputmode="numeric" placeholder="380"></span></li>
-        <li><span class="n"><label for="hxPro">protein (g)</label></span>
-          <span class="tag"><input id="hxPro" type="number" inputmode="numeric" placeholder="165"></span></li>
-        <li><span class="n"><label for="hxFat">fat (g)</label></span>
-          <span class="tag"><input id="hxFat" type="number" inputmode="numeric" placeholder="80"></span></li>
-        <li><span class="n"><label for="hxFuel">fuelling</label></span>
-          <span class="tag"><input id="hxFuel" type="text" placeholder="e.g. high"></span></li>
-      </ul>
-      <button class="primary" id="hxSave">Save today's targets</button>
-      <div class="small" id="hxMsg"></div>
-      <div class="small" style="margin-top:12px">Read these in Hexis first — this page
-        only stores what you type. Nothing here signs into anything.</div>
-    </div>`;
-
-  const msg = document.getElementById("hxMsg");
-  const showCurrent = async ()=>{
-    const el = document.getElementById("hxNow");
-    try{
-      const m = await bridge("/macros/today");
-      // The bridge names the day; the field follows it rather than the device.
-      const df = document.getElementById("hxDate");
-      if (df && m && m.date && !df.value) df.value = m.date;
-      el.innerHTML = m && m.have
-        ? `Already in for today: <b>${m.kcal ?? "—"} kcal</b> · ${m.carbs_g ?? "—"}c ·
-           ${m.protein_g ?? "—"}p · ${m.fat_g ?? "—"}f${m.fuelling ? " · " + esc(m.fuelling) : ""}.
-           Saving again replaces them.`
-        : "Nothing in for today yet.";
-    }catch(e){ el.textContent = "Can't reach the bridge — " + e.message; }
-  };
-  showCurrent();
-
-  document.getElementById("hxSave").onclick = async ()=>{
-    const n = id => { const v = document.getElementById(id).value; return v === "" ? null : Number(v); };
-    const body = { date: document.getElementById("hxDate").value,
-      kcal: n("hxKcal"), carbs_g: n("hxCarb"), protein_g: n("hxPro"), fat_g: n("hxFat"),
-      fuelling: document.getElementById("hxFuel").value || null };
-    if (body.kcal == null && body.carbs_g == null){ msg.textContent = "Give it at least kcal or carbs."; return; }
-    msg.textContent = "saving…";
-    try{
-      await bridge("/macros", { method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify(body) });
-      msg.innerHTML = `Saved. <a href="#today">Back to the day</a>.`;
-      showCurrent();
-    }catch(e){ msg.textContent = "Failed: " + e.message; }
-  };
-};
-
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;

@@ -1,0 +1,190 @@
+"use strict";
+/* THE WAY — Food (#food): the photo journal.
+   Point the camera at the plate, the bridge reads it (bridge/food.js), and the
+   day is scored against the day's guidelines. Loads after app.js and uses its
+   globals: V, view, bridge, esc, fileToBase64. */
+(function(){
+
+const J = {"Content-Type":"application/json"};
+const pad = n => String(n).padStart(2,"0");
+function keyAdd(k,n){ const [y,m,d]=k.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)+n*864e5).toISOString().slice(0,10); }
+function localToday(){ const d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function params(){ return Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||"")); }
+function dayLabel(k){ const [y,m,d]=k.split("-").map(Number);
+  return new Date(Date.UTC(y,m-1,d)).toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric",timeZone:"UTC"}); }
+function hm12(t){ const m=/^(\d{2}):(\d{2})$/.exec(t||""); if(!m) return t||""; let h=+m[1]; const ap=h<12?"a":"p"; h=h%12; if(h===0)h=12; return h+":"+m[2]+ap; }
+function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function clock(iso){ const d=new Date(iso); if (isNaN(d)) return ""; let h=d.getHours(); const mm=pad(d.getMinutes()), ap=h<12?"a":"p"; h=h%12; if(h===0)h=12; return h+":"+mm+ap; }
+const toneC = t => t==="good"?"var(--green)":t==="warn"?"var(--amber)":t==="bad"?"var(--red)":"var(--ink)";
+const FIT = { yes:{word:"fits", tone:"good"}, partly:{word:"partly", tone:"warn"}, no:{word:"miss", tone:"bad"} };
+const MEALS = ["breakfast","lunch","dinner","snack","on the bike"];
+
+/* ---- pieces shared with the front page ---- */
+function fitBadge(a){ const f = FIT[a && a.fits] || FIT.partly; return `<span class="fit" style="color:${toneC(f.tone)};border-color:${toneC(f.tone)}">${f.word}</span>`; }
+function targetsRow(t){
+  if (!t) return "";
+  return `<div class="macros"><span class="mfuel">${esc(t.fuel_day||"")}</span>
+    <span class="unit">${t.kcal} kcal</span><span class="unit c">${t.carbs_g}C</span>
+    <span class="unit p">${t.protein_g}P</span><span class="unit f">${t.fat_g}F</span></div>`;
+}
+function checksList(checks){
+  if (!checks || !checks.length) return "";
+  return `<ul class="checks">${checks.map(c=>`<li class="${c.ok?"ok":"miss"}"><span class="mark">${c.ok?"✓":"✗"}</span>
+    <span class="n">${esc(c.label)}</span><span class="small">${esc(c.detail||"")}</span></li>`).join("")}</ul>`;
+}
+function thumbStrip(entries){
+  if (!entries || !entries.length) return `<div class="small">No photos yet today.</div>`;
+  return `<div class="thumbstrip">${entries.map(e=>{
+    const f = FIT[e.assessment && e.assessment.fits] || FIT.partly;
+    const img = e.thumb ? `<img src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="nothumb">${esc((e.name||"?").slice(0,2))}</span>`;
+    return `<a class="thumb" href="#food" title="${esc(e.name)}" style="border-color:${toneC(f.tone)}">${img}<span class="small">${esc(clock(e.at))}</span></a>`;
+  }).join("")}</div>`;
+}
+window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT };
+
+/* ---- the page ---- */
+V.food = async function(){
+  const p = params(), today = localToday();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
+  const isToday = date === today;
+  const go = k => { location.hash = k === today ? "#food" : "#food?date="+k; };
+  view.innerHTML = `<span class="eyebrow">Food</span>
+    <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
+      <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
+    ${isToday ? `<div class="card day snapcard" id="snap">
+      <button class="primary big snapbtn" id="snapBtn">Snap a meal</button>
+      <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
+      <div id="snapForm" hidden>
+        <img id="snapPreview" class="snappreview" alt="">
+        <div class="row2"><span><label>Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
+          <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
+        <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
+        <div class="small" id="snapMsg"></div></div>
+      <div id="snapResult"></div>
+    </div>` : ""}
+    <div id="fDay"><div class="card"><div class="small">Loading the day…</div></div></div>`;
+  document.getElementById("fPrev").onclick = ()=>go(keyAdd(date,-1));
+  document.getElementById("fNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
+  document.getElementById("fToday").onclick = ()=>go(today);
+
+  let day = null;
+  const draw = ()=>{
+    const el = document.getElementById("fDay");
+    if (!el) return;
+    if (!day){ el.innerHTML = `<div class="card"><h4>Food</h4><div class="small">bridge unreachable</div></div>`; return; }
+    const c = day.compliance, b = c.band;
+    const m = c.macros && c.macros.per_macro;
+    const macroRow = (label,key)=>{ const x = m && m[key]; if (!x) return "";
+      return `<li><span class="n">${label}<span class="small"> ${x.actual} of ${x.target}${x.direction!=="on target"?` · ${esc(x.direction)} ${Math.abs(x.deviation_pct)}%`:""}</span></span>
+        <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
+    const sessions = (day.sessions||[]).map(s=>`${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
+    el.innerHTML = `
+      <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
+        ${targetsRow(day.target)}
+        <div class="small">${sessions || "No training on the calendar, so a rest day."}</div>
+        <ul class="rules">${day.guidelines.map(g=>`<li>${esc(g.text)}</li>`).join("")}</ul>
+        ${(day.ride_notes||[]).map(n=>`<details class="ridenotes"><summary>${esc(n.name)} · eating guidelines</summary><div class="ptext">${esc(n.notes)}</div></details>`).join("")}
+      </div>
+      <div class="card"><h4>${isToday?"Today's":"The day's"} meals · timed to the training</h4>
+        ${day.cue ? `<div class="cue"><b>Now:</b> ${esc(day.cue.text)}</div>` : ""}
+        <ul class="agenda mealplan">${(day.meals||[]).map(m=>{
+          const logged = (m.logged||[]).length, now = nowHM();
+          return `<li class="${logged?"done":(isToday&&m.time<now?"past":"")}"><span class="t">${esc(hm12(m.time))}</span>
+            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}</span>`:""}</span>
+            <span class="tag">${logged?"✓ logged":""}</span></li>`; }).join("")}</ul>
+      </div>
+      <div class="card"><h4>Compliance</h4>
+        <div class="recovery"><span class="recscore" style="color:${c.overall==null?"var(--muted)":toneC(b.tone)}">${c.overall==null?"—":c.overall}</span>
+          <span class="recmeta"><span class="recword" style="color:${b?toneC(b.tone):"var(--muted)"}">${b?esc(b.word):"nothing logged"}</span>
+            <div class="small">${c.guidelines.meals||0} photo${c.guidelines.meals===1?"":"s"}${c.guidelines.score!=null?` · guidelines ${c.guidelines.score}`:""}${c.macros&&c.macros.overall!=null&&c.guidelines.meals?` · macros ${c.macros.overall}`:""}</div></span></div>
+        ${checksList(c.guidelines.checks)}
+        ${m ? `<ul class="agenda totals">${macroRow("carbs","carbs_g")}${macroRow("protein","protein_g")}${macroRow("fat","fat_g")}${macroRow("kcal","kcal")}</ul>` : ""}
+        ${day.suggestion && !day.suggestion.none ? `<div class="snack"><b>Suggested next</b> — ${esc(day.suggestion.name)}${day.suggestion.servings>1?` ×${day.suggestion.servings}`:""}
+          <div class="small">${day.suggestion.kcal} kcal · ${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P · ${day.suggestion.fat_g}F — ${esc(day.suggestion.why)}, score ${day.suggestion.score_before} → <b>${day.suggestion.score_after}</b></div></div>` : ""}
+        <div class="small">${esc(day.basis)}. Half the score is the macros against the target, half is how each photo fits the rules.</div>
+      </div>
+      <span class="eyebrow">The journal · ${day.entries.length} ${day.entries.length===1?"meal":"meals"}</span>
+      <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
+    el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
+    el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
+      if (!confirm("Remove this meal from the journal?")) return;
+      try{ const r = await bridge(`/food/${encodeURIComponent(btn.dataset.del)}?date=${date}`,{method:"DELETE"}); day = r.day; draw(); }
+      catch(e){ btn.textContent = "failed — " + e.message; }
+    });
+    el.querySelectorAll("[data-fix]").forEach(btn => btn.onclick = async ()=>{
+      const id = btn.dataset.fix, box = btn.closest(".jfix");
+      const body = { date, name: box.querySelector(".fxName").value, meal: box.querySelector(".fxMeal").value,
+        kcal: +box.querySelector(".fxK").value, carbs_g: +box.querySelector(".fxC").value, protein_g: +box.querySelector(".fxP").value, fat_g: +box.querySelector(".fxF").value,
+        fits: box.querySelector(".fxFit").value };
+      try{ const r = await bridge(`/food/${encodeURIComponent(id)}`,{method:"PUT",headers:J,body:JSON.stringify(body)}); day = r.day; draw(); }
+      catch(e){ btn.textContent = "failed — " + e.message; }
+    });
+  };
+  const entryHTML = (e)=>{
+    const a = e.assessment || {};
+    const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${esc((e.name||"?").slice(0,2))}</span>`;
+    return `<div class="card jentry">
+      <div class="jrow">${img}
+        <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${esc(e.meal)}${e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
+          <div class="jname">${esc(e.name)}</div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}</div></div>
+        <div class="jfit">${fitBadge(a)}</div></div>
+      <div class="small jwhy">${esc(a.why||"")}</div>
+      <div class="jmore">
+        ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
+        <div class="small">${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
+        ${isToday?`<div class="jfix">
+          <div class="row2"><span><label>Name</label><input class="fxName" value="${esc(e.name)}"></span>
+            <span><label>Meal</label><select class="fxMeal">${MEALS.map(m=>`<option ${m===e.meal?"selected":""}>${m}</option>`).join("")}</select></span></div>
+          <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
+          <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
+          <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
+          <button data-fix="${esc(e.id)}">Save correction</button> <button class="pdanger" data-del="${esc(e.id)}">Remove</button></div>`:""}
+      </div></div>`;
+  };
+
+  const load = async ()=>{
+    try{ day = await bridge(isToday ? "/food/today" : "/food/day?date="+date); }
+    catch(e){ day = null; }
+    if (location.hash.split("?")[0] !== "#food") return;
+    draw();
+  };
+  load();
+
+  /* ---- the camera ---- */
+  if (!isToday) return;
+  const fileEl = document.getElementById("snapFile"), form = document.getElementById("snapForm");
+  let file = null;
+  document.getElementById("snapBtn").onclick = ()=> fileEl.click();
+  fileEl.onchange = ()=>{
+    file = fileEl.files && fileEl.files[0];
+    if (!file) return;
+    document.getElementById("snapPreview").src = URL.createObjectURL(file);
+    document.getElementById("snapResult").innerHTML = "";
+    form.hidden = false;
+  };
+  document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; };
+  document.getElementById("snapLog").onclick = async ()=>{
+    if (!file) return;
+    const msg = document.getElementById("snapMsg"), btn = document.getElementById("snapLog");
+    btn.disabled = true; msg.textContent = "Reading the plate…";
+    try{
+      const [image_base64, thumb_base64] = await Promise.all([fileToBase64(file, 1280, 0.75), fileToBase64(file, 240, 0.6)]);
+      const r = await bridge("/food/photo",{method:"POST",headers:J,body:JSON.stringify({
+        images:[{image_base64, media_type:"image/jpeg"}], thumb_base64,
+        meal: document.getElementById("snapMeal").value || undefined,
+        notes: document.getElementById("snapNote").value || undefined })});
+      const e = r.entry, a = e.assessment;
+      document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC((FIT[a.fits]||FIT.partly).tone)}">
+        <div class="jname">${esc(e.name)} ${fitBadge(a)}</div>
+        <div class="small">${esc(e.meal)} · ${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}</div>
+        <div>${esc(a.why)}</div></div>`;
+      form.hidden = true; file = null; fileEl.value = ""; msg.textContent = "";
+      document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
+      day = r.day; draw();
+    }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
+    finally{ btn.disabled = false; }
+  };
+};
+
+})();

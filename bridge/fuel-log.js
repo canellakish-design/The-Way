@@ -67,7 +67,8 @@ async function logMeal(body) {
     name: String(body.name || 'meal'), meal: String(body.meal || 'snack'),
     carbs_g: Number(body.carbs_g) || 0, protein_g: Number(body.protein_g) || 0,
     fat_g: Number(body.fat_g) || 0, kcal: Number(body.kcal) || 0,
-    logged_at: new Date().toISOString()
+    logged_at: new Date().toISOString(),
+    ...(body.food_id ? { food_id: String(body.food_id) } : {})
   };
   d.meals.push(m);
   d.meals = d.meals.filter(x => hoursSince(x.logged_at) < 168);

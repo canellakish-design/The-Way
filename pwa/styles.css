@@ -297,3 +297,42 @@ details.card summary{font-family:var(--mono); font-size:12px; font-weight:700; l
   .pbig{font-size:22px}
   .psum{top:54px}
 }
+
+/* ============================================================
+   Food — the photo journal (food.js) and the front page's food card.
+   ============================================================ */
+.snapcard{text-align:center}
+.snapbtn{width:100%; margin:0}
+.snappreview{display:block; width:100%; max-height:46vh; object-fit:cover; margin:12px 0 4px; border:1px solid var(--line)}
+#snapForm{text-align:left}
+.verdict{border:2px solid var(--line); padding:12px; margin-top:12px; text-align:left}
+.verdict .jname{margin-bottom:2px}
+.fit{display:inline-block; font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+  border:1px solid; padding:2px 7px; margin-left:4px; vertical-align:middle}
+.cue{border-left:3px solid var(--green); padding:6px 10px; margin:10px 0 2px; background:var(--green-soft)}
+ul.rules{margin:10px 0 0 18px}
+ul.rules li{margin:3px 0}
+ul.checks{margin-top:10px}
+ul.checks li{list-style:none; display:grid; grid-template-columns:22px 1fr auto; gap:8px; align-items:baseline; padding:5px 0; border-bottom:1px solid var(--line-soft)}
+ul.checks li:last-child{border-bottom:0}
+ul.checks .mark{font-family:var(--mono); font-weight:700}
+ul.checks li.ok .mark{color:var(--green)} ul.checks li.miss .mark{color:var(--red)}
+ul.agenda.mealplan li{grid-template-columns:58px 1fr auto}
+ul.agenda.mealplan li.done{border-left-color:var(--green)}
+ul.agenda.mealplan li.next{background:var(--green-soft); border-left-color:var(--green)}
+ul.agenda.mealplan li.past{opacity:.55}
+.thumbstrip{display:flex; gap:8px; overflow-x:auto; padding:4px 0 2px; margin-top:6px}
+.thumbstrip .thumb{flex:0 0 auto; width:64px; text-align:center; text-decoration:none; color:var(--muted); border:2px solid var(--line); padding:2px; background:var(--card)}
+.thumbstrip img,.thumbstrip .nothumb{display:block; width:56px; height:56px; object-fit:cover; margin:0 auto}
+.nothumb{display:flex; align-items:center; justify-content:center; font-family:var(--mono); font-weight:700; background:var(--line-soft); color:var(--muted)}
+.journal .card{padding:10px 12px}
+.jrow{display:grid; grid-template-columns:72px 1fr auto; gap:12px; align-items:center}
+.jthumb{width:72px; height:72px; object-fit:cover; border:1px solid var(--line)}
+.jname{font-weight:600; font-size:17px; line-height:1.25}
+.jwhy{margin-top:8px}
+.jmore{display:none; border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
+.jentry.open .jmore{display:block}
+.jentry{cursor:pointer}
+.jfix{margin-top:8px}
+.jfix input,.jfix select{width:100%}
+a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; margin-top:10px}

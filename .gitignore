@@ -29,3 +29,6 @@ bridge/plan-workouts.json
 bridge/workout-settings.json
 bridge/calendar-icu-cache.json
 bridge/calendar-strava-cache.json
+# Food: the photo journal (food.js)
+bridge/food-*.json
+bridge/food-index.json

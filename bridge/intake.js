@@ -46,16 +46,16 @@ async function save(rows) {
   return saved;
 }
 
-// Alma is the tracker of record. If it hasn't posted for the day, fall back to
-// what was logged here rather than showing an empty day as perfect compliance.
+// The Way's own food log is the record. A day's totals posted to /intake
+// (the old Alma inbox) still count if nothing was logged here.
 async function actualFor(date) {
   const d = await db();
-  if (d.days[date]) return { ...d.days[date], from: 'alma' };
-  if (date !== dateKey(new Date())) return null;
+  if (date !== dateKey(new Date())) return d.days[date] ? { ...d.days[date], from: 'posted totals' } : null;
   try {
     const { mealsToday } = require('./fuel-log');
     const meals = await mealsToday();
-    if (!meals.length) return { date, kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, meals: 0, from: 'the way (nothing logged yet)' };
+    if (!meals.length) return d.days[date] ? { ...d.days[date], from: 'posted totals' }
+      : { date, kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, meals: 0, from: 'the way (nothing logged yet)' };
     const sum = k => Math.round(meals.reduce((a, m) => a + (m[k] || 0), 0) * 10) / 10;
     return { date, kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'),
       fat_g: sum('fat_g'), meals: meals.length, from: 'the way food log' };
@@ -126,21 +126,32 @@ function suggestSnack(actual, target) {
     why: gaps.length ? `closes the ${gaps.join(' and ')} gap` : 'best available move on the remaining macros' };
 }
 
+// The target is The Way's own (food-math.js, from the day's training), the
+// intake is the food log, and the photo journal adds the guideline half of
+// the score. Hexis and Alma are no longer in the loop.
 async function compliance(date) {
   const key = date || dateKey(new Date());
-  const target = await require('./macros').forDate(key);
+  const food = await require('./food').dayReport(key);
   const actual = await actualFor(key);
-  const scored = target ? scoreDay(actual || {}, target) : null;
+  const scored = scoreDay(actual || {}, food.target);
+  if (scored) {
+    const g = food.compliance.guidelines;
+    scored.macro_overall = scored.overall;
+    scored.guideline_overall = g.score;
+    scored.overall = require('./food-math').overall(scored.overall, g.score);
+    scored.checks = g.checks;
+  }
   return {
     date: key,
-    target: target || null,
+    target: food.target,
     actual: actual || null,
     source: actual ? actual.from : null,
     compliance: scored,
-    suggestion: (target && actual) ? suggestSnack(actual, target) : null,
+    suggestion: actual ? suggestSnack(actual, food.target) : null,
+    meals: food.entries.length,
     // Mid-morning you are "under" on everything and that is not a failure.
     // Say what the number means rather than letting it be read as a verdict.
-    basis: 'day-to-date intake against the full-day Hexis target'
+    basis: 'day-to-date intake against the whole-day target, and the photo journal against the guidelines'
   };
 }
 
