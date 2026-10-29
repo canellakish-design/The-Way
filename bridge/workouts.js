@@ -197,15 +197,20 @@ async function stravaDone(from, to, st) {
   return { connected: true, rides };
 }
 
-// A workout saved on a day already gone is the rider logging what he did,
-// not planning what he will do. It counts as done unless Strava has the ride.
+// A workout saved after its own date has passed is the rider logging what he
+// did, not planning what he will do. It counts as done unless Strava has the
+// ride. A workout planned ahead and then skipped stays a miss: it was saved
+// before its day, and nothing says it happened.
 function pastNow(w, today) {
-  if (w.date < today) return true;
-  if (w.date > today) return false;
+  const saved = w.created ? new Date(w.created) : null;
+  if (!saved || isNaN(saved)) return false;
+  const savedDay = tz.keyOf(saved);
+  if (w.date < savedDay) return true;
+  if (w.date > savedDay) return false;
+  // Saved the same day: logged only if its end time had already passed.
   if (!isTime(w.time)) return false;
-  const p = tz.parts(new Date());
   const endMin = (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) + Math.round(W.metrics(w.steps || [], W.DEFAULTS).duration_s / 60);
-  return p.h * 60 + p.mi >= endMin;
+  return tz.minutesOf(saved) >= endMin;
 }
 function loggedPlanned(workouts, st, today, ridesByDate) {
   return workouts.filter(w => pastNow(w, today) && !(ridesByDate[w.date] || []).length)
