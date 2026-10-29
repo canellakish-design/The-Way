@@ -189,7 +189,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","The day"],["calendar","Calendar"],["food","Food"],["flags","Flags"]];
+  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["flags","Flags"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = h === "bedroom" ? "" :
     NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");

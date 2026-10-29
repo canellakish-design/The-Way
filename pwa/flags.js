@@ -133,4 +133,6 @@ V.flags = async function(){
 };
 
 window.flagBits = { rbadge, icon, hm, unseen, setUnseen };
+// app.js ran nav() before this file loaded; if the page opened on #flags, draw it now.
+if (location.hash.replace(/^#/, "").split("?")[0] === "flags") nav();
 })();
