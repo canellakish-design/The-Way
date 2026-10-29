@@ -103,6 +103,18 @@ function suggestSnack(actual, target, opts) {
   if (!base || base.overall == null) return null;
   const kcalCeiling = target.kcal ? target.kcal * 1.05 : Infinity;
   const carbCap = o.post ? Infinity : o.day === 'rest' ? 15 : o.day === 'normal' ? 30 : Infinity;
+  // The chooser closes what is left of the day, protein counting double, and
+  // pays for going over. The banded score is for display: it sits at zero
+  // until a macro reaches 45% of target, which early in the day hides every
+  // real improvement and favours whatever happens to be nearest the line.
+  const W = { protein_g: 2, carbs_g: 1, fat_g: 0.5 };
+  const objective = x => MACROS.reduce((sum, m) => {
+    const t = target[m]; if (!t) return sum;
+    const v = x[m] || 0;
+    const got = Math.min(v, t) / t, over = Math.max(0, v - t) / t;
+    return sum + W[m] * (got - 2 * over);
+  }, 0);
+  const before = objective(actual);
   let best = null;
   for (const s of (SNACKS.snacks || [])) {
     for (let n = 1; n <= 2; n++) {
@@ -114,18 +126,13 @@ function suggestSnack(actual, target, opts) {
         fat_g: (actual.fat_g || 0) + s.fat_g * n
       };
       if (after.kcal > kcalCeiling) continue;
-      const sc = scoreDay(after, target);
-      if (!sc || sc.overall == null) continue;
-      const gain = sc.overall - base.overall;
-      if (gain <= 0) continue;
-      // Protein first: among snacks within a few points of the best lift,
-      // the one carrying the most protein wins; the deficit runs on protein.
-      const protein = s.protein_g * n;
-      const better = !best ? true
-        : gain > best.gain + 3 ? true
-        : gain >= best.gain - 3 && (protein > best.protein_g + 2 || (Math.abs(protein - best.protein_g) <= 2 && gain > best.gain));
-      if (better) {
-        best = { name: s.name, servings: n, gain, score_after: sc.overall,
+      const gain = objective(after) - before;
+      if (gain <= 0.005) continue;
+      // per calorie, so a small dense snack beats a big one that does the same job
+      const perKcal = gain / (s.kcal * n);
+      if (!best || perKcal > best.perKcal * 1.15 || (perKcal >= best.perKcal * 0.85 && gain > best.gain)) {
+        const sc = scoreDay(after, target);
+        best = { name: s.name, servings: n, gain, perKcal, score_after: sc ? sc.overall : null,
           kcal: Math.round(s.kcal * n),
           carbs_g: Math.round(s.carbs_g * n * 10) / 10,
           protein_g: Math.round(s.protein_g * n * 10) / 10,
@@ -133,16 +140,14 @@ function suggestSnack(actual, target, opts) {
       }
     }
   }
-  if (!best) return { none: true, reason: 'nothing in the snack list improves the score without overshooting calories' };
+  if (!best) return { none: true, reason: 'nothing in the snack list closes a gap without overshooting' };
   const gaps = MACROS.filter(m => base.per_macro[m] && base.per_macro[m].direction === 'under')
     .map(m => m.replace('_g', ''));
-  return { ...best, score_before: base.overall,
+  const { gain, perKcal, ...out } = best;
+  return { ...out, score_before: base.overall,
     why: gaps.length ? `closes the ${gaps.join(' and ')} gap` : 'best available move on the remaining macros' };
 }
 
-// The target is The Way's own (food-math.js, from the day's training), the
-// intake is the food log, and the photo journal adds the guideline half of
-// the score. Hexis and Alma are no longer in the loop.
 async function compliance(date) {
   const key = date || dateKey(new Date());
   const food = await require('./food').dayReport(key);
