@@ -131,4 +131,4 @@ function suggest(days, opts) {
     supplements: supps.map(x => ({ ...x, score_after: base.score + x.gain })) };
 }
 
-module.exports = { KEYS, TABLE, findFood, plateMicros, supplementMicros, dayScore, band, suggest, zero };
+module.exports = { KEYS, TABLE, findFood, plateMicros, supplementMicros, sumDays, dayScore, band, suggest, zero };
