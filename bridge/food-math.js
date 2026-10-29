@@ -275,6 +275,22 @@ function guidelineScore(day, entries, rides) {
 
 // The day's number: macros against target and photos against guidelines,
 // averaged when both exist.
+// What the plan says should be in by now: the meals whose time has come
+// (with 45 minutes' grace to finish eating), as a share of the day. The
+// macro half of the Food score is read against this, not the whole day, so
+// a good breakfast at eight is not "off" because dinner has not happened.
+function dueSoFar(meals, target, nowHM) {
+  if (!target || !Array.isArray(meals) || !meals.length) return null;
+  const now = toMin(nowHM);
+  const due = meals.filter(m => !m.extra && toMin(m.time) <= now + 45);
+  if (!due.length) return { kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, share: 0, meals: 0, next: meals[0].time };
+  const kcal = due.reduce((a, m) => a + (m.kcal || 0), 0);
+  const share = target.kcal ? Math.min(1, kcal / target.kcal) : 0;
+  const nxt = meals.find(m => !m.extra && toMin(m.time) > now + 45);
+  return { kcal, carbs_g: due.reduce((a, m) => a + (m.carbs_g || 0), 0), protein_g: due.reduce((a, m) => a + (m.protein_g || 0), 0),
+    fat_g: Math.round(target.fat_g * share), share: Math.round(share * 100) / 100, meals: due.length, next: nxt ? nxt.time : null };
+}
+
 function overall(macroScore, guideline) {
   const m = macroScore == null ? null : macroScore;
   const g = guideline == null ? null : guideline;
@@ -291,5 +307,5 @@ function band(score) {
   return { word: 'off', tone: 'bad' };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM,
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM, dueSoFar,
   guidelineScore, overall, band, FIT_POINTS };

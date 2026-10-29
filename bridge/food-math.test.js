@@ -119,6 +119,17 @@ ok('mealPlan: meals are timed around the session', () => {
   assert.strictEqual(F.slotFor(vo2, '15:00'), null);
 });
 
+ok('dueSoFar: the plan\'s meals whose time has come', () => {
+  const tg = F.targets('normal', 370);
+  const meals = F.mealPlan('normal', [{ name: 'Zone 1, 90 min', time: '19:00', minutes: 90 }], tg);
+  assert.strictEqual(F.dueSoFar(meals, tg, '06:00').kcal, 0);                       // before breakfast: nothing due
+  const eight = F.dueSoFar(meals, tg, '08:00');
+  assert.strictEqual(eight.meals, 1); assert.ok(eight.kcal > 300 && eight.kcal < tg.kcal * 0.35, 'breakfast share ' + eight.kcal);
+  assert.strictEqual(eight.next, '12:30');
+  const night = F.dueSoFar(meals, tg, '23:00');
+  assert.ok(night.share >= 0.9, 'whole day by night ' + night.share);
+});
+
 ok('overall and band', () => {
   assert.strictEqual(F.overall(80, 60), 70);
   assert.strictEqual(F.overall(null, 60), 60);

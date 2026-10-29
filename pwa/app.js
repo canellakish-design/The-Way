@@ -1642,7 +1642,7 @@ V.today = async function(){
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a meal</a>
-        <div class="small">Half the score is the macros against the day's target, carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 90 and up is on target, 70 to 89 close, under 70 off. Mid-morning you are under on everything and that is not a failure. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
+        <div class="small">Half the score is the macros against what the meal plan says should be in by now (the meals whose time has come, as a share of the day), carbs, protein, fat and kcal each 0 to 100 then averaged, so a good calorie total cannot hide a protein miss. Before the first planned meal only the journal half counts. The other half is the photo journal against today's guidelines: 45 g of protein at every meal, vegetables, carbs where the training puts them, nothing ultra-processed, a real meal inside two hours of the ride. 90 and up is on target, 70 to 89 close, under 70 off. A photo alone reads calories to about ±35%; a note on the photo, or a scale in the frame, brings that to about ±20%.</div>`;
     } else if (openScore === "training"){
       const t = d.training;
       html = `<h4>Training · fitness</h4>

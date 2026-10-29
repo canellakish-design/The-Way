@@ -152,13 +152,19 @@ async function compliance(date) {
   const key = date || dateKey(new Date());
   const food = await require('./food').dayReport(key);
   const actual = await actualFor(key);
-  const scored = scoreDay(actual || {}, food.target);
+  // Today the macros are read against what the meal plan says should be in by
+  // now; before the first planned meal there is nothing to score them against.
+  const due = food.compliance && food.compliance.due;
+  const macroTarget = due ? (due.kcal > 0 ? Object.assign({}, food.target, due) : null) : food.target;
+  const scored = macroTarget ? scoreDay(actual || {}, macroTarget) : { per_macro: null, overall: null };
   if (scored) {
     const g = food.compliance.guidelines;
     scored.macro_overall = scored.overall;
     scored.guideline_overall = g.score;
     scored.overall = require('./food-math').overall(scored.overall, g.score);
     scored.checks = g.checks;
+    scored.due = due || null;
+    scored.day_target = { kcal: food.target.kcal, carbs_g: food.target.carbs_g, protein_g: food.target.protein_g, fat_g: food.target.fat_g };
   }
   return {
     date: key,
@@ -171,7 +177,7 @@ async function compliance(date) {
     meals: food.entries.length,
     // Mid-morning you are "under" on everything and that is not a failure.
     // Say what the number means rather than letting it be read as a verdict.
-    basis: 'day-to-date intake against the whole-day target, and the photo journal against the guidelines'
+    basis: 'day-to-date intake against what the meal plan says should be in by now, and the photo journal against the guidelines'
   };
 }
 
