@@ -189,7 +189,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","The day"],["calendar","Calendar"],["food","Food"]];
+  const NAV = [["today","The day"],["calendar","Calendar"],["food","Food"],["flags","Flags"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = h === "bedroom" ? "" :
     NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
@@ -1332,6 +1332,7 @@ V.today = async function(){
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="flags"><span class="slabel">Flags</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1475,12 +1476,23 @@ V.today = async function(){
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
-  let scoresData = null, complianceData = null, foodData = null, openScore = null;
+  let scoresData = null, complianceData = null, foodData = null, flagsData = null, openScore = null;
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : "bridge unreachable"); return; }
     const gaps = (m.gaps||[]).map(g=>g.label).join(", ");
     paintTile("micros", m.score, m.band.word, m.band.tone, gaps ? `low: ${gaps}` : "all covered");
+  };
+  const drawFlagsTile = ()=>{
+    const f = flagsData;
+    if (!f){ paintTile("flags", null, "", "", "bridge unreachable"); return; }
+    if (!f.built){ paintTile("flags", null, "", "", "build on the Flags page"); return; }
+    const fresh = f.new_catches && f.new_catches.length ? `${f.new_catches.length} new catch${f.new_catches.length===1?"":"es"}!` : "";
+    if (fresh && window.flagBits) window.flagBits.setUnseen(window.flagBits.unseen().concat(f.new_catches));
+    if (!f.hunt){ paintTile("flags", f.caught_today ? f.caught_today.length : null, f.tss ? "no fit" : "rest day", "neutral", fresh || (f.tss ? `${f.tss} TSS planned` : "no ride planned")); return; }
+    const size = f.hunt.size, c = f.caught;
+    const tone = c >= size ? "good" : c >= size / 2 ? "warn" : "bad";
+    paintTile("flags", c, `${c}/${size}`, tone, fresh || f.hunt.route);
   };
   const drawHydrationTile = ()=>{
     const h = foodData && foodData.hydration;
@@ -1576,6 +1588,7 @@ V.today = async function(){
     drawWeightTile();
     drawMicroTile();
     drawHydrationTile();
+    drawFlagsTile();
     drawScoreDetail();
   };
 
@@ -1584,7 +1597,7 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration" && openScore !== "flags")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "micros"){
@@ -1594,6 +1607,18 @@ V.today = async function(){
       box.innerHTML = html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
+    }
+    if (openScore === "flags"){
+      const f = flagsData, B = window.flagBits || {};
+      html = `<h4>Flags · today's hunt</h4>
+        ${!f ? `<div class="small">bridge unreachable</div>` : !f.built ? `<div class="small">No flags yet. Build them from your routes on the Flags page.</div>`
+          : f.hunt ? `<div class="small">${f.hunt.tss} TSS planned${f.virtual ? " on Zwift" : ""} fits <b>${esc(f.hunt.route)}</b>: ${f.hunt.size} flags within reach, ${f.caught} caught.</div>
+            <ul class="agenda totals flaglist">${f.hunt.flags.map(x => `<li class="${x.caught_today?"got":""}"><span class="n">${B.icon ? B.icon(x.kind) : "⚑"} ${esc(x.name)} ${B.rbadge ? B.rbadge(x.rarity) : ""}</span><span class="tag">${x.caught_today ? "caught ✓" : `${x.work_tss} TSS · km ${x.km}`}</span></li>`).join("")}</ul>`
+          : `<div class="small">${f.tss ? `${f.tss} TSS planned, no ${f.virtual ? "Zwift" : "road"} flags fit it yet.` : "Rest day: no hunt."}</div>`}
+        ${f && f.level ? `<div class="small">Level ${f.level.level} · ${f.level.xp} XP · ${f.level.next - f.level.xp} to the next level.</div>` : ""}
+        <a class="btn primary" href="#flags">The flags</a>
+        <div class="small">Iconic spots on your routes are flags: summits, dams, bridges, viewpoints, towns, the far turn. The day's planned work picks a route and the flags it reaches; ride past one and the ride's GPS track on Strava catches it. Green is the hunt complete, amber half of it, red less. Rarity is how often you have been there; a flag you have never reached is legendary and worth the most.</div>`;
+      box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
@@ -1684,10 +1709,11 @@ V.today = async function(){
     drawScoreDetail();
   });
   const refreshScores = async ()=>{
-    [scoresData, complianceData, foodData] = await Promise.all([
+    [scoresData, complianceData, foodData, flagsData] = await Promise.all([
       bridge("/scores").catch(()=>null),
       bridge("/compliance").catch(()=>null),
-      bridge("/food/today").catch(()=>null)
+      bridge("/food/today").catch(()=>null),
+      bridge("/flags/today").catch(()=>null)
     ]);
     drawScores();
   };

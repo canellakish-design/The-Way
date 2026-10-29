@@ -23,6 +23,7 @@ require('./scores').attach(app);
 require('./food').attach(app);
 // Every ride, read: heart rate and breathing from the streams.
 require('./rides').attach(app);
+require('./flags').attach(app);
 require('./macros').attach(app);
 require('./intake').attach(app);
 require('./status').attach(app);
