@@ -1602,7 +1602,7 @@ V.today = async function(){
       paintTile("fatigue", null, "", "", "");
     }
     if (r.score != null){
-      const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(Math.round(r.hrv_delta_pct))}%` : r.hrv != null ? `HRV ${r.hrv}` : "";
+      const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(Math.round(r.hrv_delta_pct))}%` : r.hrv != null ? `HRV ${Math.round(r.hrv)}` : "";
       paintTile("recovery", r.score, r.band.word, r.band.tone, hrv);
     } else {
       const w = d.sources && d.sources.whoop;
@@ -1701,7 +1701,7 @@ V.today = async function(){
         ${r.score != null ? `<ul class="agenda totals">
           ${row("WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
           ${r.guide ? row("HRV guide", r.guide.state === "warming" ? `<span class="small">${esc(r.guide.note)}</span>` : `<b style="color:${toneC(r.guide.state === "low2" ? "bad" : r.guide.state === "low" ? "warn" : "good")}">${esc(r.guide.state === "ok" ? "in band" : r.guide.state === "high" ? "above band" : r.guide.state === "low" ? "below band" : "below, 2 days")}</b> · 7-day ${r.guide.week_mean} vs ${r.guide.band_lo}–${r.guide.band_hi}${r.guide.trusted ? "" : " (settling)"}`) : ""}
-          ${row("HRV", `${r.hrv ?? "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(Math.round(r.hrv_delta_pct))}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
+          ${row("HRV", `${r.hrv != null ? Math.round(r.hrv) : "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(Math.round(r.hrv_delta_pct))}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
           ${row("resting HR", `${r.rhr ?? "—"} bpm${r.rhr_delta != null ? ` · <b style="color:${toneC(r.rhr_delta <= 0 ? "good" : r.rhr_delta >= 5 ? "bad" : "warn")}">${sgn(r.rhr_delta)}</b> vs ${r.rhr_baseline}` : ""}`)}
           ${r.resp != null ? row("breathing, overnight", `${r.resp} /min${r.resp_delta != null ? ` · <b style="color:${toneC(Math.abs(r.resp_delta) < 1 ? "good" : Math.abs(r.resp_delta) >= 2 ? "bad" : "warn")}">${sgn(r.resp_delta)}</b> vs ${r.resp_baseline}` : ""}`) : ""}
           ${r.spo2 != null ? row("blood oxygen", `${r.spo2}%`) : ""}
