@@ -188,15 +188,22 @@ async function buildStep() {
   // 4. place the flags
   if (s.phase === 'place') {
     const full = await loadTracks(s);
-    const road = full.filter(t => !t.virtual);
-    const speeds = road.filter(t => t.miles && t.minutes).map(t => t.miles * 1.609 / (t.minutes / 60)).sort((a, b) => a - b);
-    s.speed_kmh = speeds.length ? Math.round(speeds[Math.floor(speeds.length / 2)] * 10) / 10 : null;
+    const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : null;
+    const list = await rides(from, today);
+    const cal = virtual => {
+      const rs = full.filter(t => !!t.virtual === virtual && t.miles && t.minutes >= 30);
+      const speed = med(rs.map(t => t.miles * 1.609 / (t.minutes / 60)));
+      const tssH = med(rs.map(t => { const r = list.find(x => x.id === t.id); return r && r.tss ? r.tss / (t.minutes / 60) : null; }).filter(x => x != null));
+      return { speed_kmh: speed ? Math.round(speed * 10) / 10 : null, tss_per_hour: tssH ? Math.round(tssH) : null };
+    };
+    s.cal = { road: cal(false), zwift: cal(true) };
+    s.speed_kmh = s.cal.road.speed_kmh;
     const kept = {};
     for (const f of s.flags) kept[f.id] = { name: f.renamed ? f.name : null, hidden: f.hidden || false };
     const flags = [];
     for (const r of s.routes) {
       const d = await getJSON(routeKey(r.id), null); if (!d) continue;
-      const placed = G.placeFlags(d, d.pois || [], full.filter(t => !!t.virtual === !!d.virtual), { speed_kmh: s.speed_kmh });
+      const placed = G.placeFlags(d, d.pois || [], full.filter(t => !!t.virtual === !!d.virtual), d.virtual ? s.cal.zwift : s.cal.road);
       for (const f of placed) { const k = kept[f.id] || {}; flags.push(Object.assign(f, { name: k.name || f.name, renamed: !!k.name, hidden: !!k.hidden, caught: 0, first_at: null, last_at: null })); }
     }
     s.flags = flags; s.built_at = new Date().toISOString();
@@ -285,7 +292,7 @@ function attach(app) {
       let fresh = [];
       if (s.flags.length) { const r = await scan(2); fresh = r.new_catches; s = await state(); }
       const rw = await rwgps();
-      res.json({ built_at: s.built_at, level: G.level(s.xp), flags: s.flags, routes: s.routes, tracks: s.tracks.length, speed_kmh: s.speed_kmh,
+      res.json({ built_at: s.built_at, level: G.level(s.xp), flags: s.flags, routes: s.routes, tracks: s.tracks.length, speed_kmh: s.speed_kmh, cal: s.cal || null,
         catches: s.catches.slice(-40).reverse(), new_catches: fresh, today: await todayHunt(s),
         sources: { rwgps: { configured: !!envStr('RWGPS_API_KEY'), connected: !!rw.token, user: rw.user, routes: s.rwgps_routes || 0 }, strava_tracks: s.tracks.length } });
     } catch (e) { res.status(500).json({ error: e.message }); } });

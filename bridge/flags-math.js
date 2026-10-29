@@ -74,10 +74,13 @@ function nearest(idx, pt, within) {
 }
 
 // Work to reach a point: time at a steady pace plus the climbing.
-function workAt(distM, gainM, speedKmh) {
+// speedKmh and tssPerHour are his own medians from the ride history when
+// there is one (flat-road speed; TSS an hour as ridden), the defaults otherwise.
+function workAt(distM, gainM, speedKmh, tssPerHour) {
   const v = speedKmh > 8 ? speedKmh : 24;
   const minutes = Math.round(distM / 1000 / v * 60 + (gainM || 0) / 10);   // VAM-ish: 10 m of climbing costs about a minute at his pace
-  const tss = Math.round(minutes / 60 * TSS_PER_HOUR + (gainM || 0) * TSS_PER_M_GAIN);
+  const perH = tssPerHour > 10 ? tssPerHour : TSS_PER_HOUR;
+  const tss = Math.round(minutes / 60 * perH + (gainM || 0) * TSS_PER_M_GAIN / 2);
   return { minutes, tss };
 }
 
@@ -154,7 +157,7 @@ function placeFlags(route, pois, tracks, opts) {
   chosen.sort((a, b) => a.d - b.d);
   const tIdx = index(tracks && tracks.length ? tracks.flatMap(t => t.points.map(p => Object.assign({ track: t.id }, p))) : []);
   return chosen.map((c, i) => {
-    const w = workAt(c.d, c.gain, o.speed_kmh);
+    const w = workAt(c.d, c.gain, o.speed_kmh, o.tss_per_hour);
     const visits = visitCount(tIdx, c, tracks || []);
     return { id: `${route.id}:${i}`, route_id: route.id, route: route.name, name: c.name, kind: c.kind, lat: +c.lat.toFixed(5), lng: +c.lng.toFixed(5),
       km: Math.round(c.d / 100) / 10, gain_m: c.gain, ele_m: c.ele != null ? Math.round(c.ele) : null, work_tss: w.tss, work_min: w.minutes,
