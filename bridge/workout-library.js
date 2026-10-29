@@ -10,17 +10,18 @@ const m = n => n * 60;
 const step = (label, dur_s, target, cadence) => ({ kind: 'step', label, dur_s, target, cadence: cadence || null });
 const rep = (label, count, steps) => ({ kind: 'repeat', label, count, steps });
 const hr = (lo, hi) => ({ type: 'hr', lo, hi });
+const cad = (lo, hi) => ({ lo, hi: hi == null ? lo : hi });
 const pc = (lo, hi) => ({ type: 'power', lo, hi: hi == null ? lo : hi });
 
 const EAT = {
-  short: `ZONE 1: heart rate under 116 the whole ride. If it climbs, the watts come down.
+  short: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: if it goes over 116, drop the bias 5% and stay there.
 
 EAT
 Before: normal breakfast, or ride first and eat straight after.
 On the bike: water, one bottle.
 After: protein within the hour (whey, oats).
 The day: a normal day, no extra carbs.`,
-  mid: `ZONE 1: heart rate under 116 the whole ride.
+  mid: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: over 116, drop the bias 5%.
 
 EAT
 Before: low carb breakfast with 20 g protein, 1 to 2 hours before. No carbs needed for Zone 1.
@@ -53,9 +54,12 @@ After: a normal meal with protein.
 The day: normal.`
 };
 
-const z1 = min => [step('Settle', m(5), hr(95, 110)), step('Zone one', m(min - 8), hr(100, 116)), step('Easy', m(3), hr(90, 105))];
+// Trainer rides carry a power target so Zwift's ERG can hold it (and so the
+// session shows on Zwift's home screen); road rides are heart-rate led.
+const z1 = min => min >= 90
+  ? [step('Settle', m(10), hr(95, 110)), step('Zone one', m(min - 15), hr(100, 116)), step('Easy', m(5), hr(90, 105))]
+  : [step('Settle', m(5), pc(50, 58), cad(85, 95)), step('Zone one', m(min - 8), pc(60, 68), cad(85, 95)), step('Easy', m(3), pc(50))];
 const z1Notes = min => min >= 120 ? EAT.long : min >= 75 ? EAT.mid : EAT.short;
-const cad = (lo, hi) => ({ lo, hi: hi == null ? lo : hi });
 // Step for step the same as Zwift's own "40/20's #1", so the copy intervals.icu
 // pushes to the Zwift home screen is the real session.
 const set = (label, off_s) => rep(label, 5, [step('On', 40, pc(109), cad(95)), step('Off', off_s, pc(55), cad(80))]);
