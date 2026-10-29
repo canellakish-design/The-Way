@@ -180,9 +180,10 @@ const SCHEMA = {
   }
 };
 
-function promptFor(g, meal, notes) {
+function promptFor(g, meal, notes, written) {
   const rules = g.guidelines.map(x => '- ' + x.text).join('\n');
-  return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.
+  return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.${written ? `
+This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Where he gives amounts, use them; where he does not, assume his usual portions for a 98 kg cyclist.` : ''}
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's guidelines:
 ${rules}
@@ -196,12 +197,12 @@ Then judge the plate against today's guidelines and the meal-plan slot nearest t
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
 
-async function analyze(images, g, meal, notes) {
+async function analyze(images, g, meal, notes, written) {
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
-  const content = images.slice(0, 3).map(img => ({ type: 'image',
+  const content = (images || []).slice(0, 3).map(img => ({ type: 'image',
     source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
-  content.push({ type: 'text', text: promptFor(g, meal, notes) });
+  content.push({ type: 'text', text: promptFor(g, meal, notes, written) });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json',
@@ -260,14 +261,16 @@ async function dayReport(date) {
   };
 }
 
+// A photo, or words instead of one (body.text): the same read, the same entry.
 async function addPhoto(body) {
   const images = Array.isArray(body.images) ? body.images.filter(i => i && i.image_base64) : [];
-  if (!images.length) throw new Error('no photo');
+  const written = body.text ? String(body.text).trim().slice(0, 600) : '';
+  if (!images.length && !written) throw new Error('no photo and nothing written');
   const date = tz.todayKey();
   const g = await guidelinesFor(date);
   const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(body.meal) ? body.meal : null;
   const notes = body.notes ? String(body.notes).slice(0, 300) : '';
-  const a = await analyze(images, g, meal, notes);
+  const a = await analyze(images, g, meal, notes, written);
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
   const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   const entry = {
@@ -281,13 +284,14 @@ async function addPhoto(body) {
     assessment: { protein_source: !!a.protein_source, carbs: a.carbs || 'some', vegetables: !!a.vegetables,
       processed: !!a.processed, fits: a.fits || 'partly', why: String(a.why || '').slice(0, 240) },
     thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null,
+    written: written || null,
     ingredients: Array.isArray(a.ingredients) ? a.ingredients.slice(0, 20).map(i => ({ name: String(i.name || '').slice(0, 60), grams: Math.max(0, Math.round(i.grams || 0)) })) : [],
     micros: null, micros_matched_pct: null, micros_unknown: []
   };
   const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
   entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.
-  await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64 }).catch(() => {});
+  if (images.length) await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64 }).catch(() => {});
   const doc = await dayDoc(date);
   doc.entries.push(entry);
   await setJSON(dayKey(date), doc);
@@ -324,6 +328,13 @@ function attach(app) {
   app.get('/food/guidelines', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await guidelinesFor(isDate(req.query.date) ? req.query.date : tz.todayKey())); }
     catch (e) { res.status(500).json({ error: e.message }); } });
+
+  // Words instead of a photo: {text, meal?}
+  app.post('/food/text', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const entry = await addPhoto({ text: (req.body || {}).text, meal: (req.body || {}).meal });
+      res.json({ ok: true, entry, day: await dayReport(entry.date) });
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
   app.post('/food/photo', async (req, res) => { if (!auth(req, res)) return;
     try {

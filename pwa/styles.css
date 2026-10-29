@@ -358,3 +358,6 @@ a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; m
 .pday.graded.green{border-color:var(--green)}
 .pday.graded.yellow{border-color:var(--amber)}
 .pday.graded.red{border-color:var(--red)}
+.writebtn{width:100%; margin:8px 0 0}
+#writeForm{text-align:left; margin-top:10px}
+#writeForm textarea{width:100%; font:inherit; padding:10px; background:var(--card); color:var(--ink); border:1px solid var(--line)}

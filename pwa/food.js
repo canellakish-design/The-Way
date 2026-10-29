@@ -36,7 +36,7 @@ function thumbStrip(entries){
   if (!entries || !entries.length) return `<div class="small">No photos yet today.</div>`;
   return `<div class="thumbstrip">${entries.map(e=>{
     const f = FIT[e.assessment && e.assessment.fits] || FIT.partly;
-    const img = e.thumb ? `<img src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="nothumb">${esc((e.name||"?").slice(0,2))}</span>`;
+    const img = e.thumb ? `<img src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="nothumb">${e.written ? "✎" : esc((e.name||"?").slice(0,2))}</span>`;
     return `<a class="thumb" href="#food" title="${esc(e.name)}" style="border-color:${toneC(f.tone)}">${img}<span class="small">${esc(clock(e.at))}</span></a>`;
   }).join("")}</div>`;
 }
@@ -83,6 +83,13 @@ V.food = async function(){
           <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
+      <button id="writeBtn" class="writebtn">Write it instead</button>
+      <div id="writeForm" hidden>
+        <label for="writeText">What you ate, in your words</label>
+        <textarea id="writeText" rows="3" placeholder="Rice bowl: a cup of jasmine rice, grilled salmon about 150 g, edamame, kimchi, soft egg"></textarea>
+        <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
+          <span><label>&nbsp;</label><button class="primary" id="writeLog">Log it</button> <button id="writeCancel">Cancel</button></span></div>
+        <div class="small" id="writeMsg"></div></div>
       <div id="snapResult"></div>
     </div>` : ""}
     <div id="fDay"><div class="card"><div class="small">Loading the day…</div></div></div>`;
@@ -152,15 +159,16 @@ V.food = async function(){
       <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · supplement</div><div class="jname">${esc(e.name)}</div><div class="small">${esc(e.notes||"")}</div></div>
       <div class="jfit">${isToday?`<button class="pdanger" data-del="${esc(e.id)}">Remove</button>`:""}</div></div></div>`;
     const a = e.assessment || {};
-    const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${esc((e.name||"?").slice(0,2))}</span>`;
+    const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${e.written ? "✎" : esc((e.name||"?").slice(0,2))}</span>`;
     return `<div class="card jentry">
       <div class="jrow">${img}
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${esc(e.meal)}${e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.notes?"":" · photo only, ±35%"}</div></div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}</div></div>
         <div class="jfit">${fitBadge(a)}</div></div>
       <div class="small jwhy">${esc(a.why||"")}</div>
       <div class="jmore">
+        ${e.written?`<div class="small">You wrote: “${esc(e.written)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
         <div class="small">${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
         ${isToday?`<div class="jfix">
@@ -194,6 +202,29 @@ V.food = async function(){
     form.hidden = false;
   };
   document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; };
+  const showVerdict = (e)=>{
+    const a = e.assessment;
+    document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC((FIT[a.fits]||FIT.partly).tone)}">
+      <div class="jname">${esc(e.name)} ${fitBadge(a)}</div>
+      <div class="small">${esc(e.meal)} · ${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}</div>
+      <div>${esc(a.why)}</div></div>`;
+  };
+  const wform = document.getElementById("writeForm");
+  document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };
+  document.getElementById("writeCancel").onclick = ()=>{ wform.hidden = true; };
+  document.getElementById("writeLog").onclick = async ()=>{
+    const text = document.getElementById("writeText").value.trim();
+    if (!text) return;
+    const msg = document.getElementById("writeMsg"), btn = document.getElementById("writeLog");
+    btn.disabled = true; msg.textContent = "Reading it…";
+    try{
+      const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined })});
+      showVerdict(r.entry);
+      wform.hidden = true; msg.textContent = ""; document.getElementById("writeText").value = ""; document.getElementById("writeMeal").value = "";
+      day = r.day; draw();
+    }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
+    finally{ btn.disabled = false; }
+  };
   document.getElementById("snapLog").onclick = async ()=>{
     if (!file) return;
     const msg = document.getElementById("snapMsg"), btn = document.getElementById("snapLog");
@@ -204,11 +235,7 @@ V.food = async function(){
         images:[{image_base64, media_type:"image/jpeg"}], thumb_base64,
         meal: document.getElementById("snapMeal").value || undefined,
         notes: document.getElementById("snapNote").value || undefined })});
-      const e = r.entry, a = e.assessment;
-      document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC((FIT[a.fits]||FIT.partly).tone)}">
-        <div class="jname">${esc(e.name)} ${fitBadge(a)}</div>
-        <div class="small">${esc(e.meal)} · ${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}</div>
-        <div>${esc(a.why)}</div></div>`;
+      showVerdict(r.entry);
       form.hidden = true; file = null; fileEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
       day = r.day; draw();
