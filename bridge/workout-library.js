@@ -55,7 +55,10 @@ The day: normal.`
 
 const z1 = min => [step('Settle', m(5), hr(95, 110)), step('Zone one', m(min - 8), hr(100, 116)), step('Easy', m(3), hr(90, 105))];
 const z1Notes = min => min >= 120 ? EAT.long : min >= 75 ? EAT.mid : EAT.short;
-const set = label => rep(label, 5, [step('On', 40, pc(120)), step('Off', 20, pc(50))]);
+const cad = (lo, hi) => ({ lo, hi: hi == null ? lo : hi });
+// Step for step the same as Zwift's own "40/20's #1", so the copy intervals.icu
+// pushes to the Zwift home screen is the real session.
+const set = (label, off_s) => rep(label, 5, [step('On', 40, pc(109), cad(95)), step('Off', off_s, pc(55), cad(80))]);
 
 const LIBRARY = [
   ...[45, 60, 75, 90, 105, 120, 135, 150].map(min => ({
@@ -65,12 +68,13 @@ const LIBRARY = [
   {
     key: 'vo2-4020', name: 'VO2 max: Zwift 40/20s #1', sport: 'VirtualRide', notes: EAT.vo2,
     steps: [
-      step('Build', m(10), { type: 'ramp', from: 50, to: 75 }),
-      rep('Openers', 3, [step('Opener', 15, pc(150)), step('Easy', 45, pc(55))]),
-      step('Steady', m(4), pc(65)), step('Tempo', m(3), pc(85)), step('Easy', m(3), pc(55)),
-      set('Set one'), step('Recover', m(4), pc(55)),
-      set('Set two'), step('Recover', m(4), pc(55)),
-      set('Set three'), step('Cool down', m(4), pc(50))
+      step('Easy', m(3), pc(50)),
+      rep('Openers', 4, [step('Opener', 10, pc(175), cad(110)), step('Easy', 50, pc(50), cad(80))]),
+      step('Steady', m(3), pc(70), cad(95)), step('Easy', m(2), pc(50)),
+      step('Tempo', m(5), pc(90), cad(90)), step('Easy', m(3), pc(50), cad(85)),
+      set('Set one', 30), step('Recover', m(5), pc(50), cad(85)),
+      set('Set two', 20), step('Recover', m(5), pc(50), cad(85)),
+      set('Set three', 20), step('Cool down', m(5), pc(50), cad(85))
     ]
   },
   ...[60, 75, 90].map(min => ({

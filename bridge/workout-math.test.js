@@ -67,7 +67,7 @@ ok('library: every template normalises, and the session lengths are right', () =
   assert.strictEqual(byKey['z1-45'].duration_s, 45 * 60);
   assert.strictEqual(byKey['z1-150'].duration_s, 150 * 60);
   // Zwift's 40/20's #1 is 50 min
-  assert.strictEqual(byKey['vo2-4020'].duration_s, 50 * 60);
+  assert.strictEqual(byKey['vo2-4020'].duration_s, 50 * 60 + 50);
   assert.strictEqual(byKey['mtb-60'].duration_s, 60 * 60);
   for (const t of LIBRARY) assert.ok(/EAT/.test(t.notes), t.key + ' has eating guidelines');
   for (const t of LIBRARY) assert.ok(W.toIntervalsText(W.normItems(t.steps), st).length > 0);
