@@ -5,9 +5,10 @@ const F = require('./food-math');
 let n = 0;
 function ok(name, fn) { fn(); n++; console.log('ok ' + name); }
 
-ok('fuelDay: VO2 or 90 min or 80 TSS is a higher carb day; a short ride is normal; nothing is rest', () => {
+ok('fuelDay: VO2, two hours or 80 TSS is a higher carb day; a 90-minute Zone 1 is normal; nothing is rest', () => {
   assert.strictEqual(F.fuelDay([{ name: 'VO2 max: Zwift 40/20s #1', minutes: 50, tss: 55 }]), 'high');
   assert.strictEqual(F.fuelDay([{ name: 'Zone 1, 120 min', minutes: 120 }]), 'high');
+  assert.strictEqual(F.fuelDay([{ name: 'Zone 1, 90 min', minutes: 90, tss: 59 }]), 'normal');
   assert.strictEqual(F.fuelDay([{ name: 'Zone 1, 45 min', minutes: 45, tss: 25 }]), 'normal');
   assert.strictEqual(F.fuelDay([{ name: 'Mountain bike handling, 60 min', minutes: 60 }]), 'normal');
   assert.strictEqual(F.fuelDay([]), 'rest');

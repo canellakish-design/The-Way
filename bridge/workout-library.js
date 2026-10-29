@@ -23,16 +23,16 @@ The day: a normal day, no extra carbs.`,
   mid: `ZONE 1: heart rate under 116 the whole ride.
 
 EAT
-Before: normal breakfast 1 to 2 hours before.
-On the bike: one bottle of Tailwind, 2 scoops (50 g carbs).
-After: protein and carbs within the hour.
+Before: low carb breakfast with 20 g protein, 1 to 2 hours before. No carbs needed for Zone 1.
+On the bike: Tailwind, 1 scoop a bottle: about 30 g carbs an hour from the first 20 minutes.
+After: a real meal within 2 hours, 45 g protein and carbs.
 The day: normal.`,
   long: `LONG ZONE 1: heart rate under 116. Flat route, R5.
 
 EAT
 Before: carb breakfast 2 to 3 hours before (oats and fruit).
-On the bike: 60 g carbs an hour from the first 20 minutes. Tailwind 2 scoops a bottle plus a fig bar (37 g) each hour. Over 2 hours: 75 to 85 g an hour. No Nuun in the Tailwind.
-After: whey and carbs within 30 minutes.
+On the bike: 60 g carbs an hour from the first 20 minutes. Tailwind 2 scoops a bottle plus a fig bar (37 g) each hour. Over 2.5 hours: 90 g an hour, glucose and fructose together. No Nuun in the Tailwind.
+After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
   vo2: `VO2 MAX: ride Zwift's 40/20's #1 (Workouts > VO2 Max). The steps below only mirror it so the load shows here.
 Judge it by one number: minutes above 147 bpm, target 8 to 12.
@@ -54,7 +54,7 @@ The day: normal.`
 };
 
 const z1 = min => [step('Settle', m(5), hr(95, 110)), step('Zone one', m(min - 8), hr(100, 116)), step('Easy', m(3), hr(90, 105))];
-const z1Notes = min => min >= 90 ? EAT.long : min >= 75 ? EAT.mid : EAT.short;
+const z1Notes = min => min >= 120 ? EAT.long : min >= 75 ? EAT.mid : EAT.short;
 const set = label => rep(label, 5, [step('On', 40, pc(120)), step('Off', 20, pc(50))]);
 
 const LIBRARY = [

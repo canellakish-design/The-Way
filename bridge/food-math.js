@@ -31,10 +31,13 @@ function bmr(p) { return Math.round(10 * p.kg + 6.25 * p.cm - 5 * p.age + 5); }
 function baseBurn(p) { return Math.round(bmr(p) * p.activity); }
 
 // sessions: [{name, sport, minutes, tss}] for the date, planned or done.
+// A higher carb day is a hard session (VO2, threshold, a race) or a long
+// one: two hours and up, or 80 TSS. A 90-minute Zone 1 is a normal day; in
+// a deficit it needs about 30 g an hour on the bike, not a carb breakfast.
 function fuelDay(sessions) {
   const s = (sessions || []).filter(Boolean);
   const hard = s.some(x => /vo2|40\s*\/\s*20|threshold|race/i.test(String(x.name || ''))
-    || (x.minutes || 0) >= 90 || (x.tss || 0) >= 80);
+    || (x.minutes || 0) >= 120 || (x.tss || 0) >= 80);
   if (hard) return 'high';
   if (s.some(x => (x.minutes || 0) >= 30 || (x.tss || 0) >= 20)) return 'normal';
   return 'rest';
