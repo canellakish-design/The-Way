@@ -25,6 +25,7 @@ const tz = require('./tz');
 const F = require('./food-math');
 const W = require('./workout-math');
 const MI = require('./micro-math');
+const HY = require('./hydration-math');
 
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 const KEEP_DAYS = 60;
@@ -146,7 +147,7 @@ async function guidelinesFor(date) {
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
-  return { date, day, fuel_day: t.fuel_day, target: t, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
+  return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
     sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null,
@@ -157,7 +158,7 @@ async function guidelinesFor(date) {
 const SCHEMA = {
   type: 'object', additionalProperties: false,
   required: ['food_name', 'meal_guess', 'portion', 'kcal', 'carbs_g', 'protein_g', 'fat_g', 'confidence',
-    'protein_source', 'carbs', 'vegetables', 'processed', 'fits', 'why', 'ingredients', 'micronutrients'],
+    'protein_source', 'carbs', 'vegetables', 'processed', 'fits', 'why', 'ingredients', 'micronutrients', 'fluid_ml', 'drink'],
   properties: {
     ingredients: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'grams'],
       properties: { name: { type: 'string' }, grams: { type: 'integer' } } } },
@@ -166,6 +167,8 @@ const SCHEMA = {
       properties: { iron_mg: { type: 'number' }, calcium_mg: { type: 'number' }, magnesium_mg: { type: 'number' }, potassium_mg: { type: 'number' },
         sodium_mg: { type: 'number' }, zinc_mg: { type: 'number' }, vitamin_d_ug: { type: 'number' }, b12_ug: { type: 'number' }, folate_ug: { type: 'number' },
         vitamin_c_mg: { type: 'number' }, vitamin_a_ug: { type: 'number' }, omega3_mg: { type: 'number' }, fiber_g: { type: 'number' } } },
+    fluid_ml: { type: 'integer' },
+    drink: { type: 'string' },
     food_name: { type: 'string' },
     meal_guess: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
     portion: { type: 'string' },
@@ -193,6 +196,7 @@ ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${meal ? `He sa
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
+Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink, kcal as drunk, meal_guess snack, fits yes.
 Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when there is a real protein serving (roughly 30 g or more); carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
@@ -230,11 +234,12 @@ async function dayReport(date) {
   const doc = await dayDoc(date);
   const entries = doc.entries.map(e => Object.assign({}, e, { photo: undefined }));
   const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
+  const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
   const { scoreDay, suggestSnack } = require('./intake');
   const macro = scoreDay(actual, g.target);
   const rides = g.sessions.filter(s => s.done && s.end_at);
-  const guide = F.guidelineScore(g.day, entries.filter(e => !e.supplement), rides);
+  const guide = F.guidelineScore(g.day, meals, rides);
   const overall = F.overall(macro ? macro.overall : null, guide.score);
   // Micronutrients: today and up to six days before; each nutrient averages
   // over its own window (3 days for the quick ones, 7 for iron, D, B12,
@@ -249,11 +254,14 @@ async function dayReport(date) {
   const microOpts = { day: g.day, post: !!(g.cue && g.cue.key === 'post'), ride_hours: Math.round(rideHours * 10) / 10 };
   const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays, microOpts) : null;
   const microSuggest = micro ? MI.suggest(microDays, microOpts) : null;
+  const nowP = tz.parts(new Date());
+  const hydration = HY.score(entries, { kg: g.kg, ride_hours: rideHours, now_min: date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null });
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
-    actual: Object.assign(actual, { meals: entries.filter(e => !e.supplement).length }), entries,
+    actual: Object.assign(actual, { meals: meals.length }), entries,
+    hydration,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,
@@ -286,8 +294,11 @@ async function addPhoto(body) {
     thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null,
     written: written || null,
     ingredients: Array.isArray(a.ingredients) ? a.ingredients.slice(0, 20).map(i => ({ name: String(i.name || '').slice(0, 60), grams: Math.max(0, Math.round(i.grams || 0)) })) : [],
-    micros: null, micros_matched_pct: null, micros_unknown: []
+    micros: null, micros_matched_pct: null, micros_unknown: [],
+    fluid_ml: Math.max(0, Math.min(3000, Math.round(a.fluid_ml || 0))), drink: String(a.drink || '').slice(0, 40) || null
   };
+  // A bottle or a glass on its own is a drink: it counts for hydration, not as a meal the rules judge.
+  entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
   const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
   entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.

@@ -1331,6 +1331,7 @@ V.today = async function(){
       <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1481,6 +1482,12 @@ V.today = async function(){
     const gaps = (m.gaps||[]).map(g=>g.label).join(", ");
     paintTile("micros", m.score, m.band.word, m.band.tone, gaps ? `low: ${gaps}` : "all covered");
   };
+  const drawHydrationTile = ()=>{
+    const h = foodData && foodData.hydration;
+    if (!h){ paintTile("hydration", null, "", "", foodData ? "snap a drink" : "bridge unreachable"); return; }
+    if (h.score == null){ paintTile("hydration", null, "", "", "snap a drink"); return; }
+    paintTile("hydration", h.score, h.band.word, h.band.tone, `${(h.drunk_ml/1000).toFixed(1)} of ${(h.target.total/1000).toFixed(1)} L`);
+  };
   const drawWeightTile = ()=>{
     const w = bodyData;
     if (!w || !w.latest){ paintTile("weight", null, "", "", w ? (w.withings_connected ? "no reading yet" : "scale not connected") : "bridge unreachable"); return; }
@@ -1568,6 +1575,7 @@ V.today = async function(){
     drawFood();
     drawWeightTile();
     drawMicroTile();
+    drawHydrationTile();
     drawScoreDetail();
   };
 
@@ -1576,7 +1584,7 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "micros"){
@@ -1586,6 +1594,19 @@ V.today = async function(){
       box.innerHTML = html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
+    }
+    if (openScore === "hydration"){
+      const h = foodData && foodData.hydration;
+      html = `<h4>Hydration · today</h4>
+        ${h ? `<ul class="agenda totals">
+          ${row("drunk so far", `<b style="color:${toneC(h.band.tone)}">${(h.drunk_ml/1000).toFixed(2)} L</b>${h.score != null ? ` · ${h.band.word}` : ""}`)}
+          ${row("due by now", `${(h.due_ml/1000).toFixed(2)} L`)}
+          ${row("today's target", `${(h.target.total/1000).toFixed(1)} L${h.target.ride ? ` · ${(h.target.base/1000).toFixed(1)} base + ${(h.target.ride/1000).toFixed(1)} for the riding` : ""}`)}
+          ${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}
+        </ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
+        <a class="btn primary" href="#food">Snap a drink</a>
+        <div class="small">Every glass, mug, bottle or bowl of broth the camera sees is read as millilitres and added up; a photo of the bottle alone counts too, and so does a drink you write down. The target is drinks only: 30 ml per kg of body weight (EFSA's 2.5 L of water a day for men, four fifths of it from drinks, and the 30 to 35 ml/kg sports-medicine rule agree on it), plus 600 ml for every hour ridden, the middle of the ACSM's 0.4 to 0.8 L an hour of cycling sweat. The score paces the base target over the waking day, 06:00 to 22:00, and adds a ride's fluid when the ride ends, so a glass at breakfast is judged against breakfast's share, not the whole day. 80% of what is due is green, 50% amber, under that red. Coffee and tea count in full, habitual caffeine does not dry you out; alcohol counts nothing.</div>`;
+      box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">The number on the box is the latest reading; the word is the week-over-week move of the 7-day average, down green, up red. ${bodyData && bodyData.start_lb ? "Measured against the " + bodyData.start_lb + " lb start." : ""}</div>`;

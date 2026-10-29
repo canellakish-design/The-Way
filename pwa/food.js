@@ -76,6 +76,7 @@ V.food = async function(){
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     ${isToday ? `<div class="card day snapcard" id="snap">
       <button class="primary big snapbtn" id="snapBtn">Snap a meal</button>
+      <div class="small snaphint">Drinks count: a glass, a mug or the bottle in the frame is read as millilitres for the hydration score. A photo of the bottle alone works too.</div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
       <div id="snapForm" hidden>
         <img id="snapPreview" class="snappreview" alt="">
@@ -165,7 +166,7 @@ V.food = async function(){
       <div class="jrow">${img}
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${esc(e.meal)}${e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}</div></div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}</div></div>
         <div class="jfit">${fitBadge(a)}</div></div>
       <div class="small jwhy">${esc(a.why||"")}</div>
       <div class="jmore">
