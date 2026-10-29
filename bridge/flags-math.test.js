@@ -61,8 +61,11 @@ ok('hunt: the flags the day\'s TSS reaches, on the route the work fills best', (
 });
 
 ok('routesFromTracks groups rides by name; worldOf names the Zwift world; the Garmin course carries the flags', () => {
-  const r = G.routesFromTracks([{ id: 1, name: 'Loch Raven loop', points: main.points }, { id: 2, name: 'Loch Raven Loop', points: main.points.slice(0, 300) }, { id: 3, name: 'Once', points: main.points }]);
-  assert.strictEqual(r.length, 1); assert.strictEqual(r[0].rides, 2);
+  const other = route('r2', 'Morning Ride'); other.points = other.points.map(p => ({ lat: p.lat, lng: p.lng + 0.05, ele: p.ele }));   // 4 km east: a different loop
+  const r = G.routesFromTracks([{ id: 1, name: 'Morning Ride', points: main.points }, { id: 2, name: 'Loch Raven Loop', points: main.points.slice(0, 300) },
+    { id: 3, name: 'Morning Ride', points: other.points }, { id: 4, name: 'Morning Ride', points: other.points }, { id: 5, name: 'Once', points: main.points.map(p => ({ lat: p.lat + 0.2, lng: p.lng })) }]);
+  assert.strictEqual(r.length, 2, JSON.stringify(r.map(x => [x.name, x.rides])));
+  assert.deepStrictEqual(r.map(x => [x.name, x.rides]).sort(), [['Loch Raven Loop', 2], ['Loop · 40 km', 2]]);
   assert.strictEqual(G.worldOf(-11.63, 166.96), 'Watopia');
   const flags = G.placeFlags(main, [dam], [], {});
   const tcx = G.tcxCourse(main, flags);

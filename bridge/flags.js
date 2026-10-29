@@ -80,15 +80,16 @@ async function rides(from, to) {
 const MIRRORS = [OVERPASS, 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
 async function namesFor(route) {
   const body = 'data=' + encodeURIComponent(G.overpassQuery(route.points));
-  let last = null;
+  const errs = [];
   for (const url of MIRRORS) {
     try {
       const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
-      if (!r.ok) { last = new Error('overpass ' + r.status + ' at ' + new URL(url).host); continue; }
-      return G.parsePois(await r.json());
-    } catch (e) { last = e; }
+      const text = await r.text();
+      if (!r.ok) { errs.push(new URL(url).host + ' ' + r.status + ' ' + text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 90)); continue; }
+      return G.parsePois(JSON.parse(text));
+    } catch (e) { errs.push(new URL(url).host + ' ' + e.message.slice(0, 60)); }
   }
-  throw last || new Error('overpass unreachable');
+  throw new Error('overpass: ' + errs.join(' | '));
 }
 
 // ---- the build: one small step per call (a function has about ten

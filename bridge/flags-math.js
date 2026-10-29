@@ -175,20 +175,35 @@ function visitCount(tIdx, spot, tracks) {
 function rarity(visits) { return visits >= 6 ? 'common' : visits >= 2 ? 'uncommon' : visits >= 1 ? 'rare' : 'legendary'; }
 
 // Flags from ride history alone (no RideWithGPS yet, and every Zwift
-// world): the rides are grouped by name, each group's longest ride is the
-// route, and the flags are placed on it like any other.
+// world): rides that cover the same roads are one route, whatever Strava
+// called them (his are mostly "Morning Ride"). Two rides are the same route
+// when most of each lies within 150 m of the other. Each group's longest
+// ride stands for the route.
+const DEFAULT_NAME = /^(morning|lunch|afternoon|evening|night|early morning) (ride|zwift|virtual ride|activity)$/i;
+function overlap(a, b) {
+  const idx = index(b);
+  let hit = 0;
+  for (const p of a) if (nearest(idx, p, 150)) hit++;
+  return a.length ? hit / a.length : 0;
+}
 function routesFromTracks(tracks) {
-  const groups = new Map();
-  for (const t of tracks) {
-    const k = (t.virtual ? 'zwift|' : 'road|') + String(t.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(t);
+  const ts = tracks.filter(t => t.points && t.points.length >= 20).map(t => Object.assign({}, t, { thin: downsample(t.points, 120) }));
+  const parent = ts.map((_, i) => i);
+  const find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let i = 0; i < ts.length; i++) for (let j = i + 1; j < ts.length; j++) {
+    if (!!ts[i].virtual !== !!ts[j].virtual) continue;
+    if (dist(ts[i].thin[0], ts[j].thin[0]) > 30000) continue;          // different corners of the world: not the same loop
+    if (overlap(ts[i].thin, ts[j].thin) >= 0.6 && overlap(ts[j].thin, ts[i].thin) >= 0.6) parent[find(i)] = find(j);
   }
+  const groups = new Map();
+  for (let i = 0; i < ts.length; i++) { const r = find(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(ts[i]); }
   const out = [];
-  for (const [k, list] of groups) {
+  for (const list of groups.values()) {
     if (list.length < 2 && !list[0].virtual) continue;       // a one-off ride is not a route
     const longest = list.reduce((a, t) => t.points.length > a.points.length ? t : a);
-    out.push({ id: 'ride-' + longest.id, name: longest.name || 'Ride', virtual: !!longest.virtual, points: longest.points, rides: list.length });
+    const given = list.map(t => t.name).find(n => n && !DEFAULT_NAME.test(n.trim()));
+    const km = Math.round(annotate(longest.points).slice(-1)[0].d / 1000);
+    out.push({ id: 'ride-' + longest.id, name: given || `${longest.virtual ? 'Route' : 'Loop'} · ${km} km`, virtual: !!longest.virtual, points: longest.points, rides: list.length });
   }
   return out.sort((a, b) => b.rides - a.rides).slice(0, 12);
 }
@@ -258,4 +273,4 @@ function tcxCourse(route, flags) {
 }
 
 module.exports = { CATCH_M, VISIT_M, MIN_GAP_M, XP, HUNT_BONUS, dist, annotate, downsample, index, nearest, workAt, classify, overpassQuery, parsePois,
-  placeFlags, visitCount, rarity, routesFromTracks, worldOf, catchesIn, xpFor, level, hunt, tcxCourse };
+  placeFlags, visitCount, rarity, routesFromTracks, overlap, worldOf, catchesIn, xpFor, level, hunt, tcxCourse };
