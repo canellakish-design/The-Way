@@ -451,3 +451,8 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxstack{margin-left:0; padding-left:0}
 .wxlab{position:absolute; left:-2px; font-family:var(--mono); font-size:8.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink); background:rgba(0,0,0,.55); padding:0 3px; line-height:1.4; pointer-events:none}
 .wxlab1{top:2px} .wxlab2{top:27px}
+
+/* the row names in their own column, the boxes beside them */
+.wxstack{display:grid; grid-template-columns:64px 1fr; align-items:center; gap:3px 6px}
+.wxlab{position:static; background:none; padding:0; font-size:8.5px; letter-spacing:1.2px; color:var(--muted)}
+.wxover{left:70px}
