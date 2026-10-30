@@ -141,4 +141,16 @@ ok('overall and band', () => {
   assert.strictEqual(F.band(40).word, 'off');
 });
 
+
+ok('mealMatch: a plate within 20% is green, 40% yellow, further is red either way; protein only when short', () => {
+  const plan = { kcal: 500, carbs_g: 60, protein_g: 30 };
+  assert.strictEqual(F.mealMatch(plan, []), null);
+  assert.strictEqual(F.mealMatch(plan, [{ kcal: 520, carbs_g: 55, protein_g: 32 }]).key, 'green');
+  assert.strictEqual(F.mealMatch(plan, [{ kcal: 650, carbs_g: 70, protein_g: 30 }]).key, 'yellow');
+  const red = F.mealMatch(plan, [{ kcal: 520, carbs_g: 110, protein_g: 30 }]);
+  assert.strictEqual(red.key, 'red'); assert.ok(/carbs 83% over/.test(red.word), red.word);
+  assert.strictEqual(F.mealMatch(plan, [{ kcal: 500, carbs_g: 60, protein_g: 10 }]).key, 'yellow');   // protein short is never red
+  assert.strictEqual(F.mealMatch(plan, [{ kcal: 500, carbs_g: 60, protein_g: 60 }]).key, 'green');    // extra protein is fine
+  assert.strictEqual(F.mealMatch({ kcal: 120, carbs_g: 30, protein_g: 0 }, [{ kcal: 110, carbs_g: 28 }]).key, 'green');
+});
 console.log(n + ' passed');

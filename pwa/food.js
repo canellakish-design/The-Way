@@ -239,8 +239,9 @@ V.food = async function(){
           const logged = (m.logged||[]).length, now = nowHM();
           const mealOf = m.slot === "before" || m.slot === "after" ? "snack" : (MEALS.includes(m.slot) ? m.slot : "snack");
           const mark = logged ? `<span class="mk ok" title="logged">✓</span>` : (isToday && m.time < now) ? `<span class="mk no" title="nothing logged">✗</span>` : `<span class="mk"></span>`;
-          return `<li class="${logged?"done":(isToday&&m.time<now?"past":"")}"><span class="t">${esc(hm12(m.time))}</span>
-            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}</span>`:""}</span>
+          const mt = logged && m.match ? m.match : null;
+          return `<li class="${logged?"done":(isToday&&m.time<now?"past":"")}${mt?` match ${mt.key}`:""}"><span class="t">${esc(hm12(m.time))}</span>
+            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}</span>`:""}${mt?`<span class="small mword"> ${mt.kcal} kcal · ${mt.carbs_g}C${mt.protein_g?` · ${mt.protein_g}P`:""} · ${esc(mt.word)}</span>`:""}</span>
             <span class="tag mealtag">${mark}${isToday?`<button class="cam" data-cam="${esc(mealOf)}" aria-label="Snap this meal"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></button>`:""}</span></li>`; }).join("")}</ul>
       </div>
       <div class="card"><h4>Compliance</h4>

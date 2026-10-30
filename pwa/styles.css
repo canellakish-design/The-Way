@@ -497,3 +497,6 @@ details.addev input{width:100%}
 
 .legstap{margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap} .legstap .suppbtn{min-width:36px}
 .fdot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--muted)} .fdot.green{background:var(--green)} .fdot.yellow{background:var(--amber)} .fdot.red{background:var(--red)}
+ul.agenda.mealplan li.match.green{background:var(--green-soft); border-left-color:var(--green)} ul.agenda.mealplan li.match.green .mword{color:var(--green)}
+ul.agenda.mealplan li.match.yellow{background:var(--amber-soft); border-left-color:var(--amber)} ul.agenda.mealplan li.match.yellow .mword{color:var(--amber)}
+ul.agenda.mealplan li.match.red{background:var(--red-soft, #3A1A16); border-left-color:var(--red)} ul.agenda.mealplan li.match.red .mword{color:var(--red)}

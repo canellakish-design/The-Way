@@ -268,7 +268,7 @@ async function dayReport(date) {
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
-    meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
+    meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id), match: F.mealMatch(m, entries.filter(e => e.slot === m.slot)) })),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },

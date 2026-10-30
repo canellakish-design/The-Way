@@ -313,5 +313,30 @@ function band(score) {
   return { word: 'off', tone: 'bad' };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM, dueSoFar,
+// Once a planned meal has something logged against it, how well the plate
+// matched the plan: calories, carbs and protein each against the slot's
+// target. Green when all are within 20%; yellow within 40% (or protein
+// short alone); red when the calories or the carbs are further off than
+// that, either way, since on a Zone 1 morning too many carbs is the miss
+// and before a hard session too few is. Slots with no logged entry: null.
+function mealMatch(plan, logged) {
+  const l = (logged || []).filter(e => e && !e.supplement);
+  if (!l.length) return null;
+  const sum = k => l.reduce((a, e) => a + (e[k] || 0), 0);
+  const got = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g') };
+  const off = (have, want) => want > 0 ? (have - want) / want : (have > 15 ? 1 : 0);
+  const parts = [];
+  if (plan.kcal > 0) parts.push({ k: 'kcal', off: off(got.kcal, plan.kcal), both: true });
+  if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: off(got.carbs_g, plan.carbs_g), both: true });
+  if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
+  const miss = p => p.both ? Math.abs(p.off) : Math.max(0, -p.off);   // protein only counts when short
+  const worst = parts.reduce((a, p) => miss(p) > miss(a) ? p : a, parts[0] || { k: 'kcal', off: 0, both: true });
+  const w = miss(worst);
+  const key = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
+  const dir = worst.off > 0 ? 'over' : 'under';
+  const word = key === 'green' ? 'as planned' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
+  return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k };
+}
+
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM, dueSoFar, mealMatch,
   guidelineScore, overall, band, FIT_POINTS };
