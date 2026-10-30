@@ -174,8 +174,9 @@ V.workout = async function(){
       // 7:00 is the house start, nothing earlier; the meal plan hangs off this time. A window
       // tapped on the day passes its own start.
       const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? p.time : "07:00";
-      W = t ? {name:t.name, date:date0, time:t0, sport:t.sport, notes:t.notes||"", steps:clone(t.steps)}
-            : {name:"Workout", date:date0, time:t0, sport:"Ride", notes:"", steps:[blankStep()]};
+      const where = p.where === "out" ? "Ride" : p.where === "in" ? "VirtualRide" : null;
+      W = t ? {name:t.name, date:date0, time:t0, sport:where || t.sport, notes:t.notes||"", steps:clone(t.steps)}
+            : {name:"Workout", date:date0, time:t0, sport:where || "Ride", notes:"", steps:[blankStep()]};
       editor();
     });
     return;

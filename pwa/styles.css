@@ -456,3 +456,6 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxstack{display:grid; grid-template-columns:64px 1fr; align-items:center; gap:3px 6px}
 .wxlab{position:static; background:none; padding:0; font-size:8.5px; letter-spacing:1.2px; color:var(--muted)}
 .wxover{left:70px}
+
+/* outdoor windows solid, indoor windows dashed */
+.wxwin.in{border-style:dashed; border-color:#C9C7BE} .wxwin.in b{color:#C9C7BE}

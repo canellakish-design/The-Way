@@ -1339,12 +1339,19 @@ function hourStrips(d){
   const wxBoxes = w ? w.hours.filter(h => h.hour >= H0 && h.hour <= H1).map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good outside") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(hlbl(h.hour))}"></span>`).join("")
                    : cal.map(() => `<span class="wxh none"></span>`).join("");
   const calBoxes = cal.map(c => `<span class="wxh ${c.free ? "good" : "bad"}" data-why="${attr(c.names.length ? c.names.join(", ") : "free")}" title="${attr(hlbl(c.hour))}"><i>${hlbl(c.hour)}</i></span>`).join("");
-  // the windows: runs of free hours
+  // the windows: runs of free hours, split by the conditions above them.
+  // Free and green outside is an outdoor window (solid box); free under
+  // amber or red, or with no forecast, is an indoor window (dashed box).
+  const grade = i => { const h = w && w.hours.find(x => x.hour === H0 + i); return h ? h.grade : "none"; };
   const wins = []; let run = null;
-  cal.forEach((c, i) => { if (c.free){ if (!run) run = { i0: i, i1: i }; else run.i1 = i; } else { if (run) wins.push(run); run = null; } });
+  cal.forEach((c, i) => {
+    const kind = c.free ? (grade(i) === "good" ? "out" : "in") : null;
+    if (kind && run && run.kind === kind) run.i1 = i;
+    else { if (run) wins.push(run); run = kind ? { i0: i, i1: i, kind } : null; }
+  });
   if (run) wins.push(run);
   const overlay = wins.map(r => { const h0 = H0 + r.i0, h1 = H0 + r.i1 + 1; const len = r.i1 - r.i0 + 1;
-    return `<a class="wxwin" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free`)}"><b>${len}h</b></a>`; }).join("");
+    return `<a class="wxwin ${r.kind}" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00&where=${r.kind}" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free, ${r.kind === "out" ? "outdoors" : "indoors"}`)}"><b>${len}h ${r.kind}</b></a>`; }).join("");
   return `<div class="wxstrip">
     <div class="wxstack"><span class="wxlab">conditions</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wxBoxes}</div>
       <span class="wxlab">schedule</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${calBoxes}</div><div class="wxover">${overlay}</div></div>
