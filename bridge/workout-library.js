@@ -45,7 +45,7 @@ Before: carb breakfast 2 to 3 hours before (70 g oats and fruit). Carbs the even
 On the bike: one bottle of Tailwind, 2 scoops (50 g carbs). Fan on.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
-  lift: `LIFTING: 45 minutes, two sessions a week, never the day before the 40/20s. Log it set by set on the Lift tab; it tells you the next weight.
+  lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes the day before a day off the bike or a long coaching day. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets. Log it set by set on the Lift tab; it tells you the next weight.
 
 EAT
 Before: a normal meal 1 to 2 hours before, or the whey shake if it is first thing.
@@ -93,10 +93,13 @@ const LIBRARY = [
     key: 'mtb-' + min, name: `Mountain bike handling, ${min} min`, sport: 'Ride', notes: EAT.mtb,
     steps: [step('Bike handling', m(min), { type: 'free' })]
   })),
-  // The two lifting sessions (lifts.js has the exercises, sets and the
-  // progression); here they are a 45-minute block the calendar can hold.
-  { key: 'lift-a', name: 'Lift A: hinge and push', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(45), { type: 'free' })] },
-  { key: 'lift-b', name: 'Lift B: squat and pull', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(45), { type: 'free' })] }
+  // The five lifting sessions (lifts.js has the exercises, sets and the
+  // progression); here each is a block the calendar can hold.
+  { key: 'lift-push', name: 'Push', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
+  { key: 'lift-pull', name: 'Pull and calves', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
+  { key: 'lift-upper-1', name: 'Upper body and core (Upper 1)', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] },
+  { key: 'lift-legs', name: 'Legs', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
+  { key: 'lift-upper-2', name: 'Upper body and core (Upper 2)', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] }
 ];
 
 module.exports = { LIBRARY, EAT };

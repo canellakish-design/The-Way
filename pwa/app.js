@@ -718,11 +718,12 @@ V.lift = async function(){
   try{ L = await bridge("/lifts"); }catch(e){ document.getElementById("liftPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
   const p = Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||"")); const key = L.templates.some(t => t.key === p.t) ? p.t : L.next;
   const T = L.templates.find(t => t.key === key);
-  const other = L.templates.find(t => t.key !== key);
+  const others = L.templates.filter(t => t.key !== key);
+  const today = localDateKey();
   const unit = e => e.kind === "time" ? "s" : e.kind === "reps" ? "reps" : "lb";
   const exHTML = (e, i) => `<li class="lex" data-i="${i}">
-      <div class="lexhead"><span class="n"><b>${esc(e.name)}</b> <span class="small">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""}</span>${e.note?`<span class="small lnote">${esc(e.note)}</span>`:""}</span>
-        <span class="tag"><b style="color:${e.target.progress?"var(--green)":"var(--ink)"}">${e.kind==="time"||e.kind==="reps" ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</b></span></div>
+      <div class="lexhead"><span class="n"><b>${esc(e.name)}</b> <span class="small">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${e.rest_min} min</span>${e.note?`<span class="small lnote">${esc(e.note)}</span>`:""}</span>
+        <span class="tag"><b style="color:${e.target.progress?"var(--green)":e.target.back?"var(--amber)":"var(--ink)"}">${e.kind==="time"||e.kind==="reps" ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</b></span></div>
       <div class="small">${esc(e.target.why)}${e.last ? ` · last: ${esc(e.last.date)}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
       <div class="lsets">${Array.from({ length: e.sets }, (_, k) => `<span class="lset"><label>set ${k+1}</label>${e.kind==="time"||e.kind==="reps" ? "" : `<input type="number" class="llb" inputmode="numeric" value="${e.target.lb}" aria-label="pounds"><span class="small">lb ×</span>`}<input type="number" class="lreps" inputmode="numeric" value="${e.target.reps}" aria-label="${unit(e)}"><span class="small">${e.kind==="time"?"s":"reps"}</span></span>`).join("")}</div>
     </li>`;
@@ -733,17 +734,31 @@ V.lift = async function(){
     return `<svg viewBox="0 0 ${W} ${H}" class="lspark" preserveAspectRatio="none"><path d="${rows.map((r, i) => (i ? "L" : "M") + xs[i].toFixed(1) + "," + Y(r.e1rm).toFixed(1)).join(" ")}" fill="none" stroke="currentColor" stroke-width="2"></path></svg>`;
   };
   const hist = Object.entries(L.history || {});
+  const shortOf = k => (L.templates.find(t => t.key === k) || {}).short || "";
+  const dayLine = x => x.ride ? esc(x.ride.name.replace(/^Zwift - Intervals icu: /i, "").replace(/^VO2 max: Zwift /i, "VO2 ").slice(0, 18)) : x.long_coaching ? `coaching ${Math.round(x.coaching_min/60)} h` : "off the bike";
+  const legsDay = (L.week||[]).find(x => x.lift === "legs");
+  const weekHTML = (L.week||[]).length ? `<div class="card"><h4>This week · ${esc(L.plan||"")}</h4>
+      <div class="lweek">${L.week.map(x => `<a class="lday${x.lift?"":" off"}${x.done?" done":""}${x.date===today?" today":""}" href="#lift?t=${esc(x.lift||L.next)}" title="${esc(x.why||"")}">
+        <span class="ld">${esc(String(x.label||x.date).split(" ").slice(0,1).join(""))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
+        <b>${x.lift ? esc(shortOf(x.lift)) : "—"}</b>
+        <span class="small">${dayLine(x)}</span></a>`).join("")}</div>
+      <div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.</div>
+      <div class="small">${L.this_week} of ${L.target_per_week} this week · week ${L.week_no}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""}</div>
+      ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
+      <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
+    </div>` : "";
   document.getElementById("liftPage").innerHTML = `
-    <div class="card"><h4>${esc(T.name)}${key === L.next ? " · next up" : ""}</h4>
+    ${weekHTML}
+    <div class="card"><h4>${esc(T.name)}${T.short && /Upper/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(L.next_date.slice(5).replace("-","/")) : ""}` : ""}</h4>
       <div class="small">${esc(T.why)}</div>
-      <div class="small">${L.this_week} of ${L.target_per_week} this week${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""} · <a href="#lift?t=${esc(other.key)}">switch to ${esc(other.name.replace(/:.*$/, ""))}</a></div>
+      <div class="small">${T.hard_sets} hard sets · about ${T.minutes} min · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
       <ul class="agenda lexlist">${T.exercises.map(exHTML).join("")}</ul>
       <label for="lNotes">Notes</label><input id="lNotes" placeholder="how it felt, anything that hurt">
-      <div class="rowbtns"><button class="primary" id="lSave">Save the session</button><button id="lPlan">Put it on the calendar</button></div>
+      <div class="rowbtns"><button class="primary" id="lSave">Save the session</button><button id="lPlan">Put this one on the calendar</button></div>
       <div class="small" id="lMsg"></div>
-      <details class="why"><summary>how the targets move</summary><div class="small">Double progression. The weight holds until every set reaches the top of its rep range; then it steps up (the next bell for a kettlebell, ten pounds on the Bowflex) and the reps drop back to the bottom of the range. Planks add fifteen seconds, dead bugs two reps. Two sessions a week, heavy and short, never the day before the 40/20s: that is what the research on strength work for cyclists supports (Rønnestad and Mujika 2014), and it adds power without adding weight when the riding stays easy.</div></details>
+      <details class="why"><summary>how the targets move</summary><div class="small">Mike Matthews' double progression (Bigger Leaner Stronger). The big lifts work in 4 to 6 reps, about 80 to 85% of a one-rep max, three minutes between hard sets; the small lifts in 6 to 8 or 8 to 10. When a hard set reaches the top of its range the weight goes up next time (ten pounds on the Bowflex, the next bell for a kettlebell, five on a small lift) and the reps drop back to the bottom; a set that cannot reach the bottom of the range takes the weight back a step. Nine to twelve hard sets a session, each of the five once every seven days, eight weeks on and then a deload. Legs is the cycling day of the five, so it goes the day before a day off the bike or a long coaching day, where the soreness costs no ride. The lifts are the book's, on the kettlebells and the Bowflex; the barbell original is in each note for a gym.</div></details>
     </div>
-    ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session.</div></div>` : ""}
+    ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session. This is where lifting shows up: not in the ride CTL.</div></div>` : ""}
     ${L.sessions && L.sessions.length ? `<div class="card"><h4>Sessions</h4><ul class="agenda">${L.sessions.map(s => `<li><span class="t">${esc(s.date.slice(5).replace("-","/"))}</span><span class="n">${esc(s.name)}<span class="small"> ${s.exercises.map(e => `${e.name.replace(/^(Kettlebell|Bowflex) /, "")} ${e.sets.map(x => (x.lb ? x.lb + "×" : "") + x.reps).join(",")}`).join(" · ")}${s.notes ? " · " + esc(s.notes) : ""}</span></span><span class="tag">${(s.volume_lb/1000).toFixed(1)}k lb <button class="tdel" data-dell="${esc(s.id)}" aria-label="Remove">${TRASH}</button></span></li>`).join("")}</ul></div>` : ""}`;
   document.getElementById("lSave").onclick = async ()=>{
     const btn = document.getElementById("lSave"), msg = document.getElementById("lMsg"); btn.disabled = true;
@@ -758,6 +773,15 @@ V.lift = async function(){
     const m = /^(\d{4}-\d{2}-\d{2})\s*(\d{2}:\d{2})?/.exec(when.trim()); if (!m){ msg.textContent = "Did not understand the day."; return; }
     try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date: m[1], time: m[2] || null, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); msg.textContent = `On the calendar: ${T.name}, ${m[1]}${m[2] ? " at " + hm12(m[2]) : ""}.`; }
     catch(e){ msg.textContent = e.message; }
+  };
+  const wk = document.getElementById("lWeek");
+  if (wk) wk.onclick = async ()=>{
+    const msg = document.getElementById("lWeekMsg");
+    const t = prompt("What time, most days? (like 07:00 or 17:30)", "07:00"); if (t == null) return;
+    if (!/^\d{2}:\d{2}$/.test(t.trim())) { msg.textContent = "Did not understand the time."; return; }
+    wk.disabled = true; msg.textContent = "Placing…";
+    try{ const r = await bridge("/lifts/schedule",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ time: t.trim() })}); msg.textContent = `${r.added.length} put on the calendar at ${hm12(r.time)}${r.kept.length ? `; ${r.kept.length} day${r.kept.length===1?" already had":"s already had"} a lift` : ""}.`; }
+    catch(e){ msg.textContent = e.message; wk.disabled = false; }
   };
   document.querySelectorAll("[data-dell]").forEach(b => b.onclick = async ()=>{ if (!confirm("Remove this session?")) return; try{ await bridge("/lifts/" + encodeURIComponent(b.dataset.dell), { method: "DELETE" }); V.lift(); }catch(e){ document.getElementById("lMsg").textContent = e.message; } });
 };

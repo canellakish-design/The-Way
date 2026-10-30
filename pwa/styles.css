@@ -534,3 +534,9 @@ ul.agenda.lexlist li{display:block; padding:10px 12px} .lexhead{display:flex; ju
 .lset input{width:58px; padding:6px 6px; font-size:16px; text-align:center} .lspark{width:120px; height:28px; vertical-align:middle; color:var(--green); margin-left:6px}
 @media (max-width:560px){ nav a{font-size:10px; padding:4px 4px; letter-spacing:0} }
 #liftPage a, #zonesPage a{color:var(--ink); text-underline-offset:3px}
+/* the lift week */
+.lweek{display:grid; grid-template-columns:repeat(7,1fr); gap:4px; margin:8px 0}
+.lday{display:flex; flex-direction:column; align-items:center; gap:3px; padding:8px 2px; border:1px solid var(--line); text-decoration:none; text-align:center; color:var(--ink); min-width:0}
+.lday b{font-size:13px} .lday .small{font-size:10px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%}
+.lday.off{opacity:.55} .lday.today{border-color:var(--green)} .lday.done b{color:var(--green)}
+.lday .ld{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted)}
