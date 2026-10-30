@@ -8,6 +8,8 @@ const require = createRequire(import.meta.url);
 export default async () => {
   const { sleepLatest } = require('../../bridge/whoop.js');
   try {
+    const { keepWarm } = require('../../bridge/whoop.js');
+    await keepWarm().catch(() => {});
     const r = await sleepLatest({ sync: true });
     return new Response(JSON.stringify({ ok: true, synced_at: r && r.synced_at, auth_error: r && r.auth_error || null }), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {

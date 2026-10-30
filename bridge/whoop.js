@@ -51,19 +51,33 @@ async function storeTokens(tokens) {
   return fresh;
 }
 
-async function tok(d) {
-  if (!d.tokens) throw new Error('not authorized — visit /whoop/auth');
-  if (Date.now() < d.tokens.expires_at - 60000) return d.tokens.access_token;
+async function refreshWith(refreshToken) {
   const r = await fetch(API + '/oauth/oauth2/token', { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: d.tokens.refresh_token,
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken,
       client_id: CID, client_secret: SEC,
       // Required: WHOOP only returns a replacement refresh token when the
       // refresh request asks for offline access. Without it the token it just
       // retired is never replaced, and the connection dies an hour after it
       // was made — which is exactly what "it was working" looks like.
       scope: 'offline' }) });
-  const j = await r.json();
+  return r.json();
+}
+async function tok(d) {
+  if (!d.tokens) throw new Error('not authorized — visit /whoop/auth');
+  if (Date.now() < d.tokens.expires_at - 60000) return d.tokens.access_token;
+  // No refresh token at all means the approval did not include offline
+  // access; nothing automatic can fix that, only a fresh approval.
+  if (!d.tokens.refresh_token) {
+    const cur = await db();
+    cur.auth_error = { at: new Date().toISOString(), detail: 'no refresh token was granted; approve again at /whoop/auth (offline access)' };
+    await setJSON('whoop', cur).catch(() => {});
+    throw new Error('token refresh failed: ' + cur.auth_error.detail);
+  }
+  let j = await refreshWith(d.tokens.refresh_token);
+  // A rotation whose write was lost leaves us holding a retired token while
+  // the one before it may still be live: try that once before giving up.
+  if (!j.access_token && d.tokens.prev_refresh_token) j = await refreshWith(d.tokens.prev_refresh_token);
   if (!j.access_token) {
     // Record it rather than failing silently — a dead refresh token needs a
     // human to revisit /whoop/auth, and nothing else can tell them that.
@@ -75,6 +89,7 @@ async function tok(d) {
   d.tokens = { access_token: j.access_token,
     // A refresh response without a new refresh token means keep the old one.
     refresh_token: j.refresh_token || d.tokens.refresh_token,
+    prev_refresh_token: d.tokens.refresh_token,
     expires_at: Date.now() + j.expires_in * 1000 };
   await storeTokens(d.tokens);
   return d.tokens.access_token;
@@ -196,6 +211,7 @@ function attach(app) {
           client_id: CID, client_secret: SEC, redirect_uri: BASE + '/whoop/callback' }) });
       const j = await r.json();
       if (!j.access_token) throw new Error(JSON.stringify(j));
+      if (!j.refresh_token) throw new Error('WHOOP granted no refresh token (offline access missing), so the connection would die in an hour. Approve again and allow offline access.');
       const d = await db();
       d.tokens = { access_token: j.access_token, refresh_token: j.refresh_token,
         expires_at: Date.now() + j.expires_in * 1000 };
@@ -220,6 +236,7 @@ function attach(app) {
       connected: !!d.tokens, has_sleep: !!d.sleep, has_recovery: !!d.recovery,
       synced_at: d.synced_at || null, auth_error: d.auth_error || null,
       token_expires_in_s: d.tokens ? Math.round((d.tokens.expires_at - Date.now()) / 1000) : null,
+      has_refresh_token: !!(d.tokens && d.tokens.refresh_token),
       reauthorize: !!(d.auth_error) || !d.tokens,
       fix: !(CID && SEC) ? 'set WHOOP_CLIENT_ID and WHOOP_CLIENT_SECRET'
         : !BASE ? 'set BASE_URL so the OAuth callback resolves'
@@ -230,4 +247,14 @@ function attach(app) {
   app.get('/sleep/latest', async (req, res) => { if (!auth(req, res)) return;
     res.json(await sleepLatest()); });
 }
-module.exports = { attach, sleepLatest, apiGet };
+// For the scheduled pull: refresh ahead of expiry so the rotating refresh
+// token is exercised and stored every hour, never left to die while idle.
+async function keepWarm() {
+  const d = await db();
+  if (!d.tokens || !d.tokens.refresh_token) return false;
+  if (Date.now() < d.tokens.expires_at - 40 * 60000) return false;
+  d.tokens.expires_at = 0;
+  await tok(d);
+  return true;
+}
+module.exports = { attach, sleepLatest, apiGet, keepWarm };
