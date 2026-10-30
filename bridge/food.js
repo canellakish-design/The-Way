@@ -341,12 +341,31 @@ async function liveHydration(date, entries, g, nowMin) {
   }
   const cal = await getJSON('hydration-calibration', { points: [] });
   const k = HL.calibrate(cal.points).k;
-  // the scale: a morning reading and one after a ride
-  let weigh = null;
+  // yesterday's end is today's start. Yesterday is recomputed once if its
+  // stored end predates its own evening (a drink logged after the last look).
+  const hdays = await getJSON('hydration-days', { days: {} });
+  const yday = tz.shiftKey(date, -1);
+  let prev = hdays.days[yday] || null;
+  const ydayEve = tz.zonedToUTC(...yday.split('-').map(Number), 22, 0).getTime();
+  if ((!prev || prev.at < ydayEve) && date >= tz.shiftKey(tz.todayKey(), -1)) {
+    try {
+      const gy = await guidelinesFor(yday);
+      const ey = (await dayDoc(yday)).entries;
+      if (ey.length || gy.sessions.some(s => s.done)) {
+        const my = HL.model({ entries: ey, sessions: gy.sessions, now_min: null, kg: gy.kg, ftp: st.ftp, weather: null, sweat_k: k, start_ml: (hdays.days[tz.shiftKey(yday, -1)] || {}).end_ml != null ? HL.carryOver(hdays.days[tz.shiftKey(yday, -1)].end_ml, null).start_ml : 0 });
+        prev = hdays.days[yday] = { end_ml: my.end_ml, at: Date.now() };
+      }
+    } catch (e) { /* yesterday unknown: start from zero */ }
+  }
+  // the scale: a morning reading against a three-day baseline, and one after a ride
+  let weigh = null, scale = null;
   try {
     const w = await getJSON('weigh-in', { entries: [] });
     const dayStart = tz.zonedToUTC(...date.split('-').map(Number), 0, 0).getTime();
     const todays = (w.entries || []).filter(e => e.ts >= dayStart && e.ts < dayStart + 864e5 && e.lb > 100).sort((a, b) => a.ts - b.ts);
+    const morning = todays.find(e => e.ts < dayStart + 11 * 36e5);
+    const base = (w.entries || []).filter(e => e.ts >= dayStart - 3 * 864e5 && e.ts < dayStart && e.lb > 100);
+    if (morning && base.length >= 2) scale = { today_kg: morning.lb / 2.20462, baseline_kg: base.reduce((a, e) => a + e.lb, 0) / base.length / 2.20462 };
     for (const s of g.sessions.filter(x => x.done && x.start_at && x.end_at)) {
       const t0 = Date.parse(s.start_at), t1 = Date.parse(s.end_at);
       const pre = todays.filter(e => e.ts < t0).pop();
@@ -360,7 +379,15 @@ async function liveHydration(date, entries, g, nowMin) {
       break;
     }
   } catch (e) { weigh = null; }
-  const live = HL.model({ entries, sessions: g.sessions, now_min: nowMin, kg: g.kg, ftp: st.ftp, weather, sweat_k: k, weigh });
+  const carry = HL.carryOver(prev ? prev.end_ml : null, scale);
+  const live = HL.model({ entries, sessions: g.sessions, now_min: nowMin, kg: g.kg, ftp: st.ftp, weather, sweat_k: k, weigh, start_ml: carry.start_ml });
+  live.carried = Object.assign({ from_date: yday }, carry);
+  const wasH = hdays.days[date];
+  if (!wasH || wasH.end_ml !== live.end_ml) {
+    hdays.days[date] = { end_ml: live.end_ml, at: Date.now() };
+    for (const kk of Object.keys(hdays.days)) if (kk < tz.shiftKey(date, -45)) delete hdays.days[kk];
+    await setJSON('hydration-days', hdays);
+  }
   if (weigh) {
     const s = live.sessions.find(x => x.name === weigh.session) || null;
     const modelled = s ? Math.round(s.loss_ml / live.sweat_k) : null;

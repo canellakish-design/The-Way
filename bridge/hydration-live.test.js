@@ -60,4 +60,16 @@ ok('calibration: three weigh-ins pull halfway, five count in full, clamped', () 
   assert.strictEqual(H.measured(98.4, 97.3, 600, 90), Math.round((1100 + 600) * 0.95));
   assert.strictEqual(H.measured(null, 97, 0, 60), null);
 });
+
+ok('carry-over: a deficit at bedtime is still there in the morning, a surplus is not; the scale has a say', () => {
+  assert.deepStrictEqual(H.carryOver(-900, null), { start_ml: -900 - H.NIGHT_ML, from: 'yesterday' });
+  assert.strictEqual(H.carryOver(400, null).start_ml, 0);
+  assert.strictEqual(H.carryOver(-4000, null).start_ml, -1500);
+  assert.strictEqual(H.carryOver(null, null).start_ml, 0);
+  const both = H.carryOver(-900, { today_kg: 97.6, baseline_kg: 98.2 });
+  assert.strictEqual(both.from, 'both'); assert.ok(both.start_ml < -600 && both.start_ml > -1200, JSON.stringify(both));
+  const m = H.model({ kg, ftp: 175, now_min: 7 * 60, entries: [], sessions: [], start_ml: -1150 });
+  assert.ok(m.series[0].ml <= -1150 && m.series[0].ml > -1160, 'starts from the carried deficit: ' + m.series[0].ml); assert.strictEqual(m.now.band.key, 'yellow');
+  assert.ok(/down/.test(m.advice), m.advice);
+});
 console.log(n + ' passed');

@@ -150,13 +150,15 @@ function model(o) {
     }
     if (foodWater) pour(m, foodWater, 60);
   }
-  const series = []; let bal = 0, balActual = 0;
+  // the start: yesterday's end less the night (or the scale's word), never a constant zero
+  const start = Number.isFinite(o.start_ml) ? Math.max(-kg * 20, Math.min(300, o.start_ml)) : 0;
+  const series = []; let bal = start, balActual = start;
   for (let i = 0; i < n; i++) {
     const t = T0 + i * STEP;
     const rest = (t >= WAKE && t < SLEEP ? REST_AWAKE_ML_H : REST_ASLEEP_ML_H) / 60 * STEP;
     const projected = t > now;
     bal = bal + inflow[i] - rest - sweat[i] - (projected ? sweatProj[i] : 0);
-    if (!projected) balActual = bal;
+    balActual = balActual + inflow[i] - rest - sweat[i];     // what is logged and ridden, run to the end of the day
     series.push({ t: toHM(t), m: t, ml: Math.round(bal), pct: Math.round(-bal / (kg * 10) * 100) / 100, band: band(bal, kg).key, projected });
   }
   const at = m => series[Math.max(0, Math.min(n - 1, idx(m)))];
@@ -189,10 +191,29 @@ function model(o) {
   else if (!advice && o.now_min != null && now >= 20 * 60 && nowPt.ml < -kg * 5) advice = `${r50(-nowPt.ml - kg * 3)} ml before bed.`;
   if (o.weigh && o.weigh.lost_ml > 0 && now - (o.weigh.end_min || 0) < 4 * 60) advice = `The scale says ${L(o.weigh.lost_ml)} lost on the ride. ${L(o.weigh.lost_ml * 1.3)} over the next three hours, with salt, not all at once.`;
   return { series, now: { time: toHM(now), ml: nowPt.ml, pct: nowPt.pct, band: nowB }, sessions: upcoming, drinks,
-    drunk_ml: drunk, target_ml: target, left_ml: Math.max(0, target - drunk), end_ml: balActual, kg, sweat_k: k, step: STEP,
+    drunk_ml: drunk, target_ml: target, left_ml: Math.max(0, target - drunk), end_ml: Math.round(balActual), start_ml: Math.round(start), kg, sweat_k: k, step: STEP,
     weather_used: !!(o.weather && o.weather.hours && sessions.some(s => !s.env.indoor)),
     score: Math.max(0, Math.min(100, Math.round(100 - Math.max(0, -nowPt.ml) / (kg * 20) * 100))),   // 100 at the morning, 0 at 2% down
     advice };
+}
+
+// Tomorrow's start from tonight's end: the night between the model's last
+// step (11:55 p) and its first (5 a) costs about 250 ml. A deficit carried
+// to bed is still there in the morning; a surplus is passed as urine, so a
+// gain never carries. When the scale has this morning's reading and a
+// three-day baseline, the two are averaged: the scale sees the whole body,
+// the model only what was logged.
+const NIGHT_ML = 5 * REST_ASLEEP_ML_H;
+function carryOver(prevEndMl, scale) {
+  // capped at 1.5 L: a drink that went unlogged must not compound into a permanent red
+  let carry = prevEndMl == null ? null : Math.max(-1500, Math.min(0, prevEndMl - NIGHT_ML));
+  if (carry == null && !scale) return { start_ml: 0, from: 'none' };
+  if (scale && scale.today_kg > 40 && scale.baseline_kg > 40) {
+    const fromScale = Math.min(0, Math.max(-3000, (scale.today_kg - scale.baseline_kg) * 1000));
+    if (carry == null) return { start_ml: Math.round(fromScale), from: 'scale' };
+    return { start_ml: Math.round((carry + fromScale) / 2), from: 'both', carried_ml: Math.round(carry), scale_ml: Math.round(fromScale) };
+  }
+  return { start_ml: Math.round(carry), from: 'yesterday' };
 }
 
 // A post-ride weigh-in against the morning one: measured sweat = weight lost
@@ -214,4 +235,4 @@ function measured(preKg, postKg, drankMl, minutes) {
   return Math.round(lost * (minutes >= 120 ? 0.9 : 0.95));
 }
 
-module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, toMin, toHM, STEP, BOTTLE_ML };
+module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };
