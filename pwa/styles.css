@@ -533,3 +533,4 @@ ul.agenda.lexlist li{display:block; padding:10px 12px} .lexhead{display:flex; ju
 .lset{display:inline-flex; align-items:center; gap:4px} .lset label{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin:0 2px 0 0}
 .lset input{width:58px; padding:6px 6px; font-size:16px; text-align:center} .lspark{width:120px; height:28px; vertical-align:middle; color:var(--green); margin-left:6px}
 @media (max-width:560px){ nav a{font-size:10px; padding:4px 4px; letter-spacing:0} }
+#liftPage a, #zonesPage a{color:var(--ink); text-underline-offset:3px}
