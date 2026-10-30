@@ -1,0 +1,231 @@
+{
+  "note": "Chain menus with published nutrition, per item as sold, approximate: the chain's own app or nutrition page has the exact figure and changes it now and then. kcal, carbs_g, protein_g, fat_g, sodium_mg. tags: main, side, drink, breakfast, snack, protein (a real protein serving), carb (starch-led), veg, fried, sweet, dairy, bottle (a bottle or can). A brand matches a place by any of its names. Replace or extend with a dataset (MenuStat, Nutritionix) when one is wired in.",
+  "brands": [
+    { "key": "chipotle", "names": ["chipotle", "chipotle mexican grill"], "items": [
+      { "name": "Chicken bowl: brown rice, black beans, fajita veg, tomato salsa", "kcal": 620, "carbs_g": 75, "protein_g": 44, "fat_g": 14, "sodium_mg": 1330, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Chicken bowl: double chicken, black beans, fajita veg, salsa, no rice", "kcal": 520, "carbs_g": 32, "protein_g": 72, "fat_g": 14, "sodium_mg": 1390, "tags": ["main", "protein", "veg"] },
+      { "name": "Steak bowl: white rice, pinto beans, salsa, lettuce", "kcal": 640, "carbs_g": 78, "protein_g": 36, "fat_g": 17, "sodium_mg": 1250, "tags": ["main", "protein", "carb"] },
+      { "name": "Chicken salad bowl: supergreens, black beans, fajita veg, salsa, vinaigrette", "kcal": 560, "carbs_g": 40, "protein_g": 44, "fat_g": 26, "sodium_mg": 1500, "tags": ["main", "protein", "veg"] },
+      { "name": "Chicken burrito: white rice, black beans, cheese, salsa", "kcal": 1000, "carbs_g": 118, "protein_g": 56, "fat_g": 33, "sodium_mg": 2100, "tags": ["main", "protein", "carb"] },
+      { "name": "Sofritas bowl: brown rice, black beans, fajita veg, salsa", "kcal": 590, "carbs_g": 84, "protein_g": 20, "fat_g": 18, "sodium_mg": 1400, "tags": ["main", "carb", "veg"] },
+      { "name": "Chips and guacamole", "kcal": 770, "carbs_g": 81, "protein_g": 9, "fat_g": 47, "sodium_mg": 1030, "tags": ["side", "fried"] },
+      { "name": "Side of guacamole", "kcal": 230, "carbs_g": 8, "protein_g": 2, "fat_g": 22, "sodium_mg": 370, "tags": ["side", "veg"] },
+      { "name": "Kid's build-your-own: chicken, rice, beans", "kcal": 400, "carbs_g": 45, "protein_g": 28, "fat_g": 10, "sodium_mg": 850, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "panera", "names": ["panera", "panera bread"], "items": [
+      { "name": "Steel cut oatmeal with strawberries and pecans", "kcal": 360, "carbs_g": 50, "protein_g": 8, "fat_g": 15, "sodium_mg": 160, "tags": ["breakfast", "carb"] },
+      { "name": "Greek yogurt with mixed berries parfait", "kcal": 240, "carbs_g": 36, "protein_g": 10, "fat_g": 7, "sodium_mg": 60, "tags": ["breakfast", "snack", "dairy"] },
+      { "name": "Avocado, egg white and spinach sandwich", "kcal": 360, "carbs_g": 39, "protein_g": 19, "fat_g": 14, "sodium_mg": 700, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Chipotle chicken, scrambled egg and avocado wrap", "kcal": 530, "carbs_g": 42, "protein_g": 33, "fat_g": 26, "sodium_mg": 1180, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Mediterranean bowl with chicken", "kcal": 630, "carbs_g": 68, "protein_g": 37, "fat_g": 24, "sodium_mg": 1170, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Baja bowl with chicken", "kcal": 580, "carbs_g": 63, "protein_g": 38, "fat_g": 20, "sodium_mg": 1050, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Green Goddess Cobb salad with chicken", "kcal": 530, "carbs_g": 29, "protein_g": 41, "fat_g": 29, "sodium_mg": 1040, "tags": ["main", "protein", "veg"] },
+      { "name": "Chicken Caesar salad", "kcal": 440, "carbs_g": 19, "protein_g": 36, "fat_g": 25, "sodium_mg": 950, "tags": ["main", "protein", "veg"] },
+      { "name": "Turkey sandwich on country rustic sourdough", "kcal": 450, "carbs_g": 56, "protein_g": 30, "fat_g": 12, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Ten vegetable soup, bowl", "kcal": 130, "carbs_g": 24, "protein_g": 5, "fat_g": 2, "sodium_mg": 1100, "tags": ["side", "veg"] },
+      { "name": "Plain bagel", "kcal": 290, "carbs_g": 57, "protein_g": 10, "fat_g": 2, "sodium_mg": 440, "tags": ["carb", "snack", "breakfast"] },
+      { "name": "Cinnamon crunch bagel", "kcal": 420, "carbs_g": 75, "protein_g": 10, "fat_g": 9, "sodium_mg": 460, "tags": ["carb", "sweet", "snack"] }
+    ] },
+    { "key": "chickfila", "names": ["chick-fil-a", "chick fil a", "chickfila"], "items": [
+      { "name": "Grilled chicken sandwich", "kcal": 390, "carbs_g": 44, "protein_g": 28, "fat_g": 12, "sodium_mg": 800, "tags": ["main", "protein", "carb"] },
+      { "name": "Grilled nuggets, 12 count", "kcal": 200, "carbs_g": 2, "protein_g": 38, "fat_g": 5, "sodium_mg": 790, "tags": ["main", "protein"] },
+      { "name": "Grilled chicken Cool Wrap", "kcal": 660, "carbs_g": 35, "protein_g": 43, "fat_g": 40, "sodium_mg": 1340, "tags": ["main", "protein"] },
+      { "name": "Market salad with grilled chicken, no dressing", "kcal": 340, "carbs_g": 27, "protein_g": 28, "fat_g": 14, "sodium_mg": 630, "tags": ["main", "protein", "veg"] },
+      { "name": "Spicy Southwest salad with grilled chicken, no dressing", "kcal": 450, "carbs_g": 29, "protein_g": 33, "fat_g": 23, "sodium_mg": 950, "tags": ["main", "protein", "veg"] },
+      { "name": "Egg white grill", "kcal": 290, "carbs_g": 30, "protein_g": 26, "fat_g": 8, "sodium_mg": 980, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Greek yogurt parfait with granola", "kcal": 270, "carbs_g": 36, "protein_g": 13, "fat_g": 9, "sodium_mg": 80, "tags": ["breakfast", "snack", "dairy"] },
+      { "name": "Fruit cup, medium", "kcal": 60, "carbs_g": 15, "protein_g": 1, "fat_g": 0, "sodium_mg": 0, "tags": ["side", "veg"] },
+      { "name": "Chicken sandwich, original", "kcal": 420, "carbs_g": 41, "protein_g": 28, "fat_g": 17, "sodium_mg": 1400, "tags": ["main", "protein", "carb", "fried"] },
+      { "name": "Waffle fries, medium", "kcal": 420, "carbs_g": 45, "protein_g": 5, "fat_g": 24, "sodium_mg": 240, "tags": ["side", "fried"] },
+      { "name": "Kale crunch side", "kcal": 120, "carbs_g": 8, "protein_g": 3, "fat_g": 9, "sodium_mg": 140, "tags": ["side", "veg"] }
+    ] },
+    { "key": "sweetgreen", "names": ["sweetgreen"], "items": [
+      { "name": "Harvest bowl", "kcal": 705, "carbs_g": 67, "protein_g": 32, "fat_g": 36, "sodium_mg": 1180, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Chicken pesto parm bowl", "kcal": 640, "carbs_g": 48, "protein_g": 42, "fat_g": 32, "sodium_mg": 1220, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Kale Caesar with chicken", "kcal": 490, "carbs_g": 26, "protein_g": 37, "fat_g": 27, "sodium_mg": 920, "tags": ["main", "protein", "veg"] },
+      { "name": "Hummus crunch salad", "kcal": 580, "carbs_g": 46, "protein_g": 16, "fat_g": 37, "sodium_mg": 980, "tags": ["main", "veg"] },
+      { "name": "Chicken + chickpea bowl, light dressing", "kcal": 560, "carbs_g": 55, "protein_g": 40, "fat_g": 19, "sodium_mg": 900, "tags": ["main", "protein", "carb", "veg"] }
+    ] },
+    { "key": "cava", "names": ["cava"], "items": [
+      { "name": "Grilled chicken bowl: brown rice, hummus, tomato cucumber, lemon herb tahini", "kcal": 620, "carbs_g": 60, "protein_g": 40, "fat_g": 25, "sodium_mg": 1100, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Grilled chicken greens bowl: supergreens, tzatziki, tomato cucumber, pickled onion", "kcal": 400, "carbs_g": 18, "protein_g": 38, "fat_g": 20, "sodium_mg": 950, "tags": ["main", "protein", "veg"] },
+      { "name": "Harissa honey chicken bowl with rice and pita crisps", "kcal": 760, "carbs_g": 78, "protein_g": 40, "fat_g": 32, "sodium_mg": 1400, "tags": ["main", "protein", "carb"] },
+      { "name": "Falafel bowl: brown rice, hummus, veg", "kcal": 680, "carbs_g": 80, "protein_g": 18, "fat_g": 32, "sodium_mg": 1200, "tags": ["main", "carb", "veg", "fried"] }
+    ] },
+    { "key": "wawa", "names": ["wawa"], "items": [
+      { "name": "Turkey hoagie, shorti, on wheat with lettuce and tomato", "kcal": 430, "carbs_g": 56, "protein_g": 30, "fat_g": 9, "sodium_mg": 1400, "tags": ["main", "protein", "carb"] },
+      { "name": "Turkey hoagie, classic, on wheat", "kcal": 640, "carbs_g": 84, "protein_g": 45, "fat_g": 13, "sodium_mg": 2100, "tags": ["main", "protein", "carb"] },
+      { "name": "Chicken salad shorti", "kcal": 580, "carbs_g": 52, "protein_g": 26, "fat_g": 29, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Sizzli egg and cheese on a bagel", "kcal": 460, "carbs_g": 57, "protein_g": 22, "fat_g": 16, "sodium_mg": 980, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Sizzli egg white and turkey sausage on a wheat flatbread", "kcal": 330, "carbs_g": 35, "protein_g": 24, "fat_g": 10, "sodium_mg": 900, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Oatmeal with brown sugar", "kcal": 260, "carbs_g": 50, "protein_g": 6, "fat_g": 4, "sodium_mg": 150, "tags": ["breakfast", "carb"] },
+      { "name": "Hard-boiled eggs, two", "kcal": 140, "carbs_g": 1, "protein_g": 12, "fat_g": 10, "sodium_mg": 140, "tags": ["snack", "protein"] },
+      { "name": "Fruit cup", "kcal": 80, "carbs_g": 20, "protein_g": 1, "fat_g": 0, "sodium_mg": 10, "tags": ["snack", "veg"] },
+      { "name": "Banana", "kcal": 105, "carbs_g": 27, "protein_g": 1, "fat_g": 0, "sodium_mg": 1, "tags": ["snack", "carb", "veg"] },
+      { "name": "Chocolate milk, 16 oz", "kcal": 320, "carbs_g": 52, "protein_g": 16, "fat_g": 5, "sodium_mg": 300, "tags": ["drink", "bottle", "carb", "protein", "dairy"] },
+      { "name": "Fairlife Core Power protein shake, 26 g", "kcal": 170, "carbs_g": 8, "protein_g": 26, "fat_g": 4, "sodium_mg": 230, "tags": ["drink", "bottle", "protein", "dairy"] },
+      { "name": "Gatorade, 28 oz", "kcal": 200, "carbs_g": 52, "protein_g": 0, "fat_g": 0, "sodium_mg": 380, "tags": ["drink", "bottle", "carb"] },
+      { "name": "Pretzel, soft", "kcal": 340, "carbs_g": 70, "protein_g": 10, "fat_g": 2, "sodium_mg": 1100, "tags": ["snack", "carb"] },
+      { "name": "Greek yogurt cup", "kcal": 150, "carbs_g": 18, "protein_g": 12, "fat_g": 3, "sodium_mg": 60, "tags": ["snack", "protein", "dairy"] }
+    ] },
+    { "key": "sheetz", "names": ["sheetz"], "items": [
+      { "name": "Turkey sub, 6 inch, on wheat with veg", "kcal": 420, "carbs_g": 54, "protein_g": 28, "fat_g": 10, "sodium_mg": 1300, "tags": ["main", "protein", "carb"] },
+      { "name": "Grilled chicken wrap", "kcal": 520, "carbs_g": 48, "protein_g": 34, "fat_g": 21, "sodium_mg": 1250, "tags": ["main", "protein", "carb"] },
+      { "name": "Egg white and turkey sausage breakfast wrap", "kcal": 340, "carbs_g": 36, "protein_g": 24, "fat_g": 11, "sodium_mg": 920, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Oatmeal with fruit", "kcal": 280, "carbs_g": 54, "protein_g": 6, "fat_g": 4, "sodium_mg": 140, "tags": ["breakfast", "carb"] },
+      { "name": "Hard-boiled eggs, two", "kcal": 140, "carbs_g": 1, "protein_g": 12, "fat_g": 10, "sodium_mg": 140, "tags": ["snack", "protein"] },
+      { "name": "Banana", "kcal": 105, "carbs_g": 27, "protein_g": 1, "fat_g": 0, "sodium_mg": 1, "tags": ["snack", "carb", "veg"] },
+      { "name": "Chocolate milk, 16 oz", "kcal": 320, "carbs_g": 52, "protein_g": 16, "fat_g": 5, "sodium_mg": 300, "tags": ["drink", "bottle", "carb", "protein", "dairy"] },
+      { "name": "Fairlife Core Power protein shake, 26 g", "kcal": 170, "carbs_g": 8, "protein_g": 26, "fat_g": 4, "sodium_mg": 230, "tags": ["drink", "bottle", "protein", "dairy"] },
+      { "name": "Gatorade, 28 oz", "kcal": 200, "carbs_g": 52, "protein_g": 0, "fat_g": 0, "sodium_mg": 380, "tags": ["drink", "bottle", "carb"] },
+      { "name": "Clif bar", "kcal": 250, "carbs_g": 45, "protein_g": 9, "fat_g": 5, "sodium_mg": 150, "tags": ["snack", "carb"] },
+      { "name": "Mozzarella sticks, 6", "kcal": 540, "carbs_g": 45, "protein_g": 22, "fat_g": 30, "sodium_mg": 1400, "tags": ["side", "fried"] }
+    ] },
+    { "key": "royalfarms", "names": ["royal farms", "rofo"], "items": [
+      { "name": "Grilled chicken sandwich", "kcal": 410, "carbs_g": 44, "protein_g": 32, "fat_g": 12, "sodium_mg": 1100, "tags": ["main", "protein", "carb"] },
+      { "name": "Fried chicken, two pieces (breast and wing)", "kcal": 620, "carbs_g": 22, "protein_g": 52, "fat_g": 36, "sodium_mg": 1500, "tags": ["main", "protein", "fried"] },
+      { "name": "Western fries, regular", "kcal": 460, "carbs_g": 58, "protein_g": 6, "fat_g": 23, "sodium_mg": 700, "tags": ["side", "fried"] },
+      { "name": "Egg and cheese breakfast sandwich", "kcal": 420, "carbs_g": 42, "protein_g": 20, "fat_g": 19, "sodium_mg": 900, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Banana", "kcal": 105, "carbs_g": 27, "protein_g": 1, "fat_g": 0, "sodium_mg": 1, "tags": ["snack", "carb", "veg"] },
+      { "name": "Chocolate milk, 16 oz", "kcal": 320, "carbs_g": 52, "protein_g": 16, "fat_g": 5, "sodium_mg": 300, "tags": ["drink", "bottle", "carb", "protein", "dairy"] },
+      { "name": "Fairlife Core Power protein shake, 26 g", "kcal": 170, "carbs_g": 8, "protein_g": 26, "fat_g": 4, "sodium_mg": 230, "tags": ["drink", "bottle", "protein", "dairy"] },
+      { "name": "Gatorade, 28 oz", "kcal": 200, "carbs_g": 52, "protein_g": 0, "fat_g": 0, "sodium_mg": 380, "tags": ["drink", "bottle", "carb"] }
+    ] },
+    { "key": "seveneleven", "names": ["7-eleven", "7 eleven", "7eleven", "seven eleven"], "items": [
+      { "name": "Turkey and cheese sandwich", "kcal": 400, "carbs_g": 46, "protein_g": 26, "fat_g": 12, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Chicken salad with grilled chicken", "kcal": 320, "carbs_g": 14, "protein_g": 30, "fat_g": 16, "sodium_mg": 700, "tags": ["main", "protein", "veg"] },
+      { "name": "Hard-boiled eggs, two", "kcal": 140, "carbs_g": 1, "protein_g": 12, "fat_g": 10, "sodium_mg": 140, "tags": ["snack", "protein"] },
+      { "name": "Banana", "kcal": 105, "carbs_g": 27, "protein_g": 1, "fat_g": 0, "sodium_mg": 1, "tags": ["snack", "carb", "veg"] },
+      { "name": "Chocolate milk, 16 oz", "kcal": 320, "carbs_g": 52, "protein_g": 16, "fat_g": 5, "sodium_mg": 300, "tags": ["drink", "bottle", "carb", "protein", "dairy"] },
+      { "name": "Fairlife Core Power protein shake, 26 g", "kcal": 170, "carbs_g": 8, "protein_g": 26, "fat_g": 4, "sodium_mg": 230, "tags": ["drink", "bottle", "protein", "dairy"] },
+      { "name": "Gatorade, 28 oz", "kcal": 200, "carbs_g": 52, "protein_g": 0, "fat_g": 0, "sodium_mg": 380, "tags": ["drink", "bottle", "carb"] },
+      { "name": "Clif bar", "kcal": 250, "carbs_g": 45, "protein_g": 9, "fat_g": 5, "sodium_mg": 150, "tags": ["snack", "carb"] },
+      { "name": "Beef jerky, 1 oz", "kcal": 80, "carbs_g": 6, "protein_g": 11, "fat_g": 1, "sodium_mg": 500, "tags": ["snack", "protein"] },
+      { "name": "Big Bite hot dog", "kcal": 370, "carbs_g": 30, "protein_g": 12, "fat_g": 22, "sodium_mg": 1000, "tags": ["main", "fried"] }
+    ] },
+    { "key": "starbucks", "names": ["starbucks"], "items": [
+      { "name": "Egg white and roasted red pepper egg bites", "kcal": 170, "carbs_g": 11, "protein_g": 12, "fat_g": 8, "sodium_mg": 470, "tags": ["breakfast", "snack", "protein"] },
+      { "name": "Bacon and gruyere egg bites", "kcal": 300, "carbs_g": 9, "protein_g": 19, "fat_g": 20, "sodium_mg": 680, "tags": ["breakfast", "snack", "protein"] },
+      { "name": "Turkey bacon, cheddar and egg white sandwich", "kcal": 230, "carbs_g": 28, "protein_g": 17, "fat_g": 5, "sodium_mg": 560, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Spinach, feta and egg white wrap", "kcal": 290, "carbs_g": 34, "protein_g": 20, "fat_g": 8, "sodium_mg": 840, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Rolled and steel-cut oatmeal, plain", "kcal": 160, "carbs_g": 28, "protein_g": 5, "fat_g": 2, "sodium_mg": 125, "tags": ["breakfast", "carb"] },
+      { "name": "Eggs and cheddar protein box", "kcal": 470, "carbs_g": 40, "protein_g": 23, "fat_g": 25, "sodium_mg": 470, "tags": ["main", "snack", "protein", "carb"] },
+      { "name": "Chicken and quinoa protein bowl", "kcal": 420, "carbs_g": 42, "protein_g": 27, "fat_g": 17, "sodium_mg": 880, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Plain bagel", "kcal": 280, "carbs_g": 56, "protein_g": 10, "fat_g": 1, "sodium_mg": 530, "tags": ["carb", "snack", "breakfast"] },
+      { "name": "Banana", "kcal": 105, "carbs_g": 27, "protein_g": 1, "fat_g": 0, "sodium_mg": 1, "tags": ["snack", "carb", "veg"] },
+      { "name": "Caffe latte, grande, 2% milk", "kcal": 190, "carbs_g": 19, "protein_g": 13, "fat_g": 7, "sodium_mg": 170, "tags": ["drink", "dairy", "protein"] },
+      { "name": "Caffe latte, grande, skim milk", "kcal": 130, "carbs_g": 19, "protein_g": 13, "fat_g": 0, "sodium_mg": 170, "tags": ["drink", "dairy", "protein"] },
+      { "name": "Brewed coffee, grande, black", "kcal": 5, "carbs_g": 0, "protein_g": 1, "fat_g": 0, "sodium_mg": 10, "tags": ["drink"] }
+    ] },
+    { "key": "dunkin", "names": ["dunkin", "dunkin'", "dunkin donuts"], "items": [
+      { "name": "Wake-up wrap: egg and cheese", "kcal": 180, "carbs_g": 13, "protein_g": 8, "fat_g": 11, "sodium_mg": 400, "tags": ["breakfast", "snack"] },
+      { "name": "Egg white and veggie omelet bites, two", "kcal": 180, "carbs_g": 7, "protein_g": 13, "fat_g": 11, "sodium_mg": 500, "tags": ["breakfast", "snack", "protein"] },
+      { "name": "Turkey sausage, egg and cheese on an English muffin", "kcal": 470, "carbs_g": 41, "protein_g": 25, "fat_g": 22, "sodium_mg": 1000, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Plain bagel", "kcal": 300, "carbs_g": 61, "protein_g": 11, "fat_g": 2, "sodium_mg": 600, "tags": ["carb", "snack", "breakfast"] },
+      { "name": "Glazed donut", "kcal": 240, "carbs_g": 33, "protein_g": 3, "fat_g": 11, "sodium_mg": 270, "tags": ["sweet", "snack", "fried"] },
+      { "name": "Coffee, medium, with skim milk", "kcal": 25, "carbs_g": 3, "protein_g": 2, "fat_g": 0, "sodium_mg": 30, "tags": ["drink"] }
+    ] },
+    { "key": "subway", "names": ["subway"], "items": [
+      { "name": "Oven roasted turkey, 6 inch, on 9-grain wheat with veg", "kcal": 280, "carbs_g": 42, "protein_g": 18, "fat_g": 4, "sodium_mg": 760, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Oven roasted turkey footlong on wheat with veg", "kcal": 560, "carbs_g": 84, "protein_g": 36, "fat_g": 8, "sodium_mg": 1520, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Rotisserie-style chicken, 6 inch, on wheat with veg", "kcal": 350, "carbs_g": 43, "protein_g": 29, "fat_g": 7, "sodium_mg": 700, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Rotisserie-style chicken protein bowl", "kcal": 320, "carbs_g": 14, "protein_g": 42, "fat_g": 10, "sodium_mg": 900, "tags": ["main", "protein", "veg"] },
+      { "name": "Steak and cheese, 6 inch, on wheat", "kcal": 380, "carbs_g": 45, "protein_g": 26, "fat_g": 11, "sodium_mg": 1000, "tags": ["main", "protein", "carb"] },
+      { "name": "Egg and cheese flatbread, 6 inch", "kcal": 380, "carbs_g": 44, "protein_g": 20, "fat_g": 14, "sodium_mg": 850, "tags": ["breakfast", "protein", "carb"] }
+    ] },
+    { "key": "jerseymikes", "names": ["jersey mike's", "jersey mikes"], "items": [
+      { "name": "Turkey and provolone, regular, on wheat, Mike's Way", "kcal": 740, "carbs_g": 75, "protein_g": 42, "fat_g": 30, "sodium_mg": 2200, "tags": ["main", "protein", "carb"] },
+      { "name": "Turkey and provolone, mini, on wheat, Mike's Way", "kcal": 520, "carbs_g": 52, "protein_g": 29, "fat_g": 22, "sodium_mg": 1500, "tags": ["main", "protein", "carb"] },
+      { "name": "Turkey sub in a tub (no bread)", "kcal": 320, "carbs_g": 10, "protein_g": 36, "fat_g": 15, "sodium_mg": 1600, "tags": ["main", "protein", "veg"] },
+      { "name": "Chipotle chicken cheesesteak, regular", "kcal": 920, "carbs_g": 78, "protein_g": 58, "fat_g": 42, "sodium_mg": 2400, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "potbelly", "names": ["potbelly"], "items": [
+      { "name": "Turkey breast sandwich, original, on multigrain", "kcal": 460, "carbs_g": 52, "protein_g": 29, "fat_g": 15, "sodium_mg": 1150, "tags": ["main", "protein", "carb"] },
+      { "name": "Chicken salad sandwich, original", "kcal": 620, "carbs_g": 56, "protein_g": 30, "fat_g": 30, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Farmhouse salad with chicken", "kcal": 470, "carbs_g": 20, "protein_g": 36, "fat_g": 28, "sodium_mg": 1000, "tags": ["main", "protein", "veg"] },
+      { "name": "Oatmeal with fruit", "kcal": 300, "carbs_g": 56, "protein_g": 7, "fat_g": 5, "sodium_mg": 120, "tags": ["breakfast", "carb"] }
+    ] },
+    { "key": "fiveguys", "names": ["five guys"], "items": [
+      { "name": "Little hamburger with lettuce, tomato, onion", "kcal": 560, "carbs_g": 40, "protein_g": 27, "fat_g": 32, "sodium_mg": 560, "tags": ["main", "protein", "carb"] },
+      { "name": "Little hamburger, lettuce wrap", "kcal": 320, "carbs_g": 5, "protein_g": 22, "fat_g": 24, "sodium_mg": 360, "tags": ["main", "protein"] },
+      { "name": "Hamburger (two patties) with veg", "kcal": 840, "carbs_g": 42, "protein_g": 45, "fat_g": 55, "sodium_mg": 760, "tags": ["main", "protein", "carb"] },
+      { "name": "Fries, little", "kcal": 530, "carbs_g": 72, "protein_g": 8, "fat_g": 23, "sodium_mg": 530, "tags": ["side", "fried"] }
+    ] },
+    { "key": "shakeshack", "names": ["shake shack"], "items": [
+      { "name": "Single ShackBurger", "kcal": 530, "carbs_g": 26, "protein_g": 29, "fat_g": 34, "sodium_mg": 1000, "tags": ["main", "protein", "carb"] },
+      { "name": "Chicken Shack", "kcal": 590, "carbs_g": 55, "protein_g": 30, "fat_g": 26, "sodium_mg": 1400, "tags": ["main", "protein", "carb", "fried"] },
+      { "name": "Fries", "kcal": 470, "carbs_g": 63, "protein_g": 6, "fat_g": 22, "sodium_mg": 760, "tags": ["side", "fried"] }
+    ] },
+    { "key": "noodles", "names": ["noodles & company", "noodles and company", "noodles"], "items": [
+      { "name": "Zucchini pesto with grilled chicken", "kcal": 410, "carbs_g": 18, "protein_g": 36, "fat_g": 23, "sodium_mg": 900, "tags": ["main", "protein", "veg"] },
+      { "name": "Penne rosa with grilled chicken, regular", "kcal": 780, "carbs_g": 92, "protein_g": 42, "fat_g": 26, "sodium_mg": 1300, "tags": ["main", "protein", "carb"] },
+      { "name": "Japanese pan noodles with chicken, small", "kcal": 470, "carbs_g": 68, "protein_g": 26, "fat_g": 10, "sodium_mg": 1200, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Pad Thai with chicken, small", "kcal": 430, "carbs_g": 62, "protein_g": 25, "fat_g": 9, "sodium_mg": 1100, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "qdoba", "names": ["qdoba"], "items": [
+      { "name": "Chicken bowl: brown rice, black beans, pico, lettuce", "kcal": 600, "carbs_g": 76, "protein_g": 40, "fat_g": 13, "sodium_mg": 1400, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Chicken salad bowl, no shell, with salsa", "kcal": 420, "carbs_g": 30, "protein_g": 38, "fat_g": 16, "sodium_mg": 1300, "tags": ["main", "protein", "veg"] },
+      { "name": "Chicken burrito with queso", "kcal": 1050, "carbs_g": 115, "protein_g": 52, "fat_g": 40, "sodium_mg": 2400, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "pandaexpress", "names": ["panda express"], "items": [
+      { "name": "Grilled teriyaki chicken with super greens", "kcal": 390, "carbs_g": 22, "protein_g": 42, "fat_g": 16, "sodium_mg": 1200, "tags": ["main", "protein", "veg"] },
+      { "name": "String bean chicken breast with steamed white rice", "kcal": 570, "carbs_g": 95, "protein_g": 21, "fat_g": 9, "sodium_mg": 1000, "tags": ["main", "carb", "veg"] },
+      { "name": "Orange chicken with fried rice", "kcal": 1010, "carbs_g": 118, "protein_g": 35, "fat_g": 43, "sodium_mg": 1500, "tags": ["main", "carb", "fried", "sweet"] },
+      { "name": "Broccoli beef with brown rice", "kcal": 570, "carbs_g": 90, "protein_g": 19, "fat_g": 14, "sodium_mg": 1100, "tags": ["main", "carb", "veg"] }
+    ] },
+    { "key": "mcdonalds", "names": ["mcdonald's", "mcdonalds"], "items": [
+      { "name": "Egg McMuffin", "kcal": 310, "carbs_g": 30, "protein_g": 17, "fat_g": 13, "sodium_mg": 770, "tags": ["breakfast", "protein", "carb"] },
+      { "name": "Fruit and maple oatmeal", "kcal": 320, "carbs_g": 64, "protein_g": 6, "fat_g": 4, "sodium_mg": 150, "tags": ["breakfast", "carb"] },
+      { "name": "Hamburger", "kcal": 250, "carbs_g": 31, "protein_g": 12, "fat_g": 9, "sodium_mg": 510, "tags": ["main", "carb"] },
+      { "name": "Quarter Pounder with cheese", "kcal": 520, "carbs_g": 42, "protein_g": 30, "fat_g": 26, "sodium_mg": 1140, "tags": ["main", "protein", "carb"] },
+      { "name": "McChicken", "kcal": 400, "carbs_g": 39, "protein_g": 14, "fat_g": 21, "sodium_mg": 560, "tags": ["main", "carb", "fried"] },
+      { "name": "Fries, medium", "kcal": 320, "carbs_g": 43, "protein_g": 4, "fat_g": 15, "sodium_mg": 260, "tags": ["side", "fried"] },
+      { "name": "Apple slices", "kcal": 15, "carbs_g": 4, "protein_g": 0, "fat_g": 0, "sodium_mg": 0, "tags": ["side", "veg"] }
+    ] },
+    { "key": "wendys", "names": ["wendy's", "wendys"], "items": [
+      { "name": "Grilled chicken sandwich", "kcal": 370, "carbs_g": 38, "protein_g": 34, "fat_g": 10, "sodium_mg": 790, "tags": ["main", "protein", "carb"] },
+      { "name": "Apple pecan chicken salad, full, light dressing", "kcal": 460, "carbs_g": 34, "protein_g": 38, "fat_g": 20, "sodium_mg": 1000, "tags": ["main", "protein", "veg"] },
+      { "name": "Dave's single", "kcal": 590, "carbs_g": 40, "protein_g": 30, "fat_g": 34, "sodium_mg": 1100, "tags": ["main", "protein", "carb"] },
+      { "name": "Chili, large", "kcal": 340, "carbs_g": 32, "protein_g": 23, "fat_g": 14, "sodium_mg": 1200, "tags": ["main", "side", "protein", "carb"] },
+      { "name": "Plain baked potato", "kcal": 270, "carbs_g": 61, "protein_g": 7, "fat_g": 0, "sodium_mg": 25, "tags": ["side", "carb"] },
+      { "name": "Fries, medium", "kcal": 350, "carbs_g": 47, "protein_g": 5, "fat_g": 15, "sodium_mg": 330, "tags": ["side", "fried"] }
+    ] },
+    { "key": "tacobell", "names": ["taco bell"], "items": [
+      { "name": "Chicken power bowl", "kcal": 470, "carbs_g": 50, "protein_g": 26, "fat_g": 19, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Bean burrito", "kcal": 350, "carbs_g": 54, "protein_g": 13, "fat_g": 9, "sodium_mg": 1000, "tags": ["main", "carb"] },
+      { "name": "Chicken soft taco, two", "kcal": 340, "carbs_g": 32, "protein_g": 24, "fat_g": 12, "sodium_mg": 1000, "tags": ["main", "protein", "carb"] },
+      { "name": "Crunchwrap Supreme", "kcal": 530, "carbs_g": 71, "protein_g": 16, "fat_g": 21, "sodium_mg": 1200, "tags": ["main", "carb", "fried"] }
+    ] },
+    { "key": "jimmyjohns", "names": ["jimmy john's", "jimmy johns"], "items": [
+      { "name": "Turkey Tom, 8 inch, no mayo", "kcal": 420, "carbs_g": 62, "protein_g": 26, "fat_g": 7, "sodium_mg": 1300, "tags": ["main", "protein", "carb"] },
+      { "name": "Turkey Tom unwich (lettuce wrap)", "kcal": 230, "carbs_g": 6, "protein_g": 24, "fat_g": 12, "sodium_mg": 1100, "tags": ["main", "protein", "veg"] },
+      { "name": "Beach Club, 8 inch", "kcal": 740, "carbs_g": 66, "protein_g": 35, "fat_g": 38, "sodium_mg": 1600, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "smoothieking", "names": ["smoothie king"], "items": [
+      { "name": "Gladiator chocolate, 20 oz", "kcal": 230, "carbs_g": 3, "protein_g": 45, "fat_g": 3, "sodium_mg": 300, "tags": ["drink", "protein"] },
+      { "name": "The Activator recovery chocolate, 20 oz", "kcal": 400, "carbs_g": 58, "protein_g": 30, "fat_g": 5, "sodium_mg": 300, "tags": ["drink", "protein", "carb"] },
+      { "name": "Power punch plus, 20 oz", "kcal": 460, "carbs_g": 82, "protein_g": 26, "fat_g": 3, "sodium_mg": 200, "tags": ["drink", "carb", "protein"] }
+    ] },
+    { "key": "tropicalsmoothie", "names": ["tropical smoothie", "tropical smoothie cafe"], "items": [
+      { "name": "Detox Island Green smoothie, 24 oz", "kcal": 180, "carbs_g": 43, "protein_g": 3, "fat_g": 1, "sodium_mg": 40, "tags": ["drink", "carb", "veg"] },
+      { "name": "Peanut Paradise smoothie, 24 oz", "kcal": 560, "carbs_g": 66, "protein_g": 29, "fat_g": 20, "sodium_mg": 320, "tags": ["drink", "carb", "protein"] },
+      { "name": "Chipotle chicken club flatbread", "kcal": 620, "carbs_g": 52, "protein_g": 42, "fat_g": 28, "sodium_mg": 1600, "tags": ["main", "protein", "carb"] },
+      { "name": "Caribbean jerk chicken wrap", "kcal": 510, "carbs_g": 56, "protein_g": 34, "fat_g": 17, "sodium_mg": 1300, "tags": ["main", "protein", "carb"] }
+    ] },
+    { "key": "honeygrow", "names": ["honeygrow"], "items": [
+      { "name": "Spicy garlic stir-fry with chicken, whole wheat noodles", "kcal": 620, "carbs_g": 78, "protein_g": 38, "fat_g": 18, "sodium_mg": 1400, "tags": ["main", "protein", "carb", "veg"] },
+      { "name": "Chicken parm stir-fry, small", "kcal": 520, "carbs_g": 58, "protein_g": 36, "fat_g": 16, "sodium_mg": 1200, "tags": ["main", "protein", "carb"] },
+      { "name": "Make-your-own salad with chicken, light dressing", "kcal": 420, "carbs_g": 24, "protein_g": 36, "fat_g": 20, "sodium_mg": 800, "tags": ["main", "protein", "veg"] }
+    ] },
+    { "key": "ledo", "names": ["ledo pizza", "ledo"], "items": [
+      { "name": "Cheese pizza, two squares (8 inch quarter)", "kcal": 520, "carbs_g": 56, "protein_g": 22, "fat_g": 24, "sodium_mg": 1100, "tags": ["main", "carb"] },
+      { "name": "Grilled chicken salad, light dressing", "kcal": 400, "carbs_g": 18, "protein_g": 36, "fat_g": 20, "sodium_mg": 900, "tags": ["main", "protein", "veg"] }
+    ] },
+    { "key": "royrogers", "names": ["roy rogers"], "items": [
+      { "name": "Roast beef sandwich, regular", "kcal": 380, "carbs_g": 36, "protein_g": 28, "fat_g": 13, "sodium_mg": 1100, "tags": ["main", "protein", "carb"] },
+      { "name": "Grilled chicken sandwich", "kcal": 430, "carbs_g": 44, "protein_g": 32, "fat_g": 14, "sodium_mg": 1000, "tags": ["main", "protein", "carb"] },
+      { "name": "Fried chicken breast", "kcal": 400, "carbs_g": 14, "protein_g": 40, "fat_g": 20, "sodium_mg": 1000, "tags": ["main", "protein", "fried"] },
+      { "name": "Baked potato, plain", "kcal": 280, "carbs_g": 63, "protein_g": 7, "fat_g": 0, "sodium_mg": 30, "tags": ["side", "carb"] }
+    ] }
+  ]
+}

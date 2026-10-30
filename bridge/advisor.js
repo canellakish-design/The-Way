@@ -54,13 +54,14 @@ async function ask(content) {
 }
 
 function prompt(ctx, o) {
-  const places = (o.places || []).slice(0, 25).map(p => `- ${p.name}${p.brand && p.brand !== p.name ? ` (${p.brand})` : ''}, ${p.kind}, ${p.dist_m} m`).join('\n');
+  const places = (o.places || []).slice(0, 25).map(p => `- ${p.name}${p.brand && p.brand !== p.name ? ` (${p.brand})` : ''}, ${p.kind}, ${p.dist_m} m` +
+    ((p.orders || []).length ? `. KNOWN MENU, published macros, best orders for what he needs next: ${p.orders.map(x => `"${x.name}" ${x.kcal} kcal, ${x.carbs_g} C, ${x.protein_g} P, ${x.fat_g} F (${x.why})`).join('; ')}` : '')).join('\n');
   return `You advise one cyclist on what to eat right now, from what is in front of him. He is 55, 98 kg, losing weight slowly while training; the plan times his meals to the riding.
 
 Where the day stands:
 ${ctx}
 
-${o.images && o.images.length ? `The photo shows what is in front of him: a shelf, a cooler, a menu or a counter. Name up to 8 items you can actually identify (brand and size when readable) with their macros as sold or served.` : places ? `No photo. These places are near him now:\n${places}\nChoose the best one or two for what he needs next and name a specific order at each (a real menu item, sized), with its macros.` : 'No photo and no places: answer from what he wrote.'}
+${o.images && o.images.length ? `The photo shows what is in front of him: a shelf, a cooler, a menu or a counter. Name up to 8 items you can actually identify (brand and size when readable) with their macros as sold or served.` : places ? `No photo. These places are near him now:\n${places}\nChoose the best one or two for what he needs next and name a specific order at each (a real menu item, sized), with its macros. Where a place lists KNOWN MENU orders, use those names and numbers exactly (they are published); only for places without one, name an order from your own knowledge of the chain and say the numbers are your estimate.` : 'No photo and no places: answer from what he wrote.'}
 ${o.text ? `He says: "${o.text}"` : ''}
 
 Judge every item against what he needs NEXT: the next slot of the plan (its calories, its carbs, which may be a cap on a low-carb slot, its protein), today's eating rules, and what is still due today. fits is yes when it serves the next slot, partly when it is acceptable, no when it works against the plan. why is one plain sentence. how_much is the portion to buy or order ("one", "the small", "half the bag").
@@ -129,17 +130,36 @@ async function nearby(lat, lon, radius) {
   return out.filter(p => { const k = p.name.toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 25);
 }
 
+// For each place with a known menu: the three orders closest to what the
+// plan wants next, with their published macros, what he has ordered there
+// before first. Deterministic, before the model sees anything.
+async function ordersFor(places) {
+  const M = require('./menus');
+  let need = null;
+  try { const d = await require('./food').dayReport(require('./tz').todayKey()); const sg = d.suggestion; if (sg && !sg.none) need = { kcal: sg.kcal, carbs_g: sg.carbs_g, protein_g: sg.protein_g, low_carb: !!sg.low_carb, slot: sg.slot }; } catch (e) { need = null; }
+  const out = [];
+  for (const p of places || []) {
+    const brand = M.brandFor(p);
+    if (!brand) { out.push(Object.assign({}, p, { menu: null, orders: [] })); continue; }
+    const rem = await M.remembered(brand.key).catch(() => []);
+    out.push(Object.assign({}, p, { menu: { brand: brand.key, items: brand.items.length }, orders: M.choose(brand, need, rem) }));
+  }
+  return { places: out, need };
+}
+
 async function advise(body) {
   const b = body || {};
   const images = Array.isArray(b.images) ? b.images.filter(i => i && i.image_base64).slice(0, 2) : [];
   const ctx = await require('./voice').context();
+  let places = Array.isArray(b.places) ? b.places : null, need = null;
+  if (places && places.length) { const o = await ordersFor(places); places = o.places; need = o.need; }
   const content = images.map(img => ({ type: 'image', source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
-  content.push({ type: 'text', text: prompt(ctx, { images, text: String(b.text || '').slice(0, 400), places: Array.isArray(b.places) ? b.places : null }) });
+  content.push({ type: 'text', text: prompt(ctx, { images, text: String(b.text || '').slice(0, 400), places }) });
   const u = await ask(content);
   const items = (u.items || []).slice(0, 8);
   const pick = items.find(i => i.name === u.pick) || (u.pick ? { name: u.pick } : null);
-  const place = (b.places || []).find(p => p.name === u.place) || null;
-  return { items, pick, place, reply: String(u.reply || '').slice(0, 400) };
+  const place = (places || []).find(p => p.name === u.place) || null;
+  return { items, pick, place, reply: String(u.reply || '').slice(0, 400), places: places ? places.filter(p => p.orders && p.orders.length).slice(0, 12) : undefined, need };
 }
 
 function attach(app) {
@@ -150,8 +170,10 @@ function attach(app) {
       const lat = Number((req.body || {}).lat), lon = Number((req.body || {}).lon);
       if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return res.status(400).json({ error: 'lat and lon needed' });
       const places = await nearby(lat, lon, Number((req.body || {}).radius) || 1500);
-      res.json({ lat, lon, places, search: `https://www.google.com/maps/search/food/@${lat},${lon},15z` });
+      const M = require('./menus');
+      for (const p of places) { const br = M.brandFor(p); p.menu = br ? { brand: br.key, items: br.items.length } : null; }
+      res.json({ lat, lon, places, with_menus: places.filter(p => p.menu).length, search: `https://www.google.com/maps/search/food/@${lat},${lon},15z` });
     } catch (e) { res.status(502).json({ error: /abort/i.test(e.message) ? 'the map service took too long' : e.message, places: [], search: `https://www.google.com/maps/search/food/@${Number((req.body || {}).lat)},${Number((req.body || {}).lon)},15z` }); } });
 }
 
-module.exports = { attach, advise, nearby, prompt, SCHEMA };
+module.exports = { attach, advise, nearby, ordersFor, prompt, SCHEMA };

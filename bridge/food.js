@@ -522,6 +522,40 @@ async function addPhoto(body) {
   return entry;
 }
 
+// A known item (a chain menu order, with its published macros) logged
+// without a photo. The entry looks like any other so every scorer reads it;
+// the place is kept so the advisor can prefer it next time.
+async function addKnown(body) {
+  const b = body || {};
+  const name = String(b.name || '').trim().slice(0, 120);
+  if (!name || !(Number(b.kcal) >= 0)) throw new Error('name and kcal needed');
+  const date = tz.todayKey();
+  const g = await guidelinesFor(date);
+  const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal) ? b.meal : null;
+  const id = 'f_' + crypto.randomBytes(5).toString('hex');
+  const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
+  const slot = F.slotFor(g.meals, nowHM);
+  const tags = Array.isArray(b.tags) ? b.tags : [];
+  const entry = {
+    id, at: new Date().toISOString(), date, time: nowHM, slot,
+    meal: meal || (slot && ['breakfast', 'lunch', 'dinner'].includes(slot) ? slot : slot === 'on the bike' ? 'on the bike' : 'snack'),
+    name, portion: b.place ? `at ${String(b.place).slice(0, 60)}` : 'as sold', kcal: Math.round(Number(b.kcal) || 0), carbs_g: Math.round(Number(b.carbs_g) || 0),
+    protein_g: Math.round(Number(b.protein_g) || 0), fat_g: Math.round(Number(b.fat_g) || 0), confidence: 'high', notes: 'published nutrition, approximate',
+    assessment: { protein_source: (Number(b.protein_g) || 0) >= 25, carbs: (Number(b.carbs_g) || 0) >= 45 ? 'heavy' : (Number(b.carbs_g) || 0) >= 15 ? 'some' : 'none', vegetables: tags.includes('veg'),
+      processed: tags.includes('fried') || tags.includes('sweet'), fits: b.fits || 'partly', why: String(b.why || 'A known order, logged with its published numbers.').slice(0, 240) },
+    thumb: null, written: null, ingredients: [], micros: null, micros_matched_pct: null, micros_unknown: [],
+    fluid_ml: tags.includes('drink') ? Math.max(0, Math.round(Number(b.fluid_ml) || 500)) : 0, drink: tags.includes('drink') ? name.slice(0, 40) : null,
+    place: b.place ? { name: String(b.place).slice(0, 80), brand: b.brand || null } : null, source: 'menu'
+  };
+  entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
+  const doc = await dayDoc(date);
+  doc.entries.push(entry);
+  await setJSON(dayKey(date), doc);
+  await logMeal({ name: entry.name, meal: entry.meal === 'on the bike' ? 'snack' : entry.meal, kcal: entry.kcal, carbs_g: entry.carbs_g, protein_g: entry.protein_g, fat_g: entry.fat_g, food_id: id }).catch(() => {});
+  if (b.brand) await require('./menus').remember(b.brand, { name, kcal: entry.kcal, carbs_g: entry.carbs_g, protein_g: entry.protein_g, fat_g: entry.fat_g }).catch(() => {});
+  return entry;
+}
+
 async function pruneOld(today) {
   const idx = await getJSON('food-index', { days: [] });
   if (!idx.days.includes(today)) idx.days.push(today);
@@ -550,6 +584,9 @@ function attach(app) {
     catch (e) { res.status(500).json({ error: e.message }); } });
 
   // Words instead of a photo: {text, meal?}
+  app.post('/food/item', async (req, res) => { if (!auth(req, res)) return;
+    try { const entry = await addKnown(req.body); res.json({ ok: true, entry, day: await dayReport(entry.date) }); }
+    catch (e) { res.status(400).json({ ok: false, error: e.message }); } });
   app.post('/food/text', async (req, res) => { if (!auth(req, res)) return;
     try {
       const entry = await addPhoto({ text: (req.body || {}).text, meal: (req.body || {}).meal });
@@ -671,4 +708,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement, removeEntry, todayEntries, rateLegs };
+module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };

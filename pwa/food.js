@@ -403,19 +403,31 @@ V.food = async function(){
   /* ---- the advisor: what is in front of him, or what is near him ---- */
   const adviseFile = document.getElementById("adviseFile"), adviseOut = document.getElementById("adviseOut");
   const fitTone = f => f === "yes" ? "var(--green)" : f === "partly" ? "var(--amber)" : "var(--red)";
+  // an order from a known menu, with its published numbers: the row, and the button that logs it exactly
+  const orderRow = (o, place) => `<li class="${o.fits==="yes"?"pick":""}"><span class="n"><b style="color:${fitTone(o.fits)}">${esc(o.name)}</b>${o.yours?` <span class="small">· your usual</span>`:""}<span class="small"> ${o.kcal} kcal · ${o.carbs_g}C · ${o.protein_g}P · ${o.fat_g}F</span><span class="small adwhy">${esc(o.why||"")}</span></span>
+      <span class="tag"><button class="linkish" data-adorder="${encodeURIComponent(JSON.stringify({ name: o.name, kcal: o.kcal, carbs_g: o.carbs_g, protein_g: o.protein_g, fat_g: o.fat_g, place: place.name, brand: place.menu && place.menu.brand, fits: o.fits, why: o.why }))}">log it</button></span></li>`;
   const renderAdvice = (r, places)=>{
     const items = (r.items||[]).slice().sort((a,b)=>["yes","partly","no"].indexOf(a.fits)-["yes","partly","no"].indexOf(b.fits));
     const pickName = r.pick && r.pick.name;
+    const withMenus = (r.places || []).filter(p => p.orders && p.orders.length);
+    const pickedMenu = r.place && withMenus.find(p => p.name === r.place.name);
     adviseOut.innerHTML = `
-      ${r.reply ? `<div class="verdict" style="border-color:${pickName?"var(--green)":"var(--amber)"}"><div>${esc(r.reply)}</div></div>` : ""}
+      ${r.reply ? `<div class="verdict" style="border-color:${pickName||pickedMenu?"var(--green)":"var(--amber)"}"><div>${esc(r.reply)}</div></div>` : ""}
       ${r.place ? `<div class="small adplace"><b>${esc(r.place.name)}</b> · ${esc(r.place.kind)} · ${r.place.dist_m} m · <a href="${esc(r.place.directions)}" target="_blank" rel="noopener">Navigate</a> · <a href="${esc(r.place.apple)}" target="_blank" rel="noopener">Apple Maps</a></div>` : ""}
-      ${items.length ? `<ul class="agenda totals aditems">${items.map(i => `<li class="${i.name===pickName?"pick":""}"><span class="n"><b style="color:${fitTone(i.fits)}">${esc(i.name)}</b>${i.how_much?` <span class="small">${esc(i.how_much)}</span>`:""}<span class="small"> ${i.kcal} kcal · ${i.carbs_g}C · ${i.protein_g}P · ${i.fat_g}F</span><span class="small adwhy">${esc(i.why||"")}</span></span>
-          <span class="tag">${i.name===pickName?`<button class="linkish" data-adlog="${esc((i.how_much?i.how_much+" ":"")+i.name)}">log it</button>`:""}</span></li>`).join("")}</ul>` : `<div class="small">Nothing here that it could name.</div>`}
-      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
+      ${pickedMenu ? `<div class="small"><b>What to order there</b> · published nutrition, the chain's app has the exact figure</div><ul class="agenda totals aditems">${pickedMenu.orders.map(o => orderRow(o, pickedMenu)).join("")}</ul>` : ""}
+      ${items.length && !pickedMenu ? `<ul class="agenda totals aditems">${items.map(i => `<li class="${i.name===pickName?"pick":""}"><span class="n"><b style="color:${fitTone(i.fits)}">${esc(i.name)}</b>${i.how_much?` <span class="small">${esc(i.how_much)}</span>`:""}<span class="small"> ${i.kcal} kcal · ${i.carbs_g}C · ${i.protein_g}P · ${i.fat_g}F${r.places?" · estimate":""}</span><span class="small adwhy">${esc(i.why||"")}</span></span>
+          <span class="tag">${i.name===pickName?`<button class="linkish" data-adlog="${esc((i.how_much?i.how_much+" ":"")+i.name)}">log it</button>`:""}</span></li>`).join("")}</ul>` : (!pickedMenu && !items.length ? `<div class="small">Nothing here that it could name.</div>` : "")}
+      ${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).length ? `<details class="why"><summary>other places with a known menu</summary>${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).slice(0, 6).map(p => `<div class="small adplace"><b>${esc(p.name)}</b> · ${p.dist_m} m · <a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></div><ul class="agenda totals aditems">${p.orders.slice(0, 2).map(o => orderRow(o, p)).join("")}</ul>`).join("")}</details>` : ""}
+      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m${p.menu?" · menu known":""}</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
     if (r.reply && typeof speak === "function") speak(r.reply);
     adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
       try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); }
+      catch(e){ b.textContent = "failed"; }
+    });
+    adviseOut.querySelectorAll("[data-adorder]").forEach(b => b.onclick = async ()=>{
+      b.disabled = true; b.textContent = "logging…";
+      try{ const rr = await bridge("/food/item",{method:"POST",headers:J,body:decodeURIComponent(b.dataset.adorder)}); b.textContent = "logged"; day = rr.day; draw(); }
       catch(e){ b.textContent = "failed"; }
     });
   };
@@ -439,7 +451,7 @@ V.food = async function(){
       try{ near = await bridge("/food/nearby",{method:"POST",headers:J,body:JSON.stringify({ lat, lon })}); }
       catch(e){ adviseOut.innerHTML = `<div class="small">The map service did not answer. <a href="https://www.google.com/maps/search/food/@${lat},${lon},15z" target="_blank" rel="noopener">Open the map</a> instead.</div>`; return; }
       if (!near.places || !near.places.length){ adviseOut.innerHTML = `<div class="small">Nothing with a name within 1.5 km on the map. <a href="${esc(near.search)}" target="_blank" rel="noopener">Open the map</a>.</div>`; return; }
-      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you. Choosing…</div>`;
+      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you${near.with_menus ? `, ${near.with_menus} with a known menu` : ""}. Choosing…</div>`;
       try{
         const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ places: near.places })});
         renderAdvice(r, near.places);
