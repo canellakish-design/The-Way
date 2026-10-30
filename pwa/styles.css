@@ -467,3 +467,8 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .cam{margin:0; padding:0; width:34px; height:34px; border:1px solid var(--line); background:transparent; color:var(--ink); box-shadow:none; display:inline-flex; align-items:center; justify-content:center; text-decoration:none}
 .cam:active{border-color:var(--ink)}
 .snapbtn.pulse{animation:micpulse 1s ease-in-out 3}
+
+/* the now dot on the agenda's line */
+ul.agenda{position:relative}
+.nowdot{position:absolute; left:-5px; width:12px; height:12px; margin-top:-6px; border-radius:50%; background:var(--ink); border:2px solid var(--paper); box-shadow:0 0 0 2px var(--ink); z-index:2; pointer-events:none}
+.nowmeta{margin:8px 0 2px}

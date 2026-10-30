@@ -1357,6 +1357,28 @@ function hourStrips(d){
       <span class="wxlab">schedule</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${calBoxes}</div><div class="wxover">${overlay}</div></div>
     <div class="small wxnote"><span class="wxwhy">${w ? `light ${esc(w.sunrise)}–${esc(w.sunset)}` : ""}</span></div></div>`;
 }
+/* ---- the now dot: a small circle on the agenda's left line that slides
+   down the day as the time passes; between rows it sits on the boundary ---- */
+function placeNowDot(){
+  const ul = document.querySelector(".card.day.is-today ul.agenda"); if (!ul) return;
+  let dot = ul.querySelector(".nowdot");
+  if (!dot){ dot = document.createElement("span"); dot.className = "nowdot"; ul.appendChild(dot); }
+  const n = new Date(); const now = n.getHours()*60 + n.getMinutes();
+  const rows = [...ul.querySelectorAll("li[data-s]")];
+  if (!rows.length){ dot.hidden = true; return; }
+  let top = null;
+  for (const li of rows){
+    const s = +li.dataset.s, e = +li.dataset.e;
+    if (now >= s && now < e){ top = li.offsetTop + (now - s) / Math.max(1, e - s) * li.offsetHeight; break; }
+  }
+  if (top == null){
+    const first = rows[0], last = rows[rows.length - 1];
+    if (now < +first.dataset.s) top = first.offsetTop;
+    else if (now >= +last.dataset.e) top = last.offsetTop + last.offsetHeight;
+    else { const nxt = rows.find(li => +li.dataset.s > now); top = nxt ? nxt.offsetTop : last.offsetTop + last.offsetHeight; }
+  }
+  dot.hidden = false; dot.style.top = Math.round(top) + "px";
+}
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
@@ -1372,8 +1394,8 @@ function dayCard(d, plan, nowMin, rec, solo){
     }
     // A free window is the space between things. Rendered as a full row it
     // read as an appointment, and an empty day looked packed.
-    if (r.open) return `<li class="gap ${state}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
-    return `<li class="${r.lane.cls} ${state} xrow" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
+    if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
+    return `<li class="${r.lane.cls} ${state} xrow" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
@@ -1422,13 +1444,7 @@ V.today = async function(){
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
-    <div class="nowbar">
-      <div class="nowtime" id="nowTime">--:--</div>
-      <div class="nowmeta">
-        <div class="nowdate" id="nowDate"></div>
-        <div class="small" id="nowNext">reaching the bridge…</div>
-        <div class="small" id="nowFresh"></div></div>
-    </div>
+    <div class="nowmeta small"><span id="nowNext">reaching the bridge…</span> <span id="nowFresh"></span></div>
     <div class="upnext" id="upnext"><div class="label">Next</div>
       <div class="what">reaching the bridge…</div></div>
     <div class="daystep">
@@ -1463,7 +1479,7 @@ V.today = async function(){
     if (de) de.textContent = zoned({ weekday:"long", month:"long", day:"numeric" }).format(n);
   };
   tick();
-  __dayTimers.push(setInterval(()=>{ if(location.hash!=="#today") clearDayTimers(); else tick(); }, 1000));
+  __dayTimers.push(setInterval(()=>{ if(location.hash!=="#today") clearDayTimers(); else { tick(); placeNowDot(); } }, 15000));
   document.getElementById("toClock").onclick = ()=>{ location.hash = "#bedroom"; };
   // The day is the whole app now, but a device still has to be told its bridge
   // URL and token once — without a way back to Settings a fresh tablet is
@@ -1854,6 +1870,7 @@ V.today = async function(){
       : `<div class="card"><div class="small">No data for that day — the schedule reaches
           ${cached.days.length} days from ${esc(cached.days[0].date)}.</div></div>`;
 
+    placeNowDot();
     const lab = document.getElementById("dayLabel");
     if (lab) lab.textContent = offset === 0 ? "Today"
       : offset === -1 ? "Yesterday" : offset === 1 ? "Tomorrow"
