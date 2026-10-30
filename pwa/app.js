@@ -1451,9 +1451,6 @@ V.today = async function(){
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
-    <div class="nowmeta small"><span id="nowNext">reaching the bridge…</span> <span id="nowFresh"></span></div>
-    <div class="upnext" id="upnext"><div class="label">Next</div>
-      <div class="what">reaching the bridge…</div></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
       <div class="daystep-label" id="dayLabel"></div>
