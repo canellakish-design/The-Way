@@ -177,6 +177,38 @@ function wireMicro(root, onChange){
 window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy, hydrationHTML, wireHydration, curveSVG, wireCurve };
 
 /* ---- the page ---- */
+/* ---- Live: fuel and hydration, their own tab ----
+   The two curves of the day, from the same report the Food page reads, with
+   the day stepper so a past day can be looked at. The Food page keeps the
+   plan, the compliance and the journal. */
+V.live = async function(){
+  const p = params(), today = localToday();
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
+  const isToday = date === today;
+  const go = k => { location.hash = k === today ? "#live" : "#live?date="+k; };
+  view.innerHTML = `<span class="eyebrow">Live</span>
+    <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
+      <div class="pweeknav"><button id="lPrev" aria-label="Previous day">‹</button><button id="lToday">Today</button><button id="lNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
+    <div id="lDay"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
+  document.getElementById("lPrev").onclick = ()=> go(keyAdd(date,-1));
+  document.getElementById("lToday").onclick = ()=> go(today);
+  document.getElementById("lNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
+  const load = async ()=>{
+    let day = null;
+    try{ day = await bridge(isToday ? "/food/today" : "/food/day?date="+date); }catch(e){ day = null; }
+    if (location.hash.split("?")[0] !== "#live") return;
+    const el = document.getElementById("lDay"); if (!el) return;
+    if (!day){ el.innerHTML = `<div class="card"><div class="small">bridge unreachable</div></div>`; return; }
+    el.innerHTML = `
+      <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
+      <div class="card" id="fHydration"><h4>Live hydration${isToday?"":" · that day"}</h4>${hydrationHTML(day.hydration)}</div>
+      <div class="rowbtns"><a class="btn" href="${isToday?"#food":"#food?date="+date}">The food log</a>${isToday?`<a class="btn" href="#food?snap=snack">Snap a meal or a drink</a>`:""}</div>`;
+    wireEnergy(el, day.energy, async ()=>{ await load(); });
+    wireHydration(el, day.hydration);
+  };
+  load();
+};
+
 V.food = async function(){
   const p = params(), today = localToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
@@ -223,8 +255,7 @@ V.food = async function(){
         <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
     const sessions = (day.sessions||[]).map(s=>`${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
     el.innerHTML = `
-      <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
-      <div class="card" id="fHydration"><h4>Live hydration${isToday?"":" · that day"}</h4>${hydrationHTML(day.hydration)}</div>
+      <a class="btn" href="${isToday?"#live":"#live?date="+date}">Live fuel and hydration</a>
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
         ${day.target.base_burn?`<details class="why"><summary>how the target is set</summary><div class="small">${day.target.base_burn} kcal before riding at ${day.target.kg} kg + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div></details>`:""}
@@ -258,8 +289,6 @@ V.food = async function(){
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
-    wireEnergy(el, day.energy, async ()=>{ await load(); });
-    wireHydration(el, day.hydration);
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
       const meals = day.entries.filter(x => !x.supplement).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));

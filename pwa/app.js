@@ -189,7 +189,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"]];
+  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
@@ -1670,7 +1670,7 @@ V.today = async function(){
       const h = foodData && foodData.hydration;
       html = `<h4>Hydration · today</h4>
         ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
-        <a class="btn primary" href="#food">Snap a drink</a>`;
+        <div class="rowbtns"><a class="btn primary" href="#live">Live fuel and hydration</a> <a class="btn" href="#food">Snap a drink</a></div>`;
       box.innerHTML = html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
     }
     if (openScore === "bodyfat"){
@@ -2254,5 +2254,8 @@ if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-work
 window.addEventListener("hashchange", nav);
 // Setting the hash fires hashchange, which calls nav() — calling it here too
 // booted the view twice, racing two copies of the day against each other.
+// The views in food.js and plan.js are defined after this script runs, so
+// the first route waits for the document to finish parsing.
 if (!location.hash) location.hash = "#" + defaultView();
+else if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", nav);
 else nav();
