@@ -445,3 +445,4 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxwin b{font-family:var(--mono); font-size:9px; padding:0 3px; background:#000; line-height:1.4; margin:0 1px 1px 0}
 .wxlegend .wxsep{width:1px; height:12px; background:var(--line); margin:0 2px}
 .wxnote{margin-top:18px; min-height:1.2em}
+.wxlegend{flex-wrap:wrap; gap:6px 12px} .wxlegend span{display:inline-flex; align-items:center; white-space:nowrap}
