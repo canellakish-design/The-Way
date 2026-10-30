@@ -39,61 +39,114 @@ function thumbStrip(entries){
     return `<a class="thumb" href="#food" title="${esc(e.name)}" style="border-color:${toneC(f.tone)}">${img}<span class="small">${esc(clock(e.at))}</span></a>`;
   }).join("")}</div>`;
 }
-/* ---- live fuel: the carbohydrate on board through the day, as a curve ----
-   One series, so no legend; the fill under the line carries the status colour
-   (green fuelled, amber ok, red low) and the words sit in text ink. The past
-   is drawn solid from what was logged, the hours ahead dashed from the plan.
-   Sessions are shaded bands; logged meals are filled dots, planned ones hollow.
-   Tap or drag across the chart to read a time. */
-function energyHTML(e){
-  if (!e || !e.series || !e.series.length) return `<div class="small">Starts with the first meal.</div>`;
+/* ---- the day curve: one drawing for live fuel and live hydration ----
+   One series, so no legend; the fill under the line carries the status
+   colour (green, amber, red, blue for over) and the words sit in text ink.
+   The past is drawn solid from what was logged, the hours ahead dashed from
+   the plan. Sessions are shaded bands; logged meals and drinks are filled
+   dots, planned ones hollow. A faint band is the model's own uncertainty; a
+   thinner second line is the legs (muscle store). Tap or drag to read a time. */
+function curveSVG(o){
   const W = 340, H = 150, L = 8, R = 8, T = 10, B = 24;
-  const m0 = e.series[0].m, m1 = e.series[e.series.length-1].m;
+  const S = o.series, m0 = S[0].m, m1 = S[S.length-1].m;
   const X = m => L + (m - m0) / (m1 - m0) * (W - L - R);
-  const Y = pct => T + (1 - Math.min(100, pct) / 100) * (H - T - B);
-  const col = pct => pct >= 60 ? "#2E7D4A" : pct >= 35 ? "#8A6A14" : "#7A2E26";
-  const colL = pct => pct >= 60 ? "var(--green)" : pct >= 35 ? "var(--amber)" : "var(--red)";
-  // the fill: one polygon per band run, so the colour follows the level
+  const Y = v => T + (1 - (Math.max(o.lo, Math.min(o.hi, v)) - o.lo) / (o.hi - o.lo)) * (H - T - B);
+  const val = o.val, y0 = Y(o.baseline || 0);
   let fills = "", lines = "", run = null;
-  const flush = ()=>{ if (!run) return; const pts = run.pts; const d = `M${X(pts[0].m).toFixed(1)},${Y(0)} ` + pts.map(p=>`L${X(p.m).toFixed(1)},${Y(p.pct).toFixed(1)}`).join(" ") + ` L${X(pts[pts.length-1].m).toFixed(1)},${Y(0)} Z`; fills += `<path d="${d}" fill="${run.col}" opacity="${run.proj?0.45:0.85}"></path>`; run = null; };
-  e.series.forEach((p, i) => {
-    const c = col(p.pct);
-    if (!run || run.col !== c || run.proj !== p.projected){ const prev = e.series[i-1]; flush(); run = { col: c, proj: p.projected, pts: prev ? [prev] : [] }; }
+  const flush = ()=>{ if (!run) return; const pts = run.pts; const d = `M${X(pts[0].m).toFixed(1)},${y0.toFixed(1)} ` + pts.map(p=>`L${X(p.m).toFixed(1)},${Y(val(p)).toFixed(1)}`).join(" ") + ` L${X(pts[pts.length-1].m).toFixed(1)},${y0.toFixed(1)} Z`; fills += `<path d="${d}" fill="${run.col}" opacity="${run.proj?0.45:0.85}"></path>`; run = null; };
+  S.forEach((p, i) => {
+    const c = o.col(p);
+    if (!run || run.col !== c || run.proj !== p.projected){ const prev = S[i-1]; flush(); run = { col: c, proj: p.projected, pts: prev ? [prev] : [] }; }
     run.pts.push(p);
   });
   flush();
-  const past = e.series.filter(p => !p.projected), fut = e.series.filter((p, i) => p.projected || (e.series[i+1] && e.series[i+1].projected));
-  const path = pts => pts.map((p,i)=>(i?"L":"M")+X(p.m).toFixed(1)+","+Y(p.pct).toFixed(1)).join(" ");
-  if (past.length) lines += `<path d="${path(past)}" fill="none" stroke="#F2F1EC" stroke-width="2"></path>`;
-  if (fut.length) lines += `<path d="${path(fut)}" fill="none" stroke="#F2F1EC" stroke-width="2" stroke-dasharray="4 4" opacity=".8"></path>`;
-  const bands = (e.sessions||[]).map(s => `<rect x="${X(s.min).toFixed(1)}" y="${T}" width="${Math.max(2, X(s.end_min)-X(s.min)).toFixed(1)}" height="${H-T-B}" fill="#F2F1EC" opacity=".12"></rect><text x="${(X(s.min)+2).toFixed(1)}" y="${T+10}" class="egl">${esc(s.name.replace(/,.*$/,"").slice(0,14))}</text>`).join("");
-  const dots = (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return `<circle cx="${X(m.min).toFixed(1)}" cy="${Y(p.pct).toFixed(1)}" r="4.5" fill="${m.logged?"#F2F1EC":"#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${esc(hm12(m.time))} ${esc(m.name||"")} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}</title></circle>`; }).join("");
-  const nowX = X(Math.max(m0, Math.min(m1, (h=>h)(e.now ? (e.series.find(p=>p.t===e.now.time)||{}).m ?? m0 : m0))));
+  const path = (pts, f) => pts.map((p,i)=>(i?"L":"M")+X(p.m).toFixed(1)+","+Y(f(p)).toFixed(1)).join(" ");
+  let band = "";
+  if (o.band){ const up = S.map(p=>`${X(p.m).toFixed(1)},${Y(o.band(p)[1]).toFixed(1)}`), dn = S.slice().reverse().map(p=>`${X(p.m).toFixed(1)},${Y(o.band(p)[0]).toFixed(1)}`); band = `<polygon points="${up.concat(dn).join(" ")}" fill="#F2F1EC" opacity=".10"></polygon>`; }
+  const past = S.filter(p => !p.projected), fut = S.filter((p, i) => p.projected || (S[i+1] && S[i+1].projected));
+  if (past.length) lines += `<path d="${path(past, val)}" fill="none" stroke="#F2F1EC" stroke-width="2"></path>`;
+  if (fut.length) lines += `<path d="${path(fut, val)}" fill="none" stroke="#F2F1EC" stroke-width="2" stroke-dasharray="4 4" opacity=".8"></path>`;
+  if (o.extra){ const pp = past.filter(p=>o.extra(p)!=null), ff = fut.filter(p=>o.extra(p)!=null); if (pp.length) lines += `<path d="${path(pp, o.extra)}" fill="none" stroke="#F2F1EC" stroke-width="1" opacity=".6"></path>`; if (ff.length) lines += `<path d="${path(ff, o.extra)}" fill="none" stroke="#F2F1EC" stroke-width="1" stroke-dasharray="3 3" opacity=".5"></path>`; }
+  const bands = (o.sessions||[]).map(s => `<rect x="${X(s.min).toFixed(1)}" y="${T}" width="${Math.max(2, X(s.end_min)-X(s.min)).toFixed(1)}" height="${H-T-B}" fill="${s.col||"#F2F1EC"}" opacity="${s.col?".22":".12"}"></rect><text x="${(X(s.min)+2).toFixed(1)}" y="${T+10}" class="egl">${esc((s.name||"").replace(/,.*$/,"").slice(0,14))}</text>`).join("");
+  const dots = (o.dots||[]).map(d => `<circle cx="${X(d.min).toFixed(1)}" cy="${Y(d.val).toFixed(1)}" r="4.5" fill="${d.filled?"#F2F1EC":"#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${esc(d.title||"")}</title></circle>`).join("");
   const ticks = [6,9,12,15,18,21].map(h => `<text x="${X(h*60).toFixed(1)}" y="${H-6}" class="egt" text-anchor="middle">${h%12||12}${h<12?"a":"p"}</text>`).join("");
-  const guide = [35,60].map(v => `<line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#F2F1EC" opacity=".15" stroke-dasharray="2 4"></line>`).join("");
-  const nowLine = e.now ? `<line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${T}" y2="${H-B}" stroke="#F2F1EC" stroke-width="1.5"></line>` : "";
-  const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${colL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}</span>`).join(" · ");
-  return `<div class="energy" data-m0="${m0}" data-m1="${m1}">
-    <div class="egline"><span class="egnow"><b style="color:${colL(e.now.pct)}">${e.now.pct}%</b> fuel now</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
-    <svg viewBox="0 0 ${W} ${H}" class="egsvg" preserveAspectRatio="none">${guide}${bands}${fills}${lines}${nowLine}${dots}${ticks}</svg>
+  const guides = (o.guides||[]).map(v => `<line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#F2F1EC" opacity="${v===(o.baseline||0)&&o.baselineStrong?".4":".15"}" stroke-dasharray="${v===(o.baseline||0)&&o.baselineStrong?"":"2 4"}"></line>`).join("");
+  const nowLine = o.nowMin != null ? `<line x1="${X(o.nowMin).toFixed(1)}" x2="${X(o.nowMin).toFixed(1)}" y1="${T}" y2="${H-B}" stroke="#F2F1EC" stroke-width="1.5"></line>` : "";
+  return { svg: `<svg viewBox="0 0 ${W} ${H}" class="egsvg" preserveAspectRatio="none">${guides}${bands}${band}${fills}${lines}${nowLine}${dots}${ticks}</svg>`, m0, m1 };
+}
+function wireCurve(box, series, read){
+  if (!box) return;
+  const svg = box.querySelector(".egsvg"), out = box.querySelector(".egread");
+  const m0 = +box.dataset.m0, m1 = +box.dataset.m1;
+  const go = (ev)=>{
+    const r = svg.getBoundingClientRect(); const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+    const m = m0 + Math.max(0, Math.min(1, (x - 8/340*r.width) / (r.width * (1 - 16/340)))) * (m1 - m0);
+    const p = series.reduce((a, q) => Math.abs(q.m - m) < Math.abs(a.m - m) ? q : a);
+    out.textContent = read(p);
+  };
+  svg.addEventListener("pointerdown", go); svg.addEventListener("pointermove", ev => { if (ev.buttons || ev.pointerType === "touch") go(ev); });
+  svg.addEventListener("touchstart", go, { passive: true }); svg.addEventListener("touchmove", go, { passive: true });
+}
+const fuelCol = pct => pct >= 60 ? "#2E7D4A" : pct >= 35 ? "#8A6A14" : "#7A2E26";
+const fuelColL = pct => pct >= 60 ? "var(--green)" : pct >= 35 ? "var(--amber)" : "var(--red)";
+const verdictCol = key => key === "green" ? "var(--green)" : key === "yellow" ? "var(--amber)" : key === "blue" ? "#5B8DEF" : "var(--red)";
+function energyHTML(e){
+  if (!e || !e.series || !e.series.length) return `<div class="small">Starts with the first meal.</div>`;
+  const nowMin = e.now ? (e.series.find(p=>p.t===e.now.time)||{}).m : null;
+  const c = curveSVG({ series: e.series, val: p=>p.pct, lo: 0, hi: 100, col: p=>fuelCol(p.pct),
+    band: e.series[0].lo != null ? (p=>[p.lo, p.hi]) : null, extra: e.series[0].legs_pct != null ? (p=>p.legs_pct) : null,
+    sessions: (e.sessions||[]).map(s => ({ min: s.min, end_min: s.end_min, name: s.name, col: s.band ? fuelCol(s.band.key==="green"?100:s.band.key==="yellow"?50:0) : null })),
+    dots: (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return { min: m.min, val: p.pct, filled: m.logged && (m.carbs_g > 0 || !m.protein_only), title: `${hm12(m.time)} ${m.name||""} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}` }; }),
+    nowMin, guides: [35,60] });
+  const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}</span>`).join(" · ");
+  return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
+    <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
+    ${c.svg}
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}
     ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
-    <details class="why"><summary>what it counts</summary><div class="small">Carbohydrate on board, the quick store a hard effort runs on. Carbs from each logged meal arrive over two to three hours, slower when the meal has fat and protein in it. Protein adds about half its weight as glucose, slowly, over four to five hours. Fat adds nothing here: it is the fuel Zone 1 burns, which is why Zone 1 only needs a quarter of a tank.</div></details>
+    ${e.legs_tap?legsTapHTML(e.legs_tap):""}
+    <details class="why"><summary>what it counts</summary><div class="small">Two stores. The line is the quick store, liver and blood, what a hard effort runs on and what bonking empties: about 110 g full, half that after a night's sleep. The thin line is the legs, muscle glycogen, which only a ride drains and only a day refills; it carries over from yesterday. Each meal's carbs arrive as the stomach empties, slower with fat and protein; protein adds about a sixth of its weight as glucose over the afternoon, so a salmon dinner is a hollow dot and a small slow rise. On the bike a quarter of the carbohydrate burned comes from the quick store, the rest from the legs; carbs eaten on the bike count up to 60 g an hour, 90 with Tailwind. The faint band is the model's own uncertainty. Fat is not drawn: it is the fuel Zone 1 burns, which is why Zone 1 needs only a quarter of a tank.</div></details>
   </div>`;
 }
-function wireEnergy(root, e){
+function legsTapHTML(t){
+  if (!t) return "";
+  if (t.rated) return `<div class="small legstap">Legs on ${esc(t.name.replace(/,.*$/,""))}: <b>${t.rated} of 5</b>${t.tuned?" · fuel model tuned to your rides":""}</div>`;
+  return `<div class="legstap"><span class="small">How did the legs feel on ${esc(t.name.replace(/,.*$/,""))}?</span> ${[1,2,3,4,5].map(n=>`<button class="suppbtn" data-legs="${n}" data-ride="${esc(t.key)}">${n}</button>`).join("")}</div>`;
+}
+function wireEnergy(root, e, onChange){
   const box = root.querySelector(".energy"); if (!box || !e) return;
-  const svg = box.querySelector(".egsvg"), out = box.querySelector(".egread");
-  const m0 = +box.dataset.m0, m1 = +box.dataset.m1;
-  const read = (ev)=>{
-    const r = svg.getBoundingClientRect(); const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
-    const m = m0 + Math.max(0, Math.min(1, (x - 8/340*r.width) / (r.width * (1 - 16/340)))) * (m1 - m0);
-    const p = e.series.reduce((a, q) => Math.abs(q.m - m) < Math.abs(a.m - m) ? q : a);
-    out.textContent = `${hm12(p.t)} · ${p.pct}% · about ${p.g} g on board${p.projected ? " (projected)" : ""}`;
-  };
-  svg.addEventListener("pointerdown", read); svg.addEventListener("pointermove", ev => { if (ev.buttons || ev.pointerType === "touch") read(ev); });
-  svg.addEventListener("touchstart", read, { passive: true }); svg.addEventListener("touchmove", read, { passive: true });
+  wireCurve(box, e.series, p => `${hm12(p.t)} · ${p.pct}% · about ${p.g} g on board${p.legs_pct!=null?` · legs ${p.legs_pct}%`:""}${p.projected ? " (projected)" : ""}`);
+  box.querySelectorAll("[data-legs]").forEach(b => b.onclick = async ()=>{
+    b.disabled = true;
+    try{ await bridge("/fuel/legs",{method:"POST",headers:J,body:JSON.stringify({ key: b.dataset.ride, legs: +b.dataset.legs })}); if (onChange) await onChange(); }
+    catch(err){ b.textContent = "✗"; }
+  });
+}
+function hydrationHTML(h){
+  if (!h || !h.series || !h.series.length) return `<div class="small">Starts with the first drink.</div>`;
+  const kg = h.kg || 98, lo = -kg * 25, hi = kg * 10;   // 2.5% down to 1% up
+  const nowMin = h.now ? (h.series.find(p=>p.t===h.now.time)||{}).m : null;
+  const colOf = p => p.band === "green" ? "#2E7D4A" : p.band === "yellow" ? "#8A6A14" : p.band === "blue" ? "#2F4F8F" : "#7A2E26";
+  const c = curveSVG({ series: h.series, val: p=>p.ml, lo, hi, baseline: 0, baselineStrong: true, col: colOf,
+    sessions: (h.sessions||[]).map(s => ({ min: h.series.find(p=>p.t===s.time) ? h.series.find(p=>p.t===s.time).m : (+s.time.slice(0,2))*60+(+s.time.slice(3,5)), end_min: s.end_min, name: s.name })),
+    dots: (h.drinks||[]).map(d => { const p = h.series.find(x => x.m >= d.min + 10) || h.series[h.series.length-1]; return { min: d.min, val: p.ml, filled: true, title: `${hm12(d.time)} ${d.name} ${d.ml} ml` }; }),
+    nowMin, guides: [0, -kg*10, -kg*20] });
+  const nb = h.now.band, nowTxt = h.now.ml > 300 ? `+${(h.now.ml/1000).toFixed(1)} L` : `${h.now.ml < 0 ? "−" : ""}${(Math.abs(h.now.ml)/1000).toFixed(1)} L`;
+  const ses = (h.sessions||[]).map(s => `<span class="egs"><b>${(s.sweat_ml_h/1000).toFixed(1)} L/h</b> ${esc(s.name.replace(/,.*$/,""))}${s.indoor?"":s.temp_f?` · ${s.temp_f}°F`:""}</span>`).join(" · ");
+  return `<div class="energy hyd" data-m0="${c.m0}" data-m1="${c.m1}">
+    <div class="egline"><span class="egnow"><b style="color:${verdictCol(nb.key)}">${nowTxt}</b> <span class="small">${esc(nb.word)}</span></span><span class="small">${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk</span></div>
+    ${c.svg}
+    <div class="small egread"></div>
+    ${ses?`<div class="small">${ses}</div>`:""}
+    ${h.advice?`<div class="egadvice" style="border-color:${verdictCol(nb.key)}">${esc(h.advice)}</div>`:""}
+    ${h.weigh?`<div class="small">Scale: ${h.weigh.pre_lb.toFixed(1)} → ${h.weigh.post_lb.toFixed(1)} lb around the ride, ${(h.weigh.lost_ml/1000).toFixed(1)} L lost${h.weigh.modelled_ml?` (the model said ${(h.weigh.modelled_ml/1000).toFixed(1)})`:""}.</div>`:""}
+    <details class="why"><summary>what it counts</summary><div class="small">Water against the morning: zero is first thing, after the bathroom. It drifts down about 100 ml an hour awake (breath, skin, urine), half that asleep; each drink arrives as the stomach empties, most of it within 45 minutes; food brings its own water. A ride takes sweat at the rate the power, the air and the weather give: the fan on the trainer, the wind and the temperature on the road. Water drunk after a ride is kept at 70%, 90% when it carries salt. Under 1% of body weight down is fine, 1 to 2% costs endurance, over 2% is dry; blue is more than the morning, which after a long ride is the dangerous side.${h.calibration&&h.calibration.points?` Tuned by ${h.calibration.points} post-ride weigh-in${h.calibration.points===1?"":"s"} (×${h.calibration.k}).`:" Weigh in after a ride and it tunes itself to you."}</div></details>
+  </div>`;
+}
+function wireHydration(root, h){
+  const box = root.querySelector(".energy.hyd"); if (!box || !h) return;
+  wireCurve(box, h.series, p => `${hm12(p.t)} · ${p.ml > 0 ? "+" : "−"}${(Math.abs(p.ml)/1000).toFixed(2)} L (${p.pct}% of body weight)${p.projected ? " (projected)" : ""}`);
 }
 function microHTML(m, day){
   if (!m) return `<div class="small">Starts with the first meal.</div>`;
@@ -120,7 +173,7 @@ function wireMicro(root, onChange){
     catch(e){ b.textContent = "failed — " + e.message; }
   });
 }
-window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy };
+window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy, hydrationHTML, wireHydration, curveSVG, wireCurve };
 
 /* ---- the page ---- */
 V.food = async function(){
@@ -170,6 +223,7 @@ V.food = async function(){
     const sessions = (day.sessions||[]).map(s=>`${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
     el.innerHTML = `
       <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
+      <div class="card" id="fHydration"><h4>Live hydration${isToday?"":" · that day"}</h4>${hydrationHTML(day.hydration)}</div>
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
         ${day.target.base_burn?`<details class="why"><summary>how the target is set</summary><div class="small">${day.target.base_burn} kcal before riding at ${day.target.kg} kg + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div></details>`:""}
@@ -202,7 +256,8 @@ V.food = async function(){
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
-    wireEnergy(el, day.energy);
+    wireEnergy(el, day.energy, async ()=>{ await load(); });
+    wireHydration(el, day.hydration);
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
       const meals = day.entries.filter(x => !x.supplement).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));

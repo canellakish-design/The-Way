@@ -25,7 +25,7 @@ const tz = require('./tz');
 const F = require('./food-math');
 const W = require('./workout-math');
 const MI = require('./micro-math');
-const HY = require('./hydration-math');
+const HL = require('./hydration-live');
 const EM = require('./energy-math');
 
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
@@ -151,7 +151,7 @@ async function guidelinesFor(date) {
   return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
-    sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null,
+    sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
       start_at: s.start_at || null, end_at: s.end_at || null })) };
 }
 
@@ -260,14 +260,11 @@ async function dayReport(date) {
   const micro = entries.some(e => e.micros) || microDays.length > 1 ? MI.dayScore(microDays, microOpts) : null;
   const microSuggest = micro ? MI.suggest(microDays, microOpts) : null;
   const nowP = tz.parts(new Date());
-  const hydration = HY.score(entries, { kg: g.kg, ride_hours: rideHours, now_min: date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null });
+  const nowMin = date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null;
+  const hydration = await liveHydration(date, entries, g, nowMin);
   // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
   let energy = null;
-  try {
-    const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
-    const planMeals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) }));
-    energy = EM.model({ entries, meals: planMeals, sessions: g.sessions, now_min: date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null, base_burn_kcal: g.target.base_burn, ftp: st.ftp });
-  } catch (e) { energy = null; }
+  try { energy = await liveFuel(date, entries, g, nowMin); } catch (e) { energy = null; }
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
@@ -279,6 +276,106 @@ async function dayReport(date) {
     suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,
     basis: 'day-to-date photos against the day\'s guidelines and the whole-day target'
   };
+}
+
+// Live fuel (energy-math.js): two stores through the day. Yesterday's end
+// is today's start (the legs carry over; the quick store loses the night),
+// so a long Saturday reads low on Sunday. Each day's end is kept in one
+// small store. The legs tap after a ride is kept too, and after thirty
+// rides it tunes the model's two constants.
+async function liveFuel(date, entries, g, nowMin) {
+  const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
+  const planMeals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) }));
+  const days = await getJSON('energy-days', { days: {} });
+  const prev = days.days[tz.shiftKey(date, -1)] || null;
+  const taps = await getJSON('fuel-legs', { rides: [] });
+  const cal = EM.calibrate(taps.rides);
+  const energy = EM.model(Object.assign({ entries, meals: planMeals, sessions: g.sessions, now_min: nowMin, ftp: st.ftp, cal }, EM.carryOver(prev)));
+  const end = { quick_end_g: energy.quick_end_g, legs_end_g: energy.legs_end_g, at: Date.now() };
+  const was = days.days[date];
+  if (!was || was.quick_end_g !== end.quick_end_g || was.legs_end_g !== end.legs_end_g) {
+    days.days[date] = end;
+    for (const k of Object.keys(days.days)) if (k < tz.shiftKey(date, -45)) delete days.days[k];
+    await setJSON('energy-days', days);
+  }
+  // the legs tap: the last ride done today, if he has not rated it yet
+  const done = g.sessions.filter(s => s.done && s.time && !/lift|weight|strength/i.test(s.name || '')).sort((a, b) => F.toMin(a.time) - F.toMin(b.time)).pop();
+  if (done) {
+    const key = `${date}|${done.name}`;
+    const rated = taps.rides.find(r => r.key === key);
+    const startPt = energy.series.find(p => p.t === done.time) || null;
+    energy.legs_tap = { key, name: done.name, rated: rated ? rated.legs : null, tuned: cal.tuned, pct: startPt ? startPt.pct : null,
+      fasted: !entries.some(e => !e.supplement && e.time && F.toMin(e.time) < F.toMin(done.time)) };
+  }
+  energy.calibration = { rides: cal.rides, tuned: cal.tuned, quick_share: energy.share, rest_g_h: energy.rest_g_h };
+  energy.carried = prev ? { from: tz.shiftKey(date, -1), legs_g: prev.legs_end_g } : null;
+  return energy;
+}
+// The legs tap itself: POST /fuel/legs { key, legs 1..5 }.
+async function rateLegs(key, legs) {
+  const taps = await getJSON('fuel-legs', { rides: [] });
+  const [date, name] = String(key).split('|');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !(legs >= 1 && legs <= 5)) throw new Error('need a date|ride key and legs 1 to 5');
+  const day = await dayReport(date);
+  const tap = day.energy && day.energy.legs_tap && day.energy.legs_tap.key === key ? day.energy.legs_tap : null;
+  const r = { key, date, name, legs: Math.round(legs), pct: tap ? tap.pct : null, fasted: tap ? tap.fasted : false, at: Date.now() };
+  taps.rides = taps.rides.filter(x => x.key !== key).concat([r]).slice(-200);
+  await setJSON('fuel-legs', taps);
+  return { ok: true, rating: r, calibration: EM.calibrate(taps.rides) };
+}
+
+// Live hydration (hydration-live.js): the water balance through the day. The
+// weather is fetched only when a ride is outdoors, and only waited on for a
+// few seconds; the trainer needs none. A post-ride weigh-in within three
+// hours of a ride, against the morning reading, is a calibration point.
+async function liveHydration(date, entries, g, nowMin) {
+  const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
+  let weather = null;
+  if (g.sessions.some(s => s.sport && s.sport !== 'VirtualRide' && s.sport !== 'WeightTraining')) {
+    const first = g.sessions.find(s => s.sport === 'Ride') || g.sessions[0];
+    const span = g.sessions.reduce((a, s) => a + (s.minutes || 60), 0);
+    weather = await Promise.race([
+      require('./weather').forecastAt(date, F.toMin(first.time) || 9 * 60, span).catch(() => null),
+      new Promise(r => setTimeout(() => r(null), 3000))
+    ]);
+  }
+  const cal = await getJSON('hydration-calibration', { points: [] });
+  const k = HL.calibrate(cal.points).k;
+  // the scale: a morning reading and one after a ride
+  let weigh = null;
+  try {
+    const w = await getJSON('weigh-in', { entries: [] });
+    const dayStart = tz.zonedToUTC(...date.split('-').map(Number), 0, 0).getTime();
+    const todays = (w.entries || []).filter(e => e.ts >= dayStart && e.ts < dayStart + 864e5 && e.lb > 100).sort((a, b) => a.ts - b.ts);
+    for (const s of g.sessions.filter(x => x.done && x.start_at && x.end_at)) {
+      const t0 = Date.parse(s.start_at), t1 = Date.parse(s.end_at);
+      const pre = todays.filter(e => e.ts < t0).pop();
+      const post = todays.find(e => e.ts > t1 && e.ts < t1 + 3 * 36e5);
+      if (!pre || !post) continue;
+      const sMin = F.toMin(s.time), eMin = sMin + (s.minutes || 0);
+      const drank = entries.filter(e => e.fluid_ml > 0 && F.toMin(e.time) != null && F.toMin(e.time) >= sMin - 5 && F.toMin(e.time) <= eMin).reduce((a, e) => a + e.fluid_ml, 0);
+      const lost = HL.measured(pre.lb / 2.20462, post.lb / 2.20462, drank, s.minutes);
+      if (lost == null) continue;
+      weigh = { session: s.name, lost_ml: lost, end_min: eMin, pre_lb: pre.lb, post_lb: post.lb, drank_ml: drank };
+      break;
+    }
+  } catch (e) { weigh = null; }
+  const live = HL.model({ entries, sessions: g.sessions, now_min: nowMin, kg: g.kg, ftp: st.ftp, weather, sweat_k: k, weigh });
+  if (weigh) {
+    const s = live.sessions.find(x => x.name === weigh.session) || null;
+    const modelled = s ? Math.round(s.loss_ml / live.sweat_k) : null;
+    if (modelled && !cal.points.some(p => p.date === date && p.session === weigh.session)) {
+      cal.points.push({ date, session: weigh.session, measured_ml: weigh.lost_ml, modelled_ml: modelled, pre_lb: weigh.pre_lb, post_lb: weigh.post_lb });
+      cal.points = cal.points.slice(-60);
+      await setJSON('hydration-calibration', cal);
+    }
+    live.weigh = Object.assign(weigh, { modelled_ml: modelled });
+  }
+  live.calibration = { k: live.sweat_k, points: HL.calibrate(cal.points).points };
+  // the shape the tile already reads
+  live.target = { total: live.target_ml, base: live.target_ml - live.sessions.reduce((a, s) => a + s.loss_ml, 0), ride: live.sessions.reduce((a, s) => a + s.loss_ml, 0) };
+  live.note = live.advice || (live.now.band.key === 'blue' ? 'Ahead of the morning.' : `${(Math.abs(live.now.ml) / 1000).toFixed(1)} L ${live.now.ml < 0 ? 'down' : 'up'} on the morning.`);
+  return live;
 }
 
 // Remove one entry from a day (and from the ledger). Returns the entry, or null.
@@ -395,6 +492,18 @@ function attach(app) {
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
   // A supplement is an entry without a photo: one tap, its nutrients counted.
+  // the legs tap after a ride, and the fuel verdicts for the days ahead (calendar dots)
+  app.post('/fuel/legs', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await rateLegs((req.body || {}).key, Number((req.body || {}).legs))); } catch (e) { res.status(400).json({ error: e.message }); } });
+  app.get('/fuel/ahead', async (req, res) => {
+    try {
+      const days = Math.max(1, Math.min(4, Number(req.query.days) || 3));
+      const dates = Array.from({ length: days }, (_, i) => tz.shiftKey(tz.todayKey(), i));
+      const reports = await Promise.all(dates.map(d => dayReport(d).catch(() => null)));
+      const out = [];
+      reports.forEach((d, i) => { for (const s of (d && d.energy && d.energy.sessions) || []) out.push({ date: dates[i], name: s.name, time: s.time, band: s.band.key, pct: s.pct, legs_pct: s.legs_pct, advice: s.advice }); });
+      res.json({ sessions: out });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/food/supplement', async (req, res) => { if (!auth(req, res)) return;
     try {
       const entry = await addSupplement(String((req.body || {}).key || ''));
@@ -491,4 +600,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement, removeEntry, todayEntries };
+module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement, removeEntry, todayEntries, rateLegs };

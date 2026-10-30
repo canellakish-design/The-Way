@@ -494,3 +494,6 @@ details.addev input{width:100%}
 .egline{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px} .egnow{font-size:17px} .egnow b{font-family:var(--mono); font-size:24px}
 .egt{font-family:var(--mono); font-size:9px; fill:#9A9A92} .egl{font-family:var(--mono); font-size:8px; fill:#F2F1EC; opacity:.7; letter-spacing:.5px}
 .egread{min-height:1.2em; margin-top:6px} .egs b{font-family:var(--mono)} .egadvice{margin-top:8px; padding:8px 10px; border-left:3px solid var(--amber); background:#1A1810}
+
+.legstap{margin-top:8px; display:flex; gap:6px; align-items:center; flex-wrap:wrap} .legstap .suppbtn{min-width:36px}
+.fdot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:6px; vertical-align:middle; background:var(--muted)} .fdot.green{background:var(--green)} .fdot.yellow{background:var(--amber)} .fdot.red{background:var(--red)}

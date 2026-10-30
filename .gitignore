@@ -36,3 +36,6 @@ bridge/ride-*.json
 
 # research working notes (the report itself is kept in reports/)
 research_notes/
+bridge/energy-days.json
+bridge/fuel-legs.json
+bridge/hydration-calibration.json

@@ -1327,7 +1327,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {};
+let WX = {}, WGRADE = {}, FUELV = {};
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
 function freeHours(d){
@@ -1407,7 +1407,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -1630,8 +1630,10 @@ V.today = async function(){
   const drawHydrationTile = ()=>{
     const h = foodData && foodData.hydration;
     if (!h){ paintTile("hydration", null, "", "", foodData ? "snap a drink" : "bridge unreachable"); return; }
-    if (h.score == null){ paintTile("hydration", null, "", "", "snap a drink"); return; }
-    paintTile("hydration", h.score, h.band.word, h.band.tone, `${(h.drunk_ml/1000).toFixed(1)} of ${(h.target.total/1000).toFixed(1)} L`);
+    const b = h.now ? h.now.band : h.band, ml = h.now ? h.now.ml : null;
+    if (ml == null){ paintTile("hydration", h.score, b.word, b.tone, "snap a drink"); return; }
+    const num = ml > 300 ? `+${(ml/1000).toFixed(1)}` : `−${(Math.abs(ml)/1000).toFixed(1)}`;
+    paintTile("hydration", num, b.word, b.tone === "info" ? "neutral" : b.tone, `L on the morning · ${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk`);
   };
   const drawWeightTile = ()=>{
     const w = bodyData;
@@ -1762,15 +1764,9 @@ V.today = async function(){
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
       html = `<h4>Hydration · today</h4>
-        ${h ? `<ul class="agenda totals">
-          ${row("drunk so far", `<b style="color:${toneC(h.band.tone)}">${(h.drunk_ml/1000).toFixed(2)} L</b>${h.score != null ? ` · ${h.band.word}` : ""}`)}
-          ${row("due by now", `${(h.due_ml/1000).toFixed(2)} L`)}
-          ${row("today's target", `${(h.target.total/1000).toFixed(1)} L${h.target.ride ? ` · ${(h.target.base/1000).toFixed(1)} base + ${(h.target.ride/1000).toFixed(1)} for the riding` : ""}`)}
-          ${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}
-        </ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
-        <a class="btn primary" href="#food">Snap a drink</a>
-        <details class="why"><summary>how it's scored</summary><div class="small">Drinks in the photos, added up, against 30 ml/kg plus 600 ml an hour ridden, paced over the waking day. Green from 80% of what is due, amber from 50%.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+        ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
+        <a class="btn primary" href="#food">Snap a drink</a>`;
+      box.innerHTML = html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
@@ -1854,7 +1850,16 @@ V.today = async function(){
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; for(const day of (r.days||[])) for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; r.today_day=(r.days||[]).find(x=>x.date===k)||null; return r; }); })().catch(()=>null)
     ]);
     drawScores();
+    fuelDots();
   };
+  // The fuel verdict on each planned session, as a dot before its name, for
+  // today and the next two days (the bridge runs the fuel model for each).
+  // Fetched after the page is up, so it never slows the page; the dots land
+  // when it answers.
+  const fuelDots = ()=> bridge("/fuel/ahead?days=3").then(f => {
+    FUELV = {}; for (const s of (f.sessions||[])) FUELV[s.date + "|" + s.name] = s;
+    repaint();
+  }).catch(()=>{});
 
 
   // Redraw from cache: moves the "now" band and the next-up line as time
