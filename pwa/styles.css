@@ -488,3 +488,9 @@ details.addev input{width:100%}
 .dayhead{display:flex; justify-content:space-between; align-items:center; gap:10px} .dayhead h4{margin:0} .dayhead .btn{padding:6px 12px}
 .dayhead .btn{white-space:nowrap}
 .evedit{margin-top:10px}
+
+/* live fuel */
+.energy{margin-top:4px} .egsvg{width:100%; height:150px; display:block; background:#0F100E; border:1px solid var(--line); border-radius:6px; touch-action:none}
+.egline{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px} .egnow{font-size:17px} .egnow b{font-family:var(--mono); font-size:24px}
+.egt{font-family:var(--mono); font-size:9px; fill:#9A9A92} .egl{font-family:var(--mono); font-size:8px; fill:#F2F1EC; opacity:.7; letter-spacing:.5px}
+.egread{min-height:1.2em; margin-top:6px} .egs b{font-family:var(--mono)} .egadvice{margin-top:8px; padding:8px 10px; border-left:3px solid var(--amber); background:#1A1810}

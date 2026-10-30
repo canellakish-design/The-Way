@@ -26,6 +26,7 @@ const F = require('./food-math');
 const W = require('./workout-math');
 const MI = require('./micro-math');
 const HY = require('./hydration-math');
+const EM = require('./energy-math');
 
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 const KEEP_DAYS = 60;
@@ -260,12 +261,19 @@ async function dayReport(date) {
   const microSuggest = micro ? MI.suggest(microDays, microOpts) : null;
   const nowP = tz.parts(new Date());
   const hydration = HY.score(entries, { kg: g.kg, ride_hours: rideHours, now_min: date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null });
+  // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
+  let energy = null;
+  try {
+    const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
+    const planMeals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) }));
+    energy = EM.model({ entries, meals: planMeals, sessions: g.sessions, now_min: date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null, base_burn_kcal: g.target.base_burn, ftp: st.ftp });
+  } catch (e) { energy = null; }
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) })),
     actual: Object.assign(actual, { meals: meals.length }), entries,
-    hydration,
+    hydration, energy,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,

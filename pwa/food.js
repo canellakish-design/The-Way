@@ -39,6 +39,61 @@ function thumbStrip(entries){
     return `<a class="thumb" href="#food" title="${esc(e.name)}" style="border-color:${toneC(f.tone)}">${img}<span class="small">${esc(clock(e.at))}</span></a>`;
   }).join("")}</div>`;
 }
+/* ---- live fuel: the carbohydrate on board through the day, as a curve ----
+   One series, so no legend; the fill under the line carries the status colour
+   (green fuelled, amber ok, red low) and the words sit in text ink. The past
+   is drawn solid from what was logged, the hours ahead dashed from the plan.
+   Sessions are shaded bands; logged meals are filled dots, planned ones hollow.
+   Tap or drag across the chart to read a time. */
+function energyHTML(e){
+  if (!e || !e.series || !e.series.length) return `<div class="small">Starts with the first meal.</div>`;
+  const W = 340, H = 150, L = 8, R = 8, T = 10, B = 24;
+  const m0 = e.series[0].m, m1 = e.series[e.series.length-1].m;
+  const X = m => L + (m - m0) / (m1 - m0) * (W - L - R);
+  const Y = pct => T + (1 - Math.min(100, pct) / 100) * (H - T - B);
+  const col = pct => pct >= 60 ? "#2E7D4A" : pct >= 35 ? "#8A6A14" : "#7A2E26";
+  const colL = pct => pct >= 60 ? "var(--green)" : pct >= 35 ? "var(--amber)" : "var(--red)";
+  // the fill: one polygon per band run, so the colour follows the level
+  let fills = "", lines = "", run = null;
+  const flush = ()=>{ if (!run) return; const pts = run.pts; const d = `M${X(pts[0].m).toFixed(1)},${Y(0)} ` + pts.map(p=>`L${X(p.m).toFixed(1)},${Y(p.pct).toFixed(1)}`).join(" ") + ` L${X(pts[pts.length-1].m).toFixed(1)},${Y(0)} Z`; fills += `<path d="${d}" fill="${run.col}" opacity="${run.proj?0.45:0.85}"></path>`; run = null; };
+  e.series.forEach((p, i) => {
+    const c = col(p.pct);
+    if (!run || run.col !== c || run.proj !== p.projected){ const prev = e.series[i-1]; flush(); run = { col: c, proj: p.projected, pts: prev ? [prev] : [] }; }
+    run.pts.push(p);
+  });
+  flush();
+  const past = e.series.filter(p => !p.projected), fut = e.series.filter((p, i) => p.projected || (e.series[i+1] && e.series[i+1].projected));
+  const path = pts => pts.map((p,i)=>(i?"L":"M")+X(p.m).toFixed(1)+","+Y(p.pct).toFixed(1)).join(" ");
+  if (past.length) lines += `<path d="${path(past)}" fill="none" stroke="#F2F1EC" stroke-width="2"></path>`;
+  if (fut.length) lines += `<path d="${path(fut)}" fill="none" stroke="#F2F1EC" stroke-width="2" stroke-dasharray="4 4" opacity=".8"></path>`;
+  const bands = (e.sessions||[]).map(s => `<rect x="${X(s.min).toFixed(1)}" y="${T}" width="${Math.max(2, X(s.end_min)-X(s.min)).toFixed(1)}" height="${H-T-B}" fill="#F2F1EC" opacity=".12"></rect><text x="${(X(s.min)+2).toFixed(1)}" y="${T+10}" class="egl">${esc(s.name.replace(/,.*$/,"").slice(0,14))}</text>`).join("");
+  const dots = (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return `<circle cx="${X(m.min).toFixed(1)}" cy="${Y(p.pct).toFixed(1)}" r="4.5" fill="${m.logged?"#F2F1EC":"#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${esc(hm12(m.time))} ${esc(m.name||"")} ${m.carbs_g} g carbs</title></circle>`; }).join("");
+  const nowX = X(Math.max(m0, Math.min(m1, (h=>h)(e.now ? (e.series.find(p=>p.t===e.now.time)||{}).m ?? m0 : m0))));
+  const ticks = [6,9,12,15,18,21].map(h => `<text x="${X(h*60).toFixed(1)}" y="${H-6}" class="egt" text-anchor="middle">${h%12||12}${h<12?"a":"p"}</text>`).join("");
+  const guide = [35,60].map(v => `<line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#F2F1EC" opacity=".15" stroke-dasharray="2 4"></line>`).join("");
+  const nowLine = e.now ? `<line x1="${nowX.toFixed(1)}" x2="${nowX.toFixed(1)}" y1="${T}" y2="${H-B}" stroke="#F2F1EC" stroke-width="1.5"></line>` : "";
+  const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${colL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}</span>`).join(" · ");
+  return `<div class="energy" data-m0="${m0}" data-m1="${m1}">
+    <div class="egline"><span class="egnow"><b style="color:${colL(e.now.pct)}">${e.now.pct}%</b> fuel now</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
+    <svg viewBox="0 0 ${W} ${H}" class="egsvg" preserveAspectRatio="none">${guide}${bands}${fills}${lines}${nowLine}${dots}${ticks}</svg>
+    <div class="small egread"></div>
+    ${ses?`<div class="small">${ses}</div>`:""}
+    ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
+  </div>`;
+}
+function wireEnergy(root, e){
+  const box = root.querySelector(".energy"); if (!box || !e) return;
+  const svg = box.querySelector(".egsvg"), out = box.querySelector(".egread");
+  const m0 = +box.dataset.m0, m1 = +box.dataset.m1;
+  const read = (ev)=>{
+    const r = svg.getBoundingClientRect(); const x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+    const m = m0 + Math.max(0, Math.min(1, (x - 8/340*r.width) / (r.width * (1 - 16/340)))) * (m1 - m0);
+    const p = e.series.reduce((a, q) => Math.abs(q.m - m) < Math.abs(a.m - m) ? q : a);
+    out.textContent = `${hm12(p.t)} · ${p.pct}% · about ${p.g} g on board${p.projected ? " (projected)" : ""}`;
+  };
+  svg.addEventListener("pointerdown", read); svg.addEventListener("pointermove", ev => { if (ev.buttons || ev.pointerType === "touch") read(ev); });
+  svg.addEventListener("touchstart", read, { passive: true }); svg.addEventListener("touchmove", read, { passive: true });
+}
 function microHTML(m, day){
   if (!m) return `<div class="small">Starts with the first meal.</div>`;
   const bar = p => `<li><span class="n">${esc(p.label)}<span class="small"> ${p.value} of ${p.target} ${esc(p.unit)}</span></span>
@@ -64,7 +119,7 @@ function wireMicro(root, onChange){
     catch(e){ b.textContent = "failed — " + e.message; }
   });
 }
-window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro };
+window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy };
 
 /* ---- the page ---- */
 V.food = async function(){
@@ -96,6 +151,7 @@ V.food = async function(){
       <div id="snapResult"></div>
     </div>` : ""}
     <div id="fDay"><div class="card"><div class="small">Loading the day…</div></div></div>`;
+  // (the live fuel card is drawn inside the day, first thing)
   document.getElementById("fPrev").onclick = ()=>go(keyAdd(date,-1));
   document.getElementById("fNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
   document.getElementById("fToday").onclick = ()=>go(today);
@@ -112,6 +168,7 @@ V.food = async function(){
         <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
     const sessions = (day.sessions||[]).map(s=>`${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
     el.innerHTML = `
+      <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}
         ${day.target.base_burn?`<details class="why"><summary>how the target is set</summary><div class="small">${day.target.base_burn} kcal before riding at ${day.target.kg} kg + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div></details>`:""}
@@ -144,6 +201,7 @@ V.food = async function(){
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
+    wireEnergy(el, day.energy);
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
       const meals = day.entries.filter(x => !x.supplement).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));
