@@ -1,128 +1,136 @@
 "use strict";
-/* THE WAY — the microphone: the advisor. One button on every page: tap, say it or ask it, done.
+/* THE WAY — the microphone: the advisor, as a conversation.
+   Hold the button and talk; let go and it answers, out loud and in the
+   thread. Hold again to answer back: "yes, do that", "the second one",
+   "make it an hour instead". The bridge (bridge/voice.js) carries the last
+   turns with each new one, logs or changes what was asked through the same
+   functions the buttons use, and answers in a sentence.
    The phone turns speech into text (Web Speech, built into Safari and
-   Chrome); the bridge (bridge/voice.js) works out what was meant, logs it
-   through the same functions the buttons use, and answers in one sentence,
-   spoken back. No speech support, or a tablet that will not listen: the
-   same sheet takes typing, and the keyboard's own microphone key dictates
-   into it. Loads after app.js and uses its globals: bridge, esc, speak, nav. */
+   Chrome). No speech support, or a tablet that will not listen: the same
+   sheet takes typing, and the keyboard's own microphone key dictates into
+   it. A short tap on the round button opens or closes the thread.
+   Loads after app.js and uses its globals: bridge, esc, speak, nav. */
 (function(){
 
 const J = {"Content-Type":"application/json"};
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
-let rec = null, listening = false, finalText = "";
+const HOLD_MS = 280;                 // shorter than this is a tap, not a hold
+let rec = null, listening = false, finalText = "", manualStop = false, sending = false;
+// the thread: what he said and what was answered, kept for the session
+let history = [];
+try{ history = JSON.parse(sessionStorage.getItem("way-voice-thread") || "[]"); }catch{ history = []; }
+const keep = ()=>{ try{ sessionStorage.setItem("way-voice-thread", JSON.stringify(history.slice(-20))); }catch{} };
 
 function sheet(){
   let s = document.getElementById("voiceSheet");
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">Ask or say it</span><button class="linkish" id="vClose">close</button></div>
+    <div class="vhead"><span class="eyebrow">The advisor</span><span><button class="linkish" id="vNew">new conversation</button> · <button class="linkish" id="vClose">close</button></span></div>
+    <div class="vthread" id="vThread"></div>
     <div class="vheard" id="vHeard"></div>
-    <textarea id="vText" rows="3" placeholder="${SR ? "Listening… or type here" : "Type here, or use the keyboard's microphone key"}"></textarea>
-    <div class="vrow"><button class="primary" id="vSend">Do it</button> ${SR ? `<button id="vDone">Done, send</button> <button id="vAgain">Listen again</button>` : ""}</div>
+    <div class="vrow">${SR ? `<button class="primary big vhold" id="vHold">Hold to talk</button>` : ""}<button class="big" id="vType">Type</button></div>
+    <div id="vTypeBox" hidden><textarea id="vText" rows="2" placeholder="${SR ? "Or type it here" : "Type here, or use the keyboard's microphone key"}"></textarea>
+      <div class="vrow"><button class="primary" id="vSend">Send</button></div></div>
     <div class="small" id="vStatus"></div>
-    <div id="vResult"></div>
-    <div class="small vhint">"two eggs and toast" · "skim or whole milk in my coffee?" · "add 30 minutes to today's ride" · "move the dentist to 3" · "what should I eat before the 40/20s?"</div>
+    <div class="small vhint">"two eggs and toast" · "skim or whole milk?" · "add 30 minutes to today's ride" · "move the dentist to 3" · then answer back: "yes, do that" · "the second one"</div>
   </div>`;
   document.body.appendChild(s);
   document.getElementById("vClose").onclick = close;
-  document.getElementById("vSend").onclick = send;
-  const again = document.getElementById("vAgain"); if (again) again.onclick = ()=>{ restarts = 0; listen(); };
-  const done = document.getElementById("vDone"); if (done) done.onclick = ()=>{ if (listening) stop(); else send(); };
+  document.getElementById("vNew").onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
+  document.getElementById("vSend").onclick = ()=> send(document.getElementById("vText").value.trim());
+  document.getElementById("vType").onclick = ()=>{ const b = document.getElementById("vTypeBox"); b.hidden = !b.hidden; if (!b.hidden) document.getElementById("vText").focus(); };
+  const hold = document.getElementById("vHold");
+  if (hold) wireHold(hold);
   s.addEventListener("click", e => { if (e.target === s) close(); });
+  drawThread();
   return s;
 }
 
 function status(t){ const el = document.getElementById("vStatus"); if (el) el.textContent = t || ""; }
-
-function open(){
-  const s = sheet(); s.hidden = false;
-  document.getElementById("vResult").innerHTML = "";
-  document.getElementById("vHeard").textContent = "";
-  document.getElementById("vText").value = "";
-  restarts = 0;
-  if (SR) listen(); else document.getElementById("vText").focus();
+function drawThread(){
+  const el = document.getElementById("vThread"); if (!el) return;
+  el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
+    || `<div class="small">Hold the button and say it, or ask it. It answers, and you can answer back.</div>`;
+  el.scrollTop = el.scrollHeight;
 }
-function close(){ stop(); const s = document.getElementById("voiceSheet"); if (s) s.hidden = true; }
+function open(){ const s = sheet(); s.hidden = false; drawThread(); }
+function close(){ stopListening(); const s = document.getElementById("voiceSheet"); if (s) s.hidden = true; }
+function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.classList.toggle("live", on); const h = document.getElementById("vHold"); if (h){ h.classList.toggle("live", on); h.textContent = on ? "Listening… let go to send" : "Hold to talk"; } }
 
-function stop(){ manualStop = true; if (rec && listening){ try{ rec.stop(); }catch{} } listening = false; setMic(false); }
-function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.classList.toggle("live", on); }
-
-// Safari on the iPhone ends a session on its own after a short silence,
-// sometimes before a word is said, and refuses to start while the last
-// session still holds the microphone. So: a fresh recogniser each time, a
-// retry when it ends with nothing heard, a retry when it says it is busy,
-// and a button that ends the session by hand, which is the reliable way.
-let restarts = 0, manualStop = false;
-function listen(){
-  if (!SR) return;
+/* ---- push to talk ---- */
+function startListening(){
+  if (!SR || listening) return;
   try{ if (rec) { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } }catch{}
+  try{ speechSynthesis.cancel(); }catch{}
   rec = new SR();
   rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
   finalText = ""; manualStop = false;
-  const heard = document.getElementById("vHeard"), text = document.getElementById("vText");
-  heard.textContent = "";
-  rec.onstart = ()=>{ listening = true; setMic(true); status("Listening… tap the red button, or Done, when you have said it."); try{ speechSynthesis.cancel(); }catch{} };
+  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
+  rec.onstart = ()=>{ listening = true; setMic(true); status(""); };
   rec.onresult = (e)=>{
     let interim = "";
-    for (let i = e.resultIndex; i < e.results.length; i++){
-      const r = e.results[i];
-      if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript;
-    }
-    heard.textContent = (finalText + interim).trim();
+    for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript; }
+    if (heard) heard.textContent = (finalText + interim).trim();
   };
   rec.onerror = (e)=>{
     listening = false; setMic(false);
     const k = e.error;
-    if (k === "no-speech" && restarts < 2 && !manualStop){ restarts++; status("Heard nothing yet… listening again."); setTimeout(listen, 250); return; }
-    status(k === "not-allowed" || k === "service-not-allowed" ? "Microphone blocked. Settings → Safari → Microphone → Allow for this site, or type below."
-         : k === "audio-capture" ? "No microphone found. Type below."
-         : k === "no-speech" ? "Heard nothing. Tap Listen again, or type." : k === "aborted" ? "" : "Speech failed (" + k + "). Type it below.");
-    if (k !== "aborted") text.focus();
+    status(k === "not-allowed" || k === "service-not-allowed" ? "Microphone blocked. Settings → Safari → Microphone → Allow for this site, or type."
+         : k === "audio-capture" ? "No microphone found. Type instead."
+         : k === "no-speech" ? "Heard nothing. Hold the button and speak." : k === "aborted" ? "" : "Speech failed (" + k + "). Type it instead.");
   };
   rec.onend = ()=>{
     listening = false; setMic(false);
-    const t = (finalText || heard.textContent || "").trim();
-    if (t){ text.value = t; status(""); send(); return; }
-    if (!manualStop && restarts < 2){ restarts++; setTimeout(listen, 250); return; }
-    status("Heard nothing. Tap Listen again, or type.");
+    const t = (finalText || (heard && heard.textContent) || "").trim();
+    if (t) send(t); else if (manualStop) status("Heard nothing. Hold the button and speak.");
   };
   try{ rec.start(); }
-  catch(err){
-    // "already started": the last session has not let go yet; try once more shortly
-    if (/InvalidState|already/i.test(String(err && err.message)) && restarts < 3){ restarts++; setTimeout(listen, 400); return; }
-    status("Could not start the microphone: " + err.message + ". Type it below.");
-  }
+  catch(err){ status(/InvalidState|already/i.test(String(err && err.message)) ? "The microphone is still busy, try again." : "Could not start the microphone: " + err.message); }
+}
+function stopListening(){ manualStop = true; if (rec && listening){ try{ rec.stop(); }catch{} } }
+
+// hold = talk; a quick tap toggles the sheet
+function wireHold(el, onTap){
+  let downAt = 0, holding = false;
+  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} startListening(); };
+  const up = (e)=>{
+    if (!holding) return; holding = false; e.preventDefault();
+    const quick = Date.now() - downAt < HOLD_MS;
+    if (quick){ try{ if (rec){ rec.onend = null; rec.abort(); } }catch{} listening = false; setMic(false); if (onTap) onTap(); return; }
+    stopListening();
+  };
+  el.addEventListener("pointerdown", down);
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up); el.addEventListener("pointerleave", (e)=>{ if (holding) up(e); });
+  el.addEventListener("contextmenu", e => e.preventDefault());
 }
 
-async function send(){
-  const text = document.getElementById("vText").value.trim();
+async function send(text){
   if (!text) { status("Nothing to send."); return; }
-  const btn = document.getElementById("vSend"); btn.disabled = true; status("Working on it…");
+  if (sending) return;
+  sending = true;
+  open();
+  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
+  const typed = document.getElementById("vText"); if (typed) typed.value = "";
+  history.push({ role: "user", text }); keep(); drawThread();
+  status("Thinking…");
   try{
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text }) });
-    const out = document.getElementById("vResult");
-    out.innerHTML = `<ul class="agenda totals vacts">${(r.actions||[]).map(a => `<li><span class="n">${a.ok ? "✓" : "✗"} ${esc(a.summary)}</span></li>`).join("")}</ul>
-      <div class="vreply">${esc(r.reply || "")}</div>`;
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
-    // whatever was logged, the page under the sheet shows it now
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
-  }catch(e){ status(e.message); }
-  btn.disabled = false;
+  }catch(e){ status(e.message); history.pop(); keep(); drawThread(); }
+  sending = false;
 }
 
-// the button, on every page
+// the round button, on every page: hold to talk, tap to open the thread
 const b = document.createElement("button");
-b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Say something");
+b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Hold to talk to the advisor");
 b.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4zm6-4a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V22h2v-3.07A8 8 0 0 0 20 11h-2z"/></svg>`;
-b.onclick = ()=>{
-  const s = document.getElementById("voiceSheet");
-  if (listening) { stop(); return; }                       // red: end the session, it sends what it heard
-  if (s && !s.hidden) close(); else open();
-};
+if (SR) wireHold(b, ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else open(); });
+else b.onclick = ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else { open(); const t = document.getElementById("vTypeBox"); if (t) t.hidden = false; } };
 document.body.appendChild(b);
 
-window.voiceBits = { open, close, listen, supported: !!SR };
+window.voiceBits = { open, close, send, supported: !!SR };
 })();

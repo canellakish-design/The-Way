@@ -1,6 +1,6 @@
-// The Way — service worker v33. Network-first, and it only caches genuine
+// The Way — service worker v34. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v33";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v34";   // bumped whenever the shell changes, so a held copy is dropped on activate
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys =>

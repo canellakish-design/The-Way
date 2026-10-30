@@ -513,3 +513,10 @@ ul.agenda.zthree .n{min-width:0} ul.agenda.zthree .tag{display:flex; flex-direct
 .zsplit{margin:8px 0 12px} ul.agenda.zrides li{grid-template-columns:44px 1fr 72px} ul.agenda.zrides .tag .zstack{width:72px; margin:0}
 .advisor{border-top:1px dashed var(--line); margin-top:12px; padding-top:12px} .adhint{margin-top:6px}
 .aditems li.pick{background:var(--green-soft)} .adwhy{display:block; margin-top:2px; color:var(--muted)} .adplace{margin:8px 0}
+/* the advisor's thread */
+.vthread{display:flex; flex-direction:column; gap:8px; max-height:38vh; overflow:auto; margin:6px 0 10px}
+.vmsg{max-width:88%; padding:8px 12px; border:1px solid var(--line); font-size:16px; line-height:1.35}
+.vmsg.user{align-self:flex-end; background:#1E2024} .vmsg.assistant{align-self:flex-start; background:var(--green-soft); border-color:var(--green)}
+.vmsg .vacts{list-style:none; padding:0; margin:0 0 6px; font-size:13px; color:var(--muted)}
+.vhold{flex:1; min-height:54px} .vhold.live{background:#5A2620; border-color:var(--red); color:var(--ink); animation:micpulse 1s ease-in-out infinite}
+#micBtn{touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none} .vhold{touch-action:none; user-select:none; -webkit-user-select:none}
