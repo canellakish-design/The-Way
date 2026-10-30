@@ -543,6 +543,105 @@ async function removeEvent(id) {
   return true;
 }
 
+// The schedule for n days from today (back days before): every event with its
+// edit key, the planned sessions, the day's macros. The route and the voice both use it.
+async function scheduleReport(q) {
+      const n = Math.min(21, Math.max(1, parseInt(q.days, 10) || 7));
+      const back = Math.min(7, Math.max(0, parseInt(q.back, 10) || 0));
+      const d = await sync().catch(async () => await db());
+      const firstKey = tz.shiftKey(tz.todayKey(), -back);
+      const lastKey = tz.shiftKey(tz.todayKey(), n - back - 1);
+      const intervals = require('./intervals');
+      const classes = require('./classes');
+      // A dead source dims one lane of the day; it never blanks the page.
+      const iv = await intervals.plannedRange(firstKey, lastKey)
+        .catch(e => ({ configured: intervals.configured(), days: {}, error: e.message }));
+      // The plan's own workouts, merged in. One that was sent to the Garmin
+      // comes back from intervals.icu as well, so the same session on the same
+      // day at the same time is shown once, as the plan's copy (it links to
+      // the builder).
+      try {
+        const own = await require('./workouts').plannedDays(firstKey, lastKey);
+        for (const [k, list] of Object.entries(own)) {
+          const have = iv.days[k] || [];
+          const dup = p => have.some(e => (e.start_min ?? -1) === (p.start_min ?? -1)
+            && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase());
+          iv.days[k] = have.filter(e => !list.some(p => (p.start_min ?? -1) === (e.start_min ?? -1)
+              && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase()))
+            .concat(list);
+          iv.days[k].sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
+        }
+      } catch (e) { /* no plan store yet: the intervals.icu lane stands alone */ }
+      // iCal feeds sit alongside the OAuth accounts — same day, same shape.
+      const icsMod = require('./ics');
+      const ics = await icsMod.fetchAll(firstKey, lastKey)
+        .catch(e => ({ configured: icsMod.configured(), events: [], feeds: [], error: e.message }));
+      const icsEvents = (ics.events || []).map(e => {
+        const calDefault = calendarCategory(e.calendar);
+        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
+          account: 'ical:' + e.calendar,
+          category: classify(e.summary, d.manual, calDefault) };
+      });
+      // The written-down copy of the calendar fills only the days no live
+      // source reached. See snapshot.js for why it exists and how it retires.
+      const snapshot = require('./snapshot');
+      // Events added in the app: on the day at once, whether or not they have reached Google yet.
+      const localEvents = (d.local_events || []).map(e => ({ ...e, source: 'calendar', account: 'the way', category: classify(e.summary, d.manual, null) }));
+      const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
+      const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
+      const snapEvents = snapshot.eventsInRange(firstKey, lastKey, covered).map(e => {
+        const calDefault = calendarCategory(e.calendar);
+        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
+          account: 'snapshot:' + e.calendar,
+          category: classify(e.summary, d.manual, calDefault) };
+      });
+      const days = scheduleDays(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), n, iv.days, back);
+      // The day's fuel targets, from the day's training (food-math.js).
+      await attachMacros(days);
+      const sources = {
+        timezone: tz.ZONE,
+        calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))
+          .concat((ics.feeds || []).filter(f => f.ok).map(f => f.name)),
+        ical_feeds: (ics.feeds || []),
+        ical_errors: (ics.feeds || []).filter(f => !f.ok).map(f => f.name + ': ' + f.error),
+        accounts: d.accounts.map(a => a.id),
+        account_errors: d.accounts.filter(a => a.auth_error).map(a => a.id + ': ' + a.auth_error),
+        calendar_connected: d.accounts.length > 0,
+        snapshot: snapEvents.length ? { ...snapshot.meta(), used: snapEvents.length } : null,
+        classes_configured: classes.configured(),
+        intervals_configured: !!iv.configured,
+        intervals_error: iv.error || null,
+        macros_today: !!((days.find(x => x.today) || {}).macros)
+      };
+      const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
+      sources.calendar_connected = d.accounts.length > 0 || icsEvents.length > 0 || icsMod.configured();
+      const icsFeeds = await icsMod.feedsAsync().catch(() => []);
+      if (!d.accounts.length && !icsFeeds.length && !snapEvents.length) {
+        return ({ connected: false, days, sources, today_index: todayIdx0 });
+      }
+      if (!d.accounts.length) {
+        // Feeds or the snapshot, no OAuth account: still a real day. The page
+        // draws the whole thing; sources.snapshot is what tells it the events
+        // came from a copy rather than from Google.
+        const { sleepLatest } = require('./whoop');
+        const { weekState } = require('./race');
+        const s0 = await sleepLatest({ sync: false }).catch(() => null);
+        const w0 = await weekState().catch(() => null);
+        await attachMacros(days);
+        return ({ connected: true, synced_at: null, days, sources, today_index: todayIdx0,
+          ...recommendToday(days[todayIdx0], s0 && s0.recovery ? s0.recovery.score : null,
+            w0 ? w0.remaining : null) });
+      }
+      const { sleepLatest } = require('./whoop');
+      const { weekState } = require('./race');
+      const s = await sleepLatest({ sync: false }).catch(() => null);
+      const w = await weekState().catch(() => null);
+      const rec = s && s.recovery ? s.recovery.score : null;
+      return ({ connected: true, synced_at: d.synced_at, days, sources,
+        today_index: todayIdx0,
+        ...recommendToday(days[todayIdx0], rec, w ? w.remaining : null) });
+}
+
 function attach(app) {
   app.post('/gcal/events', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await addEvent(req.body || {})); }
@@ -642,102 +741,8 @@ function attach(app) {
   // The front page: N days of real schedule, day 0 = today. Answers with the
   // day skeleton even when Google isn't connected, so the page still renders.
   app.get('/schedule', async (req, res) => { if (!auth(req, res)) return;
-    try {
-      const n = Math.min(21, Math.max(1, parseInt(req.query.days, 10) || 7));
-      const back = Math.min(7, Math.max(0, parseInt(req.query.back, 10) || 0));
-      const d = await sync().catch(async () => await db());
-      const firstKey = tz.shiftKey(tz.todayKey(), -back);
-      const lastKey = tz.shiftKey(tz.todayKey(), n - back - 1);
-      const intervals = require('./intervals');
-      const classes = require('./classes');
-      // A dead source dims one lane of the day; it never blanks the page.
-      const iv = await intervals.plannedRange(firstKey, lastKey)
-        .catch(e => ({ configured: intervals.configured(), days: {}, error: e.message }));
-      // The plan's own workouts, merged in. One that was sent to the Garmin
-      // comes back from intervals.icu as well, so the same session on the same
-      // day at the same time is shown once, as the plan's copy (it links to
-      // the builder).
-      try {
-        const own = await require('./workouts').plannedDays(firstKey, lastKey);
-        for (const [k, list] of Object.entries(own)) {
-          const have = iv.days[k] || [];
-          const dup = p => have.some(e => (e.start_min ?? -1) === (p.start_min ?? -1)
-            && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase());
-          iv.days[k] = have.filter(e => !list.some(p => (p.start_min ?? -1) === (e.start_min ?? -1)
-              && String(e.summary || '').trim().toLowerCase() === String(p.summary || '').trim().toLowerCase()))
-            .concat(list);
-          iv.days[k].sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
-        }
-      } catch (e) { /* no plan store yet: the intervals.icu lane stands alone */ }
-      // iCal feeds sit alongside the OAuth accounts — same day, same shape.
-      const icsMod = require('./ics');
-      const ics = await icsMod.fetchAll(firstKey, lastKey)
-        .catch(e => ({ configured: icsMod.configured(), events: [], feeds: [], error: e.message }));
-      const icsEvents = (ics.events || []).map(e => {
-        const calDefault = calendarCategory(e.calendar);
-        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
-          account: 'ical:' + e.calendar,
-          category: classify(e.summary, d.manual, calDefault) };
-      });
-      // The written-down copy of the calendar fills only the days no live
-      // source reached. See snapshot.js for why it exists and how it retires.
-      const snapshot = require('./snapshot');
-      // Events added in the app: on the day at once, whether or not they have reached Google yet.
-      const localEvents = (d.local_events || []).map(e => ({ ...e, source: 'calendar', account: 'the way', category: classify(e.summary, d.manual, null) }));
-      const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
-      const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
-      const snapEvents = snapshot.eventsInRange(firstKey, lastKey, covered).map(e => {
-        const calDefault = calendarCategory(e.calendar);
-        return { ...e, source: calDefault === 'coaching' ? 'coaching' : 'calendar',
-          account: 'snapshot:' + e.calendar,
-          category: classify(e.summary, d.manual, calDefault) };
-      });
-      const days = scheduleDays(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), n, iv.days, back);
-      // The day's fuel targets, from the day's training (food-math.js).
-      await attachMacros(days);
-      const sources = {
-        timezone: tz.ZONE,
-        calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))
-          .concat((ics.feeds || []).filter(f => f.ok).map(f => f.name)),
-        ical_feeds: (ics.feeds || []),
-        ical_errors: (ics.feeds || []).filter(f => !f.ok).map(f => f.name + ': ' + f.error),
-        accounts: d.accounts.map(a => a.id),
-        account_errors: d.accounts.filter(a => a.auth_error).map(a => a.id + ': ' + a.auth_error),
-        calendar_connected: d.accounts.length > 0,
-        snapshot: snapEvents.length ? { ...snapshot.meta(), used: snapEvents.length } : null,
-        classes_configured: classes.configured(),
-        intervals_configured: !!iv.configured,
-        intervals_error: iv.error || null,
-        macros_today: !!((days.find(x => x.today) || {}).macros)
-      };
-      const todayIdx0 = Math.max(0, days.findIndex(x => x.today));
-      sources.calendar_connected = d.accounts.length > 0 || icsEvents.length > 0 || icsMod.configured();
-      const icsFeeds = await icsMod.feedsAsync().catch(() => []);
-      if (!d.accounts.length && !icsFeeds.length && !snapEvents.length) {
-        return res.json({ connected: false, days, sources, today_index: todayIdx0 });
-      }
-      if (!d.accounts.length) {
-        // Feeds or the snapshot, no OAuth account: still a real day. The page
-        // draws the whole thing; sources.snapshot is what tells it the events
-        // came from a copy rather than from Google.
-        const { sleepLatest } = require('./whoop');
-        const { weekState } = require('./race');
-        const s0 = await sleepLatest({ sync: false }).catch(() => null);
-        const w0 = await weekState().catch(() => null);
-        await attachMacros(days);
-        return res.json({ connected: true, synced_at: null, days, sources, today_index: todayIdx0,
-          ...recommendToday(days[todayIdx0], s0 && s0.recovery ? s0.recovery.score : null,
-            w0 ? w0.remaining : null) });
-      }
-      const { sleepLatest } = require('./whoop');
-      const { weekState } = require('./race');
-      const s = await sleepLatest({ sync: false }).catch(() => null);
-      const w = await weekState().catch(() => null);
-      const rec = s && s.recovery ? s.recovery.score : null;
-      res.json({ connected: true, synced_at: d.synced_at, days, sources,
-        today_index: todayIdx0,
-        ...recommendToday(days[todayIdx0], rec, w ? w.remaining : null) });
-    } catch (e) { res.status(500).json({ error: e.message }); } });
+    try { res.json(await scheduleReport(req.query || {})); }
+    catch (e) { res.status(500).json({ error: e.message }); } });
   // Which Google calendars feed the day (the coaching one included).
   app.get('/gcal/calendars', async (req, res) => { if (!auth(req, res)) return;
     try {
@@ -784,4 +789,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday,
-  trainingHours, connected, scheduleForDate, scheduleDays, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };
+  trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };

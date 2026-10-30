@@ -527,6 +527,20 @@ async function create(body) {
   return withMetrics(w, st);
 }
 
+// Change a planned session in place (the same path as PUT /workouts/:id):
+// a session already on the Garmin or Zwift is re-sent so nothing is left different.
+async function update(id, body) {
+  const st = await settings(); const d = await db(); const prev = d.workouts[id];
+  if (!prev) return null;
+  let w = clean(body, prev);
+  if (prev.sync && prev.sync.state === 'synced') {
+    if (prev.date !== w.date) await unsyncOne(prev);
+    w = await syncOne(w, st);
+  }
+  d.workouts[w.id] = w; await save(d);
+  return withMetrics(w, st);
+}
+
 async function remove(id) {
   const d = await db(); const w = d.workouts[id];
   if (!w) return null;
@@ -534,4 +548,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, remove };
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };

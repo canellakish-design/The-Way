@@ -1,5 +1,5 @@
 "use strict";
-/* THE WAY — the microphone. One button on every page: tap, say it, done.
+/* THE WAY — the microphone: the advisor. One button on every page: tap, say it or ask it, done.
    The phone turns speech into text (Web Speech, built into Safari and
    Chrome); the bridge (bridge/voice.js) works out what was meant, logs it
    through the same functions the buttons use, and answers in one sentence,
@@ -17,13 +17,13 @@ function sheet(){
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">Say it</span><button class="linkish" id="vClose">close</button></div>
+    <div class="vhead"><span class="eyebrow">Ask or say it</span><button class="linkish" id="vClose">close</button></div>
     <div class="vheard" id="vHeard"></div>
     <textarea id="vText" rows="3" placeholder="${SR ? "Listening… or type here" : "Type here, or use the keyboard's microphone key"}"></textarea>
     <div class="vrow"><button class="primary" id="vSend">Do it</button> ${SR ? `<button id="vDone">Done, send</button> <button id="vAgain">Listen again</button>` : ""}</div>
     <div class="small" id="vStatus"></div>
     <div id="vResult"></div>
-    <div class="small vhint">"two eggs and toast" · "took fish oil" · "weighed 215" · "zone one ride Saturday at 7"</div>
+    <div class="small vhint">"two eggs and toast" · "skim or whole milk in my coffee?" · "add 30 minutes to today's ride" · "move the dentist to 3" · "what should I eat before the 40/20s?"</div>
   </div>`;
   document.body.appendChild(s);
   document.getElementById("vClose").onclick = close;

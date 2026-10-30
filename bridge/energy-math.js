@@ -201,7 +201,8 @@ function model(o) {
     peak: peak ? { time: peak.t, pct: peak.pct } : null,
     sessions: upcoming, lows, meals, full_g: FULL_G, legs_full_g: LEGS_FULL_G, step: STEP,
     quick_end_g: endPt.g, legs_end_g: endPt.legs_g, share, rest_g_h: restH,
-    advice: first ? first.advice : (lows.length && lows[0].from !== toHM(now) && !upcoming.some(s => s.need <= 25) ? `Fuel runs low around ${say(toMin(lows[0].from))}; a carb snack an hour before.` : null) };
+    // a low stretch only matters when something hard is ahead of it; a rest day or a Zone 1 day is allowed to run low
+    advice: first ? first.advice : (lows.length && lows[0].from !== toHM(now) && upcoming.some(s => s.need >= 40 && s.min > toMin(lows[0].from)) ? `Fuel runs low around ${say(toMin(lows[0].from))}; a carb snack an hour before.` : null) };
 }
 
 // Tomorrow's start from tonight's end: the quick store loses the night's
