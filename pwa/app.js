@@ -1323,7 +1323,7 @@ function outdoorStrip(date){
   const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
   const boxes = H.map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good to ride") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(lbl(h.hour))}"><i>${lbl(h.hour)}</i></span>`).join("");
   const best = w.best && w.best.to - w.best.from >= 1 ? `best outside ${lbl(w.best.from)}–${lbl(w.best.to)}` : "no good hour outside";
-  return `<div class="wxstrip"><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span id="wxwhy"></span></div></div>`;
+  return `<div class="wxstrip"><div class="wxlegend"><span><i class="good"></i>outdoor</span><span><i class="ok"></i>marginal</span><span><i class="bad"></i>indoor</span></div><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span id="wxwhy"></span></div></div>`;
 }
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;

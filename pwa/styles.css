@@ -431,3 +431,6 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxnote{margin-top:18px}
 /* what to wear */
 .kit{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0} .kitem{border:1px solid var(--ink); padding:5px 10px; font-size:14px}
+.wxlegend{display:flex; gap:14px; font-family:var(--mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:0 0 6px}
+.wxlegend i{display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:6px}
+.wxlegend i.good{background:#2E7D4A} .wxlegend i.ok{background:#8A6A14} .wxlegend i.bad{background:#7A2E26}
