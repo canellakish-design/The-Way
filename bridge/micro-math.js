@@ -130,6 +130,8 @@ function suggest(days, opts) {
       closes: KEYS.filter(k => add[k] / TABLE.targets[k] >= 0.15).map(k => TABLE.labels[k]).slice(0, 3) });
   }
   for (const s of TABLE.supplements) {
+    // anything carrying iron waits for a ferritin result: it stays in the hand-logged list only
+    if ((Number(s.iron_mg) || 0) > 0 && !o.ferritin_low) continue;
     if (s.gate && !KEYS.every(k => s.gate[k] == null || (base.per.find(p => p.key === k) || {}).pct < s.gate[k])) continue;
     const add = {}; for (const k of KEYS) add[k] = Number(s[k]) || 0;
     const gain = scoreWith(add) - base.score;

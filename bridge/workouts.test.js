@@ -50,7 +50,7 @@ ok('gradeOne: TrainingPeaks bands, over-doing counts, Zone 1 discipline', () => 
   assert.strictEqual(dayCompliance([], { planned_min: 60, planned_tss: 40, done_min: 20, done_tss: 10 }, true, 1).band, 'red');
 });
 
-ok('gradeOne: a VO2 session is graded by minutes above 147 when the heart rate was read', () => {
+ok('gradeOne: a VO2 session is graded by minutes above 152 when the heart rate was read', () => {
   const vo2 = { name: 'VO2 max: Zwift 40/20s #1', metrics: { duration_s: 3000, tss: 65 } };
   const ride = { minutes: 50, tss: 60, analysis: { hr: { minutes_above_hard: 9.5, zones: {}, zone_pct: {} } } };
   assert.strictEqual(gradeOne(vo2, [ride]).compliance.band, 'green');

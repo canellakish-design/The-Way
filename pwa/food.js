@@ -292,7 +292,7 @@ V.food = async function(){
           <div class="small">~${day.suggestion.kcal} kcal · ${day.suggestion.low_carb?"under ":""}${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P${day.suggestion.score_after!=null?` — compliance ${day.suggestion.score_before??"—"} → <b>${day.suggestion.score_after}</b>`:""}</div>
           ${isToday?`<button class="cam snackcam" data-cam="${esc(day.suggestion.snap||"snack")}">Snap it</button>`:""}</div>` : ""}
       </div>
-      <div class="card" id="fMicro"><h4>Micronutrients · three days</h4>${microHTML(day.micros, day)}</div>
+      <div class="card" id="fMicro"><h4>Micronutrients · this week</h4>${microHTML(day.micros, day)}</div>
       <span class="eyebrow">The journal · ${(n=>`${n} ${n===1?"meal":"meals"}`)(day.entries.filter(e=>!e.supplement&&!e.drink_only).length)}${day.entries.some(e=>e.drink_only)?` · ${day.entries.filter(e=>e.drink_only).length} drink${day.entries.filter(e=>e.drink_only).length===1?"":"s"}`:""}</span>
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });

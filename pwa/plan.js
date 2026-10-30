@@ -17,7 +17,7 @@ function dayLabel(k, opts){ const [y,m,d]=k.split("-").map(Number);
   return new Date(Date.UTC(y,m-1,d)).toLocaleDateString(undefined, Object.assign({weekday:"short",day:"numeric",month:"short",timeZone:"UTC"}, opts||{})); }
 function syncBadge(w){
   const s=(w.sync&&w.sync.state)||"off";
-  if (s==="synced") return `<span class="pbadge ok" title="Sent ${esc((w.sync.at||"").slice(0,16).replace("T"," "))}">On Garmin</span>`;
+  if (s==="synced") return `<span class="pbadge ok" title="Sent ${esc(w.sync.at ? new Date(w.sync.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "")}">On Garmin</span>`;
   if (s==="error") return `<span class="pbadge bad" title="${esc(w.sync.error||"")}">Not sent: error</span>`;
   return `<span class="pbadge">Not sent</span>`;
 }

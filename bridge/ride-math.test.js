@@ -5,7 +5,7 @@ const R = require('./ride-math');
 let n = 0;
 function ok(name, fn) { fn(); n++; console.log('ok ' + name); }
 
-ok('hrSummary: average, max, minutes above 147, Seiler zones', () => {
+ok('hrSummary: average, max, minutes above 152, Seiler zones', () => {
   const hr = [].concat(Array(600).fill(110), Array(300).fill(130), Array(240).fill(150), Array(60).fill(0));
   const s = R.hrSummary(hr);
   assert.strictEqual(s.seconds, 1140);
@@ -26,7 +26,7 @@ ok('respSummary: breaths per minute with dropouts removed', () => {
   assert.strictEqual(R.respSummary([16, 17]), null);
 });
 
-ok('vo2Grade: 8 to 12 minutes above 147 is the target', () => {
+ok('vo2Grade: 8 to 12 minutes above 152 is the target', () => {
   assert.strictEqual(R.vo2Grade(9.5).band, 'green');
   assert.strictEqual(R.vo2Grade(6).band, 'yellow');
   assert.strictEqual(R.vo2Grade(14).band, 'yellow');
@@ -43,8 +43,8 @@ ok('hrSummaryFromZones: WHOOP zone times mapped onto the Seiler zones', () => {
   const z = { zone_zero_milli: 0, zone_one_milli: 600000, zone_two_milli: 600000, zone_three_milli: 600000, zone_four_milli: 300000, zone_five_milli: 540000 };
   const s = R.hrSummaryFromZones(z, 128, 158, 162);
   assert.strictEqual(s.seconds, 2640);
-  assert.strictEqual(s.minutes_above_hard, 9);
-  assert.strictEqual(s.hard_bpm, 146);           // WHOOP's zone-five cut, the only one it offers
+  assert.strictEqual(s.minutes_above_hard, 5.6);   // zone five starts at 146; the share above the 152 line is taken as even
+  assert.strictEqual(s.hard_bpm, 152);             // the same line the stream is judged on
   assert.ok(s.zones.z1_min > 20 && s.zones.z1_min < 24, 'below VT1 ' + s.zones.z1_min);
   assert.ok(/WHOOP/.test(s.estimated));
   assert.strictEqual(R.hrSummaryFromZones(null), null);

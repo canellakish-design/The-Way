@@ -56,6 +56,8 @@ async function context() {
   const today = tz.todayKey(), tomorrow = tz.shiftKey(today, 1);
   const p = tz.parts(new Date());
   const nowMin = p.h * 60 + p.mi;
+  const W = require('./workout-math');
+  const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
   const [day, sched, wx] = await Promise.all([
     race(require('./food').dayReport(today), 6000, null),
     race(require('./calendar').scheduleReport({ days: 2 }), 5000, null),
@@ -64,7 +66,8 @@ async function context() {
   const lines = [`Today is ${today}, a ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(today + 'T12:00:00Z').getUTCDay()]}; the time is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}.`];
   if (day) {
     const t = day.target, a = day.actual;
-    lines.push(`Food day: ${day.fuel_day}. Whole-day target ${t.kcal} kcal, ${t.carbs_g} g carbs, ${t.protein_g} g protein, ${t.fat_g} g fat (he is on a ${Math.abs(t.deficit)} kcal deficit for weight loss). Eaten so far: ${a.kcal} kcal, ${a.carbs_g} C / ${a.protein_g} P / ${a.fat_g} F in ${a.meals} meal(s). Still to eat today: ${Math.max(0, t.kcal - a.kcal)} kcal, ${Math.max(0, t.carbs_g - a.carbs_g)} C / ${Math.max(0, t.protein_g - a.protein_g)} P / ${Math.max(0, t.fat_g - a.fat_g)} F.`);
+    lines.push(`He weighs ${t.kg || 98} kg; planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}.`);
+    lines.push(`Food day: ${day.fuel_day}. Whole-day target ${t.kcal} kcal, ${t.carbs_g} g carbs, ${t.protein_g} g protein, ${t.fat_g} g fat (${t.deficit ? `a ${Math.abs(t.deficit)} kcal deficit for weight loss` : 'no deficit today: recovery is low, eat to maintenance'}). Eaten so far: ${a.kcal} kcal, ${a.carbs_g} C / ${a.protein_g} P / ${a.fat_g} F in ${a.meals} meal(s). Still to eat today: ${Math.max(0, t.kcal - a.kcal)} kcal, ${Math.max(0, t.carbs_g - a.carbs_g)} C / ${Math.max(0, t.protein_g - a.protein_g)} P / ${Math.max(0, t.fat_g - a.fat_g)} F.`);
     if (day.sessions.length) lines.push('Training today: ' + day.sessions.map(s => `${s.name}${s.time ? ' at ' + tz.hm12(s.time) : ''}${s.done ? ' (done)' : ' (planned)'}`).join('; ') + '.');
     else lines.push('No training today.');
     if (day.cue) lines.push('Where the day stands: ' + day.cue.text);
@@ -91,7 +94,7 @@ async function context() {
 }
 
 function promptFor(text, ctx) {
-  return `You are the voice of one cyclist's training and food app, and his advisor. He is 55, 98 kg, FTP 175, LTHR 139, losing weight slowly while training. He spoke one or more things; turn them into actions, and write one spoken reply.
+  return `You are the voice of one cyclist's training and food app, and his advisor. He is 55 and training through a slow weight loss. He spoke one or more things; turn them into actions, and write one spoken reply.
 
 Where the day stands:
 ${ctx}
@@ -114,7 +117,7 @@ Fill every field: "" or 0 where it does not apply.
 
 The reply, spoken aloud, plain and friendly, no lists, no numbers he did not ask for:
 - For logged things: one short sentence confirming them (under 20 words).
-- For a question: advise. Pick one option and say the one reason that decides it, from the numbers above (what the next session needs, the calories and macros still due, fuel and water on board, the rules of the day, the weather, the calendar). Under 45 words. If two options are truly equal, say so and pick the simpler one. Never say "it depends" without then deciding. Coffee with whole milk adds about 3 g fat and 40 kcal over skim; a bottle of Tailwind is 25 g carbs; a scoop of whey 25 g protein. Prefer the choice that serves the next session, then the day's deficit.
+- For a question: advise. Pick one option and say the one reason that decides it, from the numbers above (what the next session needs, the calories and macros still due, fuel and water on board, the rules of the day, the weather, the calendar). Under 45 words. If two options are truly equal, say so and pick the simpler one. Never say "it depends" without then deciding. Coffee with whole milk adds about 3 g fat and 40 kcal over skim; a scoop of Tailwind is 25 g carbs (the plan's bottle on a hard day is two scoops, 50 g); a scoop of whey 25 g protein. Prefer the choice that serves the next session, then the day's deficit.
 - Times in 12-hour form (3:30p, never 15:30).
 
 He said: "${text}"`;

@@ -2,7 +2,7 @@
 // scores-math.js — the three numbers on the front page, as arithmetic.
 // Pure: no storage, no network (node bridge/scores-math.test.js).
 //
-// Training and Fatigue follow the Banister impulse-response model as
+// Fitness and Fatigue follow the Banister impulse-response model as
 // TrainingPeaks, intervals.icu and Strava run it:
 //   Fitness  (CTL) = exponentially weighted average of daily TSS, 42-day constant
 //   Fatigue  (ATL) = the same with a 7-day constant

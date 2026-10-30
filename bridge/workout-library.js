@@ -14,24 +14,24 @@ const cad = (lo, hi) => ({ lo, hi: hi == null ? lo : hi });
 const pc = (lo, hi) => ({ type: 'power', lo, hi: hi == null ? lo : hi });
 
 const EAT = {
-  short: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: if it goes over 116, drop the bias 5% and stay there.
+  short: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: if it goes to 117, drop the bias 5% and stay there.
 
 EAT
-Before: normal breakfast, or ride first and eat straight after.
-On the bike: water, one bottle.
-After: protein within the hour (whey, oats).
-The day: a normal day, no extra carbs.`,
-  mid: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: over 116, drop the bias 5%.
+Before: low carb breakfast, under 20 g of carbs, 30 g protein (eggs, Greek yogurt, a smoothie). Zone 1 needs no carbs before it.
+On the bike: water. Nothing to eat under 75 minutes.
+After: a real meal within 2 hours, 45 g protein and carbs.
+The day: normal.`,
+  mid: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: at 117, drop the bias 5%.
 
 EAT
-Before: low carb breakfast with 20 g protein, 1 to 2 hours before. No carbs needed for Zone 1.
+Before: low carb breakfast, under 20 g of carbs, 30 g protein, 1 to 2 hours before. Zone 1 needs no carbs before it.
 On the bike: Tailwind, 1 scoop a bottle: about 30 g carbs an hour from the first 20 minutes.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: normal.`,
-  long: `LONG ZONE 1: heart rate under 116. Flat route, R5.
+  long: `LONG ZONE 1: heart rate 116 and under. Flat route, R5.
 
 EAT
-Before: carb breakfast 2 to 3 hours before (oats and fruit).
+Before: carb breakfast 2 to 3 hours before (oats and fruit): two hours and more makes it a higher carb day.
 On the bike: 60 g carbs an hour from the first 20 minutes. Tailwind 2 scoops a bottle plus a fig bar (37 g) each hour. Over 2.5 hours: 90 g an hour, glucose and fructose together. No Nuun in the Tailwind.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
@@ -43,14 +43,14 @@ EAT
 Ride fed and fresh, never fasted.
 Before: carb breakfast 2 to 3 hours before (70 g oats and fruit). Carbs the evening before too.
 On the bike: one bottle of Tailwind, 2 scoops (50 g carbs). Fan on.
-After: whey and carbs within 30 minutes.
+After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
   mtb: `MOUNTAIN BIKE: bike handling only. No power or heart rate target. Cornering, braking late, line choice, descending.
 
 EAT
-Before: normal breakfast.
-On the bike: one bottle of Tailwind, 2 scoops, and one fig bar.
-After: a normal meal with protein.
+Before: low carb breakfast, under 20 g of carbs, 30 g protein.
+On the bike: water under 75 minutes; from 75, Tailwind 1 scoop a bottle, about 30 g carbs an hour.
+After: a real meal within 2 hours, 45 g protein and carbs.
 The day: normal.`
 };
 

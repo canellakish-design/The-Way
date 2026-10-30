@@ -1489,7 +1489,7 @@ V.today = async function(){
     const d = workoutsData && (workoutsData.today_day || (workoutsData.days && workoutsData.days[0]));
     if (!d) return null;
     const planned = (d.planned||[]).map(w => ({ name: w.name, time: w.time || null, minutes: w.metrics ? Math.round(w.metrics.duration_s/60) : null, sport: w.sport,
-      done: !!(w.logged || (w.compliance && w.compliance.band !== "red") || (w.compliance && w.compliance.basis !== "no ride on Strava" && w.compliance.pct > 0)),
+      done: !!(w.logged || (w.compliance && w.compliance.band !== "red")),   // a red ride is short, not done
       band: w.compliance ? w.compliance.band : null, pct: w.compliance ? w.compliance.pct : null }))
       .concat((d.intervals||[]).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes, sport: e.type, done: false, band: null, pct: null, source: "intervals.icu" })));
     const rides = d.done || [];
@@ -1581,9 +1581,9 @@ V.today = async function(){
     // The HRV-guided rule the trials used, once it has its 14 nights: below
     // the band two days running is rest; below it once is easy, same volume.
     if (g.state === "low2") return "Rest day. HRV has sat below your band two days running; that is the signal the trials rested on.";
-    if (g.state === "low") return "Easy day: Zone 1 under 117, full volume. HRV is below your band; swap the hard session, keep the hours.";
+    if (g.state === "low") return "Easy day: Zone 1 at 116 or under, full volume. HRV is below your band; swap the hard session, keep the hours.";
     if ((r.band && r.band.key === "red") || (strava && f.form && f.form.key === "overreached"))
-      return "Easy day: Zone 1 under 117, or off. The body is asking, not the plan.";
+      return "Easy day: Zone 1 at 116 or under, or off. The body is asking, not the plan.";
     if (strava && f.monotony && f.monotony.band === "high" && f.tsb < -10)
       return "Vary the week: seven same-sized days carry more strain than the load says. Make one of them long and one of them nothing.";
     if (r.band && r.band.key === "yellow" && strava && f.tsb < -10 && g.state !== "ok" && g.state !== "high")
@@ -1646,7 +1646,7 @@ V.today = async function(){
     let html = "";
     if (openScore === "micros"){
       const B = window.foodBits || {};
-      html = `<h4>Micronutrients · three days</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
+      html = `<h4>Micronutrients · this week</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
         <details class="why"><summary>how it's scored</summary><div class="small">Thirteen nutrients against their daily targets, averaged; today owes only the share of the day reached so far. Iron and zinc are suggested only after a week low.</div></details>`;
       box.innerHTML = html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
@@ -1655,10 +1655,12 @@ V.today = async function(){
     if (openScore === "workouts"){
       const t = workoutsToday();
       const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
+      // the same words the calendar uses: done, over, partly, short (a ride, but not enough), missed
+      const gradeWordOf = (p, rides) => p.band === "green" ? (p.pct > 120 ? "over" : "done") : p.band === "yellow" ? "partly" : p.band === "red" ? (rides ? "short" : "missed") : "done";
       html = `<h4>Workouts · today</h4>
         ${!t ? `<div class="small">bridge unreachable</div>` : `<ul class="agenda totals">
           ${t.planned.map(p => row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${p.minutes ? ` <span class="small">${p.minutes} min</span>` : ""}`,
-              p.done ? `<b style="color:${toneC(bandTone(p.band || "green"))}">${p.band === "yellow" ? "partly" : p.band === "red" ? "missed" : p.pct > 120 ? "over" : "done"}</b>${p.pct != null ? ` · ${p.pct}%` : ""}` : `<span class="small">to do</span>`)).join("")}
+              p.done ? `<b style="color:${toneC(bandTone(p.band || "green"))}">${gradeWordOf(p, t.rides.length)}</b>${p.pct != null ? ` · ${p.pct}%` : ""}` : `<span class="small">to do</span>`)).join("")}
           ${t.rides.filter(r => !t.planned.some(p => p.done)).map(r => row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`)).join("")}
           ${!t.planned.length && !t.rides.length ? `<li><span class="n">Nothing planned</span><span class="tag">rest day</span></li>` : ""}
         </ul>`}

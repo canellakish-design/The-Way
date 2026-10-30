@@ -15,22 +15,23 @@ ok('fuelDay: VO2, two hours or 80 TSS is a higher carb day; a 90-minute Zone 1 i
 });
 
 ok('targets: Mifflin energy, the deficit, protein per kg, carb floors by day', () => {
-  assert.strictEqual(F.bmr(F.PROFILE), 1883);
-  assert.strictEqual(F.baseBurn(F.PROFILE), 2542);
-  const t = F.targets('high', 600);
+  const P104 = Object.assign({}, F.PROFILE, { kg: 104 });   // the numbers below were worked at 104 kg
+  assert.strictEqual(F.bmr(P104), 1883);
+  assert.strictEqual(F.baseBurn(P104), 2542);
+  const t = F.targets('high', 600, { kg: 104 });
   assert.strictEqual(t.kcal, 2700);                 // the 3 g/kg floor trims the deficit by a few kcal
   assert.ok(t.deficit_trimmed > 0 && t.deficit_trimmed < 20, 'trimmed ' + t.deficit_trimmed);
   assert.strictEqual(t.protein_g, 198);
   assert.ok(t.carbs_g >= 312, 'high day carbs at least 3 g/kg: ' + t.carbs_g);
   assert.ok(t.fat_g >= 73, 'fat floor');
   assert.strictEqual(t.fuel_day, 'higher carb day');
-  const r = F.targets('rest', 0);
+  const r = F.targets('rest', 0, { kg: 104 });
   assert.strictEqual(r.kcal, 2090);
   assert.ok(r.carbs_g >= 156 && r.carbs_g < t.carbs_g, 'rest day carbs ' + r.carbs_g);
   assert.strictEqual(r.deficit_trimmed, 0);
   // the scale moves the numbers; a rest-ordered day drops the deficit
   assert.ok(F.targets('rest', 0, { kg: 98 }).protein_g < r.protein_g);
-  assert.strictEqual(F.targets('rest', 0, { deficit: 0 }).kcal, 2540);
+  assert.strictEqual(F.targets('rest', 0, { deficit: 0, kg: 104 }).kcal, 2540);
 });
 
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {

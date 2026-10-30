@@ -45,9 +45,10 @@ ok('suggest: foods and supplements that lift the score, iron gated, carbs capped
   assert.ok(!s.supplements.some(x => x.key === 'iron'), 'iron not suggested when iron is near target');
   assert.ok(s.foods.every(f => !/rice|pasta|potato/.test(f.name)), 'no starch on a rest day: ' + s.foods.map(f => f.name));
   assert.ok(s.foods.length && s.foods[0].score_after > s.score);
-  // everything covered but iron: the iron tablet is the obvious lift, and it is allowed because iron is low
+  // everything covered but iron: the tablet would be the obvious lift, but iron waits for a ferritin result
   const ironLow = Object.fromEntries(M.KEYS.map(k => [k, M.TABLE.targets[k]])); ironLow.iron_mg = 1;
-  assert.ok(M.suggest([ironLow], { day: 'high' }).supplements.some(x => x.key === 'iron'), 'iron suggested when iron is empty');
+  assert.ok(!M.suggest([ironLow], { day: 'high' }).supplements.some(x => x.key === 'iron'), 'iron not suggested without a ferritin result');
+  assert.ok(M.suggest([ironLow], { day: 'high', ferritin_low: true }).supplements.some(x => x.key === 'iron'), 'iron suggested once ferritin says so');
 });
 
 ok('today_share: a part-day owes only its share', () => {

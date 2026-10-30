@@ -1,7 +1,7 @@
 // ============================================================
 // ride-math.js — what a ride's streams say, as arithmetic. Pure.
 //
-// Heart rate is read for every ride: average, max, minutes above 147 bpm
+// Heart rate is read for every ride: average, max, minutes above 152 bpm
 // (the VO2 session's one yardstick: 8 to 12 is the target) and minutes in
 // the three Seiler zones (VT1 117 bpm, VT2 139 bpm). Breathing comes from
 // the Garmin's respiration stream when the device recorded one; the same
@@ -60,7 +60,8 @@ function hrSummaryFromZones(z, avg, max, maxHr) {
   return {
     avg: avg != null ? Math.round(avg) : null, max: max != null ? Math.round(max) : null,
     seconds: Math.round(total / 1000),
-    minutes_above_hard: m(zone[5]), hard_bpm: Math.round(cuts[4]),
+    // zone 5 starts at 90% of max (146); the share of it above the VO2 line (152) is taken as even across the zone
+    minutes_above_hard: m(zone[5] * Math.max(0, Math.min(1, (mh - HR.hard) / (mh - cuts[4])))), hard_bpm: HR.hard,
     zones: { z1_min: m(below), z2_min: m(mid), z3_min: m(above) },
     zone_pct: { z1: Math.round(below / total * 100), z2: Math.round(mid / total * 100), z3: Math.round(above / total * 100) },
     estimated: 'from WHOOP zone times, not a stream'
@@ -95,7 +96,7 @@ function respSummary(resp) {
   };
 }
 
-// The VO2 session's grade: minutes above 147.
+// The VO2 session's grade: minutes above 152.
 function vo2Grade(minutesAbove) {
   if (minutesAbove == null) return null;
   const m = minutesAbove;

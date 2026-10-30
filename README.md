@@ -35,8 +35,8 @@ back. Crossing midnight reloads outright, so "today" is today and any new
 deploy lands with it. A network blip leaves the last good day on screen and
 says so rather than blanking the schedule.
 
-The bedside clock did not go anywhere — it is a button on the day, it is the
-Sleep tab, and it is still where the alarm lands.
+The bedside clock, the alarm and the morning and nighttime routines are gone;
+the day is the whole app.
 
 ## Repo map
 - `bridge/`  — the brain (Node/Express): fuel ledger, prescriptions,
@@ -44,8 +44,8 @@ Sleep tab, and it is still where the alarm lands.
   and the day (`calendar.js`, `classes.js`, `intervals.js`, `macros.js`,
   `weighin.js`)
 - `pwa/`     — the face: one app, no per-device configuration — every device
-  opens the same day and talks to its own origin. The day → Morning Mode →
-  close-out, Energy Bank, alarm, gear check, push-to-talk Agent
+  opens the same day and talks to its own origin. The day, the calendar, the
+  food log, live fuel and hydration, training zones, the voice advisor
 - `garmin/`  — The Way — Ride: Connect IQ field, Edge 530 + 130 Plus
   targets, RICE accumulator, substrate model, fuel-state fetch
 - `watch/`   — Apple Watch Ultra channel (Siri Shortcut, v1)

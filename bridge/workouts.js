@@ -294,7 +294,7 @@ function gradeOne(w, rides) {
     if (over != null) {
       const zb = over <= 10 ? 'green' : over <= 20 ? 'yellow' : 'red';
       if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) band = zb;
-      basis += `; ${over}% above ${R.HR.vt1} bpm`;
+      basis += `; ${over}% at ${R.HR.vt1} bpm or above`;
     }
   }
   return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis } });

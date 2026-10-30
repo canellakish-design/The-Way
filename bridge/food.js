@@ -163,7 +163,7 @@ async function guidelinesFor(date) {
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
-  return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day), ride_notes: rideNotes, work,
+  return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day, { deficit: t.deficit !== 0 }), ride_notes: rideNotes, work,
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
     sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
@@ -202,12 +202,12 @@ const SCHEMA = {
 function promptFor(g, meal, notes, written) {
   const rules = g.guidelines.map(x => '- ' + x.text).join('\n');
   return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.${written ? `
-This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume his usual portions for a 98 kg cyclist and say so in the portion field.` : ''}
+This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume his usual portions for a ${g.kg || 98} kg cyclist and say so in the portion field.` : ''}
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's guidelines:
 ${rules}
 ${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan, timed around the training:
-${(g.meals || []).map(m => `- ${m.time} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
+${(g.meals || []).map(m => `- ${tz.hm12(m.time)} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
 ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g.logged.length ? `Already in the journal today (do not ask for a meal he has already eaten): ${g.logged.map(e => `${e.time} ${e.meal}: ${e.name} (${e.kcal} kcal, ${e.carbs_g} C / ${e.protein_g} P / ${e.fat_g} F${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''})`).join('; ')}. Eaten so far: ${g.logged.reduce((a, e) => a + (e.kcal || 0), 0)} kcal, ${g.logged.reduce((a, e) => a + (e.carbs_g || 0), 0)} C / ${g.logged.reduce((a, e) => a + (e.protein_g || 0), 0)} P / ${g.logged.reduce((a, e) => a + (e.fat_g || 0), 0)} F.\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
@@ -259,7 +259,7 @@ async function dayReport(date) {
   const macroTarget = due ? (due.kcal > 0 ? Object.assign({}, g.target, due) : null) : g.target;
   const macro = macroTarget ? scoreDay(actual, macroTarget) : null;
   const rides = g.sessions.filter(s => s.done && s.end_at);
-  const guide = F.guidelineScore(g.day, meals, rides);
+  const guide = F.guidelineScore(g.day, meals, rides, g.meals);
   const overall = F.overall(macro ? macro.overall : null, guide.score);
   // Micronutrients: today and up to six days before; each nutrient averages
   // over its own window (3 days for the quick ones, 7 for iron, D, B12,
@@ -289,7 +289,7 @@ async function dayReport(date) {
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: date === tz.todayKey() ? nextUp(g, entries, actual, macro, nowHM0) : null,
-    basis: 'day-to-date photos against the day\'s guidelines and the whole-day target'
+    basis: 'the journal against the day\'s guidelines, and the macros against what the plan says should be in by now'
   };
 }
 
