@@ -142,7 +142,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"]];
+  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"],["lift","Lift"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
@@ -706,6 +706,60 @@ V.zones = async function(){
       msg.textContent = "Saved. The zones now hang on it."; V.zones();
     }catch(e){ msg.textContent = e.message; saveBtn.disabled = false; }
   };
+};
+
+/* ---------------- LIFT ----------------
+   The weight training: two sessions that alternate, each exercise with the
+   target the last time worked out (double progression), logged set by set;
+   strength over time as an estimated one-rep max; the history. */
+V.lift = async function(){
+  view.innerHTML = `<span class="eyebrow">Lift</span><div id="liftPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
+  let L = null;
+  try{ L = await bridge("/lifts"); }catch(e){ document.getElementById("liftPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
+  const p = Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||"")); const key = L.templates.some(t => t.key === p.t) ? p.t : L.next;
+  const T = L.templates.find(t => t.key === key);
+  const other = L.templates.find(t => t.key !== key);
+  const unit = e => e.kind === "time" ? "s" : e.kind === "reps" ? "reps" : "lb";
+  const exHTML = (e, i) => `<li class="lex" data-i="${i}">
+      <div class="lexhead"><span class="n"><b>${esc(e.name)}</b> <span class="small">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""}</span>${e.note?`<span class="small lnote">${esc(e.note)}</span>`:""}</span>
+        <span class="tag"><b style="color:${e.target.progress?"var(--green)":"var(--ink)"}">${e.kind==="time"||e.kind==="reps" ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</b></span></div>
+      <div class="small">${esc(e.target.why)}${e.last ? ` · last: ${esc(e.last.date)}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
+      <div class="lsets">${Array.from({ length: e.sets }, (_, k) => `<span class="lset"><label>set ${k+1}</label>${e.kind==="time"||e.kind==="reps" ? "" : `<input type="number" class="llb" inputmode="numeric" value="${e.target.lb}" aria-label="pounds"><span class="small">lb ×</span>`}<input type="number" class="lreps" inputmode="numeric" value="${e.target.reps}" aria-label="${unit(e)}"><span class="small">${e.kind==="time"?"s":"reps"}</span></span>`).join("")}</div>
+    </li>`;
+  const spark = (rows)=>{
+    if (!rows || rows.length < 2) return "";
+    const W = 120, H = 28, xs = rows.map((_, i) => i / (rows.length - 1) * (W - 6) + 3), lo = Math.min(...rows.map(r => r.e1rm)), hi = Math.max(...rows.map(r => r.e1rm)), span = Math.max(5, hi - lo);
+    const Y = v => 4 + (1 - (v - lo) / span) * (H - 8);
+    return `<svg viewBox="0 0 ${W} ${H}" class="lspark" preserveAspectRatio="none"><path d="${rows.map((r, i) => (i ? "L" : "M") + xs[i].toFixed(1) + "," + Y(r.e1rm).toFixed(1)).join(" ")}" fill="none" stroke="currentColor" stroke-width="2"></path></svg>`;
+  };
+  const hist = Object.entries(L.history || {});
+  document.getElementById("liftPage").innerHTML = `
+    <div class="card"><h4>${esc(T.name)}${key === L.next ? " · next up" : ""}</h4>
+      <div class="small">${esc(T.why)}</div>
+      <div class="small">${L.this_week} of ${L.target_per_week} this week${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""} · <a href="#lift?t=${esc(other.key)}">switch to ${esc(other.name.replace(/:.*$/, ""))}</a></div>
+      <ul class="agenda lexlist">${T.exercises.map(exHTML).join("")}</ul>
+      <label for="lNotes">Notes</label><input id="lNotes" placeholder="how it felt, anything that hurt">
+      <div class="rowbtns"><button class="primary" id="lSave">Save the session</button><button id="lPlan">Put it on the calendar</button></div>
+      <div class="small" id="lMsg"></div>
+      <details class="why"><summary>how the targets move</summary><div class="small">Double progression. The weight holds until every set reaches the top of its rep range; then it steps up (the next bell for a kettlebell, ten pounds on the Bowflex) and the reps drop back to the bottom of the range. Planks add fifteen seconds, dead bugs two reps. Two sessions a week, heavy and short, never the day before the 40/20s: that is what the research on strength work for cyclists supports (Rønnestad and Mujika 2014), and it adds power without adding weight when the riding stays easy.</div></details>
+    </div>
+    ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session.</div></div>` : ""}
+    ${L.sessions && L.sessions.length ? `<div class="card"><h4>Sessions</h4><ul class="agenda">${L.sessions.map(s => `<li><span class="t">${esc(s.date.slice(5).replace("-","/"))}</span><span class="n">${esc(s.name)}<span class="small"> ${s.exercises.map(e => `${e.name.replace(/^(Kettlebell|Bowflex) /, "")} ${e.sets.map(x => (x.lb ? x.lb + "×" : "") + x.reps).join(",")}`).join(" · ")}${s.notes ? " · " + esc(s.notes) : ""}</span></span><span class="tag">${(s.volume_lb/1000).toFixed(1)}k lb <button class="tdel" data-dell="${esc(s.id)}" aria-label="Remove">${TRASH}</button></span></li>`).join("")}</ul></div>` : ""}`;
+  document.getElementById("lSave").onclick = async ()=>{
+    const btn = document.getElementById("lSave"), msg = document.getElementById("lMsg"); btn.disabled = true;
+    const exercises = [...document.querySelectorAll("#liftPage .lex")].map(li => { const e = T.exercises[+li.dataset.i]; return { name: e.name, sets: [...li.querySelectorAll(".lset")].map(sp => ({ reps: +(sp.querySelector(".lreps")||{}).value || 0, lb: +((sp.querySelector(".llb")||{}).value) || 0 })) }; });
+    try{ await bridge("/lifts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ template: key, exercises, notes: document.getElementById("lNotes").value })}); msg.textContent = "Saved."; location.hash = "#lift"; V.lift(); }
+    catch(e){ msg.textContent = e.message; btn.disabled = false; }
+  };
+  document.getElementById("lPlan").onclick = async ()=>{
+    const msg = document.getElementById("lMsg");
+    const when = prompt("Which day? (YYYY-MM-DD, blank for today) and time, like 2026-11-02 07:00", localDateKey() + " 07:00");
+    if (when == null) return;
+    const m = /^(\d{4}-\d{2}-\d{2})\s*(\d{2}:\d{2})?/.exec(when.trim()); if (!m){ msg.textContent = "Did not understand the day."; return; }
+    try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date: m[1], time: m[2] || null, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); msg.textContent = `On the calendar: ${T.name}, ${m[1]}${m[2] ? " at " + hm12(m[2]) : ""}.`; }
+    catch(e){ msg.textContent = e.message; }
+  };
+  document.querySelectorAll("[data-dell]").forEach(b => b.onclick = async ()=>{ if (!confirm("Remove this session?")) return; try{ await bridge("/lifts/" + encodeURIComponent(b.dataset.dell), { method: "DELETE" }); V.lift(); }catch(e){ document.getElementById("lMsg").textContent = e.message; } });
 };
 
 /* ---------------- ANALYZE (weigh-in, W/kg — ride analysis coming) ---------------- */
@@ -1366,16 +1420,22 @@ V.today = async function(){
       paintTile("training", null, "", "", "Strava not connected");
       paintTile("fatigue", null, "", "", "");
     }
+    const src = (d.sources && d.sources.recovery) || { source: "whoop" };
     if (r.score != null){
       const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(Math.round(r.hrv_delta_pct))}%` : r.hrv != null ? `HRV ${Math.round(r.hrv)}` : "";
-      // Yesterday's score with a dead token is not today's recovery: say so on the box.
-      const w = d.sources && d.sources.whoop || {};
-      const ageH = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime()) / 3.6e6 : null;
-      const stale = !!w.auth_error || (ageH != null && ageH > 20);
-      paintTile("recovery", r.score, stale ? "stale" : r.band.word, stale ? "bad" : r.band.tone, stale ? (w.auth_error ? "WHOOP needs reconnecting" : `synced ${Math.round(ageH)}h ago`) : hrv);
+      if (src.source === "garmin"){
+        // the Garmin's morning, through intervals.icu: a day old at most by construction
+        paintTile("recovery", r.score, r.band.word, r.band.tone, `${hrv ? hrv + " · " : ""}Garmin${/estimated/.test(src.basis||"") ? ", estimated" : ""}`);
+      } else {
+        // Yesterday's score with a dead token is not today's recovery: say so on the box.
+        const w = d.sources && d.sources.whoop || {};
+        const ageH = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime()) / 3.6e6 : null;
+        const stale = !!w.auth_error || (ageH != null && ageH > 20);
+        paintTile("recovery", r.score, stale ? "stale" : r.band.word, stale ? "bad" : r.band.tone, stale ? (w.auth_error ? "WHOOP needs reconnecting" : `synced ${Math.round(ageH)}h ago`) : hrv);
+      }
     } else {
       const w = d.sources && d.sources.whoop;
-      paintTile("recovery", null, "", "", w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "WHOOP not connected");
+      paintTile("recovery", null, "", "", src.garmin_configured ? "no morning from the Garmin yet" : w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "no watch connected");
     }
     if (vd) vd.textContent = verdictOf(d);
     drawFood();
@@ -1470,9 +1530,11 @@ V.today = async function(){
       const age = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime())/3.6e6 : null;
       const when = age == null ? "" : age < 1 ? "just synced" : age < 24 ? `synced ${Math.round(age)}h ago` : `synced ${Math.round(age/24)}d ago`;
       const base = r.baseline_days >= 7 ? `30-day median` : `baseline after ${7 - r.baseline_days} more morning${7 - r.baseline_days === 1 ? "" : "s"}`;
-      html = `<h4>Recovery · last night</h4>
+      const rs = (d.sources && d.sources.recovery) || { source: "whoop" }, garmin = rs.source === "garmin";
+      html = `<h4>Recovery · last night${garmin ? " · Garmin" : ""}</h4>
         ${r.score != null ? `<ul class="agenda totals">
-          ${row("WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
+          ${row(garmin ? (/estimated/.test(rs.basis||"") ? "readiness, estimated" : "Garmin readiness") : "WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
+          ${garmin && rs.body_battery != null ? row("Body Battery, high", `${rs.body_battery}`) : ""}
           ${r.guide ? row("HRV guide", r.guide.state === "warming" ? `<span class="small">${esc(r.guide.note)}</span>` : `<b style="color:${toneC(r.guide.state === "low2" ? "bad" : r.guide.state === "low" ? "warn" : "good")}">${esc(r.guide.state === "ok" ? "in band" : r.guide.state === "high" ? "above band" : r.guide.state === "low" ? "below band" : "below, 2 days")}</b> · 7-day ${r.guide.week_mean} vs ${r.guide.band_lo}–${r.guide.band_hi}${r.guide.trusted ? "" : " (settling)"}`) : ""}
           ${row("HRV", `${r.hrv != null ? Math.round(r.hrv) : "—"} ms${r.hrv_delta_pct != null ? ` · <b style="color:${toneC(r.hrv_delta_pct >= 0 ? "good" : r.hrv_delta_pct <= -10 ? "bad" : "warn")}">${sgn(Math.round(r.hrv_delta_pct))}%</b> vs ${r.hrv_baseline}` : ` · ${base}`}`)}
           ${row("resting HR", `${r.rhr ?? "—"} bpm${r.rhr_delta != null ? ` · <b style="color:${toneC(r.rhr_delta <= 0 ? "good" : r.rhr_delta >= 5 ? "bad" : "warn")}">${sgn(r.rhr_delta)}</b> vs ${r.rhr_baseline}` : ""}`)}
@@ -1480,12 +1542,12 @@ V.today = async function(){
           ${r.spo2 != null ? row("blood oxygen", `${r.spo2}%`) : ""}
           ${row("slept", `${r.sleep_h ?? "—"} h${r.sleep_performance != null ? ` · ${r.sleep_performance}% of need` : ""}`)}
         </ul>
-        <div class="small">${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}</div>`
-        : `<div class="small">${!w.connected ? `WHOOP not connected — ${reconnectLink()}`
+        <div class="small">${garmin ? `From the Garmin through intervals.icu, ${esc(rs.date||"")}: ${esc(rs.basis||"")}.` : `${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}`}</div>`
+        : `<div class="small">${rs.garmin_configured ? "intervals.icu is connected but has no morning from the Garmin yet. Wear the watch overnight and let Garmin Connect sync to intervals.icu." : !w.connected ? `WHOOP not connected — ${reconnectLink()}`
             : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
             : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
-        ${w.auth_error && r.score != null ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
-        <details class="why"><summary>how it's scored</summary><div class="small">WHOOP's score for the night. The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
+        ${w.auth_error && r.score != null && !garmin ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
+        <details class="why"><summary>how it's scored</summary><div class="small">${garmin ? "The Garmin's training readiness for the morning when it reports one; otherwise an estimate from HRV against your own 30-day baseline and last night's sleep, said so on the box." : "WHOOP's score for the night."} The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
     box.innerHTML = html; box.hidden = false;
     // A forced pull, for when the webhook didn't arrive. The passive read is

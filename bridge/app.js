@@ -32,6 +32,7 @@ require('./fitness').attach(app);
 require('./zone-report').attach(app);
 require('./advisor').attach(app);
 require('./signature').attach(app);
+require('./lifts').attach(app);
 require('./strava').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);

@@ -118,6 +118,37 @@ async function plannedRange(oldest, newest) {
   return { configured: true, days, fetched_at: new Date().toISOString(), cached: false };
 }
 
+// Wellness: what the Garmin (or any watch intervals.icu syncs) said about the
+// nights and the mornings: HRV, resting heart rate, sleep, Garmin's own
+// readiness and Body Battery when present. One row per day, newest last.
+// Cached half an hour; the watch syncs a few times a morning at most.
+const WELL_TTL_MS = 30 * 60 * 1000;
+async function wellnessRange(oldest, newest) {
+  if (!configured()) return { configured: false, days: [] };
+  const cacheKey = 'intervals-wellness';
+  const cached = await getJSON(cacheKey, null);
+  if (cached && cached.oldest === oldest && cached.newest === newest && Date.now() - cached.at < WELL_TTL_MS)
+    return { configured: true, days: cached.days, fetched_at: new Date(cached.at).toISOString(), cached: true };
+  const u = new URL(BASE + '/athlete/' + encodeURIComponent(ATHLETE) + '/wellness');
+  u.searchParams.set('oldest', oldest); u.searchParams.set('newest', newest);
+  const r = await fetch(u, { headers: headers() });
+  if (!r.ok) throw new Error('intervals.icu wellness ' + r.status + ' ' + (await r.text()).slice(0, 120));
+  const j = await r.json();
+  const num = v => (v == null || v === '' ? null : Number(v));
+  const days = (Array.isArray(j) ? j : []).map(w => ({
+    date: String(w.id || w.date || '').slice(0, 10),
+    hrv: num(w.hrv), hrv_sdnn: num(w.hrvSDNN), rhr: num(w.restingHR),
+    sleep_h: w.sleepSecs != null ? Math.round(Number(w.sleepSecs) / 360) / 10 : null,
+    sleep_score: num(w.sleepScore), sleep_quality: num(w.sleepQuality),
+    readiness: num(w.readiness), body_battery_max: num(w.bodyBatteryMax), body_battery_min: num(w.bodyBatteryMin),
+    spo2: num(w.spO2), respiration: num(w.respiration), stress: num(w.avgStress != null ? w.avgStress : w.stress),
+    weight_kg: num(w.weight), steps: num(w.steps),
+    updated: w.updated || null
+  })).filter(d => d.date).sort((a, b) => a.date.localeCompare(b.date));
+  await setJSON(cacheKey, { oldest, newest, days, at: Date.now() }).catch(() => {});
+  return { configured: true, days, fetched_at: new Date().toISOString(), cached: false };
+}
+
 // A cheap liveness check for the Connections screen: does the key actually
 // work? Deliberately does not touch the cache — the cache holds one range at a
 // time, and a one-day probe would evict the fortnight the day page just
@@ -162,4 +193,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, plannedRange, configured, ping };
+module.exports = { attach, plannedRange, wellnessRange, configured, ping };

@@ -45,6 +45,12 @@ Before: carb breakfast 2 to 3 hours before (70 g oats and fruit). Carbs the even
 On the bike: one bottle of Tailwind, 2 scoops (50 g carbs). Fan on.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
+  lift: `LIFTING: 45 minutes, two sessions a week, never the day before the 40/20s. Log it set by set on the Lift tab; it tells you the next weight.
+
+EAT
+Before: a normal meal 1 to 2 hours before, or the whey shake if it is first thing.
+After: protein within 2 hours, 45 g. No extra carbs for lifting.
+The day: normal.`,
   mtb: `MOUNTAIN BIKE: bike handling only. No power or heart rate target. Cornering, braking late, line choice, descending.
 
 EAT
@@ -86,7 +92,11 @@ const LIBRARY = [
   ...[60, 75, 90].map(min => ({
     key: 'mtb-' + min, name: `Mountain bike handling, ${min} min`, sport: 'Ride', notes: EAT.mtb,
     steps: [step('Bike handling', m(min), { type: 'free' })]
-  }))
+  })),
+  // The two lifting sessions (lifts.js has the exercises, sets and the
+  // progression); here they are a 45-minute block the calendar can hold.
+  { key: 'lift-a', name: 'Lift A: hinge and push', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(45), { type: 'free' })] },
+  { key: 'lift-b', name: 'Lift B: squat and pull', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(45), { type: 'free' })] }
 ];
 
 module.exports = { LIBRARY, EAT };

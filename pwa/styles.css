@@ -527,3 +527,9 @@ ul.agenda.zthree .n{min-width:0} ul.agenda.zthree .tag{display:flex; flex-direct
 .signum{font-family:var(--mono); font-size:34px; font-weight:700; line-height:1; letter-spacing:-1px}
 @media (max-width:400px){ .signum{font-size:26px} .sigbox .slabel{font-size:9px; letter-spacing:1px} }
 .pdsvg{height:170px}
+/* the lift tab */
+ul.agenda.lexlist li{display:block; padding:10px 12px} .lexhead{display:flex; justify-content:space-between; gap:8px; align-items:flex-start} .lexhead .tag{white-space:nowrap}
+.lnote{display:block; color:var(--muted)} .lsets{display:flex; flex-wrap:wrap; gap:6px 10px; margin-top:8px}
+.lset{display:inline-flex; align-items:center; gap:4px} .lset label{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin:0 2px 0 0}
+.lset input{width:58px; padding:6px 6px; font-size:16px; text-align:center} .lspark{width:120px; height:28px; vertical-align:middle; color:var(--green); margin-left:6px}
+@media (max-width:560px){ nav a{font-size:10px; padding:4px 4px; letter-spacing:0} }
