@@ -101,6 +101,7 @@ function energyHTML(e){
   const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
     <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
+    ${e.now.arriving_g >= 10 ? `<div class="small">${e.now.arriving_g} g of carbs from what you just ate are still on the way: a meal lands over the next two to three hours, which is the rise ahead of the line.</div>` : ""}
     ${c.svg}
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}

@@ -173,6 +173,11 @@ function model(o) {
   const endPt = actual[actual.length - 1];
   const at = m => series[Math.max(0, Math.min(n - 1, idx(m)))];
   const nowPt = at(now);
+  // carbs eaten in the last three hours that the stomach has not delivered
+  // yet: a meal logged a minute ago has barely begun to show on the line
+  let arriving = 0; const iNow = Math.max(0, Math.min(n - 1, idx(now)));
+  for (let i = iNow + 1; i < n && i <= iNow + 36; i++) arriving += absorb[i];
+  arriving = Math.round(arriving);
   const ahead = series.filter(p => p.m >= now && p.m <= now + 480);
   const peak = ahead.length ? ahead.reduce((a, p) => p.pct > a.pct ? p : a) : null;
   const upcoming = sessions.filter(s => s.end_min >= now - 10).map(s => {
@@ -197,7 +202,7 @@ function model(o) {
   for (const p of series) { if (p.m < now) continue; if (p.pct < 35) { if (!runLow) runLow = { from: p.t, to: p.t }; else runLow.to = p.t; } else { if (runLow) lows.push(runLow); runLow = null; } }
   if (runLow) lows.push(runLow);
   const first = upcoming.find(s => s.advice);
-  return { series, now: { time: toHM(now), pct: nowPt.pct, g: nowPt.g, legs_pct: nowPt.legs_pct, legs_g: nowPt.legs_g, band: band(nowPt.pct), legs_band: band(nowPt.legs_pct) },
+  return { series, now: { time: toHM(now), pct: nowPt.pct, g: nowPt.g, legs_pct: nowPt.legs_pct, legs_g: nowPt.legs_g, band: band(nowPt.pct), legs_band: band(nowPt.legs_pct), arriving_g: arriving },
     peak: peak ? { time: peak.t, pct: peak.pct } : null,
     sessions: upcoming, lows, meals, full_g: FULL_G, legs_full_g: LEGS_FULL_G, step: STEP,
     quick_end_g: endPt.g, legs_end_g: endPt.legs_g, share, rest_g_h: restH,
