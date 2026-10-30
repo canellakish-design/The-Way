@@ -1334,10 +1334,10 @@ function calendarStrip(d){
     const a = h*60, b = a+60;
     let busy = 0; const names = [];
     for (const e of ev){ const o = Math.min(b, e.end_min) - Math.max(a, e.start_min); if (o > 0){ busy += o; names.push(e.summary); } }
-    const g = busy >= 30 ? "bad" : busy > 0 ? "ok" : "good";
+    const g = busy >= 15 ? "bad" : "good";   // two states only: free, or busy
     boxes.push(`<span class="wxh ${g}" data-why="${attr(names.length ? names.join(", ") : "free")}" title="${attr(lbl(h))}"><i>${lbl(h)}</i></span>`);
   }
-  return `<div class="wxstrip calstrip"><div class="wxlegend"><span><i class="good"></i>free</span><span><i class="ok"></i>part</span><span><i class="bad"></i>busy</span></div><div class="wxrow">${boxes.join("")}</div><div class="small wxnote"><span class="wxwhy"></span></div></div>`;
+  return `<div class="wxstrip calstrip"><div class="wxlegend"><span><i class="good"></i>free</span><span><i class="bad"></i>busy</span></div><div class="wxrow">${boxes.join("")}</div><div class="small wxnote"><span class="wxwhy"></span></div></div>`;
 }
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
