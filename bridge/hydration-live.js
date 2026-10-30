@@ -95,7 +95,11 @@ function band(ml, kg) {
   const k = kg > 40 ? kg : DEFAULT_KG;
   if (ml == null) return { key: 'none', word: '', tone: 'neutral' };
   const pct = -ml / (k * 1000) * 100;
-  if (ml > 300) return { key: 'blue', word: 'over', tone: 'info' };
+  // Above the morning: harmless up to a litre or so (the kidneys clear it in
+  // hours); past 1.5 L it is more than the body clears quickly, and drinking
+  // far beyond what was lost is the dangerous side after a long day.
+  if (ml > 1500) return { key: 'blue', word: 'too much', tone: 'warn' };
+  if (ml > 300) return { key: 'green', word: 'topped up', tone: 'good' };
   if (pct < 1) return { key: 'green', word: 'fine', tone: 'good' };
   if (pct < 2) return { key: 'yellow', word: 'behind', tone: 'warn' };
   return { key: 'red', word: 'dry', tone: 'bad' };
@@ -185,7 +189,8 @@ function model(o) {
   const drunk = drinks.reduce((a, d) => a + d.ml, 0);
   const nowB = band(nowPt.ml, kg);
   let advice = upcoming.find(s => s.advice) ? upcoming.find(s => s.advice).advice : null;
-  if (nowPt.ml > 300) advice = `Stop drinking: ${L(nowPt.ml)} ahead of what you have lost. Salt with the next meal.`;
+  if (nowPt.ml > 1500) advice = `${L(nowPt.ml)} ahead of what you have lost: more than the body clears quickly. No more water for now; salt with the next meal.`;
+  else if (nowPt.ml > 300) advice = `Topped up: ${L(nowPt.ml)} ahead of this morning. Nothing wrong with that; no need to drink more for now, and salt with the next meal.`;
   else if (!advice && nowB.key === 'red') advice = `${L(-nowPt.ml)} down. ${r50(Math.min(750, -nowPt.ml - kg * 5))} ml now, the rest over the next two hours, with salt if a ride is behind it.`;
   else if (!advice && nowB.key === 'yellow') advice = `${L(-nowPt.ml)} down. A bottle in the next hour.`;
   else if (!advice && o.now_min != null && now >= 20 * 60 && nowPt.ml < -kg * 5) advice = `${r50(-nowPt.ml - kg * 3)} ml before bed.`;

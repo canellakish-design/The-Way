@@ -17,11 +17,12 @@ ok('sweat: still air on the trainer doubles the fan; cool roads are light, hot r
   assert.ok(H.sweatRate(150, kg, { temp_c: 22, humidity: 50, air_ms: 1.5 }) > fan, 'harder is wetter');
 });
 
-ok('bands: 1% down is fine, 2% is dry, a gain is over', () => {
+ok('bands: 1% down is fine, 2% is dry, a little over is topped up and still green, a lot over is too much', () => {
   assert.strictEqual(H.band(-500, kg).key, 'green');
   assert.strictEqual(H.band(-1500, kg).key, 'yellow');
   assert.strictEqual(H.band(-2100, kg).key, 'red');
-  assert.strictEqual(H.band(400, kg).key, 'blue');
+  assert.deepStrictEqual(H.band(400, kg), { key: 'green', word: 'topped up', tone: 'good' });
+  assert.deepStrictEqual(H.band(1800, kg), { key: 'blue', word: 'too much', tone: 'warn' });
 });
 
 ok('model: drinks lift the line, the ride drops it, the session ahead gets a number and a time', () => {
@@ -41,11 +42,14 @@ ok('model: drinks lift the line, the ride drops it, the session ahead gets a num
   assert.strictEqual(m.sessions.find(s => /Zone 1/.test(s.name)), undefined);   // done and long past
 });
 
-ok('model: a gain over the morning says stop; a sodium drink after a ride is kept better than water', () => {
+ok('model: two litres over the morning is too much; a sodium drink after a ride is kept better than water', () => {
   const o = { kg, ftp: 175, now_min: 13 * 60, sessions: [{ name: 'Zone 1, 60 min', time: '09:00', minutes: 60, tss: 36, sport: 'VirtualRide', done: true }],
     entries: [{ time: '07:00', fluid_ml: 1000, drink_only: true }, { time: '08:00', fluid_ml: 1000, drink_only: true }, { time: '10:30', fluid_ml: 1000, drink_only: true }, { time: '11:30', fluid_ml: 1000, drink_only: true }] };
   const m = H.model(o);
-  assert.strictEqual(m.now.band.key, 'blue'); assert.ok(/Stop drinking/.test(m.advice), m.advice);
+  assert.strictEqual(m.now.band.word, 'too much'); assert.ok(/more than the body clears/.test(m.advice), m.advice);
+  const little = H.model({ kg, ftp: 175, now_min: 13 * 60, sessions: o.sessions, entries: [{ time: '07:00', fluid_ml: 1000, drink_only: true }, { time: '10:30', fluid_ml: 1200, drink_only: true }, { time: '11:30', fluid_ml: 600, drink_only: true }] });
+  assert.ok(little.now.ml > 300 && little.now.ml <= 1500, 'gain ' + little.now.ml);
+  assert.strictEqual(little.now.band.key, 'green'); assert.ok(/Topped up/.test(little.advice), little.advice);
   const water = H.model({ kg, ftp: 175, now_min: 12 * 60, sessions: o.sessions, entries: [{ time: '10:30', fluid_ml: 600, name: 'water', drink_only: true }] });
   const salt = H.model({ kg, ftp: 175, now_min: 12 * 60, sessions: o.sessions, entries: [{ time: '10:30', fluid_ml: 600, name: 'Tailwind', drink_only: true }] });
   assert.ok(salt.now.ml > water.now.ml, 'salt keeps more: ' + water.now.ml + ' vs ' + salt.now.ml);

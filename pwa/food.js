@@ -51,7 +51,7 @@ function thumbStrip(entries){
 }
 /* ---- the day curve: one drawing for live fuel and live hydration ----
    One series, so no legend; the fill under the line carries the status
-   colour (green, amber, red, blue for over) and the words sit in text ink.
+   colour (green, amber, red, blue for too much) and the words sit in text ink.
    The past is drawn solid from what was logged, the hours ahead dashed from
    the plan. Sessions are shaded bands; logged meals and drinks are filled
    dots, planned ones hollow. A faint band is the model's own uncertainty; a
@@ -154,7 +154,7 @@ function hydrationHTML(h){
     ${ses?`<div class="small">${ses}</div>`:""}
     ${h.advice?`<div class="egadvice" style="border-color:${verdictCol(nb.key)}">${esc(h.advice)}</div>`:""}
     ${h.weigh?`<div class="small">Scale: ${h.weigh.pre_lb.toFixed(1)} → ${h.weigh.post_lb.toFixed(1)} lb around the ride, ${(h.weigh.lost_ml/1000).toFixed(1)} L lost${h.weigh.modelled_ml?` (the model said ${(h.weigh.modelled_ml/1000).toFixed(1)})`:""}.</div>`:""}
-    <details class="why"><summary>what it counts</summary><div class="small">Water against the start of the day, which is yesterday's end less the night (a deficit carried to bed is still there at breakfast; a surplus is not), averaged with the scale when it has a morning reading against the last three days. It drifts down about 100 ml an hour awake (breath, skin, urine), half that asleep; each drink arrives as the stomach empties, most of it within 45 minutes; food brings its own water. A ride takes sweat at the rate the power, the air and the weather give: the fan on the trainer, the wind and the temperature on the road. Water drunk after a ride is kept at 70%, 90% when it carries salt. Under 1% of body weight down is fine, 1 to 2% costs endurance, over 2% is dry; blue is more than the morning, which after a long ride is the dangerous side.${h.calibration&&h.calibration.points?` Tuned by ${h.calibration.points} post-ride weigh-in${h.calibration.points===1?"":"s"} (×${h.calibration.k}).`:" Weigh in after a ride and it tunes itself to you."}</div></details>
+    <details class="why"><summary>what it counts</summary><div class="small">Water against the start of the day, which is yesterday's end less the night (a deficit carried to bed is still there at breakfast; a surplus is not), averaged with the scale when it has a morning reading against the last three days. It drifts down about 100 ml an hour awake (breath, skin, urine), half that asleep; each drink arrives as the stomach empties, most of it within 45 minutes; food brings its own water. A ride takes sweat at the rate the power, the air and the weather give: the fan on the trainer, the wind and the temperature on the road. Water drunk after a ride is kept at 70%, 90% when it carries salt. Under 1% of body weight down is fine, 1 to 2% costs endurance, over 2% is dry. A little above the morning is topped up and still green: the kidneys clear up to a litre or so in a few hours. Blue, past 1.5 L over, is too much; drinking far beyond what was lost is the dangerous side after a long day.${h.calibration&&h.calibration.points?` Tuned by ${h.calibration.points} post-ride weigh-in${h.calibration.points===1?"":"s"} (×${h.calibration.k}).`:" Weigh in after a ride and it tunes itself to you."}</div></details>
   </div>`;
 }
 function wireHydration(root, h){
