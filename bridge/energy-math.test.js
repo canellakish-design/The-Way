@@ -35,7 +35,7 @@ ok('model: a logged breakfast lifts the curve, the ride drains it, the plan proj
   // nothing eaten: the ride starts low and the advice says what to eat
   const empty = E.model(Object.assign({}, base, { entries: [], meals: [] }));
   assert.strictEqual(empty.sessions[0].band.key === 'green', false);
-  assert.ok(/g of carbs by 08:30/.test(empty.advice), empty.advice);
+  assert.ok(/g of carbs by 8:30a/.test(empty.advice), empty.advice);
 });
 
 ok('model: on the bike carbs land during the ride and hold the pool up', () => {

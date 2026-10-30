@@ -29,6 +29,7 @@ const REST_G_PER_H = 6;
 
 const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
 const toHM = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const say = m => { let h = Math.floor(m / 60); const mm = String(m % 60).padStart(2, '0'); const ap = h < 12 ? 'a' : 'p'; h = h % 12 || 12; return h + ':' + mm + ap; };
 
 // Absorption kernel: gamma(k=2, θ) over 4 hours, in grams per 5 minutes, summing to C.
 function kernel(carbs, fat, protein, fast) {
@@ -117,7 +118,7 @@ function model(o) {
     const p = at(s.min); const b = band(p.pct);
     const short = Math.max(0, Math.round(0.6 * FULL_G - p.g));
     const by = Math.max(now, s.min - 90);
-    return { name: s.name, time: s.time, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, band: b, advice: short > 10 ? `${short} g of carbs by ${toHM(by)} for ${s.name}` : null };
+    return { name: s.name, time: s.time, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, band: b, advice: short > 10 ? `${short} g of carbs by ${say(by)} for ${s.name}` : null };
   });
   // the low stretches ahead: where the curve drops under 35% before bedtime
   const lows = []; let run = null;
@@ -125,7 +126,7 @@ function model(o) {
   if (run) lows.push(run);
   return { series, now: { time: toHM(now), pct: nowPt.pct, g: nowPt.g, band: band(nowPt.pct) }, peak: peak ? { time: peak.t, pct: peak.pct } : null,
     sessions: upcoming, lows, meals, full_g: FULL_G, step: STEP,
-    advice: upcoming.find(s => s.advice) ? upcoming.find(s => s.advice).advice : (lows.length && lows[0].from !== toHM(now) ? `Fuel runs low around ${lows[0].from}; a carb snack an hour before.` : null) };
+    advice: upcoming.find(s => s.advice) ? upcoming.find(s => s.advice).advice : (lows.length && lows[0].from !== toHM(now) ? `Fuel runs low around ${say(toMin(lows[0].from))}; a carb snack an hour before.` : null) };
 }
 
 module.exports = { model, kernel, rideCarbsPerHour, sessionRate, band, FULL_G, START_G, toMin, toHM };
