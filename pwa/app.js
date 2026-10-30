@@ -1294,10 +1294,8 @@ function dayCard(d, plan, nowMin, rec, solo){
   const foot = isToday && rec ? `${open} · <b>${esc(rec)}</b>` : open;
   const m = d.macros;
   const macroRow = m
-    ? `<div class="macros">${m.fuel_day?`<span class="mfuel">${esc(m.fuel_day)}</span>`:""}
-        <span class="unit">${m.kcal ?? "—"} kcal</span><span class="unit c">${m.carbs_g ?? "—"}C</span>
-        <span class="unit p">${m.protein_g ?? "—"}P</span><span class="unit f">${m.fat_g ?? "—"}F</span>
-        <span class="small">from the day's training</span></div>`
+    ? `<div class="macros"><div class="fuelrow"><span class="mfuel">${esc(m.fuel_day||"")}</span><span class="fkcal"><b>${m.kcal ?? "—"}</b> kcal</span></div>
+        <div class="mgrid"><div class="mc c"><b>${m.carbs_g ?? "—"}</b><span>carbs g</span></div><div class="mc p"><b>${m.protein_g ?? "—"}</b><span>protein g</span></div><div class="mc f"><b>${m.fat_g ?? "—"}</b><span>fat g</span></div></div></div>`
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>

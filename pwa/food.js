@@ -23,9 +23,8 @@ const MEALS = ["breakfast","lunch","dinner","snack","on the bike"];
 function fitBadge(a){ const f = FIT[a && a.fits] || FIT.partly; return `<span class="fit" style="color:${toneC(f.tone)};border-color:${toneC(f.tone)}">${f.word}</span>`; }
 function targetsRow(t){
   if (!t) return "";
-  return `<div class="macros"><span class="mfuel">${esc(t.fuel_day||"")}</span>
-    <span class="unit">${t.kcal} kcal</span><span class="unit c">${t.carbs_g}C</span>
-    <span class="unit p">${t.protein_g}P</span><span class="unit f">${t.fat_g}F</span></div>`;
+  return `<div class="macros"><div class="fuelrow"><span class="mfuel">${esc(t.fuel_day||"")}</span><span class="fkcal"><b>${t.kcal}</b> kcal</span></div>
+      <div class="mgrid"><div class="mc c"><b>${t.carbs_g}</b><span>carbs g</span></div><div class="mc p"><b>${t.protein_g}</b><span>protein g</span></div><div class="mc f"><b>${t.fat_g}</b><span>fat g</span></div></div></div>`;
 }
 function checksList(checks){
   if (!checks || !checks.length) return "";

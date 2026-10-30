@@ -119,7 +119,13 @@ label{font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transfor
 
 .chips{display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 2px}
 .chip{font-family:var(--mono); border:1px solid var(--line); padding:4px 9px; font-size:12px; background:var(--card)}
-.macros{display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:10px 0 4px}
+.macros{display:block; margin:10px 0 4px}
+.macros .fuelrow{display:flex; justify-content:space-between; align-items:center; gap:10px}
+.macros .fkcal{font-family:var(--mono); font-size:15px; color:var(--muted)} .macros .fkcal b{color:var(--ink); font-size:20px}
+.macros .mgrid{display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-top:8px}
+.macros .mc{border:1px solid var(--line); padding:8px 10px; display:flex; flex-direction:column; gap:2px}
+.macros .mc b{font-family:var(--mono); font-size:22px; line-height:1} .macros .mc span{font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted)}
+.macros .mc.c b{color:#E0A458} .macros .mc.p b{color:#E07A6A} .macros .mc.f b{color:#8FB4E0}
 .macros .mfuel{font-family:var(--mono); border:1px solid var(--ink); background:var(--ink); color:var(--paper);
   padding:4px 10px; font-size:12px; font-weight:700; letter-spacing:.5px; text-transform:uppercase}
 
