@@ -422,3 +422,12 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .xd .xdesc{white-space:pre-wrap; margin:6px 0; line-height:1.4}
 .xd ul.agenda{margin-top:4px} .xd ul.agenda li{padding:6px 0 6px 10px; font-size:15px} .xd ul.agenda li .tag{text-align:right}
 .chip.xchip{cursor:pointer} .chip.xchip.on{outline:2px solid var(--ink)} ul.agenda.xchipdetail{margin-top:4px}
+
+/* the outdoor hours */
+.wxstrip{margin:8px 0 2px} .wxrow{display:grid; grid-template-columns:repeat(17,1fr); gap:2px}
+.wxh{display:block; height:26px; border-radius:2px; position:relative; cursor:pointer}
+.wxh i{position:absolute; left:0; right:0; bottom:-14px; font-style:normal; font-family:var(--mono); font-size:8px; color:var(--muted); text-align:center; letter-spacing:0}
+.wxh.good{background:#2E7D4A} .wxh.ok{background:#8A6A14} .wxh.bad{background:#7A2E26}
+.wxnote{margin-top:18px}
+/* what to wear */
+.kit{display:flex; flex-wrap:wrap; gap:6px; margin:6px 0} .kitem{border:1px solid var(--ink); padding:5px 10px; font-size:14px}

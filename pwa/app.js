@@ -124,6 +124,7 @@ async function bridge(pathname, opts){
   }
 }
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
+function attr(t){ return esc(t).replace(/"/g,"&quot;"); }
 let __ttsSpeaking = false, __lastSpoken = "";
 function speak(t){
   try{
@@ -1308,16 +1309,27 @@ function briefHTML(b, x){
     ${rides ? `<h5>Ridden</h5><ul class="agenda totals">${rides}</ul>${c&&c.basis?`<div class="small">${esc(c.basis)}</div>`:""}` : ""}
     ${n ? `<h5>Eating around it</h5><div class="small">${esc(n.fuel_day)} · ${n.target.kcal} kcal · ${n.target.carbs_g} C / ${n.target.protein_g} P / ${n.target.fat_g} F for the day</div>
       ${meals?`<ul class="agenda totals">${meals}</ul>`:""}${b.notes && b.notes.eating ? `<div class="xdesc small">${esc(b.notes.eating)}</div>` : ""}` : ""}
+    ${w.sport === "Ride" && b.kit ? `<h5>What to wear</h5><div class="kit">${b.kit.items.map(k => `<span class="kitem">${esc(k)}</span>`).join("")}</div><div class="small">for ${b.kit.feels_low_f}° feels-like at the coldest, wind ${b.kit.wind_mph} mph, ${b.kit.rain_pct}% rain</div>` : ""}
     ${w.sport === "Ride" ? `<h5>Weather on the ride</h5>${wx ? `<div class="small">${esc(wx.summary)} · wind read against a ${wx.bearing}° heading out</div><ul class="agenda totals">${hours}</ul>` : `<div class="small">${esc(b.weather_error || "No forecast for that day yet (seven days ahead at most).")}</div>`}` : ""}
     <div class="rowbtns"><a class="btn" href="#workout?id=${encodeURIComponent(w.id)}">Edit the session</a>${w.sport!=="WeightTraining"?`<a class="btn" href="${DEFAULT_API}/workouts/${encodeURIComponent(w.id)}/zwo">Zwift file</a>`:""}</div>
   </div>`;
 }
 
+/* ---- the outdoor hours: one box an hour, green ride, amber marginal, red no ---- */
+let WX = {};
+function outdoorStrip(date){
+  const w = WX[date]; if (!w) return "";
+  const H = w.hours.filter(h => h.hour >= 5 && h.hour <= 21);
+  const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
+  const boxes = H.map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good to ride") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(lbl(h.hour))}"><i>${lbl(h.hour)}</i></span>`).join("");
+  const best = w.best && w.best.to - w.best.from >= 1 ? `best outside ${lbl(w.best.from)}–${lbl(w.best.to)}` : "no good hour outside";
+  return `<div class="wxstrip"><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span id="wxwhy"></span></div></div>`;
+}
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
   const chips = (d.all_day||[]).map(e=>
-    `<span class="chip ${(LANE[e.source]||LANE.calendar).cls} xchip" data-x="${esc(JSON.stringify({ title:e.summary, from:"all day", to:"", desc:e.description||null, location:e.location||null, calendar:e.calendar||null, wid:e.workout_id||null, source:e.source||null }))}">${esc(e.summary)}${e.detail?" · "+esc(e.detail):""}</span>`).join("");
+    `<span class="chip ${(LANE[e.source]||LANE.calendar).cls} xchip" data-x="${attr(JSON.stringify({ title:e.summary, from:"all day", to:"", desc:e.description||null, location:e.location||null, calendar:e.calendar||null, wid:e.workout_id||null, source:e.source||null }))}">${esc(e.summary)}${e.detail?" · "+esc(e.detail):""}</span>`).join("");
   let markedNext = false;
   const items = rows.map(r=>{
     let state = "";
@@ -1329,7 +1341,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     // A free window is the space between things. Rendered as a full row it
     // read as an appointment, and an empty day looked packed.
     if (r.open) return `<li class="gap ${state}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
-    return `<li class="${r.lane.cls} ${state} xrow" data-x="${esc(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
+    return `<li class="${r.lane.cls} ${state} xrow" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
@@ -1343,7 +1355,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
-    ${macroRow}
+    ${macroRow}${outdoorStrip(d.date)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div></div>`;
@@ -1893,10 +1905,12 @@ V.today = async function(){
     try{
       // A week either side, so stepping back to yesterday (or forward) is
       // instant and needs no second round trip.
-      const [s, plan] = await Promise.all([
+      const [s, plan, wx] = await Promise.all([
         bridge("/schedule?days=15&back=7"),
-        bridge("/plan").catch(()=>({for_today:false}))
+        bridge("/plan").catch(()=>({for_today:false})),
+        bridge("/weather/outlook").catch(()=>null)
       ]);
+      if (wx && wx.days) WX = wx.days;
       const days = s.days || [];
       const ti = Number.isInteger(s.today_index) ? s.today_index
         : Math.max(0, days.findIndex(d=>d.today));
@@ -1970,6 +1984,8 @@ V.today = async function(){
     // tap a row: it opens underneath with everything about it
     view.addEventListener("click", async (e)=>{
       if (e.target.closest("button, a")) return;
+      const box = e.target.closest(".wxh");
+      if (box){ const el = box.closest(".wxstrip").querySelector("#wxwhy"); if (el) el.textContent = box.title + ": " + box.dataset.why; return; }
       // an all-day chip (a session with no time yet) opens the same way, under the chips
       const chip = e.target.closest(".xchip");
       if (chip){

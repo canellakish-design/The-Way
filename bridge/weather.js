@@ -67,9 +67,77 @@ async function forecastAt(dateKey, startMin, minutes, opts) {
   return { date: dateKey, hours, summary: `${mid.temp_f}°F, feels ${mid.feels_f}°, wind ${mid.wind_mph} mph from the ${mid.wind_from}${mid.gust_mph > mid.wind_mph + 8 ? `, gusts ${mid.gust_mph}` : ''}, ${mid.rain_pct}% rain`,
     bearing, source: 'Open-Meteo' };
 }
+// Each hour of a day graded for riding outside: red when it is dark, very
+// cold, very hot, very windy or wet; amber when marginal; green otherwise.
+// Daylight from Open-Meteo's sunrise and sunset for that day.
+function gradeHour(h, sunrise, sunset) {
+  const why = []; let g = 'good';
+  const bad = r => { g = 'bad'; why.push(r); }, ok = r => { if (g !== 'bad') g = 'ok'; why.push(r); };
+  if (h.hour < sunrise || h.hour >= sunset) bad('dark');
+  if (h.feels_f < 35) bad(`${h.feels_f}° feels`); else if (h.feels_f < 45) ok(`${h.feels_f}° feels`);
+  if (h.feels_f > 95) bad(`${h.feels_f}° feels`); else if (h.feels_f > 88) ok(`${h.feels_f}° feels`);
+  if (h.wind_mph >= 20 || h.gust_mph >= 32) bad(`wind ${h.wind_mph}, gusts ${h.gust_mph}`); else if (h.wind_mph >= 14 || h.gust_mph >= 25) ok(`wind ${h.wind_mph}, gusts ${h.gust_mph}`);
+  if (h.rain_pct >= 60 || h.rain_in >= 0.05) bad(`${h.rain_pct}% rain`); else if (h.rain_pct >= 35) ok(`${h.rain_pct}% rain`);
+  return { grade: g, why };
+}
+async function outlook(from, to) {
+  const u = `https://api.open-meteo.com/v1/forecast?latitude=${HOME_LAT}&longitude=${HOME_LON}` +
+    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+    `&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=7&past_days=3&timezone=auto`;
+  const r = await fetch(u); if (!r.ok) throw new Error('open-meteo ' + r.status);
+  const d = await r.json(); const h = d.hourly, dd = d.daily;
+  const days = {};
+  for (let k = 0; k < dd.time.length; k++) {
+    const date = dd.time[k];
+    if (date < from || date > to) continue;
+    const sr = +dd.sunrise[k].slice(11, 13) + (+dd.sunrise[k].slice(14, 16) >= 30 ? 1 : 0), ss = +dd.sunset[k].slice(11, 13);
+    const hours = [];
+    for (let hh = 0; hh < 24; hh++) {
+      const i = h.time.indexOf(`${date}T${String(hh).padStart(2, '0')}:00`); if (i < 0) continue;
+      const pt = { hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
+        wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(h.wind_direction_10m[i]) };
+      hours.push(Object.assign(pt, gradeHour(pt, sr, ss)));
+    }
+    // the best stretch: the longest run of green hours, then amber
+    let best = null, run = null;
+    for (const x of hours) {
+      if (x.grade === 'good') { if (!run) run = { from: x.hour, to: x.hour + 1 }; else run.to = x.hour + 1; if (!best || run.to - run.from > best.to - best.from) best = run; }
+      else run = null;
+    }
+    days[date] = { date, sunrise: dd.sunrise[k].slice(11, 16), sunset: dd.sunset[k].slice(11, 16), hours, best };
+  }
+  return { from, to, days, source: 'Open-Meteo' };
+}
+
+// What to wear, from feels-like temperature, wind and rain over the ride.
+// The usual road-cyclist thresholds; he can shift them in his head by a layer.
+function kit(hours) {
+  if (!hours || !hours.length) return null;
+  const feels = Math.min(...hours.map(h => h.feels_f)), wind = Math.max(...hours.map(h => h.wind_mph)), rain = Math.max(...hours.map(h => h.rain_pct)), rainIn = Math.max(...hours.map(h => h.rain_in || 0));
+  const items = [];
+  if (feels >= 68) items.push('short bibs', 'light jersey');
+  else if (feels >= 58) items.push('short bibs', 'light jersey', 'arm warmers in the pocket');
+  else if (feels >= 50) items.push('short bibs with knee warmers', 'long-sleeve jersey', 'light gloves');
+  else if (feels >= 40) items.push('long bibs', 'heavy jersey', 'wind vest', 'full gloves', 'cap under the helmet');
+  else if (feels >= 32) items.push('long bibs, thermal', 'heavy jersey', 'jacket', 'winter gloves', 'shoe covers', 'cap or headband');
+  else items.push('long bibs, thermal', 'base layer', 'heavy jersey', 'winter jacket', 'lobster gloves', 'shoe covers', 'balaclava');
+  if (rain >= 50 || rainIn >= 0.05) items.push('rain jacket', 'cap with a peak');
+  else if (rain >= 30) items.push('packable rain jacket in the pocket');
+  if (wind >= 15 && feels < 68 && !items.some(x => /jacket|vest/.test(x))) items.push('wind vest');
+  if (feels >= 60 && feels < 68) items.push('vest for the first half hour');
+  return { feels_low_f: feels, wind_mph: wind, rain_pct: rain, items };
+}
 function attach(app) {
+  app.get('/weather/outlook', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const today = tz.todayKey();
+      const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : today;
+      const to = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to || '') ? req.query.to : tz.shiftKey(today, 6);
+      res.json(await outlook(from, to));
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+
   app.get('/route-weather', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await routeWeather(parseInt(req.query.hour, 10))); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, routeWeather, forecastAt, windKind };
+module.exports = { attach, routeWeather, forecastAt, windKind, outlook, kit, gradeHour };
