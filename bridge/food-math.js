@@ -397,11 +397,14 @@ function rollForward(meals, entries) {
     a.rolled_out = { to: b.slot, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
     b.plan_kcal = b.plan_kcal ?? b.kcal; b.plan_carbs_g = b.plan_carbs_g ?? b.carbs_g; b.plan_protein_g = b.plan_protein_g ?? b.protein_g;
     b.kcal = Math.max(0, (b.kcal || 0) - over.kcal); b.carbs_g = Math.max(0, (b.carbs_g || 0) - over.carbs_g); b.protein_g = Math.max(0, (b.protein_g || 0) - over.protein_g);
+    // protein the meal did not carry lands at the next slot (up to 25 g, with its calories), so the day's protein holds
+    const proteinShort = Math.min(25, Math.max(0, (a.protein_g || 0) - sum('protein_g')));
+    if (proteinShort >= 5) { b.protein_g += proteinShort; b.kcal += 4 * proteinShort; }
     b.kcal = r5(b.kcal); b.carbs_g = r5(b.carbs_g); b.protein_g = r5(b.protein_g);
-    b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
+    b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g, protein_short_g: proteinShort };
     if (b.plan_kcal > 0 && b.kcal < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = `covered by the ${aName}, which ran over; a protein bite if hungry.`; }
     else if (over.carbs_g >= 20 && b.carbs_g <= 0.6 * (b.plan_carbs_g || 1)) b.what = `${b.protein_g} g of protein and vegetables; the ${aName} carried the starch.`;
-    else if (over.kcal >= 60) b.what = `${b.what} Lighter: the ${aName} ran ${over.kcal} kcal over.`;
+    else if (over.kcal >= 60) b.what = `${b.what} Lighter: the ${aName} ran ${over.kcal} kcal over${proteinShort >= 5 ? `, and ${proteinShort} g short on protein, so protein first` : ''}.`;
   }
   return out;
 }

@@ -187,7 +187,8 @@ ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a 
   const bike = r.find(m => m.slot === 'on the bike'), lunch = r.find(m => m.slot === 'lunch'), dinner = r.find(m => m.slot === 'dinner'), after = r.find(m => m.slot === 'after');
   assert.strictEqual(bike.kcal, 0); assert.ok(!bike.rolled_from);
   assert.ok(after.rolled_out && after.rolled_out.to === 'lunch');
-  assert.strictEqual(lunch.plan_kcal, 450); assert.strictEqual(lunch.kcal, 310); assert.strictEqual(lunch.carbs_g, 30); assert.strictEqual(lunch.protein_g, 50);
+  // 140 kcal and 11 g carbs off lunch; the 16 g of protein the sushi missed lands there with its calories
+  assert.strictEqual(lunch.plan_kcal, 450); assert.strictEqual(lunch.kcal, 375); assert.strictEqual(lunch.carbs_g, 30); assert.strictEqual(lunch.protein_g, 65);
   assert.ok(/Lighter/.test(lunch.what), lunch.what);
   assert.ok(!lunch.covered_by);
   assert.strictEqual(dinner.kcal, 670); assert.ok(!dinner.rolled_from);                        // too far from lunch, and lunch has nothing logged
