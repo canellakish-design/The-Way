@@ -260,17 +260,22 @@ async function attachMacros(days) {
   }));
 }
 
+// One line under the day: what the body and the calendar say about the
+// session planned. The plan has three workouts (Zone 1 under 117 bpm, the
+// VO2 40/20s, mountain-bike handling); recovery is WHOOP's band.
 function recommendToday(day, recovery, remaining) {
   const rec = recovery == null ? null : (recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red');
   const best = day.windows.reduce((a, w) => Math.max(a, w.minutes), 0);
+  const planned = (day.events || []).filter(e => e.source === 'plan' || e.source === 'intervals');
+  const hard = planned.find(e => /vo2|40\s*\/\s*20|threshold|race/i.test(e.summary || ''));
+  const names = planned.map(e => e.summary).join(' + ');
   let what;
-  if (day.travel || best < MIN_WINDOW) what = 'rest day — no window';
-  else if (rec === 'red') what = 'mobility + easy walk — recovery is red';
-  else if (rec === 'yellow') what = best >= 60 ? 'Z2 only, keep it honest' : 'mobility + recovery spin';
-  else if (remaining && remaining.hi_min > 0 && best >= 60) what = 'threshold session (e.g., 4×8) — hard minutes owed';
-  else if (remaining && remaining.aerobic_h > 0 && best >= 75) what = 'Z2 — pay the aerobic bucket';
-  else if (best >= 40) what = 'openers or strength';
-  else what = 'mobility';
+  if (day.travel) what = 'travel day: rest, or a spin if one fits';
+  else if (rec === 'red') what = planned.length ? `recovery red: skip ${names}, easy spin or off` : 'recovery red: off';
+  else if (rec === 'yellow') what = hard ? `recovery yellow: Zone 1 under 117 instead of ${hard.summary}` : planned.length ? `recovery yellow: ${names}, keep it under 117` : 'recovery yellow: Zone 1 under 117 if you ride';
+  else if (planned.length) what = `train as planned: ${names}`;
+  else if (best >= 45) what = 'nothing planned: Zone 1 under 117 if you ride';
+  else what = 'rest day: no window';
   return { recovery: rec, best_window_min: best, recommendation: what };
 }
 
