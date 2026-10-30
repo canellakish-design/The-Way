@@ -446,3 +446,8 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxlegend .wxsep{width:1px; height:12px; background:var(--line); margin:0 2px}
 .wxnote{margin-top:18px; min-height:1.2em}
 .wxlegend{flex-wrap:wrap; gap:6px 12px} .wxlegend span{display:inline-flex; align-items:center; white-space:nowrap}
+
+/* row names instead of a key */
+.wxstack{margin-left:0; padding-left:0}
+.wxlab{position:absolute; left:-2px; font-family:var(--mono); font-size:8.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--ink); background:rgba(0,0,0,.55); padding:0 3px; line-height:1.4; pointer-events:none}
+.wxlab1{top:2px} .wxlab2{top:27px}
