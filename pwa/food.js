@@ -67,7 +67,7 @@ function energyHTML(e){
   if (past.length) lines += `<path d="${path(past)}" fill="none" stroke="#F2F1EC" stroke-width="2"></path>`;
   if (fut.length) lines += `<path d="${path(fut)}" fill="none" stroke="#F2F1EC" stroke-width="2" stroke-dasharray="4 4" opacity=".8"></path>`;
   const bands = (e.sessions||[]).map(s => `<rect x="${X(s.min).toFixed(1)}" y="${T}" width="${Math.max(2, X(s.end_min)-X(s.min)).toFixed(1)}" height="${H-T-B}" fill="#F2F1EC" opacity=".12"></rect><text x="${(X(s.min)+2).toFixed(1)}" y="${T+10}" class="egl">${esc(s.name.replace(/,.*$/,"").slice(0,14))}</text>`).join("");
-  const dots = (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return `<circle cx="${X(m.min).toFixed(1)}" cy="${Y(p.pct).toFixed(1)}" r="4.5" fill="${m.logged?"#F2F1EC":"#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${esc(hm12(m.time))} ${esc(m.name||"")} ${m.carbs_g} g carbs</title></circle>`; }).join("");
+  const dots = (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return `<circle cx="${X(m.min).toFixed(1)}" cy="${Y(p.pct).toFixed(1)}" r="4.5" fill="${m.logged?"#F2F1EC":"#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${esc(hm12(m.time))} ${esc(m.name||"")} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}</title></circle>`; }).join("");
   const nowX = X(Math.max(m0, Math.min(m1, (h=>h)(e.now ? (e.series.find(p=>p.t===e.now.time)||{}).m ?? m0 : m0))));
   const ticks = [6,9,12,15,18,21].map(h => `<text x="${X(h*60).toFixed(1)}" y="${H-6}" class="egt" text-anchor="middle">${h%12||12}${h<12?"a":"p"}</text>`).join("");
   const guide = [35,60].map(v => `<line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#F2F1EC" opacity=".15" stroke-dasharray="2 4"></line>`).join("");
@@ -79,6 +79,7 @@ function energyHTML(e){
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}
     ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
+    <details class="why"><summary>what it counts</summary><div class="small">Carbohydrate on board, the quick store a hard effort runs on. Carbs from each logged meal arrive over two to three hours, slower when the meal has fat and protein in it. Protein adds about half its weight as glucose, slowly, over four to five hours. Fat adds nothing here: it is the fuel Zone 1 burns, which is why Zone 1 only needs a quarter of a tank.</div></details>
   </div>`;
 }
 function wireEnergy(root, e){

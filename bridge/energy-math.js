@@ -78,10 +78,14 @@ function model(o) {
   const meals = [];
   for (const e of o.entries || []) {
     if (e.supplement || !e.time) continue;
-    const c = e.carbs_g || 0; if (!c) continue;
     const m = toMin(e.time); if (m == null) continue;
-    add(absorb, m, kernel(c, e.fat_g, e.protein_g, e.meal === 'on the bike' || /tailwind|gel|sports drink|chocolate milk/i.test(e.name || '')));
-    meals.push({ time: e.time, min: m, carbs_g: c, name: e.name, logged: true });
+    const c = e.carbs_g || 0;
+    if (c) add(absorb, m, kernel(c, e.fat_g, e.protein_g, e.meal === 'on the bike' || /tailwind|gel|sports drink|chocolate milk/i.test(e.name || '')));
+    // Protein becomes glucose too, about half its weight, slowly over the
+    // following hours (gluconeogenesis). A protein breakfast is a small, long bump.
+    const pr = e.protein_g || 0;
+    if (pr >= 10) add(absorb, m, kernel(0.5 * pr, 0, 0).map((v, i, arr) => arr[Math.min(arr.length - 1, Math.floor(i * 0.5))] * 0.5));
+    if (c || pr >= 10 || (e.kcal || 0) >= 80) meals.push({ time: e.time, min: m, carbs_g: c, protein_g: pr, name: e.name, logged: true });
   }
   // the plan's meals still ahead, as a projection (a logged slot does not project twice)
   for (const p of o.meals || []) {
