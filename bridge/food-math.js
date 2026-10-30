@@ -159,13 +159,16 @@ function mealPlan(day, sessions, target) {
   const bfast = (time, pre) => restDay ? Object.assign(meal(time, 'breakfast', 'Protein first: eggs or Greek yogurt, fruit. No starch.', 0.25, 0.15, 45), { low_carb: true })
     : day === 'high' ? meal(time, 'breakfast', pre ? `Carb breakfast 2 to 3 hours before ${pre}: 70 g oats, fruit, whey.` : 'Oats and fruit, whey in the bowl.', 0.25, 0.30, 45)
     : lowCarb(time, 'breakfast', pre ? `Low carb breakfast before ${pre}, under ${LOW_CARB_G} g of carbs, 30 g protein: eggs, Greek yogurt or a smoothie. No toast.` : `Protein smoothie or eggs, 30 g protein, under ${LOW_CARB_G} g of carbs.`, 30);
-  const lunch = time => meal(time, 'lunch', restDay ? 'Protein and vegetables. Big salad with chicken or fish.' : 'Protein with rice or potatoes, vegetables.', 0.30, restDay ? 0.25 : 0.35, 50);
-  const dinner = time => meal(time, 'dinner', restDay ? 'Protein, vegetables and the one starch of the day.'
-    : day === 'high' ? 'Protein, vegetables, and a proper starch. Carbs still count today.' : 'Protein and vegetables, starch beside it.', 0.35, restDay ? 0.50 : 0.40, 55);
-  const snack = time => meal(time, 'snack', 'Whey or cottage cheese if protein is short of 190 g.', 0.10, 0.10, 25);
+  // Shares of the day's calories and carbs; each layout below hands out the whole day once.
+  const lunch = (time, share, carbShare) => meal(time, 'lunch', restDay ? 'Protein and vegetables. Big salad with chicken or fish.' : 'Protein with rice or potatoes, vegetables.', share == null ? 0.30 : share, carbShare == null ? (restDay ? 0.25 : 0.35) : carbShare, 50);
+  const dinner = (time, share, carbShare) => meal(time, 'dinner', restDay ? 'Protein, vegetables and the one starch of the day.'
+    : day === 'high' ? 'Protein, vegetables, and a proper starch. Carbs still count today.' : 'Protein and vegetables, starch beside it.', share == null ? 0.35 : share, carbShare == null ? (restDay ? 0.50 : 0.40) : carbShare, 55);
+  const snack = time => meal(time, 'snack', 'Whey or cottage cheese if protein is short of 190 g.', 0.10, 0.08, 25);
   // Breakfast is as late as the training allows: he would rather sleep.
   if (!timed) {
-    out.push(bfast(9 * 60), lunch(13 * 60), dinner(18 * 60 + 30), snack(20 * 60 + 30));
+    const b = restDay || day === 'high' ? 0.25 : 0.15, bC = restDay ? 0.15 : day === 'high' ? 0.30 : 0.08;
+    const left = 1 - b - 0.10, leftC = 1 - bC - 0.08;
+    out.push(bfast(9 * 60), lunch(13 * 60, Math.round(left * 0.45 * 100) / 100, Math.round(leftC * 0.4 * 100) / 100), dinner(18 * 60 + 30, Math.round(left * 0.55 * 100) / 100, Math.round(leftC * 0.6 * 100) / 100), snack(20 * 60 + 30));
     return out;
   }
   const { start, end, x } = timed;
@@ -203,10 +206,15 @@ function mealPlan(day, sessions, target) {
     else out.push(bfast(start - gap, name));
     out.push(onBike);
     // the carbs the low-carb breakfast did not carry land here
-    out.push(after(early ? 'breakfast' : 'after', early ? 0.28 : (day === 'high' ? 0.22 : 0.32), day === 'high' ? 0.30 : 0.45));
+    const pre = early ? (day === 'high' ? 0.08 : 0.04) : (day === 'high' ? 0.25 : 0.15);
+    const preC = early ? (day === 'high' ? 0.12 : 0) : (day === 'high' ? 0.30 : 0.08);
+    out.push(after(early ? 'breakfast' : 'after', 0.25, day === 'high' ? 0.30 : 0.40));
     const l = Math.max(end + 150, 12 * 60 + 30);
-    if (l < 15 * 60) out.push(lunch(l));
-    out.push(dinner(Math.max(18 * 60 + 30, l + 300)));
+    const hasLunch = l < 15 * 60;
+    // what is left of the day after breakfast, the post-ride meal and the snack, split lunch 40 / dinner 60
+    const left = 1 - pre - 0.25 - 0.10, leftC = 1 - preC - (day === 'high' ? 0.30 : 0.40) - 0.08;
+    if (hasLunch) out.push(lunch(l, Math.round(left * 0.4 * 100) / 100, Math.round(leftC * 0.4 * 100) / 100));
+    out.push(dinner(Math.max(18 * 60 + 30, l + 300), Math.round(left * (hasLunch ? 0.6 : 1) * 100) / 100, Math.round(leftC * (hasLunch ? 0.6 : 1) * 100) / 100));
     out.push(snack(20 * 60 + 45));
   } else if (start < 15 * 60) {
     // Midday ride: breakfast carries the pre-ride role (as late as 9:30), the post-ride meal is lunch.
@@ -215,19 +223,23 @@ function mealPlan(day, sessions, target) {
       ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBike);
-    out.push(after('lunch', day === 'high' ? 0.30 : 0.40, day === 'high' ? 0.35 : 0.50));   // carries what the low-carb breakfast did not
-    out.push(dinner(Math.max(18 * 60 + 30, end + 240)));
+    const hasBefore = start - gap > 9 * 60 + 30 + 60;
+    const used = (day === 'high' ? 0.25 : 0.15) + (hasBefore ? 0.08 : 0) + 0.10, usedC = (day === 'high' ? 0.30 : 0.08) + (hasBefore ? (day === 'high' ? 0.12 : 0.04) : 0) + 0.08;
+    out.push(after('lunch', Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));   // carries what the low-carb breakfast did not
+    out.push(dinner(Math.max(18 * 60 + 30, end + 240), Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));
     out.push(snack(20 * 60 + 45));
   } else {
     // Evening ride: a late breakfast, lunch, a light pre-ride meal, and the post-ride meal is dinner.
     out.push(bfast(9 * 60));
-    out.push(lunch(13 * 60));
+    out.push(lunch(13 * 60, 0.27, day === 'high' ? 0.25 : 0.30));
     out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
     out.push(onBike);
-    out.push(after('dinner', day === 'high' ? 0.33 : 0.43, day === 'high' ? 0.35 : 0.55));   // carries what the low-carb breakfast did not
-    if (end + 30 <= 20 * 60) out.push(snack(21 * 60));
+    const lateSnack = end + 30 <= 20 * 60;
+    out.push(after('dinner', Math.round((1 - (day === 'high' ? 0.25 : 0.15) - 0.27 - 0.10 - (lateSnack ? 0.10 : 0)) * 100) / 100,
+      Math.round((1 - (day === 'high' ? 0.30 : 0.08) - (day === 'high' ? 0.25 : 0.30) - (day === 'high' ? 0.15 : 0.05) - (lateSnack ? 0.08 : 0)) * 100) / 100));   // carries what the low-carb breakfast did not
+    if (lateSnack) out.push(snack(21 * 60));
   }
   return out.sort((a, b) => toMin(a.time) - toMin(b.time));
 }
