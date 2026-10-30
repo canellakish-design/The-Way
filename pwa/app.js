@@ -1276,12 +1276,12 @@ V.today = async function(){
     <div class="scores" id="scores">
       <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="bodyfat"><span class="slabel">Body fat</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="workouts"><span class="slabel">Workouts</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
     </div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
