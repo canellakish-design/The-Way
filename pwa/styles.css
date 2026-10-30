@@ -460,3 +460,10 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 /* outdoor windows solid, indoor windows dashed */
 .wxwin.in{border-style:dashed; border-color:#C9C7BE} .wxwin.in b{color:#C9C7BE}
 .wxwin b{white-space:nowrap}
+
+/* the camera beside each meal, and its mark */
+.mealtag{display:inline-flex; align-items:center; gap:8px}
+.mk{display:inline-block; width:18px; text-align:center; font-weight:700} .mk.ok{color:var(--green)} .mk.no{color:var(--red)}
+.cam{margin:0; padding:0; width:34px; height:34px; border:1px solid var(--line); background:transparent; color:var(--ink); box-shadow:none; display:inline-flex; align-items:center; justify-content:center; text-decoration:none}
+.cam:active{border-color:var(--ink)}
+.snapbtn.pulse{animation:micpulse 1s ease-in-out 3}

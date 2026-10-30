@@ -2108,10 +2108,14 @@ function foodCardHTML(day){
   const tone = t => t==="good"?"var(--green)":t==="warn"?"var(--amber)":t==="bad"?"var(--red)":"var(--ink)";
   const now = nowHM();
   const next = (day.meals||[]).find(m => m.time >= now && !(m.logged||[]).length) || null;
-  const plan = (day.meals||[]).map(m => `<li class="${(m.logged||[]).length?"done":m===next?"next":(m.time<now?"past":"")}">
+  const CAM = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
+  const plan = (day.meals||[]).map(m => { const logged = (m.logged||[]).length;
+    const mealOf = ["breakfast","lunch","dinner","snack","on the bike"].includes(m.slot) ? m.slot : "snack";
+    const mark = logged ? `<span class="mk ok">✓</span>` : m.time < now ? `<span class="mk no">✗</span>` : `<span class="mk"></span>`;
+    return `<li class="${logged?"done":m===next?"next":(m.time<now?"past":"")}">
       <span class="t">${esc(hm12(m.time))}</span>
       <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span></span>
-      <span class="tag">${(m.logged||[]).length?"✓":m.kcal?m.kcal+" kcal":""}</span></li>`).join("");
+      <span class="tag mealtag">${mark}<a class="cam" href="#food?snap=${encodeURIComponent(mealOf)}" aria-label="Snap this meal">${CAM}</a></span></li>`; }).join("");
   return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
     ${B.targetsRow ? B.targetsRow(day.target) : ""}
     ${day.target && day.target.deficit_note ? `<div class="small"><b>Deficit:</b> ${esc(day.target.deficit_note)}</div>` : ""}
