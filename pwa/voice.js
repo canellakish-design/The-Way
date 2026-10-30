@@ -15,7 +15,7 @@
 const J = {"Content-Type":"application/json"};
 const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 const HOLD_MS = 280;                 // shorter than this is a tap, not a hold
-let rec = null, listening = false, finalText = "", manualStop = false, sending = false;
+let rec = null, listening = false, finalText = "", sending = false;
 // the thread: what he said and what was answered, kept for the session
 let history = [];
 try{ history = JSON.parse(sessionStorage.getItem("way-voice-thread") || "[]"); }catch{ history = []; }
@@ -55,49 +55,77 @@ function drawThread(){
   el.scrollTop = el.scrollHeight;
 }
 function open(){ const s = sheet(); s.hidden = false; drawThread(); }
-function close(){ stopListening(); const s = document.getElementById("voiceSheet"); if (s) s.hidden = true; }
+function close(){ abortListening(); const s = document.getElementById("voiceSheet"); if (s) s.hidden = true; }
 function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.classList.toggle("live", on); const h = document.getElementById("vHold"); if (h){ h.classList.toggle("live", on); h.textContent = on ? "Listening… let go to send" : "Hold to talk"; } }
 
-/* ---- push to talk ---- */
-function startListening(){
-  if (!SR || listening) return;
-  try{ if (rec) { rec.onend = null; rec.onresult = null; rec.onerror = null; rec.abort(); } }catch{}
-  try{ speechSynthesis.cancel(); }catch{}
+/* ---- push to talk ----
+   One recogniser for the page, reused. Safari refuses a second start()
+   while the first session is still closing ("already started"), and that is
+   exactly when a second hold arrives: a hold that lands while the last
+   session is still ending waits for it and starts the moment it is free. */
+let state = "idle";            // idle | starting | listening | stopping
+let wantListen = false, discard = false, holding = false;
+function ensureRec(){
+  if (rec) return rec;
   rec = new SR();
   rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
-  finalText = ""; manualStop = false;
-  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
-  rec.onstart = ()=>{ listening = true; setMic(true); status(""); };
+  rec.onstart = ()=>{ state = "listening"; listening = true; setMic(true); status(""); };
   rec.onresult = (e)=>{
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript; }
-    if (heard) heard.textContent = (finalText + interim).trim();
+    const heard = document.getElementById("vHeard"); if (heard) heard.textContent = (finalText + interim).trim();
   };
   rec.onerror = (e)=>{
-    listening = false; setMic(false);
     const k = e.error;
+    if (k === "aborted") return;                       // ours, on purpose
     status(k === "not-allowed" || k === "service-not-allowed" ? "Microphone blocked. Settings → Safari → Microphone → Allow for this site, or type."
          : k === "audio-capture" ? "No microphone found. Type instead."
-         : k === "no-speech" ? "Heard nothing. Hold the button and speak." : k === "aborted" ? "" : "Speech failed (" + k + "). Type it instead.");
+         : k === "no-speech" ? "Heard nothing. Hold the button and speak." : "Speech failed (" + k + "). Type it instead.");
   };
   rec.onend = ()=>{
-    listening = false; setMic(false);
+    state = "idle"; listening = false; setMic(false);
+    const heard = document.getElementById("vHeard");
     const t = (finalText || (heard && heard.textContent) || "").trim();
-    if (t) send(t); else if (manualStop) status("Heard nothing. Hold the button and speak.");
+    const toss = discard; discard = false; finalText = "";
+    if (!toss && t) send(t);
+    else if (!toss && !holding) status("Heard nothing. Hold the button and speak.");
+    // a hold began while this session was ending: start it now
+    if (wantListen && holding) startListening();
   };
-  try{ rec.start(); }
-  catch(err){ status(/InvalidState|already/i.test(String(err && err.message)) ? "The microphone is still busy, try again." : "Could not start the microphone: " + err.message); }
+  return rec;
 }
-function stopListening(){ manualStop = true; if (rec && listening){ try{ rec.stop(); }catch{} } }
+function startListening(){
+  if (!SR) return;
+  wantListen = true;
+  if (state !== "idle") return;                        // starting or still ending: onend picks it up
+  try{ speechSynthesis.cancel(); }catch{}
+  finalText = ""; discard = false;
+  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
+  state = "starting";
+  try{ ensureRec().start(); }
+  catch(err){
+    state = "idle";
+    if (/InvalidState|already/i.test(String(err && err.message))){ try{ rec.stop(); }catch{} return; }   // its onend will start us
+    status("Could not start the microphone: " + err.message);
+  }
+}
+function stopListening(){
+  wantListen = false;
+  if (state === "listening" || state === "starting"){ state = "stopping"; try{ rec.stop(); }catch{ state = "idle"; } }
+}
+function abortListening(){
+  wantListen = false; discard = true;
+  if (state !== "idle"){ state = "stopping"; try{ rec.abort(); }catch{ state = "idle"; } }
+}
 
 // hold = talk; a quick tap toggles the sheet
 function wireHold(el, onTap){
-  let downAt = 0, holding = false;
-  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} startListening(); };
+  let downAt = 0, mine = false;
+  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} startListening(); };
   const up = (e)=>{
-    if (!holding) return; holding = false; e.preventDefault();
+    if (!mine) return; mine = false; holding = false; e.preventDefault();
     const quick = Date.now() - downAt < HOLD_MS;
-    if (quick){ try{ if (rec){ rec.onend = null; rec.abort(); } }catch{} listening = false; setMic(false); if (onTap) onTap(); return; }
+    if (quick){ abortListening(); if (onTap) onTap(); return; }
     stopListening();
   };
   el.addEventListener("pointerdown", down);
