@@ -62,29 +62,39 @@ V.calendar = async function(){
   for (const d of cal.days){
     const isToday = d.date === today, past = d.date < today;
     const rows = [];
+    // A ride is drawn once: inside the planned session it was graded against
+    // when there is one, on its own when nothing was planned.
+    const rideLines = (r)=>{
+      const a = r.analysis, h = a && a.hr, b = a && a.resp, v = a && a.ve;
+      return `<span class="pm">${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
+        ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}`;
+    };
+    const word = (c)=> c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
+    let ridesShown = false;
     for (const w of d.planned){
       const c = w.compliance;
+      const withRides = !!(c && !w.logged && d.done.length && !ridesShown);
+      if (withRides) ridesShown = true;
       rows.push(`<a class="pitem planned${c?" graded "+c.band:""}" href="#workout?id=${encodeURIComponent(w.id)}">
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
         <span class="pn">${esc(w.name)}</span>
-        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":"Missed"}</span>`:syncBadge(w)}</span></a>`);
+        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
+        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}</a>`);
     }
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
         <span class="pn">${esc(e.name)}</span>
         <span class="pm">${e.minutes?hm(e.minutes):"—"}${e.tss?" · "+e.tss+" TSS":""} <span class="pbadge">Planned outside The Way</span></span></div>`);
-    for (const r of d.done){
-      const a = r.analysis, h = a && a.hr, b = a && a.resp, v = a && a.ve;
+    if (!ridesShown) for (const r of d.done){
       rows.push(`<div class="pitem done">
         <span class="pk">Done${r.time?" · "+esc(r.time):""}</span>
         <span class="pn">${esc(r.name)}</span>
-        <span class="pm">${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
-        ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}</div>`);
+        ${rideLines(r)}</div>`);
     }
     let verdict = "";
     const dc = d.compliance;
     if (dc && dc.band === "extra") verdict = `<span class="pbadge">Unplanned ride</span>`;
-    else if (dc) verdict = `<span class="pbadge ${dc.band==="green"?"ok":dc.band==="yellow"?"warn":"bad"}">${dc.pct}% · ${dc.band==="green"?"done":dc.over?"over the plan":dc.band==="yellow"?"partly":"missed"}</span>`;
+    else if (dc) verdict = `<span class="pbadge ${dc.band==="green"?"ok":dc.band==="yellow"?"warn":"bad"}">${dc.pct}% · ${dc.band==="green"?"done":dc.over?"over the plan":dc.band==="yellow"?"partly":d.done.length?"short":"missed"}</span>`;
     html += `<div class="card pday${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}">
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?" · today":""}</h4>
         <span class="small">${d.totals.planned_min?hm(d.totals.planned_min)+" planned":""}${d.totals.done_min?" · "+hm(d.totals.done_min)+" done":""} ${verdict}</span></div>
