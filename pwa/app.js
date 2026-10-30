@@ -1273,7 +1273,7 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <div class="scores" id="scores">
-      <button class="score" data-k="training"><span class="slabel">Training</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
+      <button class="score" data-k="training"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
       <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
@@ -1327,7 +1327,7 @@ V.today = async function(){
   };
 
   /* ---- the top strip: the three scores ----
-     Training, Recovery, Fatigue — drawn by refreshScores below. The scale
+     Fitness, Recovery, Fatigue — drawn by refreshScores below. The scale
      reads into its own card further down the page. */
 
   /* ---- the scale, below the day ----
@@ -1399,14 +1399,16 @@ V.today = async function(){
   const reconnectLink = ()=>
     `<a href="${DEFAULT_API}/whoop/auth"><b>reconnect WHOOP</b></a>`;
 
-  /* ---- the three scores: Training, Recovery, Fatigue ----
-     Training and Fatigue are Fitness (CTL) and Fatigue (ATL) from the
+  /* ---- the three scores: Fitness, Recovery, Fatigue ----
+     Fitness and Fatigue are CTL and ATL from the
      Banister model TrainingPeaks, intervals.icu and Strava all run — 42-day
      and 7-day weighted averages of daily TSS. Recovery is WHOOP's score, with
      HRV and resting HR against the 30-day median. The bridge does the
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
+  // What the fitness number means for a masters amateur: CTL in TSS a day.
+  const fitLevel = c => c == null ? "" : c < 25 ? "base" : c < 45 ? "recreational" : c < 65 ? "solid" : c < 85 ? "strong" : "racer";
   let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null;
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
@@ -1527,7 +1529,7 @@ V.today = async function(){
     const t = d.training, f = d.fatigue, r = d.recovery;
     if (strava && t){
       paintTile("training", t.ctl, t.ramp ? t.ramp.word : "", t.ramp ? t.ramp.tone : "",
-        `${sgn(t.ramp_7d)}/wk`);
+        `${fitLevel(t.ctl)} · ${sgn(t.ramp_7d)}/wk`);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
         `form ${sgn(f.tsb)}`);
     } else {
@@ -1603,14 +1605,14 @@ V.today = async function(){
         <details class="why"><summary>how it's scored</summary><div class="small">Half is the macros against what the plan says should be in by now, half is the journal against today's rules. 80 on target, 60 close.</div></details>`;
     } else if (openScore === "training"){
       const t = d.training;
-      html = `<h4>Training · fitness</h4>
+      html = `<h4>Fitness</h4>
         ${strava ? `<ul class="agenda totals">
-          ${row("fitness (CTL)", `<b>${t.ctl}</b> TSS/day`)}
+          ${row("fitness (CTL)", `<b>${t.ctl}</b> TSS/day · ${fitLevel(t.ctl)}`)}
           ${row("change this week", `<b style="color:${toneC(t.ramp.tone)}">${sgn(t.ramp_7d)}</b> · ${esc(t.ramp.word)}`)}
           ${row("last 7 days", `${t.tss_7d} TSS`)}
           ${row("today so far", `${t.tss_today} TSS`)}
         </ul>` : `<div class="small">Strava isn't answering (${esc((d.sources.strava||{}).reason || "not connected")}), so there is no ride history to score.</div>`}
-        <details class="why"><summary>how it's scored</summary><div class="small">Fitness is a 42-day average of daily training stress. +2 to +6 a week is a sustainable build.</div></details>`;
+        <details class="why"><summary>how it's scored</summary><div class="small">Fitness is a 42-day average of daily training stress (CTL), the same number TrainingPeaks and intervals.icu call Fitness. Under 25 is base, 25 to 45 recreational, 45 to 65 solid, 65 to 85 strong, over 85 racer. +2 to +6 a week is a sustainable build.</div></details>`;
     } else if (openScore === "fatigue"){
       const f = d.fatigue;
       html = `<h4>Fatigue · form</h4>
