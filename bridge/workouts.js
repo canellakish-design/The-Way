@@ -491,4 +491,11 @@ async function create(body) {
   return withMetrics(w, st);
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create };
+async function remove(id) {
+  const d = await db(); const w = d.workouts[id];
+  if (!w) return null;
+  await unsyncOne(w); delete d.workouts[w.id]; await save(d);
+  return w;
+}
+
+module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, remove };

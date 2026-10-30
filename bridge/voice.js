@@ -25,7 +25,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['type', 'text', 'meal', 'supplement', 'lb', 'date', 'time', 'library_key', 'name', 'minutes', 'sport'],
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'note', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'note', 'question', 'remove', 'remove_workout'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -64,6 +64,8 @@ Action types:
 - supplement: one of the known supplements (supplement = its key). One action per supplement.
 - weigh_in: lb = his weight in pounds (convert kg if he says kg).
 - workout: a ride or session to put on the calendar. date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
+- remove: take something back out of today's food journal. text = what to remove in his words ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
+- remove_workout: take a planned session off the calendar. date = its day (YYYY-MM-DD), text = what he called it or "".
 - note: anything about how he feels or slept, text = his words.
 - question: he asked something; answer it in the reply from the day's context above. No other fields.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
@@ -117,6 +119,25 @@ async function run(a) {
       body.time = /^\d{2}:\d{2}$/.test(a.time) ? a.time : null;
       const w = await require('./workouts').create(body);
       return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + w.time : ''}.`, workout_id: w.id };
+    }
+    case 'remove': {
+      const list = (await food.todayEntries()).slice().sort((a, b) => String(a.time).localeCompare(String(b.time)));
+      if (!list.length) return { ok: false, summary: 'Nothing in the journal today to remove.' };
+      const words = String(a.text || '').toLowerCase().split(/\W+/).filter(w => w.length > 2 && !/^(the|that|last|entry|one|meal|from|journal|remove|delete)$/.test(w));
+      const hit = words.length ? list.slice().reverse().find(e => words.some(w => String(e.name || '').toLowerCase().includes(w))) : list[list.length - 1];
+      if (!hit) return { ok: false, summary: `Nothing matching "${a.text}" in today's journal.` };
+      await food.removeEntry(hit.id, tz.todayKey());
+      return { ok: true, summary: `Removed: ${hit.name}${hit.time ? ' (' + hit.time + ')' : ''}.` };
+    }
+    case 'remove_workout': {
+      const d = await getJSON('plan-workouts', { workouts: {} });
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : tz.todayKey();
+      const words = String(a.text || '').toLowerCase().split(/\W+/).filter(w => w.length > 2);
+      const onDay = Object.values(d.workouts || {}).filter(w => w.date === date);
+      const hit = (words.length ? onDay.find(w => words.some(x => String(w.name || '').toLowerCase().includes(x))) : null) || onDay[0];
+      if (!hit) return { ok: false, summary: `No planned session on ${date}.` };
+      await require('./workouts').remove(hit.id);
+      return { ok: true, summary: `Off the calendar: ${hit.name}, ${hit.date}.` };
     }
     case 'note': {
       const d = await getJSON('voice-notes', { notes: [] });

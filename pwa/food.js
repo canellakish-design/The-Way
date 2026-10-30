@@ -155,7 +155,7 @@ V.food = async function(){
       catch(err){ alert(err.message); btn.disabled = false; }
     });
     el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
-      if (!confirm("Remove this meal from the journal?")) return;
+      if (!confirm("Remove this from the journal?")) return;
       try{ const r = await bridge(`/food/${encodeURIComponent(btn.dataset.del)}?date=${date}`,{method:"DELETE"}); day = r.day; draw(); }
       catch(e){ btn.textContent = "failed — " + e.message; }
     });
@@ -171,7 +171,7 @@ V.food = async function(){
   const entryHTML = (e)=>{
     if (e.supplement) return `<div class="card jentry supp"><div class="jrow"><span class="jthumb nothumb">Rx</span>
       <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · supplement</div><div class="jname">${esc(e.name)}</div><div class="small">${esc(e.notes||"")}</div></div>
-      <div class="jfit">${isToday?`<button class="pdanger" data-del="${esc(e.id)}">Remove</button>`:""}</div></div></div>`;
+      <div class="jfit"><button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">×</button></div></div></div>`;
     const a = e.assessment || {};
     const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${e.written ? "✎" : esc((e.name||"?").slice(0,2))}</span>`;
     return `<div class="card jentry">
@@ -179,7 +179,7 @@ V.food = async function(){
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${e.drink_only?"drink":esc(e.meal)}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
           <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}`}</div></div>
-        <div class="jfit">${fitBadge(a)}</div></div>
+        <div class="jfit">${fitBadge(a)}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">×</button></div></div>
       <div class="small jwhy">${esc(a.why||"")}</div>
       <div class="jmore">
         ${e.written?`<div class="small">You wrote: “${esc(e.written)}”</div>`:""}

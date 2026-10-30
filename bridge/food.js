@@ -273,6 +273,19 @@ async function dayReport(date) {
   };
 }
 
+// Remove one entry from a day (and from the ledger). Returns the entry, or null.
+async function removeEntry(id, date) {
+  const doc = await dayDoc(date);
+  const gone = doc.entries.find(x => x.id === id);
+  if (!gone) return null;
+  doc.entries = doc.entries.filter(x => x.id !== id);
+  await setJSON(dayKey(date), doc);
+  await removeFromLedger(id);
+  return gone;
+}
+// Today's entries, newest last, for the voice's "remove the ..." and "undo".
+async function todayEntries() { return (await dayDoc(tz.todayKey())).entries; }
+
 // A supplement taken: one tap, one entry, its micronutrients counted.
 async function addSupplement(key) {
   const sm = MI.supplementMicros(key);
@@ -464,14 +477,10 @@ function attach(app) {
   app.delete('/food/:id', async (req, res) => { if (!auth(req, res)) return;
     try {
       const date = isDate(req.query.date) ? req.query.date : tz.todayKey();
-      const doc = await dayDoc(date);
-      const before = doc.entries.length;
-      doc.entries = doc.entries.filter(x => x.id !== req.params.id);
-      if (doc.entries.length === before) return res.status(404).json({ error: 'no such entry' });
-      await setJSON(dayKey(date), doc);
-      await removeFromLedger(req.params.id);
-      res.json({ ok: true, day: await dayReport(date) });
+      const gone = await removeEntry(req.params.id, date);
+      if (!gone) return res.status(404).json({ error: 'no such entry' });
+      res.json({ ok: true, removed: gone, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement };
+module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addSupplement, removeEntry, todayEntries };

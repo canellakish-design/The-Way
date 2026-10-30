@@ -79,7 +79,7 @@ V.calendar = async function(){
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
         <span class="pn">${esc(w.name)}</span>
         <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
-        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}</a>`);
+        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">×</button></a>`);
     }
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
@@ -104,6 +104,12 @@ V.calendar = async function(){
   }
   html += `<div class="card"><h4>Planning numbers</h4><div id="pSettings" class="small">loading…</div></div>`;
   document.getElementById("pWeek").innerHTML = html;
+  document.querySelectorAll("[data-delw]").forEach(b => b.onclick = async (ev)=>{
+    ev.preventDefault(); ev.stopPropagation();
+    if (!confirm("Take this session off the calendar?")) return;
+    try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); V.calendar(); }
+    catch(e){ alert(e.message); }
+  });
   drawSettings(cal.settings);
 };
 
