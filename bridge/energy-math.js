@@ -80,7 +80,8 @@ function sessionBurn(s, ftp) {
   const IF = s.tss ? Math.sqrt(s.tss / (mins / 60) / 100) : (/vo2|40\s*\/\s*20|threshold/i.test(s.name || '') ? 0.9 : 0.6);
   return rideCarbsPerHour(Math.min(1.2, Math.max(0.4, IF)), ftp);
 }
-const isHard = s => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(s.name || '');
+// "Zwift - Intervals icu: Z1 trainer" is how a Zwift ride built in intervals.icu reaches Strava: that word is the tool, not the session
+const isHard = s => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(s.name || '').replace(/intervals\.?\s*icu/ig, ''));
 const isLift = s => /lift|weight|strength/i.test(s.name || '') || s.sport === 'WeightTraining';
 // What each session needs at its start, as percentages of the two stores.
 function needFor(s) {

@@ -187,7 +187,10 @@ async function weekDays(n) {
         .concat((day.done || []).filter(r => !/weight|lift|strength/i.test(r.type || '')).map(r => ({ name: r.name, minutes: r.minutes, tss: r.tss, done: true })));
       if (rides.length) {
         const big = rides.slice().sort((a, b) => (b.tss || 0) - (a.tss || 0))[0];
-        x.ride = { name: big.name, minutes: rides.reduce((a, r) => a + (r.minutes || 0), 0), tss: rides.reduce((a, r) => a + (r.tss || 0), 0), hard: rides.some(r => HARD.test(r.name || '')), done: rides.every(r => r.done) };
+        // the plan's copy, intervals.icu's copy and Strava's ride are the same session: once it is ridden the ride is the day; before that, the largest copy
+        const done = rides.filter(r => r.done), use = done.length ? done : [big];
+        x.ride = { name: big.name, minutes: use.reduce((a, r) => a + (r.minutes || 0), 0), tss: use.reduce((a, r) => a + (r.tss || 0), 0),
+          hard: rides.some(r => HARD.test(String(r.name || '').replace(/intervals\.?\s*icu/ig, ''))), done: done.length > 0 };
       }
     }
   } catch (e) { /* no plan: the week is placed on the calendar alone */ }
