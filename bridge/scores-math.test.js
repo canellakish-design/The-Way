@@ -72,7 +72,7 @@ ok('scores: the front-page payload from rides, WHOOP and the wellness log', () =
   assert.strictEqual(s.recovery.band.key, 'green');
   assert.strictEqual(s.recovery.hrv_baseline, 41);
   assert.strictEqual(s.recovery.rhr_delta, -2);
-  assert.strictEqual(s.series.length, 28);
+  assert.strictEqual(s.series.length, 42);
 });
 
 ok('hrvGuide: the 7-day mean against the 28-day band', () => {

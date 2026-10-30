@@ -190,7 +190,7 @@ function scores(input) {
   };
 
   return { today, training, fatigue, recovery,
-    series: series.slice(Math.max(0, i - 27), i + 1).map(r => ({ date: r.date, tss: r.tss, ctl: r.ctl, atl: r.atl })) };
+    series: series.slice(Math.max(0, i - 41), i + 1).map(r => ({ date: r.date, tss: r.tss, ctl: r.ctl, atl: r.atl })) };   // six weeks, the fitness constant
 }
 
 module.exports = { CTL_DAYS, ATL_DAYS, pmc, dailyLoads, formZone, rampBand, monotony, hrvGuide,

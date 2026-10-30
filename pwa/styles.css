@@ -208,6 +208,13 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 .score .sword{font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase;
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
 .score .ssub{font-size:12.5px; color:var(--muted); line-height:1.35; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%}
+/* the hero: fitness, the one slow number the program exists to move, above
+   the day's dials. Number and words on the left, six weeks of the line on the right. */
+.score.hero{flex-direction:row; align-items:stretch; justify-content:space-between; gap:12px; margin:2px 0 8px; padding:14px 14px 12px}
+.score.hero .herotext{display:flex; flex-direction:column; gap:2px; min-width:0}
+.score.hero .snum{font-size:56px}
+.score.hero .spark{flex:1 1 50%; max-width:60%; height:auto; min-height:56px; align-self:center; color:var(--ink); opacity:.9}
+@media (max-width:560px){ .score.hero .snum{font-size:40px} .score.hero .spark{min-height:48px} }
 .scoreverdict{margin:8px 2px 0; color:var(--ink); font-weight:500; min-height:0}
 .scoreverdict:empty{display:none}
 .scoredetail{margin-top:10px}

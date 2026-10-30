@@ -1272,12 +1272,13 @@ const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
+    <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
     <div class="scores" id="scores">
-      <button class="score" data-k="training"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></button>
       <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
+      <button class="score" data-k="bodyfat"><span class="slabel">Body fat</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
       <button class="score" data-k="workouts"><span class="slabel">Workouts</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
@@ -1388,8 +1389,8 @@ V.today = async function(){
     bodyData = w;
     const el = document.getElementById("body");
     if (el){ el.innerHTML = bodyHTML(w); wireBody(el); }
-    drawWeightTile();
-    if (typeof drawScoreDetail === "function" && openScore === "weight") drawScoreDetail();
+    drawWeightTile(); drawBodyFatTile();
+    if (typeof drawScoreDetail === "function" && (openScore === "weight" || openScore === "bodyfat")) drawScoreDetail();
   };
   const refreshBody = async ()=> drawBody(await bridge("/weigh-in").catch(()=>null));
 
@@ -1407,6 +1408,19 @@ V.today = async function(){
      arithmetic (bridge/scores-math.js); this draws it and explains it. */
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const sgn = n => n == null ? "—" : (n > 0 ? "+" : "") + n;
+  // The six-week line of fitness inside the hero box: one path, the last
+  // point marked. The box's own tone colours it, so the line is ink.
+  const drawSpark = (series)=>{
+    const svg = view.querySelector(".score.hero .spark"); if (!svg) return;
+    const pts = (series||[]).map(r => r.ctl).filter(v => v != null);
+    if (pts.length < 2){ svg.innerHTML = ""; return; }
+    const W = 160, H = 56, lo = Math.min(...pts), hi = Math.max(...pts), span = Math.max(4, hi - lo);
+    const X = i => (i / (pts.length - 1)) * (W - 6) + 3, Y = v => 6 + (1 - (v - lo) / span) * (H - 12);
+    const d = pts.map((v, i) => (i ? "L" : "M") + X(i).toFixed(1) + "," + Y(v).toFixed(1)).join(" ");
+    svg.innerHTML = `<path d="${d} L${X(pts.length-1).toFixed(1)},${H} L3,${H} Z" fill="currentColor" opacity=".12"></path>
+      <path d="${d}" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"></path>
+      <circle cx="${X(pts.length-1).toFixed(1)}" cy="${Y(pts[pts.length-1]).toFixed(1)}" r="3.5" fill="currentColor"></circle>`;
+  };
   // What the fitness number means for a masters amateur: CTL in TSS a day.
   const fitLevel = c => c == null ? "" : c < 25 ? "base" : c < 45 ? "recreational" : c < 65 ? "solid" : c < 85 ? "strong" : "racer";
   let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null;
@@ -1471,6 +1485,18 @@ V.today = async function(){
     if (w.latest && !w.latest.logged_today) sub = sub || "not today";
     paintTile("weight", Math.round(w.latest.lb), word, tone, sub || `${w.latest.lb} lb`);
   };
+  // Body fat from the scale's composition; the word is the week-over-week
+  // move of the 7-day mean (bridge/weighin.js trends). Down is the direction.
+  const drawBodyFatTile = ()=>{
+    const w = bodyData;
+    const c = w && w.composition, t = w && (w.trends||[]).find(x => x.key === "fat_pct");
+    if (!c || c.fat_pct == null){ paintTile("bodyfat", null, "", "", w ? (w.withings_connected ? "scale has no body fat yet" : "needs the Withings scale") : "bridge unreachable"); return; }
+    const d = t && t.delta != null ? t.delta : null;
+    const word = d == null ? "" : d < -0.2 ? "down" : d > 0.2 ? "up" : "flat";
+    const tone = d == null ? "neutral" : d < -0.2 ? "good" : d > 0.2 ? "bad" : "neutral";
+    const sub = d != null ? `${sgn(d)} pts/wk${c.fat_mass_lb != null ? ` · ${c.fat_mass_lb} lb fat` : ""}` : (c.fat_mass_lb != null ? `${c.fat_mass_lb} lb fat` : "first reading");
+    paintTile("bodyfat", c.fat_pct, word, tone, sub);
+  };
   const foodBand = o => o == null ? null : o >= 80 ? { word: "on target", tone: "good" } : o >= 60 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
   const drawFood = ()=>{
     const c = complianceData;
@@ -1528,8 +1554,9 @@ V.today = async function(){
     const strava = d.sources && d.sources.strava && d.sources.strava.connected;
     const t = d.training, f = d.fatigue, r = d.recovery;
     if (strava && t){
-      paintTile("training", t.ctl, t.ramp ? t.ramp.word : "", t.ramp ? t.ramp.tone : "",
-        `${fitLevel(t.ctl)} · ${sgn(t.ramp_7d)}/wk`);
+      paintTile("training", t.ctl, fitLevel(t.ctl), t.ramp ? t.ramp.tone : "",
+        t.ramp ? `${sgn(t.ramp_7d)} this week · ${t.ramp.word}` : `${t.tss_7d} TSS this week`);
+      drawSpark(d.series);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
         `form ${sgn(f.tsb)}`);
     } else {
@@ -1561,7 +1588,7 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "micros"){
@@ -1592,6 +1619,14 @@ V.today = async function(){
         ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a drink</a>`;
       box.innerHTML = html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
+    }
+    if (openScore === "bodyfat"){
+      const w = bodyData, c = w && w.composition;
+      const rows = c ? (w.trends||[]).filter(t => t.key !== "lb" && t.value != null).map(t => row(t.label, `<b>${t.value}${esc(t.unit)}</b>${t.delta != null ? ` · ${sgn(t.delta)}${esc(t.unit.trim())} ${esc(t.basis || "")}` : ""}`)).join("") : "";
+      html = `<h4>Body fat</h4>
+        ${c ? `<ul class="agenda totals">${rows}</ul><div class="small">From the Withings scale, ${esc(new Date(c.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}. Moves are the 7-day mean against the week before.</div>` : `<div class="small">${w && w.withings_connected ? "The scale has not reported body fat yet." : "Body fat needs the Withings scale."}</div>`}
+        <details class="why"><summary>how it's read</summary><div class="small">A bioimpedance reading swings a point or two with water alone, so the tile's word comes from the weekly mean, not the day. Losing fat while the lean rows hold is the program working.</div></details>`;
+      box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
