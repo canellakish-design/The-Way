@@ -77,7 +77,7 @@ async function context() {
     const h = day.hydration;
     if (h && h.now) lines.push(`Live hydration now: ${h.now.ml >= 0 ? '+' : '-'}${L(h.now.ml)} on the morning (${h.now.band.word}); ${L(h.drunk_ml)} drunk of about ${L(h.target_ml)} for the day.` + (h.sessions || []).filter(s => !s.done).map(s => ` ${s.name.replace(/,.*$/, '')} will sweat about ${L(s.sweat_ml_h)} an hour.`).join('') + (h.advice ? ' Advice: ' + h.advice : ''));
     if (day.micros && day.micros.gaps && day.micros.gaps.length) lines.push('Micronutrients short this week: ' + day.micros.gaps.map(g => g.label).join(', ') + '.');
-    if (day.suggestion && !day.suggestion.none) lines.push(`The app's suggested next snack: ${day.suggestion.name} (${day.suggestion.kcal} kcal) because ${day.suggestion.why}.`);
+    if (day.suggestion && !day.suggestion.none) lines.push(`NEXT ON THE PLAN: ${day.suggestion.name}: ${day.suggestion.what} About ${day.suggestion.kcal} kcal, ${day.suggestion.low_carb ? 'under ' : ''}${day.suggestion.carbs_g} g carbs, ${day.suggestion.protein_g} g protein.`);
   }
   if (sched && sched.days) {
     for (const d of sched.days.filter(x => x.date === today || x.date === tomorrow)) {

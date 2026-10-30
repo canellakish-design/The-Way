@@ -228,6 +228,12 @@ V.food = async function(){
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
       <button id="writeBtn" class="writebtn">Write it instead</button>
+      <div class="advisor">
+        <div class="snaprow"><button class="big snapbtn" id="adviseBtn">What's in front of me</button><button class="big snapbtn" id="nearBtn">Find food near me</button></div>
+        <input id="adviseFile" type="file" accept="image/*" capture="environment" hidden>
+        <div class="small adhint">A shelf, a cooler, a menu or a counter: it says what to pick for what the plan wants next. Near me finds places within a short walk and names the order.</div>
+        <div id="adviseOut"></div>
+      </div>
       <div id="writeForm" hidden>
         <label for="writeText">What is on the plate, in your words</label>
         <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
@@ -393,6 +399,53 @@ V.food = async function(){
       <div class="small">${esc(e.meal)} · ${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}</div>
       <div>${esc(a.why)}</div></div>`;
   };
+  /* ---- the advisor: what is in front of him, or what is near him ---- */
+  const adviseFile = document.getElementById("adviseFile"), adviseOut = document.getElementById("adviseOut");
+  const fitTone = f => f === "yes" ? "var(--green)" : f === "partly" ? "var(--amber)" : "var(--red)";
+  const renderAdvice = (r, places)=>{
+    const items = (r.items||[]).slice().sort((a,b)=>["yes","partly","no"].indexOf(a.fits)-["yes","partly","no"].indexOf(b.fits));
+    const pickName = r.pick && r.pick.name;
+    adviseOut.innerHTML = `
+      ${r.reply ? `<div class="verdict" style="border-color:${pickName?"var(--green)":"var(--amber)"}"><div>${esc(r.reply)}</div></div>` : ""}
+      ${r.place ? `<div class="small adplace"><b>${esc(r.place.name)}</b> · ${esc(r.place.kind)} · ${r.place.dist_m} m · <a href="${esc(r.place.directions)}" target="_blank" rel="noopener">Navigate</a> · <a href="${esc(r.place.apple)}" target="_blank" rel="noopener">Apple Maps</a></div>` : ""}
+      ${items.length ? `<ul class="agenda totals aditems">${items.map(i => `<li class="${i.name===pickName?"pick":""}"><span class="n"><b style="color:${fitTone(i.fits)}">${esc(i.name)}</b>${i.how_much?` <span class="small">${esc(i.how_much)}</span>`:""}<span class="small"> ${i.kcal} kcal · ${i.carbs_g}C · ${i.protein_g}P · ${i.fat_g}F</span><span class="small adwhy">${esc(i.why||"")}</span></span>
+          <span class="tag">${i.name===pickName?`<button class="linkish" data-adlog="${esc((i.how_much?i.how_much+" ":"")+i.name)}">log it</button>`:""}</span></li>`).join("")}</ul>` : `<div class="small">Nothing here that it could name.</div>`}
+      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
+    if (r.reply && typeof speak === "function") speak(r.reply);
+    adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
+      b.disabled = true; b.textContent = "logging…";
+      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); }
+      catch(e){ b.textContent = "failed"; }
+    });
+  };
+  document.getElementById("adviseBtn").onclick = ()=> adviseFile.click();
+  adviseFile.onchange = async ()=>{
+    const f = adviseFile.files && adviseFile.files[0]; if (!f) return;
+    adviseOut.innerHTML = `<div class="small">Looking at it…</div>`;
+    try{
+      const image_base64 = await fileToBase64(f, 1280, 0.75);
+      const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ images:[{image_base64, media_type:"image/jpeg"}] })});
+      renderAdvice(r, null);
+    }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't read it — ${esc(e.message)}</div>`; }
+    adviseFile.value = "";
+  };
+  document.getElementById("nearBtn").onclick = ()=>{
+    if (!navigator.geolocation){ adviseOut.innerHTML = `<div class="small">This browser gives no location.</div>`; return; }
+    adviseOut.innerHTML = `<div class="small">Finding where you are…</div>`;
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      let near = null;
+      try{ near = await bridge("/food/nearby",{method:"POST",headers:J,body:JSON.stringify({ lat, lon })}); }
+      catch(e){ adviseOut.innerHTML = `<div class="small">The map service did not answer. <a href="https://www.google.com/maps/search/food/@${lat},${lon},15z" target="_blank" rel="noopener">Open the map</a> instead.</div>`; return; }
+      if (!near.places || !near.places.length){ adviseOut.innerHTML = `<div class="small">Nothing with a name within 1.5 km on the map. <a href="${esc(near.search)}" target="_blank" rel="noopener">Open the map</a>.</div>`; return; }
+      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you. Choosing…</div>`;
+      try{
+        const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ places: near.places })});
+        renderAdvice(r, near.places);
+      }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't choose — ${esc(e.message)}</div><ul class="agenda totals">${near.places.slice(0,10).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul>`; }
+    }, err => { adviseOut.innerHTML = `<div class="small">Location was refused (${esc(err.message)}). Allow it for this site in Settings, or snap what is in front of you.</div>`; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+  };
+
   const wform = document.getElementById("writeForm");
   document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };
   document.getElementById("writeCancel").onclick = ()=>{ wform.hidden = true; };

@@ -511,3 +511,5 @@ ul.agenda.zthree .n{min-width:0} ul.agenda.zthree .tag{display:flex; flex-direct
 .zstack{display:flex; height:18px; margin:6px 0; border:1px solid var(--line); background:#1E2024; font-family:var(--mono); font-size:10px}
 .zstack i{display:flex; align-items:center; justify-content:center; color:#0F100E; font-style:normal; overflow:hidden} .zstack i+i{border-left:2px solid #0F100E}
 .zsplit{margin:8px 0 12px} ul.agenda.zrides li{grid-template-columns:44px 1fr 72px} ul.agenda.zrides .tag .zstack{width:72px; margin:0}
+.advisor{border-top:1px dashed var(--line); margin-top:12px; padding-top:12px} .adhint{margin-top:6px}
+.aditems li.pick{background:var(--green-soft)} .adwhy{display:block; margin-top:2px; color:var(--muted)} .adplace{margin:8px 0}
