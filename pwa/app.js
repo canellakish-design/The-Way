@@ -1347,7 +1347,7 @@ function dayCard(d, plan, nowMin, rec, solo){
       <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
-  const foot = isToday && rec ? `${open} · <b>${esc(rec)}</b>` : open;
+  const foot = open;
   const m = d.macros;
   const macroRow = m
     ? `<div class="macros"><div class="fuelrow"><span class="mfuel">${esc(m.fuel_day||"")}</span><span class="fkcal"><b>${m.kcal ?? "—"}</b> kcal</span></div>
