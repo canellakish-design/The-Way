@@ -434,3 +434,4 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxlegend{display:flex; gap:14px; font-family:var(--mono); font-size:10.5px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:0 0 6px}
 .wxlegend i{display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:6px}
 .wxlegend i.good{background:#2E7D4A} .wxlegend i.ok{background:#8A6A14} .wxlegend i.bad{background:#7A2E26}
+.calstrip{margin-top:4px} .calstrip .wxnote{min-height:1.2em}

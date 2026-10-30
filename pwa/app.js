@@ -1323,7 +1323,21 @@ function outdoorStrip(date){
   const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
   const boxes = H.map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good to ride") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(lbl(h.hour))}"><i>${lbl(h.hour)}</i></span>`).join("");
   const best = w.best && w.best.to - w.best.from >= 1 ? `best outside ${lbl(w.best.from)}–${lbl(w.best.to)}` : "no good hour outside";
-  return `<div class="wxstrip"><div class="wxlegend"><span><i class="good"></i>outdoor</span><span><i class="ok"></i>marginal</span><span><i class="bad"></i>indoor</span></div><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span id="wxwhy"></span></div></div>`;
+  return `<div class="wxstrip"><div class="wxlegend"><span><i class="good"></i>outdoor</span><span><i class="ok"></i>marginal</span><span><i class="bad"></i>indoor</span></div><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span class="wxwhy"></span></div></div>`;
+}
+/* ---- the calendar hours: one box an hour, green free, amber part, red busy ---- */
+function calendarStrip(d){
+  const ev = (d.events||[]).filter(e => e.source !== "plan" && e.source !== "ride" && e.start_min != null && e.end_min != null);
+  const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
+  const boxes = [];
+  for (let h = 5; h <= 21; h++){
+    const a = h*60, b = a+60;
+    let busy = 0; const names = [];
+    for (const e of ev){ const o = Math.min(b, e.end_min) - Math.max(a, e.start_min); if (o > 0){ busy += o; names.push(e.summary); } }
+    const g = busy >= 30 ? "bad" : busy > 0 ? "ok" : "good";
+    boxes.push(`<span class="wxh ${g}" data-why="${attr(names.length ? names.join(", ") : "free")}" title="${attr(lbl(h))}"><i>${lbl(h)}</i></span>`);
+  }
+  return `<div class="wxstrip calstrip"><div class="wxlegend"><span><i class="good"></i>free</span><span><i class="ok"></i>part</span><span><i class="bad"></i>busy</span></div><div class="wxrow">${boxes.join("")}</div><div class="small wxnote"><span class="wxwhy"></span></div></div>`;
 }
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
@@ -1355,7 +1369,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
-    ${macroRow}${outdoorStrip(d.date)}
+    ${macroRow}${outdoorStrip(d.date)}${calendarStrip(d)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div></div>`;
@@ -1985,7 +1999,7 @@ V.today = async function(){
     view.addEventListener("click", async (e)=>{
       if (e.target.closest("button, a")) return;
       const box = e.target.closest(".wxh");
-      if (box){ const el = box.closest(".wxstrip").querySelector("#wxwhy"); if (el) el.textContent = box.title + ": " + box.dataset.why; return; }
+      if (box){ const el = box.closest(".wxstrip").querySelector(".wxwhy"); if (el) el.textContent = box.title + ": " + box.dataset.why; return; }
       // an all-day chip (a session with no time yet) opens the same way, under the chips
       const chip = e.target.closest(".xchip");
       if (chip){
