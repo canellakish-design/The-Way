@@ -1414,7 +1414,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     ${macroRow}${hourStrips(d)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
-    <div class="small">${foot}</div>
+    <div class="dayfoot"><span class="small">${foot}</span><a class="btn" href="#food">Food log</a></div>
     <details class="addev"><summary>+ add to the calendar</summary>
       <div class="row2"><span><label>What</label><input class="evTitle" placeholder="Dentist"></span><span><label>Date</label><input class="evDate" type="date" value="${esc(d.date)}"></span></div>
       <div class="row2"><span><label>Start (blank = all day)</label><input class="evStart" type="time"></span><span><label>Minutes</label><input class="evMin" type="number" value="60"></span></div>
@@ -1460,7 +1460,6 @@ V.today = async function(){
       <button id="dayNext" aria-label="Next day">›</button>
     </div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
-    <div class="card" id="foodLog"><h4>Food log · today</h4><div class="small">reaching the bridge…</div></div>
     <div class="card" id="body"><h4>The scale</h4>
       <div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>

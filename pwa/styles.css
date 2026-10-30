@@ -484,3 +484,4 @@ ul.agenda{position:relative}
 details.addev{margin-top:10px} details.addev summary{font-family:var(--mono); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); cursor:pointer; list-style:none}
 details.addev summary::-webkit-details-marker{display:none} details.addev[open] summary{color:var(--ink)}
 details.addev input{width:100%}
+.dayfoot{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:8px}
