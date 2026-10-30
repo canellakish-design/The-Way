@@ -153,4 +153,19 @@ ok('mealMatch: a plate within 20% is green, 40% yellow, further is red either wa
   assert.strictEqual(F.mealMatch(plan, [{ kcal: 500, carbs_g: 60, protein_g: 60 }]).key, 'green');    // extra protein is fine
   assert.strictEqual(F.mealMatch({ kcal: 120, carbs_g: 30, protein_g: 0 }, [{ kcal: 110, carbs_g: 28 }]).key, 'green');
 });
+
+ok('a low-carb breakfast is low carb: 20 g, and eating under it is as planned', () => {
+  const plan = F.mealPlan('normal', [{ name: 'Zone 1, 90 min', time: '09:00', minutes: 90 }], F.targets('normal', 600));
+  const b = plan.find(m => m.slot === 'breakfast');
+  assert.ok(b.low_carb && b.carbs_g === 20 && b.protein_g === 30, JSON.stringify(b));
+  assert.ok(/under 20 g of carbs/.test(b.what), b.what);
+  const after = plan.find(m => m.slot === 'after');
+  assert.ok(after.carbs_g > b.carbs_g * 3, 'the carbs moved to after the ride: ' + after.carbs_g);
+  assert.strictEqual(F.mealMatch(b, [{ kcal: 175, carbs_g: 0, protein_g: 27 }]).key, 'green');     // whey and eggs, no carbs: the point
+  assert.strictEqual(F.mealMatch(b, [{ kcal: 500, carbs_g: 60, protein_g: 30 }]).key, 'red');      // toast and oats: not low carb
+  assert.strictEqual(F.mealMatch(b, [{ kcal: 120, carbs_g: 0, protein_g: 10 }]).key, 'yellow');    // protein short
+  const bike = plan.find(m => m.slot === 'on the bike');
+  assert.strictEqual(F.mealMatch(bike, [{ kcal: 0, carbs_g: 0, fluid_ml: 600, drink_only: true }]), null);   // water is not the bottle of Tailwind
+  assert.strictEqual(F.mealMatch(bike, [{ kcal: 180, carbs_g: 45, fluid_ml: 600, drink_only: true }]).key, 'green');
+});
 console.log(n + ' passed');

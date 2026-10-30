@@ -150,11 +150,15 @@ function mealPlan(day, sessions, target) {
   });
   const out = [];
   const restDay = day === 'rest';
-  const bfast = (time, pre) => meal(time, 'breakfast',
-    restDay ? 'Protein first: eggs or Greek yogurt, fruit. No starch.'
-    : day === 'high' ? (pre ? `Carb breakfast 2 to 3 hours before ${pre}: 70 g oats, fruit, whey.` : 'Oats and fruit, whey in the bowl.')
-    : (pre ? `Low carb breakfast before ${pre}, with 20 g protein: smoothie, eggs or Greek yogurt. No toast.` : 'Protein smoothie or eggs, 20 g protein at least. Low carb.'),
-    0.25, restDay ? 0.15 : day === 'high' ? 0.30 : 0.15, 45);
+  // A low-carb breakfast means it: 20 g of carbs at most (eggs, Greek yogurt, a
+  // smoothie with berries), 30 g of protein, about 350 kcal. The carbs it does
+  // not carry move to the meal after the ride. Graded as low carb: under on
+  // carbs is the point, not a miss.
+  const LOW_CARB_G = 20;
+  const lowCarb = (time, slot, what, protein) => Object.assign(meal(time, slot, what, 0.15, 0, protein), { carbs_g: LOW_CARB_G, low_carb: true });
+  const bfast = (time, pre) => restDay ? Object.assign(meal(time, 'breakfast', 'Protein first: eggs or Greek yogurt, fruit. No starch.', 0.25, 0.15, 45), { low_carb: true })
+    : day === 'high' ? meal(time, 'breakfast', pre ? `Carb breakfast 2 to 3 hours before ${pre}: 70 g oats, fruit, whey.` : 'Oats and fruit, whey in the bowl.', 0.25, 0.30, 45)
+    : lowCarb(time, 'breakfast', pre ? `Low carb breakfast before ${pre}, under ${LOW_CARB_G} g of carbs, 30 g protein: eggs, Greek yogurt or a smoothie. No toast.` : `Protein smoothie or eggs, 30 g protein, under ${LOW_CARB_G} g of carbs.`, 30);
   const lunch = time => meal(time, 'lunch', restDay ? 'Protein and vegetables. Big salad with chicken or fish.' : 'Protein with rice or potatoes, vegetables.', 0.30, restDay ? 0.25 : 0.35, 50);
   const dinner = time => meal(time, 'dinner', restDay ? 'Protein, vegetables and the one starch of the day.'
     : day === 'high' ? 'Protein, vegetables, and a proper starch. Carbs still count today.' : 'Protein and vegetables, starch beside it.', 0.35, restDay ? 0.50 : 0.40, 55);
@@ -198,7 +202,8 @@ function mealPlan(day, sessions, target) {
       : `Coffee and a 20 g whey shake before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
     else out.push(bfast(start - gap, name));
     out.push(onBike);
-    out.push(after(early ? 'breakfast' : 'after', early ? 0.28 : 0.22, day === 'high' ? 0.30 : 0.35));
+    // the carbs the low-carb breakfast did not carry land here
+    out.push(after(early ? 'breakfast' : 'after', early ? 0.28 : (day === 'high' ? 0.22 : 0.32), day === 'high' ? 0.30 : 0.45));
     const l = Math.max(end + 150, 12 * 60 + 30);
     if (l < 15 * 60) out.push(lunch(l));
     out.push(dinner(Math.max(18 * 60 + 30, l + 300)));
@@ -210,7 +215,7 @@ function mealPlan(day, sessions, target) {
       ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBike);
-    out.push(after('lunch', 0.30, day === 'high' ? 0.35 : 0.35));
+    out.push(after('lunch', day === 'high' ? 0.30 : 0.40, day === 'high' ? 0.35 : 0.50));   // carries what the low-carb breakfast did not
     out.push(dinner(Math.max(18 * 60 + 30, end + 240)));
     out.push(snack(20 * 60 + 45));
   } else {
@@ -221,7 +226,7 @@ function mealPlan(day, sessions, target) {
       ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
     out.push(onBike);
-    out.push(after('dinner', 0.33, day === 'high' ? 0.35 : 0.40));
+    out.push(after('dinner', day === 'high' ? 0.33 : 0.43, day === 'high' ? 0.35 : 0.55));   // carries what the low-carb breakfast did not
     if (end + 30 <= 20 * 60) out.push(snack(21 * 60));
   }
   return out.sort((a, b) => toMin(a.time) - toMin(b.time));
@@ -320,15 +325,22 @@ function band(score) {
 // that, either way, since on a Zone 1 morning too many carbs is the miss
 // and before a hard session too few is. Slots with no logged entry: null.
 function mealMatch(plan, logged) {
-  const l = (logged || []).filter(e => e && !e.supplement);
+  // a bottle of water logged into a slot is not the meal; a bottle with carbs on the bike is
+  const l = (logged || []).filter(e => e && !e.supplement && (!e.drink_only || (plan.slot === 'on the bike' && e.carbs_g >= 10)));
   if (!l.length) return null;
   const sum = k => l.reduce((a, e) => a + (e[k] || 0), 0);
   const got = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g') };
   const off = (have, want) => want > 0 ? (have - want) / want : (have > 15 ? 1 : 0);
   const parts = [];
-  if (plan.kcal > 0) parts.push({ k: 'kcal', off: off(got.kcal, plan.kcal), both: true });
-  if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: off(got.carbs_g, plan.carbs_g), both: true });
-  if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
+  if (plan.low_carb) {
+    // the point of the slot is few carbs: only carbs OVER the cap and protein short count
+    parts.push({ k: 'carbs', off: Math.max(0, off(got.carbs_g, plan.carbs_g)), both: true });
+    if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
+  } else {
+    if (plan.kcal > 0) parts.push({ k: 'kcal', off: off(got.kcal, plan.kcal), both: true });
+    if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: off(got.carbs_g, plan.carbs_g), both: true });
+    if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
+  }
   const miss = p => p.both ? Math.abs(p.off) : Math.max(0, -p.off);   // protein only counts when short
   const worst = parts.reduce((a, p) => miss(p) > miss(a) ? p : a, parts[0] || { k: 'kcal', off: 0, both: true });
   const w = miss(worst);
