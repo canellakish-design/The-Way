@@ -32,15 +32,36 @@ const { LIBRARY } = require('./workout-library');
 const TARGET = { z1: 75, z2: 5, z3: 20 };
 const pct = (a, b) => b > 0 ? Math.round(a / b * 100) : null;
 
-function three(st) {
-  const ftp = st.ftp, hr = R.HR;
+// The thresholds the three zones hang on. Heart rate: the Tymewear ramp
+// test when one has been entered (VT1 and VT2 as heart rates), else the
+// measured constants in ride-math. Power: the signature's TP when it has
+// one with any confidence, else the planning FTP; the Zone 1 ceiling is the
+// test's VT1 power when present, else 68% of TP.
+function anchorsFrom(st, test, sig) {
+  const hr = R.HR;
+  const t = test && Number.isFinite(Number(test.vt2_hr)) ? test : null;
+  const vt1 = t && Number.isFinite(Number(t.vt1_hr)) ? Math.round(Number(t.vt1_hr)) : hr.vt1;
+  const vt2 = t ? Math.round(Number(t.vt2_hr)) : hr.vt2;
+  const tp = sig && sig.signature && sig.confidence !== 'none' ? sig.signature.tp : null;
+  const ftp = tp || st.ftp;
+  const vt1p = t && Number.isFinite(Number(t.vt1_power)) ? Math.round(Number(t.vt1_power)) : Math.round(ftp * 0.68);
+  return { ftp, tp, planning_ftp: st.ftp, lthr: vt2, vt1, vt2, vo2_line: hr.hard, max_hr: hr.max, hr_rest: st.hr_rest,
+    vt1_power: vt1p, hr_source: t ? `Tymewear ramp test${t.date || t.at ? ' of ' + String(t.date || t.at).slice(0, 10) : ''}` : 'measured thresholds (Tymewear, entered as constants)',
+    power_source: tp ? `the signature's threshold power (${sig.confidence} confidence)` : 'the planning FTP (no signature yet)',
+    note: t ? `Heart-rate zones from your Tymewear ramp test: VT1 ${vt1}, VT2 ${vt2} bpm. Power zones from ${tp ? 'the signature' : 'the planning FTP'}, ${ftp} W.`
+      : `Heart-rate thresholds VT1 ${vt1} and VT2 ${vt2} bpm (Tymewear, as constants; enter a ramp test below to update them). Power from ${tp ? 'the signature' : 'the planning FTP'}, ${ftp} W.` };
+}
+
+function three(st, a) {
+  const ftp = a ? a.ftp : st.ftp, hr = a ? { vt1: a.vt1, vt2: a.vt2, hard: a.vo2_line } : R.HR;
+  const z1hi = a ? a.vt1_power : Math.round(ftp * 0.68);
   return [
     { key: 'z1', name: 'Zone 1', what: 'Easy. The base. Breathing through the nose, a sentence at a time.',
-      hr: { lo: null, hi: hr.vt1 - 1, cue: `under ${hr.vt1 - 1}` }, power: { lo: Math.round(ftp * 0.50), hi: Math.round(ftp * 0.68), pct: '50–68%' },
+      hr: { lo: null, hi: hr.vt1 - 1, cue: `${hr.vt1 - 1} and under` }, power: { lo: Math.round(ftp * 0.50), hi: z1hi, pct: `${Math.round(ftp * 0.5 / ftp * 100)}–${Math.round(z1hi / ftp * 100)}%` },
       sessions: LIBRARY.filter(l => /^z1-/.test(l.key)).map(l => l.name), target_pct: TARGET.z1,
       why: 'Mitochondria, fat burning, the engine. Most of the riding, at an effort that costs little to recover from.' },
     { key: 'z2', name: 'Zone 2', what: 'Between the thresholds. Tempo and sweet spot. Hard enough to tire, not hard enough to change much.',
-      hr: { lo: hr.vt1, hi: hr.vt2 - 1, cue: `${hr.vt1} to ${hr.vt2 - 1}` }, power: { lo: Math.round(ftp * 0.68), hi: Math.round(ftp * 0.95), pct: '68–95%' },
+      hr: { lo: hr.vt1, hi: hr.vt2 - 1, cue: `${hr.vt1} to ${hr.vt2 - 1}` }, power: { lo: z1hi, hi: Math.round(ftp * 0.95), pct: `${Math.round(z1hi / ftp * 100)}–95%` },
       sessions: LIBRARY.filter(l => /^mtb-/.test(l.key)).map(l => l.name), target_pct: TARGET.z2,
       why: 'The zone the plan avoids on purpose. Group rides and climbs drift here; the Zone 1 rule (watts come down when the heart rate climbs) is there to stop it.' },
     { key: 'z3', name: 'Zone 3', what: 'Hard. Threshold and above. The 40/20s live here.',
@@ -74,6 +95,12 @@ function verdict(s) {
 async function report() {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
   const today = tz.todayKey();
+  // the signature (TP, HIE, PP from his power) and the Tymewear test
+  let sig = null, fit = null;
+  try { sig = await require('./signature').report(); } catch (e) { sig = null; }
+  try { fit = await getJSON('fitness', null); } catch (e) { fit = null; }
+  const test = fit && fit.test ? fit.test : null;
+  const a = anchorsFrom(st, test, sig);
   let analyses = {}, rides = [], connected = false;
   try {
     const { stravaDone } = require('./workouts');
@@ -85,12 +112,18 @@ async function report() {
   } catch (e) { rides = []; }
   const week = rides.filter(r => r.date >= tz.shiftKey(today, -6)), month = rides;
   const sw = split(week, 'hr'), sm = split(month, 'hr'), pw = split(week, 'power'), pm = split(month, 'power');
+  // the ventilation points behind the thresholds, for the chart
+  const segs = (fit && fit.segments ? fit.segments : []).filter(x => Number.isFinite(x.power) && Number.isFinite(x.ve)).slice(-400).map(x => ({ power: x.power, ve: Math.round(x.ve * 10) / 10, confounded: !!x.confounded }));
+  let vent = null;
+  try { vent = Z.ventilatoryBreakpoints(fit && fit.segments ? fit.segments : [], a.ftp); } catch (e) { vent = null; }
   return {
-    anchors: { ftp: st.ftp, lthr: st.lthr, vt1: R.HR.vt1, vt2: R.HR.vt2, vo2_line: R.HR.hard, max_hr: R.HR.max, hr_rest: st.hr_rest,
-      note: 'Planning FTP and threshold heart rate from the workout settings; VT1 and VT2 measured (Tymewear). Zones move only when these are changed on the Setup page.' },
-    three: three(st),
+    anchors: a,
+    signature: sig,
+    test: test ? { vt1_power: test.vt1_power || null, vt1_hr: test.vt1_hr || null, vt2_power: test.vt2_power || null, vt2_hr: test.vt2_hr || null, date: test.date || test.at || null } : null,
+    ventilation: { points: segs, breakpoints: vent && vent.ok ? { vt1_power: vent.vt1_power || null, vt2_power: vent.vt2_power || null, method: vent.method, stability: vent.stability || null } : (vent ? { ok: false, reason: vent.reason } : null) },
+    three: three(st, a),
     target: TARGET,
-    power_zones: Z.powerZones(st.ftp), hr_zones: Z.hrZones(st.lthr),
+    power_zones: Z.powerZones(a.ftp), hr_zones: Z.hrZones(a.vt2),
     time: { week: Object.assign(sw, { verdict: verdict(sw) }), month: Object.assign(sm, { verdict: verdict(sm) }),
       power_week: Object.assign(pw, { verdict: verdict(pw) }), power_month: Object.assign(pm, { verdict: verdict(pm) }) },
     rides: rides.slice(0, 12).map(r => ({ id: r.id, date: r.date, name: r.name, minutes: r.minutes, tss: r.tss,
@@ -107,4 +140,4 @@ function attach(app) {
     try { res.json(await report()); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, report, three, split, verdict, TARGET };
+module.exports = { attach, report, three, anchorsFrom, split, verdict, TARGET };

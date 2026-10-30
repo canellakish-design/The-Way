@@ -142,7 +142,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"]];
+  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
@@ -567,17 +567,56 @@ V.sleep = async function(){
   wireCoach("sleep");
 };
 
-/* ---------------- TRAINING ZONES ----------------
-   The three zones the plan trains by, drawn on the heart-rate and power
-   scales, with the library's sessions placed in them; then how the recent
-   riding split across them, by power and by heart rate, against the
-   polarised target. The seven-zone tables fold away underneath. */
+/* ---------------- ZONES ----------------
+   The signature (TP, HIE, PP) fitted Xert's way to his own power, the
+   power-duration curve with his bests on it, the three zones on the
+   heart-rate and power scales (heart rate from the Tymewear ramp test), how
+   the thresholds were found, and how the recent riding split across the
+   zones. The seven-zone tables fold away underneath. */
 V.zones = async function(){
-  view.innerHTML = `<span class="eyebrow">Training zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
+  view.innerHTML = `<span class="eyebrow">Zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   let z = null;
   try{ z = await bridge("/zones"); }catch(e){ document.getElementById("zonesPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
-  const a = z.anchors, ZC = { z1:"var(--green)", z2:"var(--amber)", z3:"var(--red)" };
-  // the scale: heart rate 90 to max on top, power 60 to 120% FTP beneath, the same three bands on each
+  const a = z.anchors, sg = z.signature || {}, sig = sg.signature, ZC = { z1:"var(--green)", z2:"var(--amber)", z3:"var(--red)" };
+  const confC = c => c === "high" ? "var(--green)" : c === "medium" ? "var(--amber)" : "var(--red)";
+  /* the power-duration curve: log time across, watts up; dots are his bests, the line the fitted curve */
+  const pdHTML = ()=>{
+    const pts = sg.points || [], curve = sg.curve || [];
+    if (!pts.length) return `<div class="small">No power read yet. Tap "Read rides" to pull the last 90 days from Strava.</div>`;
+    const W = 340, H = 170, L = 34, R = 8, T = 10, B = 24;
+    const lx = t => Math.log(t), x0 = lx(1), x1 = lx(5400);
+    const X = t => L + (lx(t) - x0) / (x1 - x0) * (W - L - R);
+    const wmax = Math.max(...pts.map(p => p.watts), ...curve.map(c => c.watts)) * 1.05, wmin = 0;
+    const Y = w => T + (1 - (w - wmin) / (wmax - wmin)) * (H - T - B);
+    const line = curve.length ? `<path d="${curve.map((c, i) => (i ? "L" : "M") + X(c.dur_s).toFixed(1) + "," + Y(c.watts).toFixed(1)).join(" ")}" fill="none" stroke="#F2F1EC" stroke-width="2"></path>` : "";
+    const dots = pts.map(p => `<circle cx="${X(p.dur_s).toFixed(1)}" cy="${Y(p.watts).toFixed(1)}" r="4" fill="${sig && p.watts > (curve.find(c => c.dur_s === p.dur_s) || {}).watts * 1.03 ? "var(--green)" : "#0F100E"}" stroke="#F2F1EC" stroke-width="2"><title>${p.dur_s < 60 ? p.dur_s + " s" : Math.round(p.dur_s / 60) + " min"} · ${p.watts} W · ${esc(p.name || "")} ${esc(p.date || "")}</title></circle>`).join("");
+    const ticks = [[1,"1s"],[5,"5s"],[30,"30s"],[60,"1m"],[300,"5m"],[1200,"20m"],[3600,"1h"]].map(([t,l]) => `<text x="${X(t).toFixed(1)}" y="${H-6}" class="egt" text-anchor="middle">${l}</text>`).join("");
+    const yt = [100,200,300,400,500,600,700,800,900,1000].filter(v => v < wmax).map(v => `<text x="${L-4}" y="${(Y(v)+3).toFixed(1)}" class="egt" text-anchor="end">${v}</text><line x1="${L}" x2="${W-R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="#F2F1EC" opacity=".12" stroke-dasharray="2 4"></line>`).join("");
+    const tpLine = sig ? `<line x1="${L}" x2="${W-R}" y1="${Y(sig.tp).toFixed(1)}" y2="${Y(sig.tp).toFixed(1)}" stroke="var(--amber)" opacity=".8" stroke-dasharray="4 3"></line><text x="${W-R-2}" y="${(Y(sig.tp)-4).toFixed(1)}" class="egl" text-anchor="end">TP ${sig.tp}</text>` : "";
+    const ftpLine = a.planning_ftp && (!sig || a.planning_ftp !== sig.tp) ? `<line x1="${L}" x2="${W-R}" y1="${Y(a.planning_ftp).toFixed(1)}" y2="${Y(a.planning_ftp).toFixed(1)}" stroke="#F2F1EC" opacity=".4" stroke-dasharray="2 3"></line><text x="${L+2}" y="${(Y(a.planning_ftp)-4).toFixed(1)}" class="egl">FTP ${a.planning_ftp}</text>` : "";
+    return `<svg viewBox="0 0 ${W} ${H}" class="egsvg pdsvg" preserveAspectRatio="none">${yt}${tpLine}${ftpLine}${line}${dots}${ticks}</svg>
+      <div class="small">Dots are the best average power he has held for each length of time in the last ${sg.lookback_days || 90} days; the line is the curve the three numbers draw. A green dot sits above the curve: a breakthrough.</div>`;
+  };
+  const bests = sg.bests || {};
+  const bestsHTML = [20,30,40,50,60].map(m => { const b = bests[m]; return `<li><span class="n"><b>${m} min</b>${b ? `<span class="small"> ${esc(b.name||"")} · ${esc(b.date||"")}</span>` : `<span class="small"> no ride that long with power yet</span>`}</span><span class="tag">${b ? `<b>${b.watts} W</b>${b.curve ? `<span class="small"> curve ${b.curve}</span>` : ""}` : "—"}</span></li>`; }).join("");
+  const sigHTML = `
+    <div class="sigrow">
+      <div class="sigbox"><span class="slabel">Threshold</span><span class="signum">${sig ? sig.tp : "—"}</span><span class="small">W · TP</span></div>
+      <div class="sigbox"><span class="slabel">Tank above it</span><span class="signum">${sig ? sig.hie_kj : "—"}</span><span class="small">kJ · HIE</span></div>
+      <div class="sigbox"><span class="slabel">Peak</span><span class="signum">${sig ? sig.pp : "—"}</span><span class="small">W · 5 s · PP</span></div>
+    </div>
+    <div class="small"><b style="color:${confC(sg.confidence)}">${esc(sg.confidence || "none")} confidence</b> · ${esc(sg.why || "")}${sg.newest_long_effort ? ` Newest long effort: ${esc(sg.newest_long_effort.name||"")}, ${sg.newest_long_effort.age_days} day${sg.newest_long_effort.age_days===1?"":"s"} ago.` : ""}</div>
+    ${sig ? `<div class="small">Planning FTP is <b>${a.planning_ftp} W</b>${sig.tp !== a.planning_ftp ? `; the signature says <b>${sig.tp} W</b> (${sig.tp > a.planning_ftp ? "+" : ""}${sig.tp - a.planning_ftp}).` : ", the same as the signature."}</div>` : ""}
+    ${pdHTML()}
+    <ul class="agenda totals">${bestsHTML}</ul>
+    ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride above its own curve): ${sg.breakthroughs.slice(-5).map(b => `${esc(b.name)} ${esc(b.date)}`).join(" · ")}</div>` : ""}
+    <div class="rowbtns">
+      <button id="sigScan" class="btn">${sg.left == null ? "Read rides" : sg.left > 0 ? `Read rides (${sg.left} unread of ${sg.total})` : `All ${sg.total||0} rides read · read again`}</button>
+      ${sig && sig.tp !== a.planning_ftp && (sg.confidence === "high" || sg.confidence === "medium") ? `<button id="sigUse" class="btn">Set planning FTP to ${sig.tp} W</button>` : ""}
+    </div>
+    <div class="small" id="sigMsg"></div>
+    <details class="why"><summary>the math</summary><div class="small">Three numbers, Xert's signature: threshold power TP, high-intensity energy HIE (the tank of work above TP, in kilojoules), and peak power PP. They draw one curve, Morton's three-parameter critical-power model: P(t) = TP + (HIE ÷ t) × (1 − e<sup>−t·(PP−TP)/HIE</sup>), which runs to PP at zero seconds and settles on TP as time grows. The curve is fitted to your mean-maximal power over the last 90 days, weighted toward the long durations since TP is what the plan runs on. Maximal Power Available follows second by second: above TP the tank drains at the surplus watts, below TP it refills in proportion to what is missing (Skiba's differential model); power above it is a breakthrough and the signature moves. Xert's exact recovery curve is proprietary; this uses the published physiology it rests on. Nothing here changes the planning FTP on its own.</div></details>`;
+  // the scale: heart rate on top, power beneath, the same three bands on each
   const hrLo = 90, hrHi = a.max_hr, pLo = Math.round(a.ftp*0.45), pHi = Math.round(a.ftp*1.25);
   const hx = v => Math.max(0, Math.min(100, (v-hrLo)/(hrHi-hrLo)*100)), px = v => Math.max(0, Math.min(100, (v-pLo)/(pHi-pLo)*100));
   const band = (x0, x1, c) => `<i style="left:${x0.toFixed(1)}%;width:${(x1-x0).toFixed(1)}%;background:${c}"></i>`;
@@ -587,14 +626,36 @@ V.zones = async function(){
       <div class="ztrack">${band(0, hx(a.vt1), ZC.z1)}${band(hx(a.vt1), hx(a.vt2), ZC.z2)}${band(hx(a.vt2), 100, ZC.z3)}
         ${mark(hx(a.vt1), a.vt1)}${mark(hx(a.vt2), a.vt2, false, true)}${mark(hx(a.vo2_line), a.vo2_line + " VO2")}${mark(100, a.max_hr + " max", true, true)}</div>
       <div class="zlab">Power</div>
-      <div class="ztrack">${band(px(Math.round(a.ftp*0.5)), px(Math.round(a.ftp*0.68)), ZC.z1)}${band(px(Math.round(a.ftp*0.68)), px(Math.round(a.ftp*0.95)), ZC.z2)}${band(px(Math.round(a.ftp*0.95)), 100, ZC.z3)}
-        ${mark(px(Math.round(a.ftp*0.68)), Math.round(a.ftp*0.68) + " W")}${mark(px(Math.round(a.ftp*0.95)), Math.round(a.ftp*0.95) + " W")}${mark(px(a.ftp), "FTP " + a.ftp, true)}</div>
+      <div class="ztrack">${band(px(Math.round(a.ftp*0.5)), px(a.vt1_power), ZC.z1)}${band(px(a.vt1_power), px(Math.round(a.ftp*0.95)), ZC.z2)}${band(px(Math.round(a.ftp*0.95)), 100, ZC.z3)}
+        ${mark(px(a.vt1_power), a.vt1_power + " W")}${mark(px(Math.round(a.ftp*0.95)), Math.round(a.ftp*0.95) + " W")}${mark(px(a.ftp), (a.tp ? "TP " : "FTP ") + a.ftp, true)}</div>
     </div>`;
   const threeHTML = z.three.map(t => `<li class="zrow" style="border-left-color:${ZC[t.key]}">
       <span class="n"><b>${esc(t.name)}</b> <span class="small">${esc(t.what)}</span>
         <span class="small">HR ${esc(t.hr.cue)} · ${t.power.lo}${t.power.hi?"–"+t.power.hi:"+"} W (${esc(t.power.pct)})${t.sessions.length?` · ${esc(t.sessions.length === 1 ? t.sessions[0] : t.sessions[0].replace(/,.*$/, "") + " rides")}`:""}</span>
         <span class="small zwhy">${esc(t.why)}</span></span>
       <span class="tag"><b>${t.target_pct}%</b><span class="small">target</span></span></li>`).join("");
+  /* heart rate from breathing: the Tymewear test and the ventilation points */
+  const tst = z.test, vp = (z.ventilation && z.ventilation.points) || [], bp = z.ventilation && z.ventilation.breakpoints;
+  const ventChart = ()=>{
+    if (vp.length < 6) return "";
+    const W = 340, H = 150, L = 30, R = 8, T = 10, B = 24;
+    const pmin = Math.min(...vp.map(p=>p.power)), pmax = Math.max(...vp.map(p=>p.power)), vmax = Math.max(...vp.map(p=>p.ve)) * 1.05;
+    const X = p => L + (p - pmin) / Math.max(1, pmax - pmin) * (W - L - R), Y = v => T + (1 - v / vmax) * (H - T - B);
+    const dots = vp.map(p => `<circle cx="${X(p.power).toFixed(1)}" cy="${Y(p.ve).toFixed(1)}" r="3" fill="${p.confounded?"#0F100E":"#F2F1EC"}" stroke="#F2F1EC" stroke-width="1.5"></circle>`).join("");
+    const vl = (w, lab, c) => w ? `<line x1="${X(w).toFixed(1)}" x2="${X(w).toFixed(1)}" y1="${T}" y2="${H-B}" stroke="${c}" stroke-dasharray="4 3"></line><text x="${(X(w)+3).toFixed(1)}" y="${T+10}" class="egl">${lab} ${w} W</text>` : "";
+    return `<svg viewBox="0 0 ${W} ${H}" class="egsvg" preserveAspectRatio="none">${dots}${vl(bp && bp.vt1_power, "VT1", ZC.z2)}${vl(bp && bp.vt2_power, "VT2", ZC.z3)}<text x="${L}" y="${H-6}" class="egt">${pmin} W</text><text x="${W-R}" y="${H-6}" class="egt" text-anchor="end">${pmax} W</text><text x="${L-4}" y="${T+8}" class="egt" text-anchor="end">VE</text></svg>
+      <div class="small">Ventilation (litres a minute) against power from your steady rides, each dot a steady stretch of three minutes or more. ${bp && bp.vt1_power ? `The slope breaks at ${bp.vt1_power} W (VT1)${bp.vt2_power ? ` and ${bp.vt2_power} W (VT2)` : ""}${bp.stability ? ", " + esc(bp.stability) : ""}.` : (bp && bp.reason ? esc(bp.reason) : "")}</div>`;
+  };
+  const testHTML = `
+    <div class="small">${esc(a.hr_source)}${tst ? `: VT1 ${tst.vt1_power ? tst.vt1_power + " W · " : ""}${tst.vt1_hr || "—"} bpm, VT2 ${tst.vt2_power ? tst.vt2_power + " W · " : ""}${tst.vt2_hr || "—"} bpm.` : "."}</div>
+    ${ventChart()}
+    <details class="why"><summary>enter a Tymewear ramp test</summary>
+      <div class="row2"><span><label>VT1 power (W)</label><input id="zVt1P" type="number" value="${tst && tst.vt1_power ? tst.vt1_power : ""}"></span><span><label>VT1 heart rate</label><input id="zVt1H" type="number" value="${tst && tst.vt1_hr ? tst.vt1_hr : a.vt1}"></span></div>
+      <div class="row2"><span><label>VT2 power (W)</label><input id="zVt2P" type="number" value="${tst && tst.vt2_power ? tst.vt2_power : ""}"></span><span><label>VT2 heart rate</label><input id="zVt2H" type="number" value="${tst && tst.vt2_hr ? tst.vt2_hr : a.vt2}"></span></div>
+      <div class="row2"><span><label>Test date</label><input id="zDate" type="date" value="${tst && tst.date ? String(tst.date).slice(0,10) : ""}"></span><span><label>&nbsp;</label><button class="primary" id="zSave">Save the test</button></span></div>
+      <div class="small" id="zMsg">The heart rates set the three zones; VT2 power, discounted 7.5% for a ramp's short stages, is one more signal for FTP.</div>
+    </details>
+    <details class="why"><summary>how the thresholds are found</summary><div class="small">Tymewear's sensor reads breathing (ventilation and breathing rate) from the chest strap; its own algorithm is proprietary, but the science it implements is published and validated against gas exchange: the first ventilatory threshold is where ventilation first rises faster than work rate (Wasserman and Beaver's V-slope and ventilatory-equivalent methods, 1986), the second where it rises steeply again as breathing compensates for acid (the respiratory compensation point). From ventilation alone, both appear as breaks in the slope of VE against power, found by two-segment regression (Orr 1982) or the Dmax method (Cheng 1992). This app does the same with your steady rides: ventilation is binned by power and the slope jumps are the thresholds, cross-checked by fitting each half of the data separately. The ramp test you type in is the anchor; the ride data tells you when it has moved. Heart-rate zones are set from these thresholds, never from a percentage of a guessed maximum.</div></details>`;
   const stack = (s) => s && s.z1_pct != null ? `<div class="zstack">${["z1","z2","z3"].map(k => s[k+"_pct"] ? `<i style="width:${s[k+"_pct"]}%;background:${ZC[k]}" title="${k} ${s[k+"_min"]} min">${s[k+"_pct"] >= 12 ? s[k+"_pct"] + "%" : ""}</i>` : "").join("")}</div>` : "";
   const splitHTML = (title, s) => `<div class="zsplit"><div class="small"><b>${title}</b> · ${s.rides} ride${s.rides===1?"":"s"}, ${durLabel(s.minutes)}${s.with_data < s.rides ? ` · ${s.rides - s.with_data} without ${s.by === "power" ? "power" : "heart rate"}` : ""}</div>
       ${stack(s)}
@@ -604,20 +665,47 @@ V.zones = async function(){
       <span class="tag">${r.p1_min != null ? stack({ z1_pct: Math.round(r.p1_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z2_pct: Math.round(r.p2_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z3_pct: Math.round(r.p3_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z1_min:r.p1_min, z2_min:r.p2_min, z3_min:r.p3_min }) : ""}</span></li>`;
   const zoneTable = (rows, unit)=> `<ul class="agenda totals">${rows.map(zz=>`<li><span class="n"><b>${zz.zone}</b> ${esc(zz.name)} <span class="small">${esc(zz.pct)}</span></span><span class="tag">${zz.from}${zz.to?"–"+zz.to:"+"} ${unit}</span></li>`).join("")}</ul>`;
   document.getElementById("zonesPage").innerHTML = `
+    <div class="card"><h4>The signature</h4>${sigHTML}</div>
     <div class="card"><h4>The three zones</h4>
       ${scaleHTML}
       <ul class="agenda zthree">${threeHTML}</ul>
       <div class="small">${esc(a.note)}</div>
     </div>
+    <div class="card"><h4>Heart rate from breathing</h4>${testHTML}</div>
     <div class="card"><h4>Time in zone</h4>
       ${z.connected ? `${splitHTML("This week, by power", z.time.power_week)}${splitHTML("Four weeks, by power", z.time.power_month)}
         <details class="why"><summary>by heart rate</summary>${splitHTML("This week", z.time.week)}${splitHTML("Four weeks", z.time.month)}</details>` : `<div class="small">Strava is not answering, so there are no rides to split.</div>`}
       <details class="why"><summary>the target</summary><div class="small">Polarised: about ${z.target.z1}% of the minutes in Zone 1, ${z.target.z3}% in Zone 3, and as little as possible between the thresholds. Power is the cleaner read of Zone 1 discipline (heart rate drifts with heat, coffee and a poor night); the VO2 line is on heart rate.</div></details>
     </div>
     ${z.rides && z.rides.length ? `<div class="card"><h4>Recent rides</h4><ul class="agenda zrides">${z.rides.map(rideRow).join("")}</ul><div class="small">Zone 1 / 2 / 3 minutes. Rides read for the first time land here on the next look.</div></div>` : ""}
-    <div class="card"><details class="why"><summary>Seven power zones · FTP ${a.ftp} W</summary>${zoneTable(z.power_zones, "W")}</details>
-      <details class="why"><summary>Seven heart-rate zones · threshold ${a.lthr} bpm</summary>${zoneTable(z.hr_zones, "bpm")}<div class="small">Anchored to threshold heart rate, never to a max-HR guess.</div></details></div>
-    <a class="btn" href="#today">Back to the day</a>`;
+    <div class="card"><details class="why"><summary>Seven power zones · ${a.tp ? "TP" : "FTP"} ${a.ftp} W</summary>${zoneTable(z.power_zones, "W")}</details>
+      <details class="why"><summary>Seven heart-rate zones · threshold ${a.vt2} bpm</summary>${zoneTable(z.hr_zones, "bpm")}<div class="small">Anchored to threshold heart rate, never to a max-HR guess.</div></details></div>`;
+  // read rides a few at a time until none are left
+  const scanBtn = document.getElementById("sigScan");
+  if (scanBtn) scanBtn.onclick = async ()=>{
+    scanBtn.disabled = true; const msg = document.getElementById("sigMsg");
+    try{
+      let rounds = 0, left = null;
+      do { const r = await bridge("/signature/scan",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ n: 3 })}); left = r.left; msg.textContent = `Read ${r.read.filter(x=>x.ok).length} ride${r.read.length===1?"":"s"}${left ? `, ${left} to go…` : ", done."}`; rounds++; } while (left > 0 && rounds < 8);
+      if (location.hash.split("?")[0] === "#zones") V.zones();
+    }catch(e){ msg.textContent = e.message; scanBtn.disabled = false; }
+  };
+  const useBtn = document.getElementById("sigUse");
+  if (useBtn) useBtn.onclick = async ()=>{
+    if (!confirm(`Set the planning FTP to ${sig.tp} W? Every power target and zone follows it.`)) return;
+    useBtn.disabled = true;
+    try{ await bridge("/workouts/settings",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({ ftp: sig.tp, lthr: a.vt2, hr_rest: a.hr_rest })}); V.zones(); }
+    catch(e){ document.getElementById("sigMsg").textContent = e.message; useBtn.disabled = false; }
+  };
+  const saveBtn = document.getElementById("zSave");
+  if (saveBtn) saveBtn.onclick = async ()=>{
+    const v = id => { const x = +document.getElementById(id).value; return x > 0 ? x : null; };
+    const msg = document.getElementById("zMsg"); saveBtn.disabled = true;
+    try{
+      await bridge("/fitness/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ vt1_power: v("zVt1P"), vt1_hr: v("zVt1H"), vt2_power: v("zVt2P"), vt2_hr: v("zVt2H"), date: document.getElementById("zDate").value || undefined })});
+      msg.textContent = "Saved. The zones now hang on it."; V.zones();
+    }catch(e){ msg.textContent = e.message; saveBtn.disabled = false; }
+  };
 };
 
 /* ---------------- ANALYZE (weigh-in, W/kg — ride analysis coming) ---------------- */
