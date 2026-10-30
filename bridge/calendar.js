@@ -190,7 +190,7 @@ async function sync() {
             allDay: !e.start.dateTime,
             location: e.location || null,
             description: e.description ? String(e.description).slice(0, 1200) : null,
-            calendar: cal.name,
+            calendar: cal.name, calendar_id: cal.id, gid: e.id,
             account: acct.id,
             source: calDefault === 'coaching' ? 'coaching' : 'calendar',
             category: classify(e.summary, d.manual, calDefault)
@@ -297,13 +297,15 @@ function scheduleForDate(events, dateStr) {
   const all = dayEventsFor(events, dateStr);
   const allDay = all.filter(e => e.allDay).map(e => ({
     summary: e.summary, category: e.category, allDay: true,
-    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null
+    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null,
+    edit: editKey(e)
   }));
   const timed = all.filter(e => !e.allDay).map(e => {
     const sm = tz.minutesOf(new Date(e.start)), em = tz.minutesOf(new Date(e.end));
     return {
       summary: e.summary, category: e.category, allDay: false,
       source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
+      edit: editKey(e),
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
     };
@@ -416,6 +418,118 @@ async function addEvent(b) {
   const pushed = await pushLocal(d);
   return { ok: true, event: ev, pushed_to_google: !!ev.google_id, google_connected: d.accounts.some(a => a.tokens), pushed };
 }
+// ---- editing any event ----
+// Every event has an edit key: a Google event is "g:<calendar id>:<event id>"
+// and is changed on Google itself; one added here is "l:<id>"; a snapshot or
+// feed event has no handle on Google, so its edit is kept as an override in
+// the app ("o:<uid>") and shown here until the live calendar takes over.
+function editKey(e) {
+  if (e.gid && e.calendar_id) return 'g:' + e.calendar_id + ':' + e.gid;
+  if (e.id && String(e.id).startsWith('ev_')) return 'l:' + e.id;
+  if (e.uid) return 'o:' + e.uid;
+  return null;
+}
+function applyOverrides(events, overrides) {
+  if (!overrides || !Object.keys(overrides).length) return events;
+  const out = [];
+  for (const e of events) {
+    const k = editKey(e); const o = k && overrides[k];
+    if (!o) { out.push(e); continue; }
+    if (o.deleted) continue;
+    out.push(Object.assign({}, e, o.fields || {}));
+  }
+  return out;
+}
+function fieldsFrom(b, base) {
+  const f = {};
+  if (b.title != null) f.summary = String(b.title).trim().slice(0, 120) || base.summary;
+  if (b.notes != null) f.description = String(b.notes).slice(0, 1000) || null;
+  if (b.location != null) f.location = String(b.location).slice(0, 200) || null;
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : String(base.start).slice(0, 10);
+  if (b.start === '' || (b.start == null && base.allDay && !b.end)) { f.allDay = true; f.start = date; f.end = tz.shiftKey(date, 1); }
+  else if (/^\d{2}:\d{2}$/.test(b.start || '')) {
+    const [h, m] = b.start.split(':').map(Number);
+    const s = tz.zonedToUTC(...date.split('-').map(Number), h, m);
+    let mins = Number(b.minutes) > 0 ? Number(b.minutes) : null;
+    if (!mins && /^\d{2}:\d{2}$/.test(b.end || '')) mins = ((+b.end.slice(0, 2)) * 60 + (+b.end.slice(3, 5))) - (h * 60 + m);
+    if (!mins && !base.allDay) mins = Math.round((new Date(base.end) - new Date(base.start)) / 60000);
+    const e2 = new Date(s.getTime() + Math.max(15, mins || 60) * 60000);
+    f.allDay = false; f.start = s.toISOString(); f.end = e2.toISOString();
+  }
+  return f;
+}
+function googleBody(f) {
+  const body = {};
+  if (f.summary != null) body.summary = f.summary;
+  if (f.description !== undefined) body.description = f.description || '';
+  if (f.location !== undefined) body.location = f.location || '';
+  if (f.start) body.start = f.allDay ? { date: f.start.slice(0, 10) } : { dateTime: f.start, timeZone: tz.ZONE };
+  if (f.end) body.end = f.allDay ? { date: f.end.slice(0, 10) } : { dateTime: f.end, timeZone: tz.ZONE };
+  return body;
+}
+async function editEvent(key, b) {
+  const d = await db();
+  if (key.startsWith('l:')) {
+    const id = key.slice(2);
+    const ev = (d.local_events || []).find(e => e.id === id);
+    if (!ev) return null;
+    Object.assign(ev, fieldsFrom(b, ev));
+    if (ev.google_id) {
+      const acct = d.accounts.find(a => a.tokens);
+      if (acct) { try { const t = await tok(acct); await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(ev.google_id)}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(googleBody(ev)) }); } catch (e) { ev.push_error = e.message; } }
+    }
+    await setJSON('gcal', d);
+    return { ok: true, where: ev.google_id ? 'google' : 'app' };
+  }
+  if (key.startsWith('g:')) {
+    const [, calId, gid] = key.match(/^g:(.*):([^:]+)$/) || [];
+    const base = (d.events || []).find(e => e.gid === gid) || {};
+    const f = fieldsFrom(b, base);
+    const acct = d.accounts.find(a => a.id === base.account && a.tokens) || d.accounts.find(a => a.tokens);
+    if (!acct) { const err = new Error('Google is not connected'); err.status = 400; throw err; }
+    const t = await tok(acct);
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(gid)}`, { method: 'PATCH', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(googleBody(f)) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { const err = new Error('google: ' + ((j.error && j.error.message) || r.status)); err.status = 502; throw err; }
+    if (base.gid) Object.assign(base, f);
+    await setJSON('gcal', d);
+    return { ok: true, where: 'google' };
+  }
+  if (key.startsWith('o:')) {
+    d.overrides = d.overrides || {};
+    const cur = d.overrides[key] || { fields: {} };
+    const base = Object.assign({ summary: b.title || '', start: b.date, end: b.date, allDay: b.start === '' }, cur.fields || {});
+    cur.fields = Object.assign(cur.fields || {}, fieldsFrom(b, base));
+    cur.at = new Date().toISOString();
+    d.overrides[key] = cur;
+    await setJSON('gcal', d);
+    return { ok: true, where: 'app', note: 'This event comes from the calendar copy, not a live Google connection, so the change lives in the app until Google is connected.' };
+  }
+  return null;
+}
+async function deleteAny(key) {
+  const d = await db();
+  if (key.startsWith('l:')) return removeEvent(key.slice(2));
+  if (key.startsWith('g:')) {
+    const [, calId, gid] = key.match(/^g:(.*):([^:]+)$/) || [];
+    const base = (d.events || []).find(e => e.gid === gid) || {};
+    const acct = d.accounts.find(a => a.id === base.account && a.tokens) || d.accounts.find(a => a.tokens);
+    if (!acct) { const err = new Error('Google is not connected'); err.status = 400; throw err; }
+    const t = await tok(acct);
+    const r = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(gid)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } });
+    if (!r.ok && r.status !== 410 && r.status !== 404) { const err = new Error('google ' + r.status); err.status = 502; throw err; }
+    d.events = (d.events || []).filter(e => e.gid !== gid);
+    await setJSON('gcal', d);
+    return true;
+  }
+  if (key.startsWith('o:')) {
+    d.overrides = d.overrides || {};
+    d.overrides[key] = { deleted: true, at: new Date().toISOString() };
+    await setJSON('gcal', d);
+    return true;
+  }
+  return false;
+}
 async function removeEvent(id) {
   const d = await db();
   const ev = (d.local_events || []).find(e => e.id === id);
@@ -436,6 +550,12 @@ function attach(app) {
   app.delete('/gcal/events/:id', async (req, res) => { if (!auth(req, res)) return;
     try { const ok = await removeEvent(req.params.id); if (!ok) return res.status(404).json({ error: 'no such event' }); res.json({ ok: true }); }
     catch (e) { res.status(500).json({ error: e.message }); } });
+  app.put('/gcal/event', async (req, res) => { if (!auth(req, res)) return;
+    try { const r = await editEvent(String((req.body || {}).key || ''), req.body || {}); if (!r) return res.status(404).json({ error: 'no such event' }); res.json(r); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  app.delete('/gcal/event', async (req, res) => { if (!auth(req, res)) return;
+    try { const ok = await deleteAny(String(req.query.key || '')); if (!ok) return res.status(404).json({ error: 'no such event' }); res.json({ ok: true }); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
   app.post('/gcal/events/push', async (req, res) => { if (!auth(req, res)) return;
     try { const d = await db(); res.json({ ok: true, pushed: await pushLocal(d), waiting: (d.local_events || []).filter(e => !e.google_id).length, google_connected: d.accounts.some(a => a.tokens) }); }
     catch (e) { res.status(500).json({ error: e.message }); } });
@@ -564,7 +684,7 @@ function attach(app) {
       const snapshot = require('./snapshot');
       // Events added in the app: on the day at once, whether or not they have reached Google yet.
       const localEvents = (d.local_events || []).map(e => ({ ...e, source: 'calendar', account: 'the way', category: classify(e.summary, d.manual, null) }));
-      const liveEvents = (d.events || []).concat(icsEvents, localEvents);
+      const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
       const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
       const snapEvents = snapshot.eventsInRange(firstKey, lastKey, covered).map(e => {
         const calDefault = calendarCategory(e.calendar);
@@ -572,7 +692,7 @@ function attach(app) {
           account: 'snapshot:' + e.calendar,
           category: classify(e.summary, d.manual, calDefault) };
       });
-      const days = scheduleDays(liveEvents.concat(snapEvents), n, iv.days, back);
+      const days = scheduleDays(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), n, iv.days, back);
       // The day's fuel targets, from the day's training (food-math.js).
       await attachMacros(days);
       const sources = {
@@ -664,4 +784,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday,
-  trainingHours, connected, scheduleForDate, scheduleDays, dateKey, addEvent, removeEvent, pushLocal };
+  trainingHours, connected, scheduleForDate, scheduleDays, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };

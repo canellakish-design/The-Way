@@ -486,3 +486,5 @@ details.addev summary::-webkit-details-marker{display:none} details.addev[open] 
 details.addev input{width:100%}
 .dayfoot{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:8px}
 .dayhead{display:flex; justify-content:space-between; align-items:center; gap:10px} .dayhead h4{margin:0} .dayhead .btn{padding:6px 12px}
+.dayhead .btn{white-space:nowrap}
+.evedit{margin-top:10px}

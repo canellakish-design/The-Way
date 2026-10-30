@@ -1252,7 +1252,7 @@ function dayRows(d, plan, isToday){
   const rows = (d.events||[]).map(e=>({
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
-    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null,
+    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
     desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
   }));
   (d.windows||[]).forEach(w=> rows.push({
@@ -1274,12 +1274,20 @@ function dayRows(d, plan, isToday){
 }
 
 /* ---- a row, opened: an event's details, or the whole of a workout ---- */
+const mm2hm = m => m == null ? "" : String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
 function eventDetailHTML(x){
+  const editable = !!x.edit && !x.wid;
   return `<div class="xd"><div class="xdh">${esc(x.from)} to ${esc(x.to)}${x.calendar?` · ${esc(x.calendar)}`:""}</div>
     ${x.location?`<div><b>Where:</b> ${esc(x.location)}</div>`:""}
     ${x.desc?`<div class="xdesc">${esc(x.desc)}</div>`:""}
-    ${!x.location&&!x.desc&&!x.wid?`<div class="small">Nothing more on this one.</div>`:""}
-    ${x.wid?`<div class="small">loading the session…</div>`:""}</div>`;
+    ${!x.location&&!x.desc&&!x.wid&&!editable?`<div class="small">Nothing more on this one.</div>`:""}
+    ${x.wid?`<div class="small">loading the session…</div>`:""}
+    ${editable?`<details class="addev evedit" data-key="${attr(x.edit)}"><summary>edit</summary>
+      <div class="row2"><span><label>What</label><input class="evTitle" value="${attr(x.title)}"></span><span><label>Date</label><input class="evDate" type="date" value="${attr(x.date||"")}"></span></div>
+      <div class="row2"><span><label>Start (blank = all day)</label><input class="evStart" type="time" value="${attr(x.start!=null&&x.from!=="all day"?mm2hm(x.start):"")}"></span><span><label>End</label><input class="evEnd" type="time" value="${attr(x.end!=null&&x.from!=="all day"?mm2hm(x.end):"")}"></span></div>
+      <label>Where</label><input class="evLoc" value="${attr(x.location||"")}">
+      <label>Notes</label><input class="evNotes" value="${attr(x.desc||"")}">
+      <button class="primary evUpdate">Save</button> <span class="small evMsg">${x.edit.startsWith("g:")?"changes go to Google":x.edit.startsWith("l:")?"added here; goes to Google when connected":"from the calendar copy: the change stays in the app until Google is connected"}</span></details>`:""}</div>`;
 }
 const fmtTarget = (t, st)=>{
   if (!t) return "";
@@ -1397,10 +1405,10 @@ function dayCard(d, plan, nowMin, rec, solo){
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     const g = r.wid && WGRADE[r.wid];
     const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
-    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
+    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.lid?`<button class="tdel" data-dele="${esc(r.lid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -2037,7 +2045,7 @@ V.today = async function(){
 
     // tap a row: it opens underneath with everything about it
     view.addEventListener("click", async (e)=>{
-      if (e.target.closest("button, a")) return;
+      if (e.target.closest("button, a, input, select, textarea, label, .evedit")) return;
       const box = e.target.closest(".wxh");
       if (box){ const el = box.closest(".wxstrip").querySelector(".wxwhy"); if (el) el.textContent = box.title + ": " + box.dataset.why; return; }
       // an all-day chip (a session with no time yet) opens the same way, under the chips
@@ -2087,11 +2095,21 @@ V.today = async function(){
       b.disabled = false;
     });
     view.addEventListener("click", async (e)=>{
-      const b = e.target.closest("[data-dele]"); if (!b) return;
-      e.preventDefault();
+      const b = e.target.closest("[data-delx]"); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
       if (!confirm("Remove this from the calendar?")) return;
-      try{ await bridge("/gcal/events/"+encodeURIComponent(b.dataset.dele),{method:"DELETE"}); syncAll("deleted"); }
+      try{ await bridge("/gcal/event?key="+encodeURIComponent(b.dataset.delx),{method:"DELETE"}); syncAll("deleted"); }
       catch(err){ alert(err.message); }
+    });
+    view.addEventListener("click", async (e)=>{
+      const b = e.target.closest(".evUpdate"); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      const box = b.closest(".evedit"), msg = box.querySelector(".evMsg");
+      const body = { key: box.dataset.key, title: box.querySelector(".evTitle").value.trim(), date: box.querySelector(".evDate").value, start: box.querySelector(".evStart").value, end: box.querySelector(".evEnd").value, location: box.querySelector(".evLoc").value.trim(), notes: box.querySelector(".evNotes").value.trim() };
+      b.disabled = true; msg.textContent = "saving…";
+      try{ const r = await bridge("/gcal/event", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }); msg.textContent = r.where === "google" ? "Saved, on Google." : (r.note || "Saved here."); syncAll("edited"); }
+      catch(err){ msg.textContent = err.message; }
+      b.disabled = false;
     });
     // the trash can beside a planned session on the day
     view.addEventListener("click", async (e)=>{
