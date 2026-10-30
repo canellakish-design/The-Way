@@ -127,7 +127,7 @@ function cue(day, sessions, nowIso) {
       : day === 'high'
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: carb breakfast now, oats and fruit, then water.`
       : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: low carb breakfast now. Protein smoothie, eggs or Greek yogurt, no toast.` };
-    return { key: 'ahead', text: `${name} at ${next.x.time || 'later'}: ${day === 'high' ? 'carbs at every meal before it' : 'low carb until the ride, protein first'}.` };
+    return { key: 'ahead', text: `${name} at ${next.x.time ? require('./tz').hm12(next.x.time) : 'later'}: ${day === 'high' ? 'carbs at every meal before it' : 'low carb until the ride, protein first'}.` };
   }
   if (done) return { key: 'after', text: 'Riding is done for the day. Protein-led meals from here, carbs only beside protein.' };
   return { key: 'rest', text: day === 'rest' ? 'Rest day: protein and vegetables, starches at one meal only.' : 'No timed session: protein at every meal, carbs around the work.' };

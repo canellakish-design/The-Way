@@ -119,7 +119,7 @@ async function run(a) {
       body.date = /^\d{4}-\d{2}-\d{2}$/.test(a.date) ? a.date : tz.todayKey();
       body.time = /^\d{2}:\d{2}$/.test(a.time) ? a.time : null;
       const w = await require('./workouts').create(body);
-      return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + w.time : ''}.`, workout_id: w.id };
+      return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + tz.hm12(w.time) : ''}.`, workout_id: w.id };
     }
     case 'remove': {
       const list = (await food.todayEntries()).slice().sort((a, b) => String(a.time).localeCompare(String(b.time)));
@@ -128,7 +128,7 @@ async function run(a) {
       const hit = words.length ? list.slice().reverse().find(e => words.some(w => String(e.name || '').toLowerCase().includes(w))) : list[list.length - 1];
       if (!hit) return { ok: false, summary: `Nothing matching "${a.text}" in today's journal.` };
       await food.removeEntry(hit.id, tz.todayKey());
-      return { ok: true, summary: `Removed: ${hit.name}${hit.time ? ' (' + hit.time + ')' : ''}.` };
+      return { ok: true, summary: `Removed: ${hit.name}${hit.time ? ' (' + tz.hm12(hit.time) + ')' : ''}.` };
     }
     case 'remove_workout': {
       const d = await getJSON('plan-workouts', { workouts: {} });
@@ -142,7 +142,7 @@ async function run(a) {
     }
     case 'event': {
       const j = await require('./calendar').addEvent({ title: a.name || a.text || 'Event', date: a.date, start: a.time || '', minutes: a.minutes || 60, notes: a.text && a.name ? a.text : '' });
-      return { ok: true, summary: `On the calendar: ${a.name || a.text}, ${a.date}${a.time ? ' at ' + a.time : ''}${j.pushed_to_google ? ', and on Google' : j.google_connected ? '' : ' (Google not connected yet, it goes when it is)'}.` };
+      return { ok: true, summary: `On the calendar: ${a.name || a.text}, ${a.date}${a.time ? ' at ' + tz.hm12(a.time) : ''}${j.pushed_to_google ? ', and on Google' : j.google_connected ? '' : ' (Google not connected yet, it goes when it is)'}.` };
     }
     case 'note': {
       const d = await getJSON('voice-notes', { notes: [] });

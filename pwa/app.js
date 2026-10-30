@@ -1355,7 +1355,7 @@ function hourStrips(d){
   return `<div class="wxstrip">
     <div class="wxstack"><span class="wxlab">conditions</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wxBoxes}</div>
       <span class="wxlab">schedule</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${calBoxes}</div><div class="wxover">${overlay}</div></div>
-    <div class="small wxnote"><span class="wxwhy">${w ? `light ${esc(w.sunrise)}–${esc(w.sunset)}` : ""}</span></div></div>`;
+    <div class="small wxnote"><span class="wxwhy">${w ? `light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))}` : ""}</span></div></div>`;
 }
 /* ---- the now dot: a small circle on the agenda's left line that slides
    down the day as the time passes; between rows it sits on the boundary ---- */

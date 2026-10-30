@@ -76,18 +76,18 @@ V.calendar = async function(){
       const withRides = !!(c && !w.logged && d.done.length && !ridesShown);
       if (withRides) ridesShown = true;
       rows.push(`<a class="pitem planned${c?" graded "+c.band:""}" href="#workout?id=${encodeURIComponent(w.id)}">
-        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
+        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
         <span class="pn">${esc(w.name)}</span>
         <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
         ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></a>`);
     }
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
-        <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>
+        <span class="pk">intervals.icu${e.time?" · "+esc(hm12(e.time)):""}</span>
         <span class="pn">${esc(e.name)}</span>
         <span class="pm">${e.minutes?hm(e.minutes):"—"}${e.tss?" · "+e.tss+" TSS":""} <span class="pbadge">Planned outside The Way</span></span></div>`);
     if (!ridesShown) for (const r of d.done){
       rows.push(`<div class="pitem done">
-        <span class="pk">Done${r.time?" · "+esc(r.time):""}</span>
+        <span class="pk">Done${r.time?" · "+esc(hm12(r.time)):""}</span>
         <span class="pn">${esc(r.name)}</span>
         ${rideLines(r)}</div>`);
     }

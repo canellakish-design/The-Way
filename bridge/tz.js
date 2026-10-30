@@ -74,5 +74,7 @@ function fmtMin(m) {
   return h + ':' + pad(mm) + ap;
 }
 
-module.exports = { ZONE, parts, keyOf, todayKey, minutesOf, isToday,
+// "19:00" → "7:00p", the way the app shows every time.
+function hm12(t) { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); if (!m) return t || ''; let h = +m[1]; const ap = h < 12 ? 'a' : 'p'; h = h % 12 || 12; return h + ':' + m[2] + ap; }
+module.exports = { hm12, ZONE, parts, keyOf, todayKey, minutesOf, isToday,
   shiftKey, noonOf, zonedToUTC, dowOf, dowIndexOf, labelOf, fmtMin };
