@@ -1302,7 +1302,7 @@ function briefHTML(b, x){
   const rides = (b.rides||[]).map(r => { const h = r.analysis && r.analysis.hr, br = r.analysis && r.analysis.resp;
     return `<li><span class="n">${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)}<span class="small"> ${r.minutes} min${r.miles?` · ${r.miles} mi`:""}${r.np_w?` · NP ${r.np_w} W`:r.avg_w?` · ${r.avg_w} W`:""}${h?` · HR ${h.avg} avg, ${h.max} max`:""}${br?` · breathing ${br.avg}/min`:""}</span></span><span class="tag">${r.tss!=null?`~${r.tss} TSS`:""}</span></li>`; }).join("");
   return `<div class="xd">
-    <div class="xdh">${esc(w.sport === "VirtualRide" ? "Zwift" : w.sport === "WeightTraining" ? "Lifting" : "Road")} · ${esc(x.from)} to ${esc(x.to)} · ${clockS(m.duration_s)} · ${m.tss} TSS · IF ${m.if.toFixed(2)}${c?` · <b style="color:${bandC}">${c.pct}% ${c.band==="green"?"done":c.band==="yellow"?"partly":b.rides&&b.rides.length?"short":"missed"}</b>`:""}</div>
+    <div class="xdh">${esc(w.sport === "VirtualRide" ? "Zwift" : w.sport === "WeightTraining" ? "Lifting" : "Road")} · ${w.time ? `${esc(x.from)} to ${esc(x.to)}` : "no start time set"} · ${clockS(m.duration_s)} · ${m.tss} TSS · IF ${m.if.toFixed(2)}${c?` · <b style="color:${bandC}">${c.pct}% ${c.band==="green"?"done":c.band==="yellow"?"partly":b.rides&&b.rides.length?"short":"missed"}</b>`:""}</div>
     ${b.notes && b.notes.session ? `<div class="xdesc">${esc(b.notes.session)}</div>` : ""}
     <h5>The session</h5><ul class="agenda totals xsteps">${steps}</ul>
     ${rides ? `<h5>Ridden</h5><ul class="agenda totals">${rides}</ul>${c&&c.basis?`<div class="small">${esc(c.basis)}</div>`:""}` : ""}
@@ -1317,7 +1317,7 @@ function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
   const chips = (d.all_day||[]).map(e=>
-    `<span class="chip ${(LANE[e.source]||LANE.calendar).cls}">${esc(e.summary)}${e.detail?" · "+esc(e.detail):""}</span>`).join("");
+    `<span class="chip ${(LANE[e.source]||LANE.calendar).cls} xchip" data-x="${esc(JSON.stringify({ title:e.summary, from:"all day", to:"", desc:e.description||null, location:e.location||null, calendar:e.calendar||null, wid:e.workout_id||null, source:e.source||null }))}">${esc(e.summary)}${e.detail?" · "+esc(e.detail):""}</span>`).join("");
   let markedNext = false;
   const items = rows.map(r=>{
     let state = "";
@@ -1970,6 +1970,24 @@ V.today = async function(){
     // tap a row: it opens underneath with everything about it
     view.addEventListener("click", async (e)=>{
       if (e.target.closest("button, a")) return;
+      // an all-day chip (a session with no time yet) opens the same way, under the chips
+      const chip = e.target.closest(".xchip");
+      if (chip){
+        const wrap = chip.closest(".chips");
+        const open = wrap.nextElementSibling && wrap.nextElementSibling.classList.contains("xchipdetail");
+        view.querySelectorAll(".xchipdetail").forEach(x => x.remove());
+        view.querySelectorAll(".xchip.on").forEach(x => x.classList.remove("on"));
+        if (open && wrap.dataset.openFor === chip.dataset.x) { wrap.dataset.openFor = ""; return; }
+        let x = {}; try{ x = JSON.parse(chip.dataset.x); }catch{}
+        chip.classList.add("on"); wrap.dataset.openFor = chip.dataset.x;
+        const d = document.createElement("ul"); d.className = "agenda xchipdetail"; d.innerHTML = `<li class="xdetail">${eventDetailHTML(x)}</li>`;
+        wrap.after(d);
+        if (x.wid){
+          try{ const b = await bridge("/workouts/"+encodeURIComponent(x.wid)+"/brief"); d.firstElementChild.innerHTML = briefHTML(b, x); }
+          catch(err){ d.firstElementChild.innerHTML += `<div class="small">${esc(err.message)}</div>`; }
+        }
+        return;
+      }
       const li = e.target.closest("li.xrow"); if (!li) return;
       const open = li.nextElementSibling && li.nextElementSibling.classList.contains("xdetail");
       view.querySelectorAll("li.xdetail").forEach(x => x.remove());

@@ -421,3 +421,4 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .xd h5{font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:14px 0 2px}
 .xd .xdesc{white-space:pre-wrap; margin:6px 0; line-height:1.4}
 .xd ul.agenda{margin-top:4px} .xd ul.agenda li{padding:6px 0 6px 10px; font-size:15px} .xd ul.agenda li .tag{text-align:right}
+.chip.xchip{cursor:pointer} .chip.xchip.on{outline:2px solid var(--ink)} ul.agenda.xchipdetail{margin-top:4px}
