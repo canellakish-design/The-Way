@@ -34,4 +34,25 @@ ok('MPA: steady riding under TP never breaks through; a surge far above the curv
   const s = S.mpaTrace(surge, sig);
   assert.ok(s.over_s > 0 && s.lowest_mpa <= 176, JSON.stringify({ over: s.over_s, low: s.lowest_mpa }));
 });
+
+ok('fit: easy long rides under the curve do not pull TP down; the curve is the lowest that stays above every effort', () => {
+  const tp = 180, hie = 15000, pp = 800;
+  const hard = S.DURS.filter(t => t >= 120 && t <= 600).map(t => ({ dur_s: t, watts: Math.round(S.pd(t, tp, hie, pp)) }));
+  const easy = [1200, 1800, 2400, 3600, 5400].map(t => ({ dur_s: t, watts: 110 }));          // an easy hour at 110 W
+  const f = S.fit([{ dur_s: 5, watts: pp }].concat(hard, easy));
+  assert.ok(Math.abs(f.tp - tp) <= 6, 'tp ' + f.tp);                                          // the 5 and 10 minute efforts set TP, not the easy hour
+  assert.ok(f.binding_durations.includes(300) && !f.binding_durations.includes(3600));
+});
+
+ok('breakthroughs: a ride that beats the curve the rides before it drew is one, and the signature moves up', () => {
+  const mk = (id, date, tp, hie, pp, durs) => { const mmp = {}; for (const t of durs) mmp[t] = Math.round(S.pd(t, tp, hie, pp)); return { id, date, name: 'r' + id, minutes: 60, mmp }; };
+  const base = S.DURS.filter(t => t <= 1800);
+  const rides = [mk(1, '2026-09-01', 170, 14000, 700, base), mk(2, '2026-09-08', 170, 14000, 700, base), mk(3, '2026-09-15', 168, 14000, 700, base),
+    mk(4, '2026-09-22', 185, 16000, 700, base)];                                                 // the fourth beats the curve
+  const bt = S.breakthroughsOf(rides);
+  assert.strictEqual(bt.length, 1); assert.strictEqual(bt[0].id, 4);
+  assert.ok(bt[0].after.tp > bt[0].before.tp, JSON.stringify(bt[0].moved));
+  assert.ok(/signature moved/.test(bt[0].text), bt[0].text);
+  assert.ok(bt[0].hits.every(h => h.over_pct >= 2));
+});
 console.log(n + ' passed');

@@ -432,7 +432,19 @@ function attach(app) {
       const from = isDate(req.query.from) ? req.query.from : today;
       let to = isDate(req.query.to) ? req.query.to : tz.shiftKey(from, 6);
       if (to < from) to = from;
-      res.json(await calendar(from, to));
+      const r = await calendar(from, to);
+      // Breakthroughs (signature.js) on the rides: one unread ride's power is
+      // read per call so the medals fill in over a few loads, then each done
+      // ride that beat the signature of the day before carries the story.
+      try {
+        const S = require('./signature');
+        const d = await getJSON('signature', { rides: {}, scanned: [] });
+        const unread = (r.days || []).some(day => (day.done || []).some(x => !d.scanned.includes(String(x.id))));
+        if (unread) await S.scan(1).catch(() => null);
+        const bt = await S.breakthroughMap();
+        for (const day of r.days || []) for (const x of day.done || []) if (bt[String(x.id)]) x.breakthrough = bt[String(x.id)];
+      } catch (e) { /* no signature yet */ }
+      res.json(r);
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/workouts', async (req, res) => { if (!auth(req, res)) return;

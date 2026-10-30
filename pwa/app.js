@@ -80,6 +80,29 @@ async function bridge(pathname, opts){
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function attr(t){ return esc(t).replace(/"/g,"&quot;"); }
 let __ttsSpeaking = false, __lastSpoken = "";
+/* Stars for a meal that lands on the plan: a burst from the middle of the
+   screen, gone in under two seconds. Pure CSS motion, one element a star. */
+function celebrate(){
+  try{
+    const old = document.getElementById("stars"); if (old) old.remove();
+    const wrap = document.createElement("div"); wrap.id = "stars"; wrap.setAttribute("aria-hidden", "true");
+    const N = 42, cols = ["#f5d76e", "#ffe9a8", "#9be39b", "#ffffff", "#f0c040"];
+    for (let i = 0; i < N; i++){
+      const st = document.createElement("span"); st.className = "star";
+      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.4, dist = 120 + Math.random() * 220;
+      st.style.setProperty("--dx", Math.cos(ang) * dist + "px"); st.style.setProperty("--dy", Math.sin(ang) * dist - 40 + "px");
+      st.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg"); st.style.setProperty("--d", (900 + Math.random() * 700) + "ms");
+      st.style.setProperty("--s", (0.6 + Math.random() * 0.9).toFixed(2)); st.style.color = cols[i % cols.length];
+      st.style.animationDelay = (Math.random() * 120) + "ms";
+      st.textContent = "✦";
+      wrap.appendChild(st);
+    }
+    const word = document.createElement("div"); word.className = "starword"; word.textContent = "On the plan"; wrap.appendChild(word);
+    document.body.appendChild(wrap);
+    setTimeout(()=>{ try{ wrap.remove(); }catch{} }, 2200);
+  }catch{}
+}
+window.celebrate = celebrate;
 function speak(t){
   try{
     const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
@@ -609,7 +632,7 @@ V.zones = async function(){
     ${sig ? `<div class="small">Planning FTP is <b>${a.planning_ftp} W</b>${sig.tp !== a.planning_ftp ? `; the signature says <b>${sig.tp} W</b> (${sig.tp > a.planning_ftp ? "+" : ""}${sig.tp - a.planning_ftp}).` : ", the same as the signature."}</div>` : ""}
     ${pdHTML()}
     <ul class="agenda totals">${bestsHTML}</ul>
-    ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride above its own curve): ${sg.breakthroughs.slice(-5).map(b => `${esc(b.name)} ${esc(b.date)}`).join(" · ")}</div>` : ""}
+    ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride that beat the signature of the day before; the gold medal on the calendar):</div><ul class="agenda totals">${sg.breakthroughs.slice(-5).reverse().map(b => `<li><span class="t">${esc(b.date.slice(5).replace("-","/"))}</span><span class="n">${MEDAL}${esc(b.name)}<span class="small"> ${esc(b.text||"")}</span></span></li>`).join("")}</ul>` : `<div class="small">No breakthrough yet in the last ${sg.lookback_days||90} days: no ride has beaten the curve the rides before it drew. One all-out 5-minute effort and one 20-second effort would do it, and set TP.</div>`}
     <div class="rowbtns">
       <button id="sigScan" class="btn">${sg.left == null ? "Read rides" : sg.left > 0 ? `Read rides (${sg.left} unread of ${sg.total})` : `All ${sg.total||0} rides read · read again`}</button>
       ${sig && sig.tp !== a.planning_ftp && (sg.confidence === "high" || sg.confidence === "medium") ? `<button id="sigUse" class="btn">Set planning FTP to ${sig.tp} W</button>` : ""}
@@ -954,6 +977,9 @@ function fmtMinLocal(m){
 
 const TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
 window.TRASH = TRASH;
+// the gold medal: a breakthrough ride (signature.js), tap the row for the story
+const MEDAL = '<svg class="medal" viewBox="0 0 24 24" width="18" height="18" aria-label="Breakthrough" role="img"><path d="M8 2h3l1.5 4L14 2h3l-3.5 7h-3z" fill="#c8102e"/><path d="M13 2h3l-3.5 7" fill="#8b0a1f"/><circle cx="12" cy="15.5" r="6.5" fill="#f0c040" stroke="#b8860b" stroke-width="1.2"/><circle cx="12" cy="15.5" r="4.2" fill="none" stroke="#fff3b0" stroke-width=".8" opacity=".8"/><path d="M12 11.9l1.1 2.2 2.4.35-1.75 1.7.4 2.4L12 17.4l-2.15 1.15.4-2.4-1.75-1.7 2.4-.35z" fill="#b8860b"/></svg>';
+window.MEDAL = MEDAL;
 function dayRows(d, plan, isToday){
   const rows = (d.events||[]).map(e=>({
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
@@ -961,6 +987,12 @@ function dayRows(d, plan, isToday){
     lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
     desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
   }));
+  // a breakthrough ride nobody planned still gets its medal: its own row, at the ride's time
+  for (const b of (BTS[d.date] || [])) {
+    if (rows.some(r => (r.source === "plan" || r.source === "intervals") && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title))) break;
+    const sm = b.time ? (+b.time.slice(0,2))*60 + (+b.time.slice(3,5)) : 9*60, mins = b.minutes || 60;
+    rows.push({ start: sm, end: sm + mins, from: fmtMinLocal(sm), to: fmtMinLocal(sm + mins), title: b.name, detail: `${mins} min · ridden`, lane: LANE.plan || LANE.calendar, source: "strava", bt: b, desc: null });
+  }
   (d.windows||[]).forEach(w=> rows.push({
     start: w.start_min, end: w.end_min, from: w.from, to: w.to,
     title: "Open — " + durLabel(w.minutes), detail: w.slot || "",
@@ -981,9 +1013,23 @@ function dayRows(d, plan, isToday){
 
 /* ---- a row, opened: an event's details, or the whole of a workout ---- */
 const mm2hm = m => m == null ? "" : String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+// The story behind the medal: Xert's breakthrough. The signature of the day
+// before said this much power was the most available at that length; the
+// ride held more, so the three numbers moved.
+function breakthroughHTML(b, rideName){
+  if (!b) return "";
+  const hits = (b.hits || []).slice().sort((a, c) => c.over_pct - a.over_pct).slice(0, 4);
+  const say = s => s < 60 ? `${s} s` : s % 60 === 0 ? `${s/60} min` : `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+  return `<div class="xbt">${MEDAL}<b>Breakthrough</b>${rideName ? ` · ${esc(rideName)}` : ""}
+    <div class="small">${esc(b.text || "")}</div>
+    <ul class="agenda totals xbthits">${hits.map(h => `<li><span class="n">${say(h.dur_s)}</span><span class="tag"><b>${h.watts} W</b> <span class="small">vs ${h.curve_watts} W · +${h.over_pct}%</span></span></li>`).join("")}</ul>
+    ${b.before && b.after ? `<div class="small">Signature before: TP ${b.before.tp} W · HIE ${b.before.hie_kj} kJ · PP ${b.before.pp} W. After: TP ${b.after.tp} W · HIE ${b.after.hie_kj} kJ · PP ${b.after.pp} W.</div>` : ""}
+    <div class="small">A breakthrough, Xert's sense: power above what the signature said was available at that moment. The curve was wrong, low, and moved up to meet the ride.</div></div>`;
+}
 function eventDetailHTML(x){
   const editable = !!x.edit && !x.wid;
   return `<div class="xd"><div class="xdh">${esc(x.from)} to ${esc(x.to)}${x.calendar?` · ${esc(x.calendar)}`:""}</div>
+    ${x.bt ? breakthroughHTML(x.bt, x.ride) : ""}
     ${x.location?`<div><b>Where:</b> ${esc(x.location)}</div>`:""}
     ${x.desc?`<div class="xdesc">${esc(x.desc)}</div>`:""}
     ${!x.location&&!x.desc&&!x.wid&&!editable?`<div class="small">Nothing more on this one.</div>`:""}
@@ -1033,7 +1079,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {}, FUELV = {};
+let WX = {}, WGRADE = {}, FUELV = {}, BTS = {};   // BTS: breakthrough rides by date (signature.js), for the medal on the day
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
 function freeHours(d){
@@ -1111,9 +1157,12 @@ function dayCard(d, plan, nowMin, rec, solo){
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     const g = r.wid && WGRADE[r.wid];
     const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
-    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end }))}">
+    // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
+    const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title);
+    const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
+    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -1599,7 +1648,7 @@ V.today = async function(){
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
       get("/food/today", v => { foodData = v; }),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; for(const day of (r.days||[])) for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
     drawScores();
@@ -1624,6 +1673,7 @@ V.today = async function(){
     return (i >= 0 && i < cached.days.length) ? cached.days[i] : null;
   };
 
+  window.__repaintDay = ()=>{ try{ repaint(); }catch{} };
   const repaint = ()=>{
     if (!cached.days.length) return;
     // Crossing midnight makes every card wrong. Reload rather than patch —

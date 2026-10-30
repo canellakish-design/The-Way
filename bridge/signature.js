@@ -61,31 +61,101 @@ function pd(t, tp, hieJ, pp) {
 }
 
 // Fit TP and HIE to the points of two minutes and up; PP from the 5-s best.
+// The fit, Xert's way round: the signature is the LOWEST curve that stays
+// above every effort of the last 90 days. A point under the curve is a
+// ride that was not all-out at that length (an easy hour sits far below
+// the curve and says nothing about threshold); it costs only a little, in
+// proportion to the gap, so the curve settles down onto the efforts that
+// were maximal. A point above the curve is a breakthrough: it costs a lot,
+// so the curve is pushed up to it. That is why a 5-minute all-out and a
+// 20-second all-out are enough to set TP: the short one pins PP and HIE,
+// the long one then pins TP, and no hour-long test is needed.
 function fit(points) {
   const pts = points.filter(p => p.dur_s >= 120 && p.watts > 0);
   const pp = Math.max((points.find(p => p.dur_s === 5) || {}).watts || 0, ...pts.map(p => p.watts)) || null;
   if (pts.length < 4 || !pp) return null;
   const longest = pts[pts.length - 1];
-  const weight = p => Math.log(p.dur_s / 60 + 1);          // the long end counts for more
   let best = null;
-  const tpLo = Math.round(longest.watts * 0.7), tpHi = Math.round(Math.min(pp - 20, longest.watts * 1.4));
+  const tpLo = Math.round(longest.watts * 0.9), tpHi = Math.round(Math.min(pp - 20, Math.max(...pts.map(p => p.watts))));
   for (let tp = tpLo; tp <= tpHi; tp += 1) {
     for (let hie = 4; hie <= 45; hie += 0.5) {
       const hieJ = hie * 1000;
-      let err = 0, wsum = 0;
+      let err = 0;
       for (const p of pts) {
-        // the curve may sit above a point (he never tested that duration) at
-        // small cost; a point above the curve is a breakthrough and costs full
         const m = pd(p.dur_s, tp, hieJ, pp), r = (m - p.watts) / p.watts;
-        const w = weight(p) * (r > 0 ? 0.35 : 1);
-        err += w * r * r; wsum += w;
+        // a point above the curve is a breakthrough the curve must rise to: heavy. A point
+        // under it pulls gently, and one more than 10% under (plainly not all-out at that
+        // length, an easy hour) pulls no harder than that: Xert ignores sub-maximal data.
+        err += r < 0 ? 400 * r * r : Math.min(r, 0.10);
       }
-      const e = err / wsum;
-      if (!best || e < best.e) best = { tp, hie, e };
+      if (!best || err < best.e) best = { tp, hie, e: err };
     }
   }
-  const rmse = Math.round(Math.sqrt(best.e) * 1000) / 10;   // % of the point
-  return { tp: best.tp, hie_kj: best.hie, pp, rmse_pct: rmse, points: pts.length };
+  // how tight the curve sits on the efforts that shape it: RMS gap over the points within 5% of it
+  const hieJ = best.hie * 1000;
+  const gaps = pts.map(p => (pd(p.dur_s, best.tp, hieJ, pp) - p.watts) / p.watts);
+  const tight = gaps.filter(g => Math.abs(g) <= 0.05);
+  const rmse = tight.length ? Math.round(Math.sqrt(tight.reduce((a, g) => a + g * g, 0) / tight.length) * 1000) / 10 : null;
+  return { tp: best.tp, hie_kj: best.hie, pp, rmse_pct: rmse, points: pts.length, binding: tight.length,
+    binding_durations: pts.filter((p, k) => Math.abs(gaps[k]) <= 0.05).map(p => p.dur_s) };
+}
+
+// Breakthroughs, Xert's meaning: a ride whose power at some length beat
+// what the signature of the day BEFORE it predicted, so the signature
+// moved up. Each ride is checked against the curve fitted to the rides
+// before it (once four durations exist), and the curve fitted with it says
+// how far the three numbers moved. Cached against the set of rides read.
+const pointsOf = rides => {
+  const out = [];
+  for (const dur of DURS) {
+    let best = null;
+    for (const r of rides) { const v = r.mmp && r.mmp[dur]; if (v && (!best || v > best.watts)) best = { dur_s: dur, watts: v, date: r.date, name: r.name, id: r.id }; }
+    if (best) out.push(best);
+  }
+  return out;
+};
+function breakthroughsOf(rides) {
+  const sorted = rides.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+  const out = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i];
+    const before = fit(pointsOf(sorted.slice(0, i)));
+    if (!before || !r.mmp) continue;
+    const hits = [];
+    for (const dur of DURS) {
+      if (dur < 60 || !r.mmp[dur]) continue;
+      const curve = pd(dur, before.tp, before.hie_kj * 1000, before.pp);
+      if (r.mmp[dur] > curve * 1.02 && r.mmp[dur] - curve >= 3) hits.push({ dur_s: dur, watts: r.mmp[dur], curve_watts: Math.round(curve), over_pct: Math.round((r.mmp[dur] / curve - 1) * 100) });
+    }
+    if (!hits.length) continue;
+    const after = fit(pointsOf(sorted.slice(0, i + 1)));
+    const top = hits.slice().sort((a, b) => b.over_pct - a.over_pct)[0];
+    out.push({ id: r.id, date: r.date, name: r.name, minutes: r.minutes, hits, top,
+      before: { tp: before.tp, hie_kj: before.hie_kj, pp: before.pp },
+      after: after ? { tp: after.tp, hie_kj: after.hie_kj, pp: after.pp } : null,
+      moved: after ? { tp: after.tp - before.tp, hie_kj: Math.round((after.hie_kj - before.hie_kj) * 10) / 10, pp: after.pp - before.pp } : null,
+      text: `${sayDur(top.dur_s)} at ${top.watts} W, where the signature said ${top.curve_watts} W was the most available (${top.over_pct}% over)` +
+        (after ? `. The signature moved: TP ${before.tp} → ${after.tp} W${after.hie_kj !== before.hie_kj ? `, HIE ${before.hie_kj} → ${after.hie_kj} kJ` : ''}${after.pp !== before.pp ? `, PP ${before.pp} → ${after.pp} W` : ''}.` : '.') });
+  }
+  return out;
+}
+function sayDur(s) { return s < 60 ? `${s} seconds` : s % 60 === 0 ? `${s / 60} minute${s === 60 ? '' : 's'}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+async function breakthroughs() {
+  const d = await db();
+  const today = tz.todayKey(), floor = tz.shiftKey(today, -LOOKBACK_DAYS);
+  const rides = Object.values(d.rides).filter(r => r.date >= floor);
+  const key = rides.map(r => r.id).sort().join(',') + '|' + floor;
+  if (d.bt && d.bt.key === key) return d.bt.list;
+  const list = breakthroughsOf(rides);
+  d.bt = { key, list, at: Date.now() };
+  await setJSON('signature', d).catch(() => {});
+  return list;
+}
+async function breakthroughMap() {
+  const list = await breakthroughs();
+  const m = {};
+  for (const b of list) m[String(b.id)] = b;
+  return m;
 }
 
 // MPA through a ride; breakthroughs are seconds above it.
@@ -157,29 +227,28 @@ async function report() {
     const p = points.find(x => x.dur_s === m * 60);
     bests[m] = p ? { watts: p.watts, date: p.date, name: p.name, curve: sig ? Math.round(pd(m * 60, sig.tp, sig.hie_kj * 1000, sig.pp)) : null } : null;
   }
-  // the ride-by-ride breakthrough check against the fitted signature
-  let breakthroughs = [];
-  if (sig) {
-    for (const r of rides) {
-      // a ride breaks through when any of its own MMP points sits above the curve by 3% or more
-      const hits = DURS.filter(dur => r.mmp[dur] && r.mmp[dur] > pd(dur, sig.tp, sig.hie_kj * 1000, sig.pp) * 1.03 && dur >= 60);
-      if (hits.length) breakthroughs.push({ date: r.date, name: r.name, id: r.id, durations_s: hits });
-    }
-  }
+  const bts = await breakthroughs().catch(() => []);
   const newest = points.filter(p => p.dur_s >= 1200).sort((a, b) => b.date.localeCompare(a.date))[0];
   const ageDays = newest ? Math.round((new Date(today) - new Date(newest.date)) / 864e5) : null;
-  const hardEvidence = sig && points.some(p => p.dur_s >= 180 && p.dur_s <= 600 && p.watts >= sig.tp * 1.12);
-  const longEvidence = sig && points.some(p => p.dur_s >= 1200 && p.watts >= sig.tp * 0.97);
-  const confidence = !sig ? 'none' : rides.length < 5 ? 'low' : (hardEvidence && longEvidence && sig.rmse_pct < 6) ? 'high' : (hardEvidence || longEvidence) ? 'medium' : 'low';
+  // What sets the curve. The short end (20 s to 1 min) pins PP and HIE; a
+  // 3 to 10 minute effort then pins TP. Both are judged by whether a point
+  // of that length is binding (on the curve) and looks maximal for its
+  // length: the mid effort well above TP, the short one well above that.
+  const binding = sig ? new Set(sig.binding_durations) : new Set();
+  const midEvidence = sig && points.some(p => p.dur_s >= 180 && p.dur_s <= 600 && binding.has(p.dur_s) && p.watts >= sig.tp * 1.10);
+  const shortEvidence = sig && points.some(p => p.dur_s >= 20 && p.dur_s <= 60 && p.watts >= sig.tp * 1.8);
+  const longEvidence = sig && points.some(p => p.dur_s >= 1200 && binding.has(p.dur_s) && p.watts >= sig.tp * 0.97);
+  const recent = bts.some(b => b.date >= tz.shiftKey(today, -42));
+  const confidence = !sig ? 'none' : rides.length < 5 ? 'low' : (midEvidence && shortEvidence) ? 'high' : (midEvidence || longEvidence) ? 'medium' : 'low';
   const why = !sig ? 'Fewer than four durations of two minutes or more have been read yet.'
-    : confidence === 'high' ? `A hard effort and a long steady one both sit on the curve; the fit is within ${sig.rmse_pct}%.`
-    : !hardEvidence && !longEvidence ? 'Every point came from easy riding, so TP is a floor: nothing in the last 90 days tested it. One 8 to 20 minute hard effort would set it.'
-    : !longEvidence ? 'The short efforts shape the curve but no ride held near TP for 20 minutes or more, so TP leans on the model.'
-    : 'Long steady riding pins TP; no short effort has tested PP and HIE, which are read from the curve more than from him.';
+    : confidence === 'high' ? `A 3 to 10 minute all-out effort and a short one both sit on the curve, which is what sets TP without an hour's test${sig.rmse_pct != null ? `; the fit on them is within ${sig.rmse_pct}%` : ''}.${recent ? '' : ' No breakthrough in six weeks: it may be drifting.'}`
+    : midEvidence ? 'A 3 to 10 minute effort shapes the curve, but no short all-out effort (20 seconds to a minute) has pinned PP and HIE, so TP leans on the model.'
+    : longEvidence ? 'Long steady riding sits on the curve, so TP is a floor; one all-out 5-minute effort and one 20-second one would set it.'
+    : 'Nothing in the last 90 days was all-out at any length, so TP is a floor, not a measurement: the lowest curve that stays above every ride. One all-out 5-minute effort and one 20-second effort would set it.';
   return {
     signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, rmse_pct: sig.rmse_pct, points: sig.points } : null,
     confidence, why, rides: rides.length, lookback_days: LOOKBACK_DAYS, newest_long_effort: newest ? { date: newest.date, name: newest.name, age_days: ageDays } : null,
-    planning_ftp: st.ftp, bests, points, breakthroughs: breakthroughs.slice(-10),
+    planning_ftp: st.ftp, bests, points, breakthroughs: bts.slice(-10),
     curve: sig ? DURS.map(t => ({ dur_s: t, watts: Math.round(pd(t, sig.tp, sig.hie_kj * 1000, sig.pp)) })) : [],
     left: null
   };
@@ -211,4 +280,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS };
+module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, pointsOf };

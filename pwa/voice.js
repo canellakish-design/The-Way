@@ -147,6 +147,7 @@ async function send(text){
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
+    if ((r.actions||[]).some(a => a.celebrate) && typeof celebrate === "function") celebrate();
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
   }catch(e){ status(e.message); history.pop(); keep(); drawThread(); }
   sending = false;

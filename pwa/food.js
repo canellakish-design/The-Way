@@ -6,6 +6,16 @@
 (function(){
 
 const J = {"Content-Type":"application/json"};
+
+// A logged meal that lands green against its slot (on the plan) gets the stars.
+function cheerIf(r){
+  try{
+    const e = r && r.entry, meals = r && r.day && r.day.meals || [];
+    if (!e || (e.kcal || 0) < 100) return;
+    const m = meals.find(x => (x.logged || []).includes(e.id));
+    if (m && m.match && m.match.key === "green" && typeof celebrate === "function") celebrate();
+  }catch{}
+}
 const pad = n => String(n).padStart(2,"0");
 function keyAdd(k,n){ const [y,m,d]=k.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)+n*864e5).toISOString().slice(0,10); }
 function localToday(){ const d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
@@ -423,12 +433,12 @@ V.food = async function(){
     if (r.reply && typeof speak === "function") speak(r.reply);
     adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
-      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); }
+      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
       catch(e){ b.textContent = "failed"; }
     });
     adviseOut.querySelectorAll("[data-adorder]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
-      try{ const rr = await bridge("/food/item",{method:"POST",headers:J,body:decodeURIComponent(b.dataset.adorder)}); b.textContent = "logged"; day = rr.day; draw(); }
+      try{ const rr = await bridge("/food/item",{method:"POST",headers:J,body:decodeURIComponent(b.dataset.adorder)}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
       catch(e){ b.textContent = "failed"; }
     });
   };
@@ -472,7 +482,7 @@ V.food = async function(){
       const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined })});
       showVerdict(r.entry);
       wform.hidden = true; msg.textContent = ""; document.getElementById("writeText").value = ""; document.getElementById("writeMeal").value = "";
-      day = r.day; draw();
+      day = r.day; draw(); cheerIf(r);
     }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
     finally{ btn.disabled = false; }
   };
@@ -489,7 +499,7 @@ V.food = async function(){
       showVerdict(r.entry);
       form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
-      day = r.day; draw();
+      day = r.day; draw(); cheerIf(r);
     }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
     finally{ btn.disabled = false; }
   };
