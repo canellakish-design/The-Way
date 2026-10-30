@@ -70,33 +70,47 @@ function pd(t, tp, hieJ, pp) {
 // so the curve is pushed up to it. That is why a 5-minute all-out and a
 // 20-second all-out are enough to set TP: the short one pins PP and HIE,
 // the long one then pins TP, and no hour-long test is needed.
-function fit(points) {
+// Without an all-out effort of 20 minutes or more, TP and HIE trade off:
+// the 2 to 10 minute points fit a low TP with a big tank as well as a
+// higher TP with a typical one. Xert holds HIE near where it has been and
+// moves it only when a breakthrough demands it; here a soft prior does the
+// same, pulling HIE toward HIE_TYPICAL unless the efforts say otherwise.
+// The fit with no prior at all is kept too, as the floor TP cannot be under.
+const HIE_TYPICAL = 20, HIE_PRIOR = 1;
+function fit(points, o) {
+  const opts = o || {};
   const pts = points.filter(p => p.dur_s >= 120 && p.watts > 0);
   const pp = Math.max((points.find(p => p.dur_s === 5) || {}).watts || 0, ...pts.map(p => p.watts)) || null;
   if (pts.length < 4 || !pp) return null;
   const longest = pts[pts.length - 1];
-  let best = null;
   const tpLo = Math.round(longest.watts * 0.9), tpHi = Math.round(Math.min(pp - 20, Math.max(...pts.map(p => p.watts))));
-  for (let tp = tpLo; tp <= tpHi; tp += 1) {
-    for (let hie = 4; hie <= 45; hie += 0.5) {
-      const hieJ = hie * 1000;
-      let err = 0;
-      for (const p of pts) {
-        const m = pd(p.dur_s, tp, hieJ, pp), r = (m - p.watts) / p.watts;
-        // a point above the curve is a breakthrough the curve must rise to: heavy. A point
-        // under it pulls gently, and one more than 10% under (plainly not all-out at that
-        // length, an easy hour) pulls no harder than that: Xert ignores sub-maximal data.
-        err += r < 0 ? 400 * r * r : Math.min(r, 0.10);
+  const search = lam => {
+    let best = null;
+    for (let tp = tpLo; tp <= tpHi; tp += 1) {
+      for (let hie = 4; hie <= 45; hie += 0.5) {
+        const hieJ = hie * 1000;
+        let err = lam * Math.pow((hie - HIE_TYPICAL) / 10, 2);
+        for (const p of pts) {
+          const m = pd(p.dur_s, tp, hieJ, pp), r = (m - p.watts) / p.watts;
+          // a point above the curve is a breakthrough the curve must rise to: heavy. A point
+          // under it pulls gently, and one more than 10% under (plainly not all-out at that
+          // length, an easy hour) pulls no harder than that: Xert ignores sub-maximal data.
+          err += r < 0 ? 400 * r * r : Math.min(r, 0.10);
+        }
+        if (!best || err < best.e) best = { tp, hie, e: err };
       }
-      if (!best || err < best.e) best = { tp, hie, e: err };
     }
-  }
+    return best;
+  };
+  const best = search(opts.prior == null ? HIE_PRIOR : opts.prior);
+  const floor = opts.floor === false ? null : search(0);
   // how tight the curve sits on the efforts that shape it: RMS gap over the points within 5% of it
   const hieJ = best.hie * 1000;
   const gaps = pts.map(p => (pd(p.dur_s, best.tp, hieJ, pp) - p.watts) / p.watts);
   const tight = gaps.filter(g => Math.abs(g) <= 0.05);
   const rmse = tight.length ? Math.round(Math.sqrt(tight.reduce((a, g) => a + g * g, 0) / tight.length) * 1000) / 10 : null;
   return { tp: best.tp, hie_kj: best.hie, pp, rmse_pct: rmse, points: pts.length, binding: tight.length,
+    tp_floor: floor ? floor.tp : null, hie_floor_kj: floor ? floor.hie : null,
     binding_durations: pts.filter((p, k) => Math.abs(gaps[k]) <= 0.05).map(p => p.dur_s) };
 }
 
@@ -119,7 +133,7 @@ function breakthroughsOf(rides) {
   const out = [];
   for (let i = 0; i < sorted.length; i++) {
     const r = sorted[i];
-    const before = fit(pointsOf(sorted.slice(0, i)));
+    const before = fit(pointsOf(sorted.slice(0, i)), { floor: false });
     if (!before || !r.mmp) continue;
     const hits = [];
     for (const dur of DURS) {
@@ -128,7 +142,7 @@ function breakthroughsOf(rides) {
       if (r.mmp[dur] > curve * 1.02 && r.mmp[dur] - curve >= 3) hits.push({ dur_s: dur, watts: r.mmp[dur], curve_watts: Math.round(curve), over_pct: Math.round((r.mmp[dur] / curve - 1) * 100) });
     }
     if (!hits.length) continue;
-    const after = fit(pointsOf(sorted.slice(0, i + 1)));
+    const after = fit(pointsOf(sorted.slice(0, i + 1)), { floor: false });
     const top = hits.slice().sort((a, b) => b.over_pct - a.over_pct)[0];
     out.push({ id: r.id, date: r.date, name: r.name, minutes: r.minutes, hits, top,
       before: { tp: before.tp, hie_kj: before.hie_kj, pp: before.pp },
@@ -239,14 +253,23 @@ async function report() {
   const shortEvidence = sig && points.some(p => p.dur_s >= 20 && p.dur_s <= 60 && p.watts >= sig.tp * 1.8);
   const longEvidence = sig && points.some(p => p.dur_s >= 1200 && binding.has(p.dur_s) && p.watts >= sig.tp * 0.97);
   const recent = bts.some(b => b.date >= tz.shiftKey(today, -42));
-  const confidence = !sig ? 'none' : rides.length < 5 ? 'low' : (midEvidence && shortEvidence) ? 'high' : (midEvidence || longEvidence) ? 'medium' : 'low';
+  // High needs the two efforts AND a breakthrough inside six weeks: a curve that nothing
+  // has beaten lately sits on old data, and whether those efforts were all-out cannot be
+  // read from the numbers alone.
+  const confidence = !sig ? 'none' : rides.length < 5 ? 'low' : (midEvidence && shortEvidence && recent) ? 'high' : (midEvidence || longEvidence) ? 'medium' : 'low';
+  const spread = sig && sig.tp_floor != null && sig.tp_floor !== sig.tp ? ` TP reads ${sig.tp} W with a typical tank (HIE ${sig.hie_kj} kJ) and ${sig.tp_floor} W if the tank is as big as ${sig.hie_floor_kj} kJ; only an all-out 20 minutes or more settles which.` : '';
   const why = !sig ? 'Fewer than four durations of two minutes or more have been read yet.'
-    : confidence === 'high' ? `A 3 to 10 minute all-out effort and a short one both sit on the curve, which is what sets TP without an hour's test${sig.rmse_pct != null ? `; the fit on them is within ${sig.rmse_pct}%` : ''}.${recent ? '' : ' No breakthrough in six weeks: it may be drifting.'}`
-    : midEvidence ? 'A 3 to 10 minute effort shapes the curve, but no short all-out effort (20 seconds to a minute) has pinned PP and HIE, so TP leans on the model.'
+    : confidence === 'high' ? `A 3 to 10 minute all-out effort and a short one both sit on the curve, and a breakthrough inside six weeks tested it${sig.rmse_pct != null ? `; the fit on them is within ${sig.rmse_pct}%` : ''}.`
+    : midEvidence && shortEvidence ? `A 3 to 10 minute effort and a short one shape the curve, but nothing has beaten it in six weeks, so it rests on old rides and may be drifting.${spread}`
+    : midEvidence ? `A 3 to 10 minute effort shapes the curve, but no short all-out effort (20 seconds to a minute) has pinned PP and HIE, so TP leans on the model.${spread}`
     : longEvidence ? 'Long steady riding sits on the curve, so TP is a floor; one all-out 5-minute effort and one 20-second one would set it.'
     : 'Nothing in the last 90 days was all-out at any length, so TP is a floor, not a measurement: the lowest curve that stays above every ride. One all-out 5-minute effort and one 20-second effort would set it.';
+  // A ramp test in the window is its own reading: FTP about 75% of the best minute of it.
+  const rampRide = rides.filter(r => /ramp/i.test(r.name || '') && r.mmp && r.mmp[60]).sort((a, b) => b.date.localeCompare(a.date))[0] || null;
+  const ramp = rampRide ? { date: rampRide.date, name: rampRide.name, one_min_w: rampRide.mmp[60], ftp_est: Math.round(rampRide.mmp[60] * 0.75) } : null;
   return {
-    signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, rmse_pct: sig.rmse_pct, points: sig.points } : null,
+    signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, rmse_pct: sig.rmse_pct, points: sig.points, tp_floor: sig.tp_floor, hie_floor_kj: sig.hie_floor_kj } : null,
+    ramp,
     confidence, why, rides: rides.length, lookback_days: LOOKBACK_DAYS, newest_long_effort: newest ? { date: newest.date, name: newest.name, age_days: ageDays } : null,
     planning_ftp: st.ftp, bests, points, breakthroughs: bts.slice(-10),
     curve: sig ? DURS.map(t => ({ dur_s: t, watts: Math.round(pd(t, sig.tp, sig.hie_kj * 1000, sig.pp)) })) : [],

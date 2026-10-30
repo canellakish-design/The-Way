@@ -624,12 +624,13 @@ V.zones = async function(){
   const bestsHTML = [20,30,40,50,60].map(m => { const b = bests[m]; return `<li><span class="n"><b>${m} min</b>${b ? `<span class="small"> ${esc(b.name||"")} · ${esc(b.date||"")}</span>` : `<span class="small"> no ride that long with power yet</span>`}</span><span class="tag">${b ? `<b>${b.watts} W</b>${b.curve ? `<span class="small"> curve ${b.curve}</span>` : ""}` : "—"}</span></li>`; }).join("");
   const sigHTML = `
     <div class="sigrow">
-      <div class="sigbox"><span class="slabel">Threshold</span><span class="signum">${sig ? sig.tp : "—"}</span><span class="small">W · TP</span></div>
+      <div class="sigbox"><span class="slabel">Threshold</span><span class="signum">${sig ? sig.tp : "—"}</span><span class="small">W · TP${sig && sig.tp_floor != null && sig.tp_floor !== sig.tp ? ` · floor ${sig.tp_floor}` : ""}</span></div>
       <div class="sigbox"><span class="slabel">Tank above it</span><span class="signum">${sig ? sig.hie_kj : "—"}</span><span class="small">kJ · HIE</span></div>
       <div class="sigbox"><span class="slabel">Peak</span><span class="signum">${sig ? sig.pp : "—"}</span><span class="small">W · 5 s · PP</span></div>
     </div>
     <div class="small"><b style="color:${confC(sg.confidence)}">${esc(sg.confidence || "none")} confidence</b> · ${esc(sg.why || "")}${sg.newest_long_effort ? ` Newest long effort: ${esc(sg.newest_long_effort.name||"")}, ${sg.newest_long_effort.age_days} day${sg.newest_long_effort.age_days===1?"":"s"} ago.` : ""}</div>
     ${sig ? `<div class="small">Planning FTP is <b>${a.planning_ftp} W</b>${sig.tp !== a.planning_ftp ? `; the signature says <b>${sig.tp} W</b> (${sig.tp > a.planning_ftp ? "+" : ""}${sig.tp - a.planning_ftp}).` : ", the same as the signature."}</div>` : ""}
+    ${sg.ramp ? `<div class="small"><b>Ramp test</b> ${esc(sg.ramp.date)}: best minute ${sg.ramp.one_min_w} W, which the ramp protocol reads as an FTP of about <b>${sg.ramp.ftp_est} W</b> (75% of the best minute). A ramp test is maximal by design, so this is a measurement; the signature's TP is a curve through everything since.</div>` : ""}
     ${pdHTML()}
     <ul class="agenda totals">${bestsHTML}</ul>
     ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride that beat the signature of the day before; the gold medal on the calendar):</div><ul class="agenda totals">${sg.breakthroughs.slice(-5).reverse().map(b => `<li><span class="t">${esc(b.date.slice(5).replace("-","/"))}</span><span class="n">${MEDAL}${esc(b.name)}<span class="small"> ${esc(b.text||"")}</span></span></li>`).join("")}</ul>` : `<div class="small">No breakthrough yet in the last ${sg.lookback_days||90} days: no ride has beaten the curve the rides before it drew. One all-out 5-minute effort and one 20-second effort would do it, and set TP.</div>`}
