@@ -485,3 +485,4 @@ details.addev{margin-top:10px} details.addev summary{font-family:var(--mono); fo
 details.addev summary::-webkit-details-marker{display:none} details.addev[open] summary{color:var(--ink)}
 details.addev input{width:100%}
 .dayfoot{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-top:8px}
+.dayhead{display:flex; justify-content:space-between; align-items:center; gap:10px} .dayhead h4{margin:0} .dayhead .btn{padding:6px 12px}
