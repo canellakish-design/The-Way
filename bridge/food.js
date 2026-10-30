@@ -192,7 +192,7 @@ Today's guidelines:
 ${rules}
 ${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan, timed around the training:
 ${(g.meals || []).map(m => `- ${m.time} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
-${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
+${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g.logged.length ? `Already in the journal today (do not ask for a meal he has already eaten): ${g.logged.map(e => `${e.time} ${e.meal}: ${e.name} (${e.kcal} kcal, ${e.carbs_g} C / ${e.protein_g} P / ${e.fat_g} F${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''})`).join('; ')}. Eaten so far: ${g.logged.reduce((a, e) => a + (e.kcal || 0), 0)} kcal, ${g.logged.reduce((a, e) => a + (e.carbs_g || 0), 0)} C / ${g.logged.reduce((a, e) => a + (e.protein_g || 0), 0)} P / ${g.logged.reduce((a, e) => a + (e.fat_g || 0), 0)} F.\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
@@ -296,6 +296,8 @@ async function addPhoto(body) {
   const g = await guidelinesFor(date);
   const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(body.meal) ? body.meal : null;
   const notes = body.notes ? String(body.notes).slice(0, 300) : '';
+  // The coach sees what is already in the journal, so it never asks for a meal just eaten.
+  try { g.logged = (await dayDoc(date)).entries.filter(e => !e.supplement).map(e => ({ time: e.time, meal: e.drink_only ? 'drink' : e.meal, name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g, fluid_ml: e.fluid_ml || 0 })); } catch (e) { g.logged = []; }
   const a = await analyze(images, g, meal, notes, written);
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
   const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();

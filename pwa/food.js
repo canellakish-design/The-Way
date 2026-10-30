@@ -139,7 +139,7 @@ V.food = async function(){
           <div class="small">${day.suggestion.kcal} kcal · ${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P · ${day.suggestion.fat_g}F — ${esc(day.suggestion.why)}, score ${day.suggestion.score_before} → <b>${day.suggestion.score_after}</b></div></div>` : ""}
       </div>
       <div class="card" id="fMicro"><h4>Micronutrients · three days</h4>${microHTML(day.micros, day)}</div>
-      <span class="eyebrow">The journal · ${day.entries.length} ${day.entries.length===1?"meal":"meals"}</span>
+      <span class="eyebrow">The journal · ${(n=>`${n} ${n===1?"meal":"meals"}`)(day.entries.filter(e=>!e.supplement&&!e.drink_only).length)}${day.entries.some(e=>e.drink_only)?` · ${day.entries.filter(e=>e.drink_only).length} drink${day.entries.filter(e=>e.drink_only).length===1?"":"s"}`:""}</span>
       <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
     wireMicro(el, async ()=>{ await load(); });
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
@@ -177,9 +177,9 @@ V.food = async function(){
     const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${e.written ? "✎" : esc((e.name||"?").slice(0,2))}</span>`;
     return `<div class="card jentry">
       <div class="jrow">${img}
-        <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${esc(e.meal)}${e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
+        <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${e.drink_only?"drink":esc(e.meal)}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}</div></div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}`}</div></div>
         <div class="jfit">${fitBadge(a)}</div></div>
       <div class="small jwhy">${esc(a.why||"")}</div>
       <div class="jmore">
