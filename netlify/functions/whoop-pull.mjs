@@ -13,6 +13,9 @@ export default async () => {
     // The scale too: Withings weigh-ins land on their own once it is connected.
     let scale = null;
     try { const W = require('../../bridge/withings-weight.js'); if (await W.connected()) scale = await W.syncMeasures(); } catch (e) { scale = { error: e.message }; }
+    // Keep the main function warm: a cold start on a phone's first request
+    // of the morning is what reads as "the site is down".
+    try { const base = (process.env.URL || '').replace(/\/$/, ''); if (base) await fetch(base + '/.netlify/functions/api/status', { headers: { 'x-the-way-app': '1' } }).catch(() => {}); } catch (e) { /* warmth is a nicety */ }
     const r = await sleepLatest({ sync: true });
     return new Response(JSON.stringify({ ok: true, synced_at: r && r.synced_at, auth_error: r && r.auth_error || null, scale }), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {

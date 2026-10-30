@@ -1283,7 +1283,7 @@ V.today = async function(){
   let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null;
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
-    if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : "bridge unreachable"); return; }
+    if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
     const gaps = (m.gaps||[]).map(g=>g.label).join(", ");
     paintTile("micros", m.score, m.band.word, m.band.tone, gaps ? `low: ${gaps}` : "all covered");
   };
@@ -1307,7 +1307,7 @@ V.today = async function(){
     return { planned, rides, count: planned.length, done, compliance: d.compliance || null };
   };
   const drawWorkoutsTile = ()=>{
-    if (!workoutsData){ paintTile("workouts", null, "", "", "bridge unreachable"); return; }
+    if (!workoutsData){ paintTile("workouts", null, "", "", scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
     const t = workoutsToday();
     if (!t){ paintTile("workouts", null, "", "", "no day"); return; }
     const now = new Date(); const nowMin = now.getHours()*60 + now.getMinutes();
@@ -1325,7 +1325,7 @@ V.today = async function(){
   };
   const drawHydrationTile = ()=>{
     const h = foodData && foodData.hydration;
-    if (!h){ paintTile("hydration", null, "", "", foodData ? "snap a drink" : "bridge unreachable"); return; }
+    if (!h){ paintTile("hydration", null, "", "", foodData ? "snap a drink" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
     const b = h.now ? h.now.band : h.band, ml = h.now ? h.now.ml : null;
     if (ml == null){ paintTile("hydration", h.score, b.word, b.tone, "snap a drink"); return; }
     const num = ml > 300 ? `+${(ml/1000).toFixed(1)}` : `−${(Math.abs(ml)/1000).toFixed(1)}`;
@@ -1402,10 +1402,11 @@ V.today = async function(){
     const d = scoresData;
     const vd = document.getElementById("scoreVerdict");
     if (!d){
-      paintTile("training", null, "", "", "bridge unreachable");
+      paintTile("training", null, "", "", scoresLoading ? "reaching the bridge…" : "bridge unreachable");
       paintTile("recovery", null, "", "", "");
       paintTile("fatigue", null, "", "", "");
       if (vd) vd.textContent = "";
+      drawFood(); drawMicroTile(); drawHydrationTile(); drawWorkoutsTile();
       return;
     }
     const strava = d.sources && d.sources.strava && d.sources.strava.connected;
@@ -1563,13 +1564,20 @@ V.today = async function(){
     openScore = openScore === b.dataset.k ? null : b.dataset.k;
     drawScoreDetail();
   });
+  // Each answer paints as it lands, so a slow or cold bridge shows the boxes
+  // one by one instead of a wall of "reaching the bridge…"; anything still
+  // missing after twelve seconds is asked for again once.
+  let scoresLoading = true;
   const refreshScores = async ()=>{
-    [scoresData, complianceData, foodData, workoutsData] = await Promise.all([
-      bridge("/scores").catch(()=>null),
-      bridge("/compliance").catch(()=>null),
-      bridge("/food/today").catch(()=>null),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; for(const day of (r.days||[])) for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; r.today_day=(r.days||[]).find(x=>x.date===k)||null; return r; }); })().catch(()=>null)
+    scoresLoading = true;
+    const get = (path, set) => { const once = () => bridge(path).then(v => { set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
+    await Promise.all([
+      get("/scores", v => { scoresData = v; }),
+      get("/compliance", v => { complianceData = v; }),
+      get("/food/today", v => { foodData = v; }),
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; for(const day of (r.days||[])) for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
+    scoresLoading = false;
     drawScores();
     fuelDots();
   };
