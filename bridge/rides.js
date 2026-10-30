@@ -98,7 +98,7 @@ async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
   if (cached && !o.force) return cached;
-  const out = { id: ride.id, date: ride.date, name: ride.name, at: new Date().toISOString(), hr: null, resp: null, sources: {} };
+  const out = { id: ride.id, date: ride.date, name: ride.name, at: new Date().toISOString(), hr: null, power: null, resp: null, sources: {} };
   // 1. Strava's stream, the full read
   try {
     const s = await require('./strava').apiFetch(`/activities/${ride.id}/streams?keys=time,heartrate,watts&key_by_type=true`);
@@ -106,6 +106,9 @@ async function analyze(ride, opts) {
     const hr = s && s.heartrate && s.heartrate.data;
     if (hr && hr.length) { out.hr = R.hrSummary(Z.resample1Hz(time, hr)); out.sources.hr = 'Strava heart-rate stream (Garmin)'; }
     else out.sources.hr = 'no heart-rate stream on Strava';
+    const watts = s && s.watts && s.watts.data;
+    if (watts && watts.length) { out.power = R.powerSummary(Z.resample1Hz(time, watts), o.ftp); out.sources.power = 'Strava power stream'; }
+    else out.sources.power = 'no power stream on Strava';
   } catch (e) { out.sources.hr = 'Strava: ' + e.message; out.error = e.message; }
   // 2. intervals.icu's copy of the Garmin file, for breathing and, failing Strava, heart rate
   let icuAct = null;
@@ -148,8 +151,9 @@ async function forWindow(from, to, st) {
   const out = {}; let fresh = 0;
   for (const r of rides) {
     const c = await getJSON(key(r.id), null);
-    if (c) { out[r.id] = c; continue; }
-    if (fresh < PER_CALL) { fresh++; out[r.id] = await analyze(r); }
+    // an analysis from before power was read is re-done once, when there is room in this call
+    if (c && (c.power !== undefined || fresh >= PER_CALL)) { out[r.id] = c; continue; }
+    if (fresh < PER_CALL) { fresh++; out[r.id] = await analyze(r, { force: !!c, ftp: st && st.ftp }); }
   }
   return { from, to, connected: done.connected, analyses: out, pending: rides.filter(r => !out[r.id]).length };
 }

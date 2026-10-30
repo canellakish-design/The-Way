@@ -905,6 +905,59 @@ V.sleep = async function(){
   wireCoach("sleep");
 };
 
+/* ---------------- TRAINING ZONES ----------------
+   The three zones the plan trains by, drawn on the heart-rate and power
+   scales, with the library's sessions placed in them; then how the recent
+   riding split across them, by power and by heart rate, against the
+   polarised target. The seven-zone tables fold away underneath. */
+V.zones = async function(){
+  view.innerHTML = `<span class="eyebrow">Training zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
+  let z = null;
+  try{ z = await bridge("/zones"); }catch(e){ document.getElementById("zonesPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
+  const a = z.anchors, ZC = { z1:"var(--green)", z2:"var(--amber)", z3:"var(--red)" };
+  // the scale: heart rate 90 to max on top, power 60 to 120% FTP beneath, the same three bands on each
+  const hrLo = 90, hrHi = a.max_hr, pLo = Math.round(a.ftp*0.45), pHi = Math.round(a.ftp*1.25);
+  const hx = v => Math.max(0, Math.min(100, (v-hrLo)/(hrHi-hrLo)*100)), px = v => Math.max(0, Math.min(100, (v-pLo)/(pHi-pLo)*100));
+  const band = (x0, x1, c) => `<i style="left:${x0.toFixed(1)}%;width:${(x1-x0).toFixed(1)}%;background:${c}"></i>`;
+  const mark = (x, label, below, left) => `<b style="left:${x.toFixed(1)}%" class="${below?"below":""}${left?" left":""}"><span>${label}</span></b>`;
+  const scaleHTML = `<div class="zscale">
+      <div class="zlab">Heart rate</div>
+      <div class="ztrack">${band(0, hx(a.vt1), ZC.z1)}${band(hx(a.vt1), hx(a.vt2), ZC.z2)}${band(hx(a.vt2), 100, ZC.z3)}
+        ${mark(hx(a.vt1), a.vt1)}${mark(hx(a.vt2), a.vt2, false, true)}${mark(hx(a.vo2_line), a.vo2_line + " VO2")}${mark(100, a.max_hr + " max", true, true)}</div>
+      <div class="zlab">Power</div>
+      <div class="ztrack">${band(px(Math.round(a.ftp*0.5)), px(Math.round(a.ftp*0.68)), ZC.z1)}${band(px(Math.round(a.ftp*0.68)), px(Math.round(a.ftp*0.95)), ZC.z2)}${band(px(Math.round(a.ftp*0.95)), 100, ZC.z3)}
+        ${mark(px(Math.round(a.ftp*0.68)), Math.round(a.ftp*0.68) + " W")}${mark(px(Math.round(a.ftp*0.95)), Math.round(a.ftp*0.95) + " W")}${mark(px(a.ftp), "FTP " + a.ftp, true)}</div>
+    </div>`;
+  const threeHTML = z.three.map(t => `<li class="zrow" style="border-left-color:${ZC[t.key]}">
+      <span class="n"><b>${esc(t.name)}</b> <span class="small">${esc(t.what)}</span>
+        <span class="small">HR ${esc(t.hr.cue)} · ${t.power.lo}${t.power.hi?"–"+t.power.hi:"+"} W (${esc(t.power.pct)})${t.sessions.length?` · ${esc(t.sessions.length === 1 ? t.sessions[0] : t.sessions[0].replace(/,.*$/, "") + " rides")}`:""}</span>
+        <span class="small zwhy">${esc(t.why)}</span></span>
+      <span class="tag"><b>${t.target_pct}%</b><span class="small">target</span></span></li>`).join("");
+  const stack = (s) => s && s.z1_pct != null ? `<div class="zstack">${["z1","z2","z3"].map(k => s[k+"_pct"] ? `<i style="width:${s[k+"_pct"]}%;background:${ZC[k]}" title="${k} ${s[k+"_min"]} min">${s[k+"_pct"] >= 12 ? s[k+"_pct"] + "%" : ""}</i>` : "").join("")}</div>` : "";
+  const splitHTML = (title, s) => `<div class="zsplit"><div class="small"><b>${title}</b> · ${s.rides} ride${s.rides===1?"":"s"}, ${durLabel(s.minutes)}${s.with_data < s.rides ? ` · ${s.rides - s.with_data} without ${s.by === "power" ? "power" : "heart rate"}` : ""}</div>
+      ${stack(s)}
+      <div class="small">${s.verdict.word ? `<b style="color:${s.verdict.key==="green"?"var(--green)":s.verdict.key==="red"?"var(--red)":"var(--amber)"}">${esc(s.verdict.word)}</b> · ` : ""}${esc(s.verdict.text)}${s.hard_min ? ` · ${s.hard_min} min above ${a.vo2_line}` : ""}</div></div>`;
+  const rideRow = r => `<li><span class="t">${esc(r.date.slice(5).replace("-", "/"))}</span><span class="n">${esc(r.name)}<span class="small"> ${r.minutes} min${r.np?` · NP ${r.np} W`:""}${r.avg_hr?` · ${r.avg_hr} bpm`:""}${r.hard_min?` · ${r.hard_min} min above ${a.vo2_line}`:""}</span>
+      ${r.p1_min != null ? `<span class="small">power ${r.p1_min} / ${r.p2_min} / ${r.p3_min} min</span>` : r.z1_min != null ? `<span class="small">HR ${r.z1_min} / ${r.z2_min} / ${r.z3_min} min${r.estimated?" (estimated)":""}</span>` : `<span class="small">no stream read yet</span>`}</span>
+      <span class="tag">${r.p1_min != null ? stack({ z1_pct: Math.round(r.p1_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z2_pct: Math.round(r.p2_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z3_pct: Math.round(r.p3_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z1_min:r.p1_min, z2_min:r.p2_min, z3_min:r.p3_min }) : ""}</span></li>`;
+  const zoneTable = (rows, unit)=> `<ul class="agenda totals">${rows.map(zz=>`<li><span class="n"><b>${zz.zone}</b> ${esc(zz.name)} <span class="small">${esc(zz.pct)}</span></span><span class="tag">${zz.from}${zz.to?"–"+zz.to:"+"} ${unit}</span></li>`).join("")}</ul>`;
+  document.getElementById("zonesPage").innerHTML = `
+    <div class="card"><h4>The three zones</h4>
+      ${scaleHTML}
+      <ul class="agenda zthree">${threeHTML}</ul>
+      <div class="small">${esc(a.note)}</div>
+    </div>
+    <div class="card"><h4>Time in zone</h4>
+      ${z.connected ? `${splitHTML("This week, by power", z.time.power_week)}${splitHTML("Four weeks, by power", z.time.power_month)}
+        <details class="why"><summary>by heart rate</summary>${splitHTML("This week", z.time.week)}${splitHTML("Four weeks", z.time.month)}</details>` : `<div class="small">Strava is not answering, so there are no rides to split.</div>`}
+      <details class="why"><summary>the target</summary><div class="small">Polarised: about ${z.target.z1}% of the minutes in Zone 1, ${z.target.z3}% in Zone 3, and as little as possible between the thresholds. Power is the cleaner read of Zone 1 discipline (heart rate drifts with heat, coffee and a poor night); the VO2 line is on heart rate.</div></details>
+    </div>
+    ${z.rides && z.rides.length ? `<div class="card"><h4>Recent rides</h4><ul class="agenda zrides">${z.rides.map(rideRow).join("")}</ul><div class="small">Zone 1 / 2 / 3 minutes. Rides read for the first time land here on the next look.</div></div>` : ""}
+    <div class="card"><details class="why"><summary>Seven power zones · FTP ${a.ftp} W</summary>${zoneTable(z.power_zones, "W")}</details>
+      <details class="why"><summary>Seven heart-rate zones · threshold ${a.lthr} bpm</summary>${zoneTable(z.hr_zones, "bpm")}<div class="small">Anchored to threshold heart rate, never to a max-HR guess.</div></details></div>
+    <a class="btn" href="#today">Back to the day</a>`;
+};
+
 /* ---------------- ANALYZE (weigh-in, W/kg — ride analysis coming) ---------------- */
 V.analyze = async function(){
   view.innerHTML = `<span class="eyebrow">Analyze</span>
@@ -1609,7 +1662,7 @@ V.today = async function(){
           ${t.rides.filter(r => !t.planned.some(p => p.done)).map(r => row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`)).join("")}
           ${!t.planned.length && !t.rides.length ? `<li><span class="n">Nothing planned</span><span class="tag">rest day</span></li>` : ""}
         </ul>`}
-        <a class="btn primary" href="#calendar">The calendar</a>
+        <a class="btn primary" href="#calendar">The calendar</a> <a class="btn" href="#zones">Training zones</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
       box.innerHTML = html; box.hidden = false; return;
     }
@@ -1647,6 +1700,7 @@ V.today = async function(){
           ${row("last 7 days", `${t.tss_7d} TSS`)}
           ${row("today so far", `${t.tss_today} TSS`)}
         </ul>` : `<div class="small">Strava isn't answering (${esc((d.sources.strava||{}).reason || "not connected")}), so there is no ride history to score.</div>`}
+        <a class="btn" href="#zones">Training zones</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Fitness is a 42-day average of daily training stress (CTL), the same number TrainingPeaks and intervals.icu call Fitness. Under 25 is base, 25 to 45 recreational, 45 to 65 solid, 65 to 85 strong, over 85 racer. +2 to +6 a week is a sustainable build.</div></details>`;
     } else if (openScore === "fatigue"){
       const f = d.fatigue;

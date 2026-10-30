@@ -501,3 +501,17 @@ details.addev input{width:100%}
 ul.agenda.mealplan li.match.green{background:var(--green-soft); border-left-color:var(--green)} ul.agenda.mealplan li.match.green .mword{color:var(--green)}
 ul.agenda.mealplan li.match.yellow{background:var(--amber-soft); border-left-color:var(--amber)} ul.agenda.mealplan li.match.yellow .mword{color:var(--amber)}
 ul.agenda.mealplan li.match.red{background:var(--red-soft, #3A1A16); border-left-color:var(--red)} ul.agenda.mealplan li.match.red .mword{color:var(--red)}
+
+/* training zones: two tracks (heart rate, power), three bands each, the thresholds marked */
+.zscale{margin:6px 0 10px} .zlab{font-family:var(--mono); font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:10px 0 18px}
+.ztrack{position:relative; height:14px; background:#1E2024; border:1px solid var(--line); margin-bottom:22px}
+.ztrack i{position:absolute; top:0; bottom:0; opacity:.85} .ztrack i+i{border-left:2px solid #0F100E}
+.ztrack b{position:absolute; top:-14px; width:0; height:34px; border-left:1px solid var(--ink); font-family:var(--mono); font-size:10px; font-weight:400; letter-spacing:.5px; color:var(--ink)}
+.ztrack b span{position:absolute; left:3px; top:-2px; white-space:nowrap} .ztrack b.below span{top:auto; bottom:-2px}
+.ztrack b.left span{left:auto; right:3px}
+ul.agenda.zthree li{border-left:3px solid var(--line); grid-template-columns:minmax(0,1fr) 52px; align-items:start}
+ul.agenda.zthree .n{min-width:0} ul.agenda.zthree .tag{display:flex; flex-direction:column; align-items:flex-end; white-space:nowrap} ul.agenda.zthree .tag b{font-family:var(--mono)}
+.zwhy{display:block; margin-top:4px; color:var(--muted)}
+.zstack{display:flex; height:18px; margin:6px 0; border:1px solid var(--line); background:#1E2024; font-family:var(--mono); font-size:10px}
+.zstack i{display:flex; align-items:center; justify-content:center; color:#0F100E; font-style:normal; overflow:hidden} .zstack i+i{border-left:2px solid #0F100E}
+.zsplit{margin:8px 0 12px} ul.agenda.zrides li{grid-template-columns:44px 1fr 72px} ul.agenda.zrides .tag .zstack{width:72px; margin:0}

@@ -59,3 +59,15 @@ ok('veSummary: ventilation against the ramp-test thresholds', () => {
 });
 
 console.log(n + ' passed');
+
+// power: the three training zones by % FTP, the seven Coggan zones, NP
+(function () {
+  const assert = require('assert'); const R = require('./ride-math');
+  const w = []; for (let i = 0; i < 3600; i++) w.push(i < 1800 ? 100 : (i % 60 < 40 ? 191 : 96));
+  const p = R.powerSummary(w, 175);
+  assert.strictEqual(p.zones.z1_min, 40); assert.strictEqual(p.zones.z3_min, 20); assert.strictEqual(p.zones.z2_min, 0);
+  assert.ok(p.np > p.avg, 'NP above average on intervals: ' + p.np + ' vs ' + p.avg);
+  assert.strictEqual(p.seven_min.reduce((a, b) => a + b, 0), 60);
+  assert.strictEqual(R.powerSummary([1, 2, 3], 175), null);
+  console.log('ok power: three zones by FTP, seven zones, NP');
+})();

@@ -114,4 +114,32 @@ function zone1Grade(summary) {
     basis: `${pct}% under ${HR.vt1} bpm, avg ${summary.avg}, max ${summary.max}` };
 }
 
-module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, veSummary, vo2Grade, zone1Grade };
+// Power, the same way: minutes in the three training zones by % of FTP
+// (Zone 1 under 68%, Zone 2 to 95%, Zone 3 above), plus the seven Coggan
+// zones, average and normalised power. Zeros are coasting or stopped time and
+// are counted as Zone 1 minutes (they cost nothing), but left out of the
+// average so a descent does not drag it down.
+function powerSummary(watts, ftp) {
+  const f = ftp || 175;
+  const xs = (watts || []).map(Number).filter(v => Number.isFinite(v) && v >= 0 && v < 2500);
+  if (xs.length < 60) return null;
+  const edges7 = [0.55, 0.75, 0.90, 1.05, 1.20, 1.50];
+  const seven = [0, 0, 0, 0, 0, 0, 0];
+  let z1 = 0, z2 = 0, z3 = 0, sum = 0, n = 0, max = 0;
+  for (const v of xs) {
+    const r = v / f;
+    if (r < 0.68) z1++; else if (r < 0.95) z2++; else z3++;
+    let i = 0; while (i < edges7.length && r >= edges7[i]) i++; seven[i]++;
+    if (v > 0) { sum += v; n++; if (v > max) max = v; }
+  }
+  // normalised power: 30 s rolling mean, fourth power, mean, fourth root
+  let roll = 0; const q = []; let acc = 0, cnt = 0;
+  for (let i = 0; i < xs.length; i++) { roll += xs[i]; q.push(xs[i]); if (q.length > 30) roll -= q.shift(); if (q.length === 30) { acc += Math.pow(roll / 30, 4); cnt++; } }
+  const np = cnt ? Math.round(Math.pow(acc / cnt, 0.25)) : null;
+  return { avg: n ? Math.round(sum / n) : 0, np, max, seconds: xs.length, ftp: f,
+    zones: { z1_min: r1(z1 / 60), z2_min: r1(z2 / 60), z3_min: r1(z3 / 60) },
+    zone_pct: { z1: Math.round(z1 / xs.length * 100), z2: Math.round(z2 / xs.length * 100), z3: Math.round(z3 / xs.length * 100) },
+    seven_min: seven.map(c => r1(c / 60)) };
+}
+
+module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, veSummary, vo2Grade, zone1Grade, powerSummary };
