@@ -435,3 +435,13 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 .wxlegend i{display:inline-block; width:12px; height:12px; border-radius:2px; vertical-align:-1px; margin-right:6px}
 .wxlegend i.good{background:#2E7D4A} .wxlegend i.ok{background:#8A6A14} .wxlegend i.bad{background:#7A2E26}
 .calstrip{margin-top:4px} .calstrip .wxnote{min-height:1.2em}
+
+/* the two strips as one block, with the windows over both */
+.wxstack{position:relative; display:grid; gap:3px}
+.wxstack .wxrow .wxh{height:22px} .wxh.none{background:#1E2024}
+.wxstack .wxrow:first-child .wxh i{display:none}
+.wxover{position:absolute; left:0; right:0; top:-3px; bottom:-3px; pointer-events:none}
+.wxwin{position:absolute; top:0; bottom:0; border:2px solid #fff; border-radius:3px; pointer-events:auto; display:flex; align-items:flex-end; justify-content:flex-end; text-decoration:none; color:#fff}
+.wxwin b{font-family:var(--mono); font-size:9px; padding:0 3px; background:#000; line-height:1.4; margin:0 1px 1px 0}
+.wxlegend .wxsep{width:1px; height:12px; background:var(--line); margin:0 2px}
+.wxnote{margin-top:18px; min-height:1.2em}

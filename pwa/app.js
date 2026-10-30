@@ -1315,29 +1315,39 @@ function briefHTML(b, x){
   </div>`;
 }
 
-/* ---- the outdoor hours: one box an hour, green ride, amber marginal, red no ---- */
+/* ---- the hours: two strips, weather over calendar, one box an hour.
+   Row one: green ride outside, amber marginal, red indoors. Row two: green
+   free, red busy. White boxes span both rows over every free stretch: the
+   windows a workout can go in. Tap one and the builder opens at that time. ---- */
 let WX = {};
-function outdoorStrip(date){
-  const w = WX[date]; if (!w) return "";
-  const H = w.hours.filter(h => h.hour >= 5 && h.hour <= 21);
-  const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
-  const boxes = H.map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good to ride") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(lbl(h.hour))}"><i>${lbl(h.hour)}</i></span>`).join("");
-  const best = w.best && w.best.to - w.best.from >= 1 ? `best outside ${lbl(w.best.from)}–${lbl(w.best.to)}` : "no good hour outside";
-  return `<div class="wxstrip"><div class="wxlegend"><span><i class="good"></i>outdoor</span><span><i class="ok"></i>marginal</span><span><i class="bad"></i>indoor</span></div><div class="wxrow">${boxes}</div><div class="small wxnote">${esc(best)} · light ${esc(w.sunrise)}–${esc(w.sunset)} · <span class="wxwhy"></span></div></div>`;
-}
-/* ---- the calendar hours: one box an hour, green free, amber part, red busy ---- */
-function calendarStrip(d){
+const H0 = 5, H1 = 21;
+const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
+function freeHours(d){
   const ev = (d.events||[]).filter(e => e.source !== "plan" && e.source !== "ride" && e.start_min != null && e.end_min != null);
-  const lbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
-  const boxes = [];
-  for (let h = 5; h <= 21; h++){
-    const a = h*60, b = a+60;
-    let busy = 0; const names = [];
+  const out = [];
+  for (let h = H0; h <= H1; h++){
+    const a = h*60, b = a+60; let busy = 0; const names = [];
     for (const e of ev){ const o = Math.min(b, e.end_min) - Math.max(a, e.start_min); if (o > 0){ busy += o; names.push(e.summary); } }
-    const g = busy >= 15 ? "bad" : "good";   // two states only: free, or busy
-    boxes.push(`<span class="wxh ${g}" data-why="${attr(names.length ? names.join(", ") : "free")}" title="${attr(lbl(h))}"><i>${lbl(h)}</i></span>`);
+    out.push({ hour: h, free: busy < 15, names });
   }
-  return `<div class="wxstrip calstrip"><div class="wxlegend"><span><i class="good"></i>free</span><span><i class="bad"></i>busy</span></div><div class="wxrow">${boxes.join("")}</div><div class="small wxnote"><span class="wxwhy"></span></div></div>`;
+  return out;
+}
+function hourStrips(d){
+  const w = WX[d.date];
+  const cal = freeHours(d);
+  const n = H1 - H0 + 1;
+  const wxBoxes = w ? w.hours.filter(h => h.hour >= H0 && h.hour <= H1).map(h => `<span class="wxh ${h.grade}" data-why="${attr((h.why.length ? h.why.join(", ") : "good outside") + ` · ${h.temp_f}°, wind ${h.wind_mph} ${h.wind_from}`)}" title="${attr(hlbl(h.hour))}"></span>`).join("")
+                   : cal.map(() => `<span class="wxh none"></span>`).join("");
+  const calBoxes = cal.map(c => `<span class="wxh ${c.free ? "good" : "bad"}" data-why="${attr(c.names.length ? c.names.join(", ") : "free")}" title="${attr(hlbl(c.hour))}"><i>${hlbl(c.hour)}</i></span>`).join("");
+  // the windows: runs of free hours
+  const wins = []; let run = null;
+  cal.forEach((c, i) => { if (c.free){ if (!run) run = { i0: i, i1: i }; else run.i1 = i; } else { if (run) wins.push(run); run = null; } });
+  if (run) wins.push(run);
+  const overlay = wins.map(r => { const h0 = H0 + r.i0, h1 = H0 + r.i1 + 1; const len = r.i1 - r.i0 + 1;
+    return `<a class="wxwin" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free`)}"><b>${len}h</b></a>`; }).join("");
+  return `<div class="wxstrip"><div class="wxlegend"><span><i class="good"></i>outdoor</span><span><i class="ok"></i>marginal</span><span><i class="bad"></i>indoor</span><span class="wxsep"></span><span><i class="good"></i>free</span><span><i class="bad"></i>busy</span></div>
+    <div class="wxstack"><div class="wxrow">${wxBoxes}</div><div class="wxrow">${calBoxes}</div><div class="wxover">${overlay}</div></div>
+    <div class="small wxnote"><span class="wxwhy">${w ? `light ${esc(w.sunrise)}–${esc(w.sunset)}` : ""}</span></div></div>`;
 }
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
@@ -1369,7 +1379,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <h4>${isToday?"Today · ":""}${esc(d.label)}</h4>
-    ${macroRow}${outdoorStrip(d.date)}${calendarStrip(d)}
+    ${macroRow}${hourStrips(d)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div></div>`;
