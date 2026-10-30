@@ -1702,7 +1702,11 @@ V.today = async function(){
     }
     if (r.score != null){
       const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(Math.round(r.hrv_delta_pct))}%` : r.hrv != null ? `HRV ${Math.round(r.hrv)}` : "";
-      paintTile("recovery", r.score, r.band.word, r.band.tone, hrv);
+      // Yesterday's score with a dead token is not today's recovery: say so on the box.
+      const w = d.sources && d.sources.whoop || {};
+      const ageH = w.synced_at ? (Date.now() - new Date(w.synced_at).getTime()) / 3.6e6 : null;
+      const stale = !!w.auth_error || (ageH != null && ageH > 20);
+      paintTile("recovery", r.score, stale ? "stale" : r.band.word, stale ? "bad" : r.band.tone, stale ? (w.auth_error ? "WHOOP needs reconnecting" : `synced ${Math.round(ageH)}h ago`) : hrv);
     } else {
       const w = d.sources && d.sources.whoop;
       paintTile("recovery", null, "", "", w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "WHOOP not connected");
