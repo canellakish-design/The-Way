@@ -442,6 +442,40 @@ function attach(app) {
     if (!w) return res.status(404).json({ error: 'no such workout' });
     res.json(Object.assign(withMetrics(w, st), { profile: W.profile(w.steps, st) })); });
 
+  // Everything about one session on one screen: the steps, the eating around
+  // it, the hour-by-hour weather if it is outdoors, and the ride against it once ridden.
+  app.get('/workouts/:id/brief', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const st = await settings(); const w = (await db()).workouts[req.params.id];
+      if (!w) return res.status(404).json({ error: 'no such workout' });
+      const m = W.metrics(w.steps, st);
+      const steps = W.flatten(W.normItems(w.steps)).map(s => ({ label: s.label, dur_s: s.dur_s, target: s.target, cadence: s.cadence || null }));
+      const out = { workout: Object.assign(withMetrics(w, st), { profile: W.profile(w.steps, st) }), steps, settings: { ftp: st.ftp, lthr: st.lthr } };
+      const [eat, idx] = (w.notes || '').includes('EAT') ? [w.notes.slice(w.notes.indexOf('EAT')), w.notes.indexOf('EAT')] : [null, -1];
+      out.notes = { session: idx >= 0 ? w.notes.slice(0, idx).trim() : (w.notes || ''), eating: eat ? eat.replace(/^EAT\s*/, '').trim() : null };
+      try {
+        const g = await require('./food').guidelinesFor(w.date);
+        const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
+        const near = sm == null ? g.meals : g.meals.filter(x => /before|on the bike|after/.test(x.slot) || Math.abs(F_toMin(x.time) - sm) <= 240);
+        out.nutrition = { fuel_day: g.fuel_day, day: g.day, target: { kcal: g.target.kcal, carbs_g: g.target.carbs_g, protein_g: g.target.protein_g, fat_g: g.target.fat_g }, meals: near, cue: g.cue || null };
+      } catch (e) { out.nutrition = null; }
+      if (w.sport === 'Ride') {
+        try {
+          const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
+          out.weather = await require('./weather').forecastAt(w.date, sm, Math.round(m.duration_s / 60));
+        } catch (e) { out.weather = null; out.weather_error = e.message; }
+      } else out.weather = null;
+      try {
+        const cal = await calendar(w.date, w.date);
+        const day = cal.days[0];
+        const graded = day && day.planned.find(x => x.id === w.id);
+        out.compliance = graded && graded.compliance ? graded.compliance : null;
+        out.rides = day ? day.done : [];
+      } catch (e) { out.compliance = null; out.rides = []; }
+      res.json(out);
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+  const F_toMin = t => { const mm = /^(\d{2}):(\d{2})$/.exec(t || ''); return mm ? (+mm[1]) * 60 + (+mm[2]) : 0; };
+
   app.get('/workouts/:id/zwo', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const w = (await db()).workouts[req.params.id];
     if (!w) return res.status(404).json({ error: 'no such workout' });

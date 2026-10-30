@@ -179,6 +179,7 @@ async function sync() {
             end: (e.end && (e.end.dateTime || e.end.date)) || e.start.dateTime || e.start.date,
             allDay: !e.start.dateTime,
             location: e.location || null,
+            description: e.description ? String(e.description).slice(0, 1200) : null,
             calendar: cal.name,
             account: acct.id,
             source: calDefault === 'coaching' ? 'coaching' : 'calendar',
@@ -281,13 +282,13 @@ function scheduleForDate(events, dateStr) {
   const all = dayEventsFor(events, dateStr);
   const allDay = all.filter(e => e.allDay).map(e => ({
     summary: e.summary, category: e.category, allDay: true,
-    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null
+    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null
   }));
   const timed = all.filter(e => !e.allDay).map(e => {
     const sm = tz.minutesOf(new Date(e.start)), em = tz.minutesOf(new Date(e.end));
     return {
       summary: e.summary, category: e.category, allDay: false,
-      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null,
+      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null,
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
     };

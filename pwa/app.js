@@ -1251,7 +1251,8 @@ function dayRows(d, plan, isToday){
   const rows = (d.events||[]).map(e=>({
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
-    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null
+    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null,
+    desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
   }));
   (d.windows||[]).forEach(w=> rows.push({
     start: w.start_min, end: w.end_min, from: w.from, to: w.to,
@@ -1271,6 +1272,47 @@ function dayRows(d, plan, isToday){
   return rows.sort((a,b)=> (a.start-b.start) || (a.end-b.end));
 }
 
+/* ---- a row, opened: an event's details, or the whole of a workout ---- */
+function eventDetailHTML(x){
+  return `<div class="xd"><div class="xdh">${esc(x.from)} to ${esc(x.to)}${x.calendar?` · ${esc(x.calendar)}`:""}</div>
+    ${x.location?`<div><b>Where:</b> ${esc(x.location)}</div>`:""}
+    ${x.desc?`<div class="xdesc">${esc(x.desc)}</div>`:""}
+    ${!x.location&&!x.desc&&!x.wid?`<div class="small">Nothing more on this one.</div>`:""}
+    ${x.wid?`<div class="small">loading the session…</div>`:""}</div>`;
+}
+const fmtTarget = (t, st)=>{
+  if (!t) return "";
+  if (t.type === "free") return "no target";
+  if (t.type === "hr") return `${t.lo}–${t.hi} bpm`;
+  if (t.type === "power") return `${Math.round(t.lo/100*st.ftp)}${t.hi!==t.lo?`–${Math.round(t.hi/100*st.ftp)}`:""} W (${t.lo}${t.hi!==t.lo?`–${t.hi}`:""}%)`;
+  if (t.type === "watts") return `${t.lo}${t.hi!==t.lo?`–${t.hi}`:""} W`;
+  if (t.type === "ramp") return `${Math.round(t.from/100*st.ftp)}→${Math.round(t.to/100*st.ftp)} W`;
+  return "";
+};
+const clockS = s=>{ s=Math.round(s||0); const h=Math.floor(s/3600), m=Math.floor(s%3600/60), x=s%60; return h ? `${h}:${String(m).padStart(2,"0")}:${String(x).padStart(2,"0")}` : `${m}:${String(x).padStart(2,"0")}`; };
+function briefHTML(b, x){
+  const w = b.workout, m = w.metrics, st = b.settings || {};
+  const c = b.compliance;
+  const bandC = c ? (c.band === "green" ? "var(--green)" : c.band === "yellow" ? "var(--amber)" : "var(--red)") : "";
+  const steps = (b.steps||[]).map(s => `<li><span class="n">${esc(s.label)}${s.cadence?`<span class="small"> ${s.cadence.lo}${s.cadence.hi!==s.cadence.lo?`–${s.cadence.hi}`:""} rpm</span>`:""}</span><span class="tag">${clockS(s.dur_s)} · ${fmtTarget(s.target, st)}</span></li>`).join("");
+  const n = b.nutrition;
+  const meals = n && n.meals ? n.meals.map(mm => `<li><span class="n"><b>${esc(hm12(mm.time))}</b> ${esc(mm.slot)}<span class="small"> ${esc(mm.what)}</span></span><span class="tag">${mm.kcal?`${mm.kcal} kcal · ${mm.carbs_g}C${mm.protein_g?` · ${mm.protein_g}P`:""}`:""}</span></li>`).join("") : "";
+  const wx = b.weather;
+  const hours = wx && wx.hours ? wx.hours.map(h => `<li><span class="n"><b>${esc(hm12(String(h.hour).padStart(2,"0")+":00"))}</b> ${h.temp_f}°F, feels ${h.feels_f}°<span class="small"> · ${h.rain_pct}% rain${h.rain_in?` (${h.rain_in} in)`:""} · ${h.humidity}% humidity</span></span><span class="tag">wind ${h.wind_mph} mph ${h.wind_from}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}<br><span class="small">${esc(h.ride)}</span></span></li>`).join("") : "";
+  const rides = (b.rides||[]).map(r => { const h = r.analysis && r.analysis.hr, br = r.analysis && r.analysis.resp;
+    return `<li><span class="n">${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)}<span class="small"> ${r.minutes} min${r.miles?` · ${r.miles} mi`:""}${r.np_w?` · NP ${r.np_w} W`:r.avg_w?` · ${r.avg_w} W`:""}${h?` · HR ${h.avg} avg, ${h.max} max`:""}${br?` · breathing ${br.avg}/min`:""}</span></span><span class="tag">${r.tss!=null?`~${r.tss} TSS`:""}</span></li>`; }).join("");
+  return `<div class="xd">
+    <div class="xdh">${esc(w.sport === "VirtualRide" ? "Zwift" : w.sport === "WeightTraining" ? "Lifting" : "Road")} · ${esc(x.from)} to ${esc(x.to)} · ${clockS(m.duration_s)} · ${m.tss} TSS · IF ${m.if.toFixed(2)}${c?` · <b style="color:${bandC}">${c.pct}% ${c.band==="green"?"done":c.band==="yellow"?"partly":b.rides&&b.rides.length?"short":"missed"}</b>`:""}</div>
+    ${b.notes && b.notes.session ? `<div class="xdesc">${esc(b.notes.session)}</div>` : ""}
+    <h5>The session</h5><ul class="agenda totals xsteps">${steps}</ul>
+    ${rides ? `<h5>Ridden</h5><ul class="agenda totals">${rides}</ul>${c&&c.basis?`<div class="small">${esc(c.basis)}</div>`:""}` : ""}
+    ${n ? `<h5>Eating around it</h5><div class="small">${esc(n.fuel_day)} · ${n.target.kcal} kcal · ${n.target.carbs_g} C / ${n.target.protein_g} P / ${n.target.fat_g} F for the day</div>
+      ${meals?`<ul class="agenda totals">${meals}</ul>`:""}${b.notes && b.notes.eating ? `<div class="xdesc small">${esc(b.notes.eating)}</div>` : ""}` : ""}
+    ${w.sport === "Ride" ? `<h5>Weather on the ride</h5>${wx ? `<div class="small">${esc(wx.summary)} · wind read against a ${wx.bearing}° heading out</div><ul class="agenda totals">${hours}</ul>` : `<div class="small">${esc(b.weather_error || "No forecast for that day yet (seven days ahead at most).")}</div>`}` : ""}
+    <div class="rowbtns"><a class="btn" href="#workout?id=${encodeURIComponent(w.id)}">Edit the session</a>${w.sport!=="WeightTraining"?`<a class="btn" href="${DEFAULT_API}/workouts/${encodeURIComponent(w.id)}/zwo">Zwift file</a>`:""}</div>
+  </div>`;
+}
+
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
@@ -1287,7 +1329,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     // A free window is the space between things. Rendered as a full row it
     // read as an appointment, and an empty day looked packed.
     if (r.open) return `<li class="gap ${state}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
-    return `<li class="${r.lane.cls} ${state}">
+    return `<li class="${r.lane.cls} ${state} xrow" data-x="${esc(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
@@ -1925,6 +1967,24 @@ V.today = async function(){
       } finally { syncing = false; }
     };
 
+    // tap a row: it opens underneath with everything about it
+    view.addEventListener("click", async (e)=>{
+      if (e.target.closest("button, a")) return;
+      const li = e.target.closest("li.xrow"); if (!li) return;
+      const open = li.nextElementSibling && li.nextElementSibling.classList.contains("xdetail");
+      view.querySelectorAll("li.xdetail").forEach(x => x.remove());
+      view.querySelectorAll("li.xrow.on").forEach(x => x.classList.remove("on"));
+      if (open) return;
+      let x = {}; try{ x = JSON.parse(li.dataset.x); }catch{}
+      li.classList.add("on");
+      const d = document.createElement("li"); d.className = "xdetail";
+      d.innerHTML = eventDetailHTML(x);
+      li.after(d);
+      if (x.wid){
+        try{ const b = await bridge("/workouts/"+encodeURIComponent(x.wid)+"/brief"); d.innerHTML = briefHTML(b, x); }
+        catch(err){ d.innerHTML += `<div class="small">${esc(err.message)}</div>`; }
+      }
+    });
     // the trash can beside a planned session on the day
     view.addEventListener("click", async (e)=>{
       const b = e.target.closest("[data-delw]"); if (!b) return;
