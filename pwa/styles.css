@@ -372,13 +372,20 @@ ul.agenda.mealplan li.past{opacity:.55}
 .jfix input,.jfix select{width:100%}
 a.btn.primary{background:var(--ink); color:var(--paper); display:inline-block; margin-top:10px}
 
-/* compliance: once the day has a ride, the plan is graded against it */
-.pitem.graded.green{border-left-color:var(--green); background:#17331F}
-.pitem.graded.yellow{border-left-color:var(--amber); background:#3A2D0E}
-.pitem.graded.red{border-left-color:var(--red); background:#42201B}
+/* compliance: once the day has a ride, the plan is graded against it.
+   The same fills as the front-page boxes, so a graded session reads at a glance. */
+.pitem.graded.green{border-color:var(--green); border-left-color:var(--green); background:#1C4A2C}
+.pitem.graded.yellow{border-color:var(--amber); border-left-color:var(--amber); background:#4F3B10}
+.pitem.graded.red{border-color:var(--red); border-left-color:var(--red); background:#5A2620}
+.pitem.graded .pk,.pitem.graded .pm{color:var(--ink); opacity:.85} .pitem.graded .pbadge{border-color:var(--ink); color:var(--ink)}
 .pday.graded.green{border-color:var(--green)}
 .pday.graded.yellow{border-color:var(--amber)}
 .pday.graded.red{border-color:var(--red)}
+/* the day page's agenda row, once the session is graded */
+ul.agenda li.graded.green{background:#1C4A2C; border-left-color:var(--green)}
+ul.agenda li.graded.yellow{background:#4F3B10; border-left-color:var(--amber)}
+ul.agenda li.graded.red{background:#5A2620; border-left-color:var(--red)}
+ul.agenda li.graded{opacity:1} ul.agenda li.graded .tag{color:var(--ink); font-weight:700}
 .writebtn{width:100%; margin:8px 0 0}
 #writeForm{text-align:left; margin-top:10px}
 #writeForm textarea{width:100%; font:inherit; padding:10px; background:var(--card); color:var(--ink); border:1px solid var(--line)}

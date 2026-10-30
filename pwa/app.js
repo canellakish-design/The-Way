@@ -1319,7 +1319,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {};
+let WX = {}, WGRADE = {};
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
 function freeHours(d){
@@ -1395,10 +1395,12 @@ function dayCard(d, plan, nowMin, rec, solo){
     // A free window is the space between things. Rendered as a full row it
     // read as an appointment, and an empty day looked packed.
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
-    return `<li class="${r.lane.cls} ${state} xrow" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
+    const g = r.wid && WGRADE[r.wid];
+    const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
+    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.lid?`<button class="tdel" data-dele="${esc(r.lid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.lid?`<button class="tdel" data-dele="${esc(r.lid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -1590,7 +1592,7 @@ V.today = async function(){
   // Today's sessions: done over planned. A double day (a ride and the gym)
   // reads 0/2, then 1/2, then 2/2. A ride nobody planned still counts as done.
   const workoutsToday = ()=>{
-    const d = workoutsData && workoutsData.days && workoutsData.days[0];
+    const d = workoutsData && (workoutsData.today_day || (workoutsData.days && workoutsData.days[0]));
     if (!d) return null;
     const planned = (d.planned||[]).map(w => ({ name: w.name, time: w.time || null, minutes: w.metrics ? Math.round(w.metrics.duration_s/60) : null, sport: w.sport,
       done: !!(w.logged || (w.compliance && w.compliance.band !== "red") || (w.compliance && w.compliance.basis !== "no ride on Strava" && w.compliance.pct > 0)),
@@ -1847,7 +1849,7 @@ V.today = async function(){
       bridge("/scores").catch(()=>null),
       bridge("/compliance").catch(()=>null),
       bridge("/food/today").catch(()=>null),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${k}&to=${k}`); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; for(const day of (r.days||[])) for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; r.today_day=(r.days||[]).find(x=>x.date===k)||null; return r; }); })().catch(()=>null)
     ]);
     drawScores();
   };
