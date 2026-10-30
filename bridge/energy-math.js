@@ -113,12 +113,19 @@ function model(o) {
   // the peak within the next eight hours
   const ahead = series.filter(p => p.m >= now && p.m <= now + 480);
   const peak = ahead.length ? ahead.reduce((a, p) => p.pct > a.pct ? p : a) : null;
-  // every session ahead: the fuel at its start, and what to eat if it is short
+  // every session ahead: the fuel at its start against what that session
+  // needs. A hard session (VO2, threshold, a race) wants a full tank, 60%;
+  // a long Zone 1 of two hours or more wants half; an ordinary Zone 1 runs
+  // on fat and a low-carb breakfast, so 25% is enough and the plan's low-carb
+  // morning is not contradicted.
+  const needFor = s => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(s.name || '') ? 60 : (s.minutes || 60) >= 120 ? 50 : 25;
   const upcoming = sessions.filter(s => s.min >= now - 10).map(s => {
-    const p = at(s.min); const b = band(p.pct);
-    const short = Math.max(0, Math.round(0.6 * FULL_G - p.g));
+    const p = at(s.min); const need = needFor(s);
+    const b = p.pct >= need ? { key: 'green', word: 'enough for this', tone: 'good' } : p.pct >= need - 12 ? { key: 'yellow', word: 'a little short', tone: 'warn' } : { key: 'red', word: 'short', tone: 'bad' };
+    const short = Math.max(0, Math.round(need / 100 * FULL_G - p.g));
     const by = Math.max(now, s.min - 90);
-    return { name: s.name, time: s.time, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, band: b, advice: short > 10 ? `${short} g of carbs by ${say(by)} for ${s.name}` : null };
+    return { name: s.name, time: s.time, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, need, band: b,
+      advice: short > 10 ? `${short} g of carbs by ${say(by)} for ${s.name}` : (need <= 25 && p.pct < 35 ? `Low on purpose: ${s.name} runs on fat. Nothing more needed before it.` : null) };
   });
   // the low stretches ahead: where the curve drops under 35% before bedtime
   const lows = []; let run = null;
