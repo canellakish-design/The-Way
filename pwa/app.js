@@ -1351,7 +1351,7 @@ function hourStrips(d){
   });
   if (run) wins.push(run);
   const overlay = wins.map(r => { const h0 = H0 + r.i0, h1 = H0 + r.i1 + 1; const len = r.i1 - r.i0 + 1;
-    return `<a class="wxwin ${r.kind}" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00&where=${r.kind}" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free, ${r.kind === "out" ? "outdoors" : "indoors"}`)}"><b>${len}h ${r.kind}</b></a>`; }).join("");
+    return `<a class="wxwin ${r.kind}" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00&where=${r.kind}" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free, ${r.kind === "out" ? "outdoors" : "indoors"}`)}"><b>${len > 1 ? `${len}h ${r.kind}` : r.kind}</b></a>`; }).join("");
   return `<div class="wxstrip">
     <div class="wxstack"><span class="wxlab">conditions</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wxBoxes}</div>
       <span class="wxlab">schedule</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${calBoxes}</div><div class="wxover">${overlay}</div></div>

@@ -459,3 +459,4 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 
 /* outdoor windows solid, indoor windows dashed */
 .wxwin.in{border-style:dashed; border-color:#C9C7BE} .wxwin.in b{color:#C9C7BE}
+.wxwin b{white-space:nowrap}
