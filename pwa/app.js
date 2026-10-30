@@ -178,27 +178,23 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { morning:"routine-am", day:"today", night:"routine-pm", agent:"plan", hexis:"food" };
+const REDIRECTS = { day:"today", agent:"plan", hexis:"food", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
   if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
-  // No tab bar: the day is the app. Everything else still exists at its hash
-  // (the alarm lands on the morning routine, the routines link to their
-  // groups), so those views get one way back rather than being dead ends.
+  // No tab bar: the day is the app. Everything else still exists at its hash,
+  // so those views get one way back rather than being dead ends.
   const navEl = document.querySelector("nav");
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
   const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"]];
   const cur = h === "workout" ? "calendar" : h;
-  if (navEl) navEl.innerHTML = h === "bedroom" ? "" :
-    NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
+  if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
 }
-/* The front page is the day, on every device. The bedside clock is still a
-   tap away (button on the day, or the Sleep tab) and the alarm still lands
-   on the Morning Routine, so the bedroom kiosk keeps working. */
+/* The front page is the day, on every device. */
 function defaultView(){
   return "today";
 }
@@ -495,8 +491,7 @@ V.activate = async function(){
   ];
   const TRANSITION_S = 30;
   let mi = -1, mobRec = null, mobTimerId = null, mobRemaining = 0, mobPhase = "idle"; // idle | move | rest | done
-  // Same flow serves both routines: before 3pm it checks off the Morning
-  // Routine's mobility step, after 3pm the Nighttime Routine's.
+  // Morning or evening mobility, remembered for the day.
   const mobDone = ()=> localStorage.setItem((new Date().getHours()<15?"mob-am-":"mob-pm-")+new Date().toDateString(),"1");
   const clearMobTimer = ()=>{ if (mobTimerId){ clearInterval(mobTimerId); mobTimerId = null; }
     const el = document.getElementById("mobTimer"); if (el) el.textContent = ""; };
@@ -896,17 +891,10 @@ V.recover = async function(){
   wireCoach("recover");
 };
 
-/* ---------------- SLEEP (WHOOP, alarm, bedside) ---------------- */
+/* ---------------- SLEEP (WHOOP) ---------------- */
 V.sleep = async function(){
   view.innerHTML = `<span class="eyebrow">Sleep</span>
     <div class="card" id="sleepCard"><h4>Sleep</h4><div class="small">waiting for WHOOP…</div></div>
-    <div class="card"><h4>Alarm</h4>
-      <input id="alarmT" type="time" value="${S.alarm||"05:30"}">
-      <button id="alarmSet">Set</button>
-      <div class="small" id="alarmMsg">${S.alarm?("Armed for "+S.alarm+" (keep this tablet open — kiosk mode)"):""}</div></div>
-    <div class="card"><h4>Bedside clock</h4>
-      <div class="small">Full-screen clock that watches for the morning WHOOP sync, then rolls into the Morning Routine.</div>
-      <button id="toBedroom">Open bedside clock</button></div>
     ${coachCard("sleep")}`;
   bridge("/sleep/latest").then(s=>{
     const el = document.getElementById("sleepCard");
@@ -914,11 +902,6 @@ V.sleep = async function(){
       <div class="small">recovery ${s.recovery?.score ?? "—"} · HRV ${s.recovery?.hrv ?? "—"} · RHR ${s.recovery?.rhr ?? "—"}</div>`;
     else el.innerHTML = `<h4>Sleep</h4><div class="small">no WHOOP data yet — connect at /whoop/auth on the bridge</div>`;
   }).catch(()=>{});
-  document.getElementById("alarmSet").onclick = ()=>{
-    S.alarm = document.getElementById("alarmT").value; saveS();
-    document.getElementById("alarmMsg").textContent = "Armed for " + S.alarm + " (keep this tablet open — kiosk mode)";
-  };
-  document.getElementById("toBedroom").onclick = ()=>{ location.hash = "#bedroom"; };
   wireCoach("sleep");
 };
 
@@ -1053,164 +1036,6 @@ V.analyze = async function(){
   };
   pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#analyze") clearInterval(wp); else pollWeight(); }, 10000);
   wireCoach("analyze");
-};
-
-/* ---------------- ROUTINES (guided sequences across the groups) ----------------
-   Groups are the library; routines are the playlists. Progress is per-day.
-   Steps auto-check where a real signal exists (weigh-in, mobility);
-   the rest are tap-to-check. */
-function routineState(key){
-  return JSON.parse(localStorage.getItem(key+"-"+new Date().toDateString())||"{}");
-}
-function saveRoutine(key, st){
-  localStorage.setItem(key+"-"+new Date().toDateString(), JSON.stringify(st));
-}
-function drawRoutine(listEl, steps, st, onTap){
-  listEl.innerHTML = steps.map((s,i)=>{
-    const done = s.auto ? s.done : !!st[i];
-    const lock = s.locked ? ` <span class="lock">🔒 ${s.lockNote}</span>` : "";
-    const right = done ? "✓" : (s.auto ? "auto" : "tap");
-    return `<li class="${done?"done":""}" data-i="${i}">
-      <span>${s.label}${s.link?` — <a href="${s.link}">open</a>`:""}${lock}</span><span>${right}</span></li>`;
-  }).join("");
-  listEl.querySelectorAll("li").forEach(li=>li.onclick=(e)=>{
-    if (e.target.tagName === "A") return; // let links navigate
-    const i=+li.dataset.i;
-    if (steps[i].auto || steps[i].locked) return;
-    onTap(i);
-  });
-}
-
-V["routine-am"] = async function(){
-  view.innerHTML = `<span class="eyebrow">☀ Morning Routine</span>
-    <div class="greet">Good morning, Harry</div>
-    <div class="card"><h4>The sequence</h4><ul class="plain steps" id="amSteps"></ul></div>
-    <div class="card"><h4>Wake report</h4>
-      <div class="small">The all-agent daily briefing: sleep, the day's plan, what the week owes.</div>
-      <button class="primary" id="wakeBtn">Play wake report</button>
-      <div class="small" id="wakeOut"></div></div>`;
-
-  let weighDone = false;
-  const steps = [
-    { label:"Wake report", auto:false },
-    { label:"Weigh-in", auto:true, done:false, link:"#analyze" },
-    { label:"Mobility", auto:true, done: !!localStorage.getItem("mob-am-"+new Date().toDateString()), link:"#activate" },
-    { label:"30-min warm-up spin", auto:false, link:"#train" },
-    { label:"Breakfast", auto:false, link:"#fuel", locked:true, lockNote:"unlocks after weigh-in" }
-  ];
-  const st = routineState("routine-am");
-  const listEl = document.getElementById("amSteps");
-  const redraw = ()=>{
-    steps[4].locked = !weighDone;
-    drawRoutine(listEl, steps, st, (i)=>{ st[i] = !st[i]; saveRoutine("routine-am", st); redraw(); });
-  };
-  redraw();
-  bridge("/weight/latest").then(t=>{
-    weighDone = !!(t.latest && t.latest.logged_today);
-    steps[1].done = weighDone; redraw();
-  }).catch(()=>{});
-
-  document.getElementById("wakeBtn").onclick = async ()=>{
-    const btn = document.getElementById("wakeBtn");
-    btn.disabled = true; btn.textContent = "Thinking…";
-    try{
-      const r = await bridge("/agent",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text:"Give me the morning wake report: sleep and recovery, today's plan and weather, what the week still owes, and the one thing to focus on. Keep it tight.", persona:"plan"})});
-      document.getElementById("wakeOut").textContent = r.reply; speak(r.reply);
-      st[0] = true; saveRoutine("routine-am", st); redraw();
-    }catch(e){ document.getElementById("wakeOut").textContent = "bridge unreachable — " + e.message; }
-    btn.disabled = false; btn.textContent = "Play wake report";
-  };
-};
-
-V["routine-pm"] = async function(){
-  view.innerHTML = `<span class="eyebrow">☾ Nighttime Routine</span>
-    <div class="card"><h4>The sequence</h4><ul class="plain steps" id="pmSteps"></ul></div>
-    <div class="card"><h4>Tonight's settle</h4><div id="pmSettle" class="small">computing…</div></div>`;
-  const steps = [
-    { label:"Evening mobility — easy pace", auto:true, done: !!localStorage.getItem("mob-pm-"+new Date().toDateString()), link:"#activate" },
-    { label:"Podcast + shower wind-down", auto:false, link:"#recover" },
-    { label:"Settle the day", auto:false, link:"#recover" },
-    { label:"Tomorrow's ride + gear check", auto:false, link:"#plan" },
-    { label:"Set the alarm", auto:false, link:"#sleep" },
-    { label:"Bedside clock on", auto:false, link:"#bedroom" }
-  ];
-  const st = routineState("routine-pm");
-  const listEl = document.getElementById("pmSteps");
-  const redraw = ()=> drawRoutine(listEl, steps, st, (i)=>{ st[i] = !st[i]; saveRoutine("routine-pm", st); redraw(); });
-  redraw();
-  bridge("/fuel-state").then(s=>{
-    const b = s.balance_kcal;
-    document.getElementById("pmSettle").innerHTML =
-      `Day at <span class="bandpill" style="background:${bandZone(b).color}">${bandZone(b).name} · ${b}</span> · meals ${s.meals_today}`;
-  }).catch(()=>{ document.getElementById("pmSettle").textContent = "bridge unreachable"; });
-};
-
-/* ---------------- BEDSIDE CLOCK ---------------- */
-V.bedroom = function(){
-
-  // Phase 1: full-screen clock, polling WHOOP every 60s.
-  // When recovery arrives (logged_today or fresh sync), transition to morning.
-  let __bedPoll = null;
-  let __transitioned = false;
-
-  view.innerHTML = `
-    <div id="bedClock" style="
-      position:fixed;inset:0;background:var(--ink);color:var(--paper);
-      display:flex;flex-direction:column;align-items:center;justify-content:center;
-      gap:16px;font-family:var(--mono);">
-      <div id="bedTime" style="font-size:96px;font-weight:700;letter-spacing:-2px;line-height:1"></div>
-      <div id="bedDate" style="font-size:18px;letter-spacing:3px;text-transform:uppercase;color:#888"></div>
-      <div id="bedStatus" style="font-size:13px;color:#666;letter-spacing:1px;margin-top:8px">waiting for whoop recovery...</div>
-    </div>`;
-
-  // tick the clock every second
-
-  const tick = ()=>{
-    const n = new Date();
-    let h = n.getHours(), mm = String(n.getMinutes()).padStart(2,'0');
-    const ap = h<12?'a':'p'; h=h%12; if(h===0)h=12;
-    const el = document.getElementById("bedTime");
-    if(el) el.textContent = h+':'+mm+ap;
-    const de = document.getElementById("bedDate");
-    if(de) de.textContent = n.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  };
-  tick(); const clockInt = setInterval(tick, 1000);
-
-  const transition = (rec)=>{
-    if(__transitioned) return;
-    // only transition to morning during morning hours (5am-10am)
-    const h = new Date().getHours();
-    if(h < 5 || h >= 10) return;
-    __transitioned = true;
-    clearInterval(clockInt);
-    clearInterval(__bedPoll);
-    // fade clock out
-    const c = document.getElementById("bedClock");
-    if(c){ c.style.transition='opacity 1.5s'; c.style.opacity='0';
-      setTimeout(()=>{ location.hash="#routine-am"; nav(); }, 1600); }
-    // speak the greeting
-    const score = rec && rec.score;
-    const color = score>=67?'green':score>=34?'yellow':'red';
-    if(score) speak(`Good morning. Recovery is ${color} — ${score}.`);
-    else speak('Good morning.');
-  };
-
-  const checkWhoop = async ()=>{
-    try{
-      const s = await bridge("/sleep/latest");
-      const status = document.getElementById("bedStatus");
-      if(s && s.recovery && s.recovery.score){
-        if(status) status.textContent = `recovery ${s.recovery.score} · transitioning...`;
-        setTimeout(()=>transition(s.recovery), 800);
-      } else {
-        if(status) status.textContent = 'waiting for whoop recovery...';
-      }
-    }catch(e){}
-  };
-
-  checkWhoop();
-  __bedPoll = setInterval(checkWhoop, 60000);
 };
 
 /* ---------------- TODAY — the front page ----------------
@@ -1467,7 +1292,6 @@ V.today = async function(){
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
     <button id="toPlan" class="primary">The plan</button>
-    <button id="toClock">Bedside clock</button>
     <button id="toSettings">Settings</button>`;
 
   // Last payload, so the now/next markers can be repainted without refetching.
@@ -1489,7 +1313,6 @@ V.today = async function(){
   };
   tick();
   __dayTimers.push(setInterval(()=>{ if(location.hash!=="#today") clearDayTimers(); else { tick(); placeNowDot(); } }, 15000));
-  document.getElementById("toClock").onclick = ()=>{ location.hash = "#bedroom"; };
   // The day is the whole app now, but a device still has to be told its bridge
   // URL and token once — without a way back to Settings a fresh tablet is
   // stranded on demo data with no way to fix it.
@@ -2327,21 +2150,6 @@ V.settings = function(){
   drawConnections();
 };
 
-/* ---------------- alarm loop (kiosk) ---------------- */
-setInterval(()=>{
-  if(!S.alarm) return;
-  const n=new Date(); const hm=String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");
-  if(hm===S.alarm && !sessionStorage.getItem("alarm-fired-"+n.toDateString())){
-    sessionStorage.setItem("alarm-fired-"+n.toDateString(),"1");
-    const o=document.getElementById("alarmOverlay"); o.hidden=false;
-    document.getElementById("alarmClock").textContent=hm;
-    speak("Good morning."); // gentle; browsers require a prior interaction for audio — kiosk session has one
-  }
-}, 5000);
-document.getElementById("alarmStop").onclick=()=>{
-  document.getElementById("alarmOverlay").hidden=true;
-  location.hash="#routine-am"; nav();
-};
 
 /* ---------------- queue flush + boot ---------------- */
 setInterval(async ()=>{

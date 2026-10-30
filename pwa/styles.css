@@ -85,7 +85,6 @@ label{font-family:var(--mono); font-size:11px; letter-spacing:1px; text-transfor
   display:block; margin-top:10px}
 .row2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
 .coachLog{min-height:120px}
-.steps li .lock{color:var(--muted); font-size:12px}
 .turn{margin-top:10px; font-size:15px}
 .turn.you{color:var(--muted)}
 .turn.coach{font-weight:600}
@@ -182,11 +181,6 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 .bodyrow .arrow{font-size:38px; line-height:1; font-weight:700}
 .snack{border-top:1px dashed var(--line); margin-top:12px; padding-top:12px}
 
-/* ---- alarm overlay ---- */
-#alarmOverlay[hidden]{display:none}
-#alarmOverlay{position:fixed; inset:0; background:var(--ink); color:var(--paper); display:flex;
-  flex-direction:column; align-items:center; justify-content:center; gap:24px; z-index:50;}
-#alarmOverlay .bignum{font-size:72px}
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
 
 /* the three scores: Training, Recovery, Fatigue — three boxes side by side.

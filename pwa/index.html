@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="dark">
 <title>THE WAY</title>
 <link rel="manifest" href="manifest.webmanifest">
-<link rel="stylesheet" href="styles.css?v=48">
+<link rel="stylesheet" href="styles.css?v=49">
 </head>
 <body>
 <header>
@@ -17,10 +17,6 @@
 <main id="view" aria-live="polite"><div class="card"><h4>Loading the day…</h4>
   <div class="small">If this message stays, the app script didn't run.
   <a href="?reset=1">Tap here to clear the cached copy and reload.</a></div></div></main>
-<div id="alarmOverlay" hidden>
-  <div class="bignum" id="alarmClock"></div>
-  <button class="primary big" id="alarmStop">Good morning</button>
-</div>
 <script>
 // Runs before app.js: a syntax error or a bad cached copy of app.js otherwise
 // leaves a blank page with nothing to act on.
@@ -47,7 +43,7 @@ if (location.search.indexOf("reset=1") > -1) {
   })();
 }
 </script>
-<script src="app.js?v=58"></script>
+<script src="app.js?v=59"></script>
 <script src="plan.js?v=17"></script>
 <script src="food.js?v=23"></script>
 <script src="flags.js?v=4"></script>
