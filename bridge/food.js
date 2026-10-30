@@ -37,7 +37,7 @@ const photoKey = id => 'food-photo-' + id;
 async function dayDoc(date) { return getJSON(dayKey(date), { date, entries: [] }); }
 
 // ---- the day's sessions: planned here, planned in intervals.icu, done on Strava ----
-async function sessionsFor(date) {
+async function buildSessions(date, o) {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
   const out = [];
   try {
@@ -55,7 +55,7 @@ async function sessionsFor(date) {
   } catch (e) { /* no plan store yet */ }
   try {
     const { calendar } = require('./workouts');
-    const cal = await calendar(date, date);
+    const cal = await calendar(date, date, o);
     const day = cal.days[0];
     if (day) {
       for (const e of day.intervals) {
@@ -111,23 +111,52 @@ async function sessionsFor(date) {
           : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min (${pct}%), so the rest of today is a ${F.LABEL[actualDay]}.` };
     }
   }
-  // A planned session whose start has passed with no ride against it has not
-  // started: it slides to now, so the fuel and water curves do not burn for a
-  // ride that is not happening and the post-ride meal moves with it. This
-  // runs after the day's rides have covered the plan, so a session the ride
-  // already answered is never slid into a second copy of itself.
-  if (date === tz.todayKey()) {
-    const p = tz.parts(new Date()); const nowMin = p.h * 60 + p.mi;
-    for (const s of sessions) {
-      const start = F.toMin(s.time);
-      if (s.done || start == null || start >= nowMin - 10) continue;
-      const to = Math.ceil(nowMin / 5) * 5;
-      s.slid_from = s.time; s.time = F.toHM(to);
-      s.end_time = F.toHM(to + s.minutes);
-      s.start_at = tz.zonedToUTC(...date.split('-').map(Number), Math.floor(to / 60), to % 60).toISOString();
-    }
-  }
   return { sessions, ftp: st.ftp, work };
+}
+
+// A planned session whose start has passed with no ride against it. Three
+// readings, in order:
+//   1. Strava may simply not have been asked lately: a Zwift ride reaches
+//      Strava a minute or two after it is saved, and the calendar's copy is
+//      kept ten minutes. While a session is overdue the copy is taken only
+//      if it is under two minutes old, so the ride is seen almost as soon as
+//      it lands.
+//   2. A post-ride meal logged after the planned start is the ride's own
+//      word before Strava's: the plan holds, marked as waiting for Strava's
+//      copy, for up to three hours past the planned end. Nothing slides onto
+//      the meal and nothing says "not started".
+//   3. Otherwise it has not started: it slides to now, so the fuel and water
+//      curves do not burn for a ride that is not happening and the post-ride
+//      meal moves with it. This runs after the day's rides have covered the
+//      plan, so a session the ride already answered is never slid into a
+//      second copy of itself.
+const FRESH_MS = 2 * 60 * 1000;
+async function sessionsFor(date) {
+  let r = await buildSessions(date);
+  if (date !== tz.todayKey()) return r;
+  const p = tz.parts(new Date()); const nowMin = p.h * 60 + p.mi;
+  const overdue = s => !s.done && F.toMin(s.time) != null && F.toMin(s.time) < nowMin - 10;
+  if (r.sessions.some(overdue)) {
+    try { r = await buildSessions(date, { max_age_ms: FRESH_MS }); } catch (e) { /* the first reading stands */ }
+  }
+  let entries = [];
+  try { entries = (await dayDoc(date)).entries || []; } catch (e) { entries = []; }
+  for (const s of r.sessions) {
+    if (!overdue(s)) continue;
+    const start = F.toMin(s.time), end = start + (s.minutes || 60);
+    const meal = entries.find(e => e.slot === 'after' && !e.drink_only && !e.supplement && (e.kcal || 0) >= 100 && F.toMin(e.time) > start && F.toMin(e.time) <= end + 180);
+    if (meal && nowMin <= end + 180) {
+      s.done = true; s.awaiting = 'strava';
+      s.evidence = `${meal.name || meal.text || 'the post-ride meal'} at ${tz.hm12(meal.time)}`;
+      s.end_at = s.end_at || tz.zonedToUTC(...date.split('-').map(Number), Math.floor(end / 60), end % 60).toISOString();
+      continue;
+    }
+    const to = Math.ceil(nowMin / 5) * 5;
+    s.slid_from = s.time; s.time = F.toHM(to);
+    s.end_time = F.toHM(to + s.minutes);
+    s.start_at = tz.zonedToUTC(...date.split('-').map(Number), Math.floor(to / 60), to % 60).toISOString();
+  }
+  return r;
 }
 
 // The body's say on the deficit: a red WHOOP morning, or HRV below the band
@@ -168,7 +197,7 @@ async function guidelinesFor(date) {
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
     sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
-      slid_from: s.slid_from || null, start_at: s.start_at || null, end_at: s.end_at || null })) };
+      slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null })) };
 }
 
 // ---- the photo -> the model -> an entry ----
@@ -284,7 +313,7 @@ async function dayReport(date) {
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
-    meals: g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id), match: F.mealMatch(m, entries.filter(e => e.slot === m.slot)) })),
+    meals: F.rollForward(g.meals, entries).map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id), match: F.mealMatch(m, entries.filter(e => e.slot === m.slot)) })),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
@@ -324,6 +353,8 @@ async function liveFuel(date, entries, g, nowMin) {
       fasted: !entries.some(e => !e.supplement && e.time && F.toMin(e.time) < F.toMin(done.time)) };
   }
   energy.calibration = { rides: cal.rides, tuned: cal.tuned, quick_share: energy.share, rest_g_h: energy.rest_g_h };
+  // a planned ride taken as ridden on the strength of its post-ride meal, until Strava's copy lands
+  energy.awaiting = g.sessions.filter(s => s.awaiting).map(s => ({ name: s.name, time: s.time, evidence: s.evidence }));
   energy.carried = prev ? { from: tz.shiftKey(date, -1), legs_g: prev.legs_end_g } : null;
   return energy;
 }
@@ -427,8 +458,9 @@ async function liveHydration(date, entries, g, nowMin) {
 // earns a word (whey or cottage cheese, as the plan's snack says).
 function nextUp(g, entries, actual, macroNow, nowHM) {
   const { scoreDay } = require('./intake');
-  const meals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot && !e.supplement && (!e.drink_only || m.slot === 'on the bike')).map(e => e.id) }));
-  const nx = F.nextSlot(meals, nowHM);
+  const meals = F.rollForward(g.meals, entries).map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot && !e.supplement && (!e.drink_only || m.slot === 'on the bike')).map(e => e.id) }));
+  // a slot the meal before it already covered is not next
+  const nx = F.nextSlot(meals.filter(m => !m.covered_by), nowHM);
   const before = macroNow ? macroNow.overall : null;
   if (!nx) {
     const short = Math.round((g.target.protein_g || 0) - (actual.protein_g || 0));
@@ -444,7 +476,7 @@ function nextUp(g, entries, actual, macroNow, nowHM) {
   const late = F.toMin(nx.time) < F.toMin(nowHM) - 5;
   return { slot: nx.slot, time: nx.time, name: `${nx.slot}${nx.time ? ' at ' + tz.hm12(nx.time) : ''}`, what: nx.what,
     kcal: nx.kcal || 0, carbs_g: nx.carbs_g || 0, protein_g: nx.protein_g || 0, fat_g: fat, low_carb: !!nx.low_carb, late,
-    why: late ? 'its time has come' : 'next on the plan',
+    why: nx.rolled_from ? `next on the plan, lighter: the ${nx.rolled_from.slot === 'after' ? 'post-ride meal' : nx.rolled_from.slot} ran over` : late ? 'its time has come' : 'next on the plan',
     score_before: before, score_after: scoredAfter ? scoredAfter.overall : null,
     snap: nx.slot === 'before' || nx.slot === 'after' || nx.slot === 'on the bike' ? 'snack' : nx.slot };
 }

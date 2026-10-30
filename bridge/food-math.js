@@ -371,10 +371,46 @@ function band(score) {
 // short alone); red when the calories or the carbs are further off than
 // that, either way, since on a Zone 1 morning too many carbs is the miss
 // and before a hard session too few is. Slots with no logged entry: null.
+// A meal that ran over its slot moves the overage into the next slot, when
+// the next slot is near enough (two and a half hours) to be the same
+// stretch of the day: the sushi at 11:39 that was both the post-ride meal
+// and most of lunch leaves lunch at 12:55 a protein plate, not a second
+// full meal. Carbs over, calories over and protein over each roll on their
+// own, so a carb-heavy plate leaves the next slot lighter on starch and a
+// protein-short one leaves its protein where it was. Nothing rolls out of a
+// low-carb slot (its carbs over are the miss, not a credit) or through the
+// bottle on the bike, and a slot left under 40% of itself is covered.
+// meals: the plan with logged []; entries: the day's entries.
+function rollForward(meals, entries) {
+  const out = (meals || []).map(m => Object.assign({}, m));
+  const real = out.filter(m => !m.extra);
+  const es = Array.isArray(entries) ? entries.filter(e => e && !e.supplement && !e.drink_only) : [];
+  for (let i = 0; i + 1 < real.length; i++) {
+    const a = real[i], b = real[i + 1];
+    if (a.low_carb || toMin(b.time) == null || toMin(a.time) == null || toMin(b.time) - toMin(a.time) > 150) continue;
+    const got = es.filter(e => e.slot === a.slot);
+    if (!got.length) continue;
+    const sum = k => got.reduce((x, e) => x + (e[k] || 0), 0);
+    const over = { kcal: Math.max(0, sum('kcal') - (a.kcal || 0)), carbs_g: Math.max(0, sum('carbs_g') - (a.carbs_g || 0)), protein_g: Math.max(0, sum('protein_g') - (a.protein_g || 0)) };
+    if (over.kcal < 60 && over.carbs_g < 10 && over.protein_g < 10) continue;
+    const aName = a.slot === 'after' ? 'post-ride meal' : a.slot === 'before' ? 'pre-ride snack' : a.slot;
+    a.rolled_out = { to: b.slot, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
+    b.plan_kcal = b.plan_kcal ?? b.kcal; b.plan_carbs_g = b.plan_carbs_g ?? b.carbs_g; b.plan_protein_g = b.plan_protein_g ?? b.protein_g;
+    b.kcal = Math.max(0, (b.kcal || 0) - over.kcal); b.carbs_g = Math.max(0, (b.carbs_g || 0) - over.carbs_g); b.protein_g = Math.max(0, (b.protein_g || 0) - over.protein_g);
+    b.kcal = r5(b.kcal); b.carbs_g = r5(b.carbs_g); b.protein_g = r5(b.protein_g);
+    b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
+    if (b.plan_kcal > 0 && b.kcal < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = `covered by the ${aName}, which ran over; a protein bite if hungry.`; }
+    else if (over.carbs_g >= 20 && b.carbs_g <= 0.6 * (b.plan_carbs_g || 1)) b.what = `${b.protein_g} g of protein and vegetables; the ${aName} carried the starch.`;
+    else if (over.kcal >= 60) b.what = `${b.what} Lighter: the ${aName} ran ${over.kcal} kcal over.`;
+  }
+  return out;
+}
+
 function mealMatch(plan, logged) {
   // a bottle of water logged into a slot is not the meal; a bottle with carbs on the bike is
   const l = (logged || []).filter(e => e && !e.supplement && (!e.drink_only || (plan.slot === 'on the bike' && e.carbs_g >= 10)));
   if (!l.length) return null;
+  if (plan.covered_by) return { key: 'green', word: `with the ${plan.covered_by} meal`, kcal: 0, carbs_g: 0, protein_g: 0, worst: null, covered: true };
   const sum = k => l.reduce((a, e) => a + (e[k] || 0), 0);
   const got = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g') };
   const off = (have, want) => want > 0 ? (have - want) / want : (have > 15 ? 1 : 0);
@@ -388,7 +424,8 @@ function mealMatch(plan, logged) {
     if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: off(got.carbs_g, plan.carbs_g), both: true });
     if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
   }
-  const miss = p => p.both ? Math.abs(p.off) : Math.max(0, -p.off);   // protein only counts when short
+  // protein only counts when short; an overage that rolled into the next slot is not a miss here
+  const miss = p => p.both ? (plan.rolled_out && p.off > 0 ? 0 : Math.abs(p.off)) : Math.max(0, -p.off);
   const worst = parts.reduce((a, p) => miss(p) > miss(a) ? p : a, parts[0] || { k: 'kcal', off: 0, both: true });
   const w = miss(worst);
   const key = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
@@ -397,5 +434,5 @@ function mealMatch(plan, logged) {
   return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch,
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward,
   guidelineScore, overall, band, FIT_POINTS };

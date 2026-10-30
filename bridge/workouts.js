@@ -191,11 +191,15 @@ function epoch(dateKey, endOfDay) {
 // Same shape for Strava, whose limit is 100 calls per 15 minutes: the whole
 // window once, then slices from the cache. The fitness line reads 120 days,
 // so that is the window.
-async function stravaDone(from, to, st) {
+// o.max_age_ms: accept a cached copy only this fresh (the food page asks for
+// a two-minute copy while a planned ride is overdue, so a Zwift ride that
+// has just reached Strava is seen without waiting out the ten minutes).
+async function stravaDone(from, to, st, o) {
   const key = 'calendar-strava-cache';
   const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
-  if (c && c.from <= from && c.to >= to && Date.now() - c.at < TTL_MS)
+  const maxAge = o && o.max_age_ms > 0 ? Math.min(TTL_MS, o.max_age_ms) : TTL_MS;
+  if (c && c.from <= from && c.to >= to && Date.now() - c.at < maxAge)
     return { connected: true, rides: c.rides.filter(r => r.date >= from && r.date <= to), cached: true };
   let list;
   try {
@@ -324,13 +328,13 @@ function dayCompliance(planned, totals, dayOver, rideCount) {
   return { pct: 0, band: 'red', basis: 'nothing ridden' };
 }
 
-async function calendar(from, to) {
+async function calendar(from, to, o) {
   const st = await settings();
   const d = await db();
   const planned = Object.values(d.workouts).filter(w => w.date >= from && w.date <= to).map(w => withMetrics(w, st));
   const [icuR, doneR] = await Promise.all([
     icuEvents(from, to).catch(e => ({ configured: true, error: e.message, events: [] })),
-    stravaDone(from, to, st).catch(e => ({ connected: false, reason: e.message, rides: [] }))
+    stravaDone(from, to, st, o).catch(e => ({ connected: false, reason: e.message, rides: [] }))
   ]);
   const today = tz.todayKey();
   // What the streams said about each ride, when it has been read. Reads are

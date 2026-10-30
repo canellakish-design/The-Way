@@ -100,8 +100,9 @@ function energyHTML(e){
     nowMin, guides: [35,60] });
   const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
-    <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
-    ${e.now.arriving_g >= 10 ? `<div class="small">${e.now.arriving_g} g of carbs from what you just ate are still on the way: a meal lands over the next two to three hours, which is the rise ahead of the line.</div>` : ""}
+    <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.arriving_g >= 10 ? ` <span class="small">· ${e.now.arriving_g} g landing</span>` : ""}${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
+    ${e.now.arriving_g >= 10 ? `<div class="small">The ${e.now.pct}% is what is in the blood and liver this minute; ${e.now.arriving_g} g of carbs from what you just ate are still in the stomach and land over the next two to three hours, which is the rise ahead of the line.</div>` : ""}
+    ${(e.awaiting||[]).map(a => `<div class="small">${esc(a.name)} planned at ${esc(hm12(a.time))}: taken as ridden on the strength of ${esc(a.evidence)}; Strava's copy of the ride has not landed yet.</div>`).join("")}
     ${c.svg}
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}
@@ -279,7 +280,7 @@ V.food = async function(){
           const mark = logged ? `<span class="mk ok" title="logged">✓</span>` : (isToday && m.time < now) ? `<span class="mk no" title="nothing logged">✗</span>` : `<span class="mk"></span>`;
           const mt = logged && m.match ? m.match : null;
           return `<li class="${logged?"done":(isToday&&m.time<now?"past":"")}${mt?` match ${mt.key}`:""}"><span class="t">${esc(hm12(m.time))}</span>
-            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}</span>`:""}${mt?`<span class="small mword"> ${mt.kcal} kcal · ${mt.carbs_g}C${mt.protein_g?` · ${mt.protein_g}P`:""} · ${esc(mt.word)}</span>`:""}</span>
+            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}${m.plan_kcal!=null&&m.plan_kcal!==m.kcal?` <s>${m.plan_kcal}</s>`:""}</span>`:m.covered_by?`<span class="small"> covered</span>`:""}${mt?`<span class="small mword"> ${mt.kcal} kcal · ${mt.carbs_g}C${mt.protein_g?` · ${mt.protein_g}P`:""} · ${esc(mt.word)}</span>`:""}</span>
             <span class="tag mealtag">${mark}${isToday?`<button class="cam" data-cam="${esc(mealOf)}" aria-label="Snap this meal"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></button>`:""}</span></li>`; }).join("")}</ul>
       </div>
       <div class="card"><h4>Compliance</h4>

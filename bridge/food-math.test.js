@@ -170,3 +170,34 @@ ok('a low-carb breakfast is low carb: 20 g, and eating under it is as planned', 
   assert.strictEqual(F.mealMatch(bike, [{ kcal: 180, carbs_g: 45, fluid_ml: 600, drink_only: true }]).key, 'green');
 });
 console.log(n + ' passed');
+
+ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a low-carb slot and a far slot roll nothing', () => {
+  const plan = [
+    { slot: 'breakfast', time: '08:00', kcal: 335, carbs_g: 20, protein_g: 30, low_carb: true, what: 'eggs' },
+    { slot: 'on the bike', time: '09:30', kcal: 0, carbs_g: 0, protein_g: 0, extra: true, what: 'water' },
+    { slot: 'after', time: '10:55', kcal: 560, carbs_g: 85, protein_g: 50, what: 'rice and chicken' },
+    { slot: 'lunch', time: '12:55', kcal: 450, carbs_g: 40, protein_g: 50, what: 'Protein with rice or potatoes, vegetables.' },
+    { slot: 'dinner', time: '18:30', kcal: 670, carbs_g: 55, protein_g: 55, what: 'dinner' }
+  ];
+  const entries = [
+    { slot: 'breakfast', time: '06:39', kcal: 500, carbs_g: 45, protein_g: 27 },             // low carb slot over: no credit forward
+    { slot: 'after', time: '11:39', kcal: 700, carbs_g: 96, protein_g: 34 }                   // sushi: 140 kcal and 11 g carbs over, protein short
+  ];
+  const r = F.rollForward(plan, entries);
+  const bike = r.find(m => m.slot === 'on the bike'), lunch = r.find(m => m.slot === 'lunch'), dinner = r.find(m => m.slot === 'dinner'), after = r.find(m => m.slot === 'after');
+  assert.strictEqual(bike.kcal, 0); assert.ok(!bike.rolled_from);
+  assert.ok(after.rolled_out && after.rolled_out.to === 'lunch');
+  assert.strictEqual(lunch.plan_kcal, 450); assert.strictEqual(lunch.kcal, 310); assert.strictEqual(lunch.carbs_g, 30); assert.strictEqual(lunch.protein_g, 50);
+  assert.ok(/Lighter/.test(lunch.what), lunch.what);
+  assert.ok(!lunch.covered_by);
+  assert.strictEqual(dinner.kcal, 670); assert.ok(!dinner.rolled_from);                        // too far from lunch, and lunch has nothing logged
+  // the after slot's calories over are not a miss once they have rolled on; protein short still is
+  const mt = F.mealMatch(after, entries.filter(e => e.slot === 'after'));
+  assert.strictEqual(mt.key, 'yellow'); assert.ok(/protein/.test(mt.word), mt.word);
+  // a plate big enough to be both meals covers the next slot
+  const big = F.rollForward(plan, [{ slot: 'after', time: '11:39', kcal: 950, carbs_g: 120, protein_g: 60 }]);
+  const l2 = big.find(m => m.slot === 'lunch');
+  assert.strictEqual(l2.covered_by, 'after'); assert.ok(/covered/.test(l2.what));
+  assert.strictEqual(F.mealMatch(l2, [{ slot: 'lunch', kcal: 150, carbs_g: 5, protein_g: 25 }]).covered, true);
+  assert.strictEqual(F.nextSlot(big.filter(m => !m.covered_by).map(m => Object.assign({}, m, { logged: m.slot === 'after' ? ['x'] : [] })), '12:00').slot, 'dinner');
+});
