@@ -50,9 +50,11 @@ async function report() {
     const g = await getJSON('gcal', { accounts: [], events: [] });
     const accounts = (g.accounts || []);
     const bad = accounts.filter(a => a.auth_error);
+    const cfg = await getJSON('gcal-config', null);
+    const gConfigured = !!((env('GOOGLE_CLIENT_ID') && env('GOOGLE_CLIENT_SECRET')) || (cfg && cfg.client_id && cfg.client_secret));
     push({
       key: 'google', name: 'Google Calendar', role: 'the day itself — classes, coaching, everything',
-      configured: env('GOOGLE_CLIENT_ID') && env('GOOGLE_CLIENT_SECRET'),
+      configured: gConfigured,
       connected: accounts.length > 0 && bad.length < accounts.length,
       has_data: (g.events || []).length > 0,
       detail: accounts.length
@@ -61,8 +63,8 @@ async function report() {
         : 'no account connected',
       auth_url: link('/gcal/auth'),
       hint: 'Add one account per Google identity — /gcal/auth?email=you@domain preselects it.',
-      fix: !(env('GOOGLE_CLIENT_ID') && env('GOOGLE_CLIENT_SECRET'))
-        ? 'set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET'
+      fix: !gConfigured
+        ? 'paste the Google OAuth client id and secret below, then connect'
         : bad.length ? 'reconnect: ' + bad.map(a => a.id).join(', ')
         : accounts.length ? null : 'visit the auth link once'
     });

@@ -7,13 +7,22 @@
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const tz = require('./tz');
+const crypto = require('crypto');
 // Credentials pasted into a hosting dashboard pick up stray whitespace,
 // newlines and sometimes the quotes around them. Providers then reject the
 // value with a message about the credential being invalid, which sends you
 // looking at the wrong thing.
 const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
-const CID = envStr('GOOGLE_CLIENT_ID');
-const SEC = envStr('GOOGLE_CLIENT_SECRET');
+// The Google OAuth client: from Netlify's environment, or pasted into the
+// app's Setup page once (stored in the site's own storage). Either works.
+let CID = envStr('GOOGLE_CLIENT_ID');
+let SEC = envStr('GOOGLE_CLIENT_SECRET');
+async function creds() {
+  if (CID && SEC) return { id: CID, secret: SEC, from: process.env.GOOGLE_CLIENT_ID ? 'netlify' : 'setup' };
+  const c = await getJSON('gcal-config', null);
+  if (c && c.client_id && c.client_secret) { CID = c.client_id; SEC = c.client_secret; return { id: CID, secret: SEC, from: 'setup' }; }
+  return null;
+}
 // Netlify sets URL (the site's primary address) and DEPLOY_PRIME_URL on every
 // build, so the site knows where it lives even if BASE_URL was never set —
 // and a missing BASE_URL otherwise yields a relative redirect_uri, which
@@ -95,6 +104,7 @@ async function db() {
 
 async function tok(acct) {
   if (!acct || !acct.tokens) throw new Error('calendar not connected — visit /gcal/auth');
+  await creds();
   if (Date.now() < acct.tokens.expires_at - 60000) return acct.tokens.access_token;
   const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -287,13 +297,13 @@ function scheduleForDate(events, dateStr) {
   const all = dayEventsFor(events, dateStr);
   const allDay = all.filter(e => e.allDay).map(e => ({
     summary: e.summary, category: e.category, allDay: true,
-    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null
+    source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null
   }));
   const timed = all.filter(e => !e.allDay).map(e => {
     const sm = tz.minutesOf(new Date(e.start)), em = tz.minutesOf(new Date(e.end));
     return {
       summary: e.summary, category: e.category, allDay: false,
-      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null,
+      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
     };
@@ -357,13 +367,99 @@ async function trainingHours(recovery) {
 }
 
 // ---- routes ----------------------------------------------------------
+
+// ---- events added in the app ----
+// Stored here first, so the day shows them at once; pushed to the primary
+// Google calendar when an account with write access is connected. Until
+// then they wait, and the next push after connecting sends them all.
+async function pushLocal(d) {
+  const acct = d.accounts.find(a => a.tokens && !a.auth_error);
+  if (!acct) return 0;
+  let n = 0;
+  for (const e of d.local_events || []) {
+    if (e.google_id) continue;
+    try {
+      const t = await tok(acct);
+      const body = e.allDay ? { summary: e.summary, description: e.description || undefined, location: e.location || undefined, start: { date: e.start.slice(0, 10) }, end: { date: e.end.slice(0, 10) } }
+        : { summary: e.summary, description: e.description || undefined, location: e.location || undefined, start: { dateTime: e.start, timeZone: tz.ZONE }, end: { dateTime: e.end, timeZone: tz.ZONE } };
+      const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', { method: 'POST', headers: { Authorization: 'Bearer ' + t, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const j = await r.json();
+      if (r.ok && j.id) { e.google_id = j.id; e.pushed_at = new Date().toISOString(); n++; }
+      else e.push_error = (j.error && j.error.message) || ('google ' + r.status);
+    } catch (err) { e.push_error = err.message; }
+  }
+  if (n) await setJSON('gcal', d);
+  return n;
+}
+async function addEvent(b) {
+  const title = String(b.title || '').trim().slice(0, 120);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : tz.todayKey();
+  if (!title) { const e = new Error('a title is needed'); e.status = 400; throw e; }
+  const d = await db();
+  d.local_events = d.local_events || [];
+  const allDay = !/^\d{2}:\d{2}$/.test(b.start || '');
+  let ev;
+  if (allDay) ev = { summary: title, start: date, end: tz.shiftKey(date, 1), allDay: true };
+  else {
+    const [h, m] = b.start.split(':').map(Number);
+    const mins = Number(b.minutes) > 0 ? Number(b.minutes) : (/^\d{2}:\d{2}$/.test(b.end || '') ? ((+b.end.slice(0, 2)) * 60 + (+b.end.slice(3, 5))) - (h * 60 + m) : 60);
+    const s = tz.zonedToUTC(...date.split('-').map(Number), h, m);
+    const e2 = new Date(s.getTime() + Math.max(15, mins) * 60000);
+    ev = { summary: title, start: s.toISOString(), end: e2.toISOString(), allDay: false };
+  }
+  ev.id = 'ev_' + crypto.randomBytes(5).toString('hex');
+  ev.description = b.notes ? String(b.notes).slice(0, 1000) : null;
+  ev.location = b.location ? String(b.location).slice(0, 200) : null;
+  ev.created = new Date().toISOString();
+  d.local_events.push(ev);
+  await setJSON('gcal', d);
+  const pushed = await pushLocal(d);
+  return { ok: true, event: ev, pushed_to_google: !!ev.google_id, google_connected: d.accounts.some(a => a.tokens), pushed };
+}
+async function removeEvent(id) {
+  const d = await db();
+  const ev = (d.local_events || []).find(e => e.id === id);
+  if (!ev) return false;
+  if (ev.google_id) {
+    const acct = d.accounts.find(a => a.tokens);
+    if (acct) { try { const t = await tok(acct); await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${encodeURIComponent(ev.google_id)}`, { method: 'DELETE', headers: { Authorization: 'Bearer ' + t } }); } catch (e) { /* it stays on Google; the app forgets it */ } }
+  }
+  d.local_events = d.local_events.filter(e => e.id !== id);
+  await setJSON('gcal', d);
+  return true;
+}
+
 function attach(app) {
-  app.get('/gcal/auth', (req, res) => {
+  app.post('/gcal/events', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await addEvent(req.body || {})); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  app.delete('/gcal/events/:id', async (req, res) => { if (!auth(req, res)) return;
+    try { const ok = await removeEvent(req.params.id); if (!ok) return res.status(404).json({ error: 'no such event' }); res.json({ ok: true }); }
+    catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post('/gcal/events/push', async (req, res) => { if (!auth(req, res)) return;
+    try { const d = await db(); res.json({ ok: true, pushed: await pushLocal(d), waiting: (d.local_events || []).filter(e => !e.google_id).length, google_connected: d.accounts.some(a => a.tokens) }); }
+    catch (e) { res.status(500).json({ error: e.message }); } });
+
+  // The client id and secret, pasted once on the Setup page.
+  app.post('/gcal/config', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const id = String((req.body || {}).client_id || '').trim(), secret = String((req.body || {}).client_secret || '').trim();
+      if (!/\.apps\.googleusercontent\.com$/.test(id) || secret.length < 10) return res.status(400).json({ error: 'that does not look like a Google OAuth client id and secret' });
+      await setJSON('gcal-config', { client_id: id, client_secret: secret, at: new Date().toISOString() });
+      CID = id; SEC = secret;
+      res.json({ ok: true, redirect_uri: BASE + '/gcal/callback', next: BASE + '/gcal/auth' });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.get('/gcal/config', async (req, res) => { if (!auth(req, res)) return;
+    const c = await creds();
+    res.json({ configured: !!c, from: c ? c.from : null, client_id: c ? c.id : null, redirect_uri: BASE + '/gcal/callback', auth_url: BASE + '/gcal/auth' }); });
+
+  app.get('/gcal/auth', async (req, res) => {
+    if (!(await creds())) return res.status(400).send('Google is not configured yet: paste the OAuth client id and secret on the Setup page first.');
     const u = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     u.searchParams.set('client_id', CID);
     u.searchParams.set('redirect_uri', BASE + '/gcal/callback');
     u.searchParams.set('response_type', 'code');
-    u.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly');
+    u.searchParams.set('scope', 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events');
     u.searchParams.set('access_type', 'offline');
     u.searchParams.set('prompt', 'consent');
     // ?email= preselects the account in Google's chooser. The schedule lives on
@@ -374,6 +470,7 @@ function attach(app) {
   });
   app.get('/gcal/callback', async (req, res) => {
     try {
+      await creds();
       const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ grant_type: 'authorization_code', code: req.query.code,
@@ -465,7 +562,9 @@ function attach(app) {
       // The written-down copy of the calendar fills only the days no live
       // source reached. See snapshot.js for why it exists and how it retires.
       const snapshot = require('./snapshot');
-      const liveEvents = (d.events || []).concat(icsEvents);
+      // Events added in the app: on the day at once, whether or not they have reached Google yet.
+      const localEvents = (d.local_events || []).map(e => ({ ...e, source: 'calendar', account: 'the way', category: classify(e.summary, d.manual, null) }));
+      const liveEvents = (d.events || []).concat(icsEvents, localEvents);
       const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
       const snapEvents = snapshot.eventsInRange(firstKey, lastKey, covered).map(e => {
         const calDefault = calendarCategory(e.calendar);
@@ -565,4 +664,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday,
-  trainingHours, connected, scheduleForDate, scheduleDays, dateKey };
+  trainingHours, connected, scheduleForDate, scheduleDays, dateKey, addEvent, removeEvent, pushLocal };

@@ -1252,7 +1252,7 @@ function dayRows(d, plan, isToday){
   const rows = (d.events||[]).map(e=>({
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
-    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null,
+    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null,
     desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
   }));
   (d.windows||[]).forEach(w=> rows.push({
@@ -1398,7 +1398,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     return `<li class="${r.lane.cls} ${state} xrow" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.lid?`<button class="tdel" data-dele="${esc(r.lid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -1412,7 +1412,12 @@ function dayCard(d, plan, nowMin, rec, solo){
     ${macroRow}${hourStrips(d)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
-    <div class="small">${foot}</div></div>`;
+    <div class="small">${foot}</div>
+    <details class="addev"><summary>+ add to the calendar</summary>
+      <div class="row2"><span><label>What</label><input class="evTitle" placeholder="Dentist"></span><span><label>Date</label><input class="evDate" type="date" value="${esc(d.date)}"></span></div>
+      <div class="row2"><span><label>Start (blank = all day)</label><input class="evStart" type="time"></span><span><label>Minutes</label><input class="evMin" type="number" value="60"></span></div>
+      <label>Notes</label><input class="evNotes" placeholder="optional">
+      <button class="primary evSave">Add</button> <span class="small evMsg"></span></details></div>`;
 }
 
 /* The day runs unattended — a tablet on the counter, a phone left open on the
@@ -2072,6 +2077,26 @@ V.today = async function(){
         catch(err){ d.innerHTML += `<div class="small">${esc(err.message)}</div>`; }
       }
     });
+    // add to the calendar: here at once, on Google when the site is connected to it
+    view.addEventListener("click", async (e)=>{
+      const b = e.target.closest(".evSave"); if (!b) return;
+      const box = b.closest(".addev"), msg = box.querySelector(".evMsg");
+      const body = { title: box.querySelector(".evTitle").value.trim(), date: box.querySelector(".evDate").value, start: box.querySelector(".evStart").value, minutes: +box.querySelector(".evMin").value || 60, notes: box.querySelector(".evNotes").value.trim() };
+      if (!body.title){ msg.textContent = "Give it a name."; return; }
+      b.disabled = true; msg.textContent = "adding…";
+      try{ const r = await bridge("/gcal/events", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
+        msg.textContent = r.pushed_to_google ? "Added, and on Google." : r.google_connected ? "Added here; Google push failed, it will retry." : "Added here. It goes to Google once the site is connected to it.";
+        box.querySelector(".evTitle").value = ""; syncAll("event added"); }
+      catch(err){ msg.textContent = err.message; }
+      b.disabled = false;
+    });
+    view.addEventListener("click", async (e)=>{
+      const b = e.target.closest("[data-dele]"); if (!b) return;
+      e.preventDefault();
+      if (!confirm("Remove this from the calendar?")) return;
+      try{ await bridge("/gcal/events/"+encodeURIComponent(b.dataset.dele),{method:"DELETE"}); syncAll("deleted"); }
+      catch(err){ alert(err.message); }
+    });
     // the trash can beside a planned session on the day
     view.addEventListener("click", async (e)=>{
       const b = e.target.closest("[data-delw]"); if (!b) return;
@@ -2257,7 +2282,26 @@ V.settings = function(){
       ${st.base_url_note?`<div class="small"><b>${esc(st.base_url_note)}</b></div>`:""}
       <ul class="agenda totals">${rows}</ul>
       <div class="small">✓ live and receiving · ◐ authorized, no data yet · ○ credentials set, not authorized · × not configured</div>
-      <button id="recheck">Re-check</button>`;
+      <button id="recheck">Re-check</button>
+      <div class="card" id="gcfg" style="margin-top:12px"><h4>Google Calendar · the connection</h4>
+        <div class="small">The site reads your calendars and writes events you add here once it has a Google OAuth client. Make one in Google Cloud Console (APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Web application), add this redirect address, enable the Google Calendar API, and paste the client id and secret here. Then tap Connect and approve.</div>
+        <div class="small">Redirect address: <code id="gRedirect">${esc(DEFAULT_API)}/gcal/callback</code></div>
+        <div class="row2"><span><label>Client id</label><input id="gId" placeholder="…apps.googleusercontent.com" autocomplete="off"></span><span><label>Client secret</label><input id="gSecret" type="password" autocomplete="off"></span></div>
+        <button class="primary" id="gSave">Save</button> <a class="btn" id="gConnect" href="${esc(DEFAULT_API)}/gcal/auth">Connect Google</a> <span class="small" id="gMsg"></span></div>`;
+    try{
+      const g = await bridge("/gcal/config");
+      const r = document.getElementById("gRedirect"); if (r && g.redirect_uri) r.textContent = g.redirect_uri;
+      const c = document.getElementById("gConnect"); if (c && g.auth_url) c.href = g.auth_url;
+      const m = document.getElementById("gMsg"); if (m) m.textContent = g.configured ? `client set (${g.from}) · ${g.client_id}` : "no client yet";
+      if (g.configured){ const id = document.getElementById("gId"); if (id) id.value = g.client_id; }
+    }catch{}
+    const gs = document.getElementById("gSave");
+    if (gs) gs.onclick = async ()=>{
+      const m = document.getElementById("gMsg"); m.textContent = "saving…";
+      try{ const r = await bridge("/gcal/config", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ client_id: document.getElementById("gId").value.trim(), client_secret: document.getElementById("gSecret").value.trim() }) });
+        m.textContent = "Saved. Now tap Connect Google and approve."; const c = document.getElementById("gConnect"); if (c && r.next) c.href = r.next; }
+      catch(e){ m.textContent = e.message; }
+    };
     const rc = document.getElementById("recheck");
     if (rc) rc.onclick = ()=>{ el.innerHTML = `<h4>Connections</h4><div class="small">checking…</div>`; drawConnections(); };
   };

@@ -472,3 +472,8 @@ ul.agenda li.xdetail{display:block; grid-template-columns:1fr; padding:4px 0 12p
 ul.agenda{position:relative}
 .nowdot{position:absolute; left:-5px; width:12px; height:12px; margin-top:-6px; border-radius:50%; background:var(--ink); border:2px solid var(--paper); box-shadow:0 0 0 2px var(--ink); z-index:2; pointer-events:none}
 .nowmeta{margin:8px 0 2px}
+
+/* add to the calendar */
+details.addev{margin-top:10px} details.addev summary{font-family:var(--mono); font-size:12px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); cursor:pointer; list-style:none}
+details.addev summary::-webkit-details-marker{display:none} details.addev[open] summary{color:var(--ink)}
+details.addev input{width:100%}

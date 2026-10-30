@@ -25,7 +25,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: ['type', 'text', 'meal', 'supplement', 'lb', 'date', 'time', 'library_key', 'name', 'minutes', 'sport'],
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'note', 'question', 'remove', 'remove_workout'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'note', 'question', 'remove', 'remove_workout', 'event'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -66,6 +66,7 @@ Action types:
 - workout: a ride or session to put on the calendar. date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
 - remove: take something back out of today's food journal. text = what to remove in his words ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - remove_workout: take a planned session off the calendar. date = its day (YYYY-MM-DD), text = what he called it or "".
+- event: anything else to put on the calendar (a dentist, a meeting, a drive). name = the title, date = YYYY-MM-DD, time = HH:MM or "" for all day, minutes = length (60 if he gave none), text = notes or "".
 - note: anything about how he feels or slept, text = his words.
 - question: he asked something; answer it in the reply from the day's context above. No other fields.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
@@ -138,6 +139,10 @@ async function run(a) {
       if (!hit) return { ok: false, summary: `No planned session on ${date}.` };
       await require('./workouts').remove(hit.id);
       return { ok: true, summary: `Off the calendar: ${hit.name}, ${hit.date}.` };
+    }
+    case 'event': {
+      const j = await require('./calendar').addEvent({ title: a.name || a.text || 'Event', date: a.date, start: a.time || '', minutes: a.minutes || 60, notes: a.text && a.name ? a.text : '' });
+      return { ok: true, summary: `On the calendar: ${a.name || a.text}, ${a.date}${a.time ? ' at ' + a.time : ''}${j.pushed_to_google ? ', and on Google' : j.google_connected ? '' : ' (Google not connected yet, it goes when it is)'}.` };
     }
     case 'note': {
       const d = await getJSON('voice-notes', { notes: [] });
