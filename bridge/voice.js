@@ -93,8 +93,8 @@ async function context() {
   return lines.join('\n');
 }
 
-function promptFor(text, ctx) {
-  return `You are the voice of one cyclist's training and food app, and his advisor. He is 55 and training through a slow weight loss. He spoke one or more things; turn them into actions, and write one spoken reply.
+function promptFor(text, ctx, continuing) {
+  return `You are the voice of one cyclist's training and food app, and his advisor. He is 55 and training through a slow weight loss. ${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'} Turn what he said into actions, and write one spoken reply.
 
 Where the day stands:
 ${ctx}
@@ -123,15 +123,24 @@ The reply, spoken aloud, plain and friendly, no lists, no numbers he did not ask
 He said: "${text}"`;
 }
 
-async function understand(text) {
+// A conversation: the earlier turns come back from the page (what he said,
+// what was answered), so "yes, do that" or "the second one" has something to
+// point at. The prompt with the day's context rides on the latest turn only.
+async function understand(text, history) {
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
+  const prior = (Array.isArray(history) ? history : []).slice(-10)
+    .filter(h => h && (h.role === 'user' || h.role === 'assistant') && h.text)
+    .map(h => ({ role: h.role, content: String(h.text).slice(0, 600) }));
+  // the API wants the turns to alternate and to start with him
+  const turns = []; for (const t of prior) { if (!turns.length && t.role !== 'user') continue; if (turns.length && turns[turns.length - 1].role === t.role) turns[turns.length - 1].content += '\n' + t.content; else turns.push(t); }
+  if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
     body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-      messages: [{ role: 'user', content: promptFor(text, await context()) }] })
+      messages: turns.concat([{ role: 'user', content: promptFor(text, await context(), turns.length > 0) }]) })
   });
   const j = await r.json();
   if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
@@ -267,7 +276,7 @@ function attach(app) {
     try {
       const text = String((req.body || {}).text || '').trim().slice(0, 1000);
       if (!text) return res.status(400).json({ error: 'nothing heard' });
-      const u = await understand(text);
+      const u = await understand(text, (req.body || {}).history);
       const actions = [];
       for (const a of (u.actions || []).slice(0, 6)) {
         try { actions.push(Object.assign({ type: a.type }, await run(a))); }

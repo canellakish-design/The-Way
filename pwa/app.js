@@ -24,35 +24,6 @@ if (S.bridgeUrl !== undefined || S.token !== undefined || S.role !== undefined) 
   localStorage.setItem("way-settings", JSON.stringify(S));
 }
 function saveS(){ localStorage.setItem("way-settings", JSON.stringify(S)); }
-const BAND = [-600,-300], TARGET = -450, BASE_BURN = 2050, PROTEIN_GOAL = 190;
-// Four zones across the balance spectrum. Left = more calories eaten (less
-// deficit or a surplus), right = fewer calories eaten (bigger deficit).
-// Weight Loss (-600 to -300) is the original target band, unchanged.
-function bandZone(b){
-  if (b >= 0) return { name: "Race Fueling", color: "#3b82f6" };
-  if (b > BAND[1]) return { name: "Maintenance", color: "var(--amber)" };
-  if (b >= BAND[0]) return { name: "Weight Loss", color: "var(--green)" };
-  return { name: "Below the Floor", color: "var(--red)" };
-}
-// Needle position: left = more calories eaten (surplus/small deficit),
-// right = fewer calories eaten (bigger deficit). Anchored so b=+150 -> x=3
-// (left edge) and b=-1050 -> x=97 (right edge), b=-450 (target) -> x=50 (center).
-function bandX(b){
-  return Math.max(3, Math.min(97, 3 + (150 - b) / 1200 * 94));
-}
-// The visual background must use the exact same bandX() boundaries as the
-// needle, or the colored zones and the needle position can silently drift
-// apart (this happened before: a hardcoded 30/70 split didn't match the
-// true -300/-600 boundaries, so "Below the Floor" readings could still
-// render inside the green band).
-function gaugeBackground(){
-  const raceX = bandX(0), maintX = bandX(BAND[1]), lossX = bandX(BAND[0]);
-  return `linear-gradient(90deg,`
-    + `var(--blue-soft) 0% ${raceX}%,`
-    + `var(--amber-soft) ${raceX}% ${maintX}%,`
-    + `var(--green-soft) ${maintX}% ${lossX}%,`
-    + `var(--red-soft) ${lossX}% 100%)`;
-}
 const DAY_TYPES = ["Day 1 · fasted Z2","Day 2 · HIIT","Day 3 · grocery + batch","Day 4 · fasted Z2","Day 5 · strength (kettlebell)","Commute · 35 mi evening"];
 
 /* API base auto-select:
@@ -67,30 +38,13 @@ const DEFAULT_API = (location.port === "8420") ? "" : "/.netlify/functions/api";
    connected" when the bridge can't answer. */
 const DEMO = {
   "/route-weather": { now:{t:74,w:8,ride:"crosswind 8 mph"}, evening:{t:81,w:12,ride:"headwind 12 mph"}, stormAfterHour:16 },
-  "/fuel-state": { carbs_g:62, fasted:false, meals_today:2, workout_kcal:480, balance_kcal:-410, ball_carbs_g:19.4, fresh:true },
-  "/meals/today": { meals:[ {meal:"breakfast",name:"Blueberry oatmeal smoothie",kcal:520}, {meal:"lunch",name:"Post-ride bowl",kcal:750} ] },
   "/race": { race:{name:"Gran Fondo Maryland — Medio"}, weeks_out:10.1, phase:"build",
     need:{aerobic_h:6.2,hi_min:88,strength:2}, done:{aerobic_h:0,hi_min:0,strength:0}, remaining:{aerobic_h:6.2,hi_min:88,strength:2} },
-  "/prescription/lunch": { kcal:850, note:"carb-weighted recovery", units:{protein:2,carb:5,fat:1,greens:2} },
-  "/prescription/dinner": { kcal:1140, note:"settles the day in the band", units:{protein:4,carb:4,fat:2,greens:2} },
   "/podcasts/list": { episodes:[] },
   "/plan": { ride:null, for_today:false, intensity:"moderate", planned_hours:null, effective_hours:null, route:null },
   "/schedule": demoSchedule(),
   "/agent": { reply:"Demo mode — connect the bridge (Settings) or deploy the Netlify function for real answers." },
-  "/agent/closeout": { ok:true }, "/meals": { ok:true },
-  "/fitness": { ftp:271, threshold_hr:168, source:"eFTP — best 20 min effort", confidence:"medium",
-    threshold_hr_source:"average HR during the best qualifying effort (not a measured VT2)",
-    notes:["Demo data — connect the bridge and scan a ride for the real Signature."],
-    power_zones:[{zone:"Z1",name:"Active Recovery",pct:"0–55%",from:0,to:149},{zone:"Z2",name:"Endurance",pct:"55–75%",from:149,to:203},
-      {zone:"Z3",name:"Tempo",pct:"75–90%",from:203,to:244},{zone:"Z4",name:"Threshold",pct:"90–105%",from:244,to:285},
-      {zone:"Z5",name:"VO2max",pct:"105–120%",from:285,to:325},{zone:"Z6",name:"Anaerobic Capacity",pct:"120–150%",from:325,to:407},
-      {zone:"Z7",name:"Neuromuscular",pct:"150%+",from:407,to:null}],
-    hr_zones:[{zone:"Z1",name:"Recovery",pct:"0–80%",from:0,to:134},{zone:"Z2",name:"Aerobic",pct:"80–89%",from:134,to:150},
-      {zone:"Z3",name:"Tempo",pct:"89–95%",from:150,to:160},{zone:"Z4",name:"SubThreshold",pct:"95–100%",from:160,to:168},
-      {zone:"Z5",name:"SuperThreshold",pct:"100–103%",from:168,to:173},{zone:"Z6",name:"Aerobic Capacity",pct:"103–106%",from:173,to:178},
-      {zone:"Z7",name:"Anaerobic",pct:"106%+",from:178,to:null}],
-    signals:{ test:null, eftp:{ftp:271, from:{minutes:20}, decay:1}, ventilatory:null, override:null },
-    counts:{ efforts:3, segments:0, wellness_days:0, rides_scanned:1 } },
+  "/agent/closeout": { ok:true },
   "/fitness/log": { log:[] },
   "/workout-debt": { kcal: 480, count: 1, rides: [{name:"Morning Z2", kcal:480, source:"strava", at:new Date().toISOString()}] },
   "/batches": { batches:[ {slot:1,status:"building",ingredients:[],total_g:0,totals:{kcal:0,protein_g:0,carbs_g:0,fat_g:0},scoop_g:null,remaining_g:0,scoops_remaining:null},
@@ -136,7 +90,6 @@ function speak(t){
     speechSynthesis.speak(u);
   }catch(e){}
 }
-// bandColor removed — replaced by bandZone() above, which returns both name and color.
 
 /* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
 function fileToBase64(file, maxDim, quality){
@@ -178,7 +131,7 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { day:"today", agent:"plan", hexis:"food", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
+const REDIRECTS = { day:"today", agent:"plan", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
@@ -207,8 +160,6 @@ const PERSONA_HINTS = {
   plan:     "Planning coach — the week, the windows, tomorrow's ride.",
   activate: "Activation coach — mobility, warm-ups, getting the body ready.",
   train:    "Training coach — sessions, buckets, what the week owes.",
-  fuel:     "Fuel coach — the ledger, meals, prescriptions.",
-  recover:  "Recovery coach — settling the day, winding down.",
   sleep:    "Sleep coach — sleep, HRV, the morning readiness picture.",
   analyze:  "Analyst — weight, W/kg, trends. Ride analysis coming soon."
 };
@@ -602,295 +553,6 @@ V.train = async function(){
   wireCoach("train");
 };
 
-/* ---------------- FUEL (the ledger + all logging) ---------------- */
-V.fuel = async function(){
-
-  view.innerHTML = `<span class="eyebrow">The Ledger</span>
-    <div class="card" id="band"><h4>Balance</h4><div class="small">reaching the bridge…</div></div>
-
-    <div class="card"><h4>Smoothie</h4>
-      <button class="primary" id="favSmoothie">Log Smoothie</button>
-      <div class="small" id="smoothieMsg"></div></div>
-
-    <div class="card" id="workoutDebt"><h4>Workout Debt</h4><div class="small">reaching the bridge…</div></div>
-
-    <div class="card"><h4>Log a meal</h4>
-      <div class="row2"><span><label>Name</label><input id="mName" placeholder="Post-ride bowl"></span>
-      <span><label>Meal</label><select id="mMeal"><option>breakfast</option><option>lunch</option><option>dinner</option><option>snack</option></select></span></div>
-      <div class="row2"><span><label>kcal</label><input id="mK" type="number"></span>
-      <span><label>protein g</label><input id="mP" type="number"></span></div>
-      <div class="row2"><span><label>carbs g</label><input id="mC" type="number"></span>
-      <span><label>fat g</label><input id="mF" type="number"></span></div>
-      <button class="primary" id="mLog">Log</button>
-      <button id="favBowl">Post-ride bowl (750)</button>
-      <div class="small" id="mMsg"></div></div>
-
-    <span class="eyebrow">Batches</span>
-    <div id="batchWrap"></div>
-
-    <span class="eyebrow">More</span>
-    <div class="card"><h4>Prescriptions</h4>
-      <button id="rxL">Lunch</button> <button id="rxD">Dinner</button>
-      <div id="rxOut"></div></div>
-
-    <div class="card"><h4>Food Log · photo</h4>
-      <div class="small">One-off meal — not from a batch. Snap it, review, log it.</div>
-      <input id="foodPhoto" type="file" accept="image/*" multiple>
-      <label>Ingredients / notes (optional — helps when the photo alone is ambiguous)</label>
-      <textarea id="foodNotes" rows="2" placeholder="e.g. grilled chicken thigh, jasmine rice, olive oil, no visible scale"></textarea>
-      <button id="foodAnalyze" disabled>Analyze</button>
-      <div class="small" id="foodMsg"></div>
-      <div class="small" id="foodMicros"></div></div>
-
-    <div class="card"><h4>Today</h4><ul class="plain" id="meals"></ul></div>`;
-
-  const refresh = async ()=>{
-    try{
-      const st = await bridge("/fuel-state");
-      const b = st.balance_kcal;
-      const x = bandX(b);
-      const zone = bandZone(b);
-      document.getElementById("band").innerHTML = `<h4>Balance
-        <span class="bandpill" style="background:${zone.color}">${zone.name} · ${b}</span></h4>
-        <div class="gauge" style="background:${gaugeBackground()}"><div class="needle" style="left:${x}%"></div></div>
-        <div class="small">on board ${st.carbs_g}g carbs · ${st.fasted?"fasted":"fed"} · meals today ${st.meals_today}${st.workout_kcal ? " · workout burn " + st.workout_kcal + " kcal" : ""}</div>`;
-      const m = await bridge("/meals/today");
-      document.getElementById("meals").innerHTML = m.meals.length
-        ? m.meals.map(x=>`<li><span>${esc(x.meal)} · ${esc(x.name)}</span><b>${x.kcal}</b></li>`).join("")
-        : "<li><span>Nothing yet</span></li>";
-    }catch(e){
-      document.getElementById("band").innerHTML = `<h4>Balance</h4><div class="small">bridge unreachable — logging queues locally</div>`;
-    }
-  };
-  refresh();
-
-  const refreshWorkoutDebt = async ()=>{
-    try{
-      const w = await bridge("/workout-debt");
-      const el = document.getElementById("workoutDebt");
-      const rows = w.count ? w.rides.map(r=>`<li><span>${esc(r.name)}</span><b>${r.kcal} kcal</b></li>`).join("")
-        : "<li><span>No workouts synced today yet</span></li>";
-      el.innerHTML = `<h4>Workout Debt${w.count ? ` · <b>${w.kcal} kcal</b>` : ""}</h4>
-        <ul class="plain">${rows}</ul>
-        <div class="small">Estimated from Strava (kJ ≈ kcal) · already netted into the Balance above, not added again</div>
-        <button id="wdSync">Sync now</button>
-        <div class="small" id="wdSyncMsg"></div>`;
-      document.getElementById("wdSync").onclick = async ()=>{
-        const btn = document.getElementById("wdSync");
-        btn.disabled = true; btn.textContent = "Syncing…";
-        try{ await bridge("/strava/sync"); document.getElementById("wdSyncMsg").textContent = "Synced."; refreshWorkoutDebt(); }
-        catch(e){ document.getElementById("wdSyncMsg").textContent = "Sync failed: " + e.message; btn.disabled = false; btn.textContent = "Sync now"; }
-      };
-    }catch(e){
-      document.getElementById("workoutDebt").innerHTML = `<h4>Workout Debt</h4><div class="small">bridge unreachable</div>`;
-    }
-  };
-  refreshWorkoutDebt();
-
-  const logMeal = async (m, msgEl)=>{
-    msgEl = msgEl || "mMsg";
-    try{ await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)});
-      document.getElementById(msgEl).textContent = "Logged.";
-      refresh();
-    }catch(e){
-      const q = JSON.parse(localStorage.getItem("way-queue")||"[]"); q.push(m);
-      localStorage.setItem("way-queue", JSON.stringify(q));
-      document.getElementById(msgEl).textContent = "Bridge offline — queued locally (" + q.length + ").";
-    }
-  };
-  document.getElementById("mLog").onclick = ()=> logMeal({
-    name: document.getElementById("mName").value || "meal",
-    meal: document.getElementById("mMeal").value,
-    kcal: +document.getElementById("mK").value || 0,
-    protein_g: +document.getElementById("mP").value || 0,
-    carbs_g: +document.getElementById("mC").value || 0,
-    fat_g: +document.getElementById("mF").value || 0 });
-  document.getElementById("favSmoothie").onclick = ()=> logMeal({name:"Blueberry oatmeal smoothie",meal:"breakfast",kcal:520,protein_g:40,carbs_g:85,fat_g:8}, "smoothieMsg");
-  document.getElementById("favBowl").onclick = ()=> logMeal({name:"Post-ride bowl",meal:"lunch",kcal:750,protein_g:52,carbs_g:98,fat_g:16});
-
-  const rx = async (meal)=>{
-    try{
-      const p = await bridge("/prescription/"+meal);
-      document.getElementById("rxOut").innerHTML = `<div class="small" style="margin-top:8px">${p.kcal} kcal · ${esc(p.note)}</div>
-        <div class="unitrow"><span class="unit p">${p.units.protein} Protein</span><span class="unit c">${p.units.carb} Carb</span><span class="unit f">${p.units.fat} Fat</span><span class="unit g">${p.units.greens} Greens</span></div>`;
-    }catch(e){ document.getElementById("rxOut").innerHTML = `<div class="small">bridge unreachable</div>`; }
-  };
-  document.getElementById("rxL").onclick = ()=>rx("lunch");
-  document.getElementById("rxD").onclick = ()=>rx("dinner");
-
-  /* ---- Food Log: single ad-hoc photo -> proposal -> pre-fills the meal form ---- */
-  const foodInput = document.getElementById("foodPhoto");
-  const foodBtn = document.getElementById("foodAnalyze");
-  foodInput.onchange = ()=>{ foodBtn.disabled = !foodInput.files.length; };
-  foodBtn.onclick = async ()=>{
-    const files = foodInput.files;
-    if (!files.length) return;
-    foodBtn.disabled = true; foodBtn.textContent = "Analyzing…";
-    document.getElementById("foodMsg").textContent = "";
-    document.getElementById("foodMicros").innerHTML = "";
-    try{
-      const r = await multiPhotoBridge("/kitchen/log", files, { user_notes: document.getElementById("foodNotes").value || undefined });
-      const p = r.proposal;
-      document.getElementById("mName").value = p.food_name || "meal";
-      if (p.meal_guess) document.getElementById("mMeal").value = p.meal_guess;
-      document.getElementById("mK").value = p.kcal ?? "";
-      document.getElementById("mP").value = p.protein_g ?? "";
-      document.getElementById("mC").value = p.carbs_g ?? "";
-      document.getElementById("mF").value = p.fat_g ?? "";
-      document.getElementById("foodMsg").textContent =
-        `Filled in below — check it, then hit Log. (confidence: ${p.confidence}${p.weight_g ? ", " + p.weight_g + "g" : ""})`;
-      if (p.micronutrients){
-        const mn = p.micronutrients;
-        document.getElementById("foodMicros").textContent =
-          `fiber ${mn.fiber_g ?? "—"}g · sodium ${mn.sodium_mg ?? "—"}mg · iron ${mn.iron_mg ?? "—"}mg · vit C ${mn.vitamin_c_mg ?? "—"}mg`;
-      }
-      if (p.notes) document.getElementById("foodMsg").textContent += " — " + p.notes;
-    }catch(e){
-      document.getElementById("foodMsg").textContent = "Vision call failed: " + e.message;
-    }
-    foodBtn.disabled = false; foodBtn.textContent = "Analyze";
-  };
-
-
-
-  /* ---- Batches: 3 fixed slots, cumulative ingredient photos + scoop calibration ---- */
-  const batchCard = (b)=>{
-    const ingredRows = b.ingredients.length
-      ? b.ingredients.map(i=>`<li><span>${esc(i.name)} · ${i.added_g}g</span><b>${i.kcal} kcal</b></li>`).join("")
-      : "<li><span>No ingredients yet</span></li>";
-    const scoopLine = b.scoop_g
-      ? `<div class="small"><b>Scoop ${b.scoop_g}g</b> · ${b.remaining_g}g left · ~${b.scoops_remaining ?? "—"} scoops remaining</div>`
-      : `<div class="small">Not calibrated yet — weigh one scoop once ingredients are in</div>`;
-    return `<div class="card" data-slot="${b.slot}">
-      <h4>Batch ${b.slot} · ${esc(b.status)} · ${b.total_g}g total</h4>
-      <ul class="plain">${ingredRows}</ul>
-      ${scoopLine}
-      <div class="small" style="margin-top:8px">Add ingredient — take 2 photos: one clear shot of the scale display, one of the food (cumulative weight after adding it)</div>
-      <input class="ingredPhoto" type="file" accept="image/*" multiple>
-      <label>Ingredient notes (optional)</label>
-      <textarea class="ingredNotes" rows="1" placeholder="e.g. 90/10 ground beef, raw"></textarea>
-      <button class="ingredBtn" disabled>Add to Batch ${b.slot}</button>
-      ${!b.scoop_g ? `
-      <div class="small" style="margin-top:8px">Calibrate scoop — take 2 photos: scale display + the scoop itself</div>
-      <input class="scoopPhoto" type="file" accept="image/*" multiple>
-      <label>Scoop notes (optional)</label>
-      <textarea class="scoopNotes" rows="1" placeholder="e.g. level scoop, packed"></textarea>
-      <button class="scoopCalBtn" disabled>Calibrate + log first scoop</button>` : `
-      <button class="scoopBtn" style="margin-top:8px">Log one scoop</button>`}
-      <button class="resetBtn" style="margin-top:8px">Reset batch</button>
-      <div class="small batchMsg"></div>
-    </div>`;
-  };
-
-  const refreshBatches = async ()=>{
-    try{
-      const r = await bridge("/batches");
-      document.getElementById("batchWrap").innerHTML = r.batches.map(batchCard).join("");
-      wireBatchCards();
-    }catch(e){
-      document.getElementById("batchWrap").innerHTML = `<div class="card"><div class="small">bridge unreachable</div></div>`;
-    }
-  };
-
-  const wireBatchCards = ()=>{
-    document.querySelectorAll("#batchWrap [data-slot]").forEach(card=>{
-      const slot = card.dataset.slot;
-      const msg = card.querySelector(".batchMsg");
-
-      const ingredInput = card.querySelector(".ingredPhoto");
-      const ingredBtn = card.querySelector(".ingredBtn");
-      const ingredNotes = card.querySelector(".ingredNotes");
-      ingredInput.onchange = ()=>{ ingredBtn.disabled = !ingredInput.files.length; };
-      ingredBtn.onclick = async ()=>{
-        const files = ingredInput.files; if (!files.length) return;
-        ingredBtn.disabled = true; ingredBtn.textContent = "Reading scale…";
-        try{
-          const r = await multiPhotoBridge(`/batch/${slot}/ingredient`, files, { user_notes: ingredNotes.value || undefined });
-          msg.textContent = `Added ${r.added.name} · ${r.added.added_g}g (confidence: ${r.added.confidence})`;
-          refreshBatches();
-        }catch(e){ msg.textContent = "Failed: " + e.message; ingredBtn.disabled = false; ingredBtn.textContent = `Add to Batch ${slot}`; }
-      };
-
-      const scoopCalInput = card.querySelector(".scoopPhoto");
-      const scoopCalBtn = card.querySelector(".scoopCalBtn");
-      const scoopNotes = card.querySelector(".scoopNotes");
-      if (scoopCalInput && scoopCalBtn){
-        scoopCalInput.onchange = ()=>{ scoopCalBtn.disabled = !scoopCalInput.files.length; };
-        scoopCalBtn.onclick = async ()=>{
-          const files = scoopCalInput.files; if (!files.length) return;
-          scoopCalBtn.disabled = true; scoopCalBtn.textContent = "Reading scale…";
-          try{
-            const r = await multiPhotoBridge(`/batch/${slot}/scoop-calibrate`, files, { meal: "lunch", user_notes: scoopNotes.value || undefined });
-            msg.textContent = `Scoop calibrated at ${r.batch.scoop_g}g — first scoop logged.`;
-            refreshBatches(); refresh();
-          }catch(e){ msg.textContent = "Failed: " + e.message; scoopCalBtn.disabled = false; scoopCalBtn.textContent = "Calibrate + log first scoop"; }
-        };
-      }
-
-      const scoopBtn = card.querySelector(".scoopBtn");
-      if (scoopBtn){
-        scoopBtn.onclick = async ()=>{
-          scoopBtn.disabled = true; scoopBtn.textContent = "Logging…";
-          try{
-            const r = await bridge(`/batch/${slot}/scoop`, {method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({meal:"lunch"})});
-            msg.textContent = `Logged one scoop · ${r.batch.remaining_g}g left.`;
-            refreshBatches(); refresh();
-          }catch(e){ msg.textContent = "Failed: " + e.message; scoopBtn.disabled = false; scoopBtn.textContent = "Log one scoop"; }
-        };
-      }
-
-      card.querySelector(".resetBtn").onclick = async ()=>{
-        if (!confirm(`Reset Batch ${slot}? This clears all ingredients and scoop calibration.`)) return;
-        try{ await bridge(`/batch/${slot}/reset`, {method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}); refreshBatches(); }
-        catch(e){ msg.textContent = "Failed: " + e.message; }
-      };
-    });
-  };
-  refreshBatches();
-
-  const coachWrap = document.createElement("div");
-  coachWrap.innerHTML = coachCard("fuel");
-  view.appendChild(coachWrap);
-  wireCoach("fuel");
-};
-
-/* ---------------- RECOVER (wind-down, settle) ---------------- */
-V.recover = async function(){
-  view.innerHTML = `<span class="eyebrow">Recover</span>
-    <div class="card"><h4>Podcast</h4><div id="pods" class="small">reaching the bridge…</div>
-      <audio id="player" controls style="width:100%;margin-top:8px" hidden></audio></div>
-    <div class="card"><h4>Shower</h4><div class="small">~90 min before bed helps sleep onset</div></div>
-    <div class="card"><h4>Close out</h4><div id="settle" class="small">computing…</div>
-      <button class="primary" id="close">Settle the day</button></div>
-    ${coachCard("recover")}`;
-
-  bridge("/podcasts/list").then(p=>{
-    const el = document.getElementById("pods");
-    if (!p.episodes.length){ el.textContent = "No cached episodes — add feeds to bridge/podcast-feeds.json"; return; }
-    el.innerHTML = p.episodes.map(e=>`<button data-e="${esc(e)}">${esc(e.replace(/-/g," ").replace(".mp3",""))}</button>`).join(" ");
-    el.querySelectorAll("button").forEach(b=>b.onclick=()=>{
-      const a = document.getElementById("player"); a.hidden=false;
-      a.src = DEFAULT_API + "/podcasts/file/" + b.dataset.e; a.play();
-    });
-  }).catch(()=>{ document.getElementById("pods").textContent = "bridge unreachable"; });
-
-  bridge("/fuel-state").then(st=>{
-    const b = st.balance_kcal;
-    document.getElementById("settle").innerHTML =
-      `Day at <span class="bandpill" style="background:${bandZone(b).color}">${bandZone(b).name} · ${b}</span> · meals ${st.meals_today} · mobility ${localStorage.getItem("mob-am-"+new Date().toDateString())?"✓":"—"}`;
-  }).catch(()=>{ document.getElementById("settle").textContent = "bridge unreachable"; });
-
-  document.getElementById("close").onclick = async ()=>{
-    try{
-      const st = await bridge("/fuel-state");
-      await bridge("/agent/closeout",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({summary:`Settled ${st.balance_kcal} kcal, ${st.meals_today} meals. Tomorrow: ${S.tomorrow||DAY_TYPES[0]}.`})});
-      document.getElementById("settle").innerHTML += " · <b>settled ✓</b>";
-    }catch(e){}
-  };
-  wireCoach("recover");
-};
-
 /* ---------------- SLEEP (WHOOP) ---------------- */
 V.sleep = async function(){
   view.innerHTML = `<span class="eyebrow">Sleep</span>
@@ -1085,7 +747,7 @@ V.analyze = async function(){
         // roles are gone, and unprompted speech on a phone is not wanted)
       }
     }catch(e){ document.getElementById("weigh").innerHTML =
-      `<h4>Weigh-in</h4><div class="small">bridge unreachable — <a href="#fuel">log manually</a></div>`; }
+      `<h4>Weigh-in</h4><div class="small">bridge unreachable — <a href="#today">log it on the day</a></div>`; }
   };
   pollWeight(); const wp = setInterval(()=>{ if(location.hash!=="#analyze") clearInterval(wp); else pollWeight(); }, 10000);
   wireCoach("analyze");
@@ -1738,13 +1400,6 @@ V.today = async function(){
         <details class="why"><summary>how it's scored</summary><div class="small">WHOOP's score for the night. The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
     box.innerHTML = html; box.hidden = false;
-    const sb = document.getElementById("snackLog");
-    if (sb) sb.onclick = async ()=>{
-      const r = await logMealQueued({ name: sb.dataset.name, meal:"snack",
-        kcal:+sb.dataset.k, carbs_g:+sb.dataset.c, protein_g:+sb.dataset.p, fat_g:+sb.dataset.f });
-      sb.textContent = r.ok ? "logged" : "queued offline"; sb.disabled = true;
-      if (r.ok) refreshScores();
-    };
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");
@@ -2071,16 +1726,6 @@ V.today = async function(){
 /* ---------------- FOOD (front page) ----------------
    The journal in brief. Hexis and Alma are gone: the target comes from the
    day's training (bridge/food-math.js), the intake from the photos. */
-async function logMealQueued(m){
-  try{
-    await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)});
-    return { ok:true };
-  }catch(e){
-    const q = JSON.parse(localStorage.getItem("way-queue")||"[]"); q.push(m);
-    localStorage.setItem("way-queue", JSON.stringify(q));
-    return { ok:false, queued:q.length };
-  }
-}
 function hm12(t){ const m=/^(\d{2}):(\d{2})$/.exec(t||""); if(!m) return t||""; let h=+m[1]; const ap=h<12?"a":"p"; h=h%12; if(h===0)h=12; return h+":"+m[2]+ap; }
 function nowHM(){ const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 function foodCardHTML(day){
@@ -2244,13 +1889,7 @@ V.settings = function(){
 };
 
 
-/* ---------------- queue flush + boot ---------------- */
-setInterval(async ()=>{
-  const q=JSON.parse(localStorage.getItem("way-queue")||"[]");
-  if(!q.length) return;
-  try{ for(const m of q){ await bridge("/meals",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m)}); }
-    localStorage.setItem("way-queue","[]"); }catch(e){}
-}, 30000);
+/* ---------------- boot ---------------- */
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
 window.addEventListener("hashchange", nav);

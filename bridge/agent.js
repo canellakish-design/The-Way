@@ -2,10 +2,9 @@
 // required for serverless). Daily thread persisted in storage.
 const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
-const { auth, fuelState, logMeal } = require('./fuel-log');
+const { auth, logMeal } = require('./fuel-log');
 const { getPlan } = require('./plan');
 const { routeWeather } = require('./weather');
-const { prescription } = require('./prescriptions');
 const { weekState, logTraining } = require('./race');
 const { sleepLatest } = require('./whoop');
 const calendar = require('./calendar');
@@ -18,7 +17,7 @@ const PERSONAS = {
   plan:     'You are the PLANNING coach. Focus: the week ahead, training windows, tomorrow\'s ride, gear, the race countdown. You open the day with the wake report when asked.',
   activate: 'You are the ACTIVATION coach. Focus: mobility, warm-ups, getting the body ready to work. Calm, unhurried cueing.',
   train:    'You are the TRAINING coach (S&C and cycling). Focus: sessions, intervals, strength work, what the week\'s buckets still owe. After sessions, offer to log them.',
-  fuel:     'You are the FUEL coach. Focus: the ledger, meals, prescriptions, batches. The band judges the day\'s end, not the moment.',
+  fuel:     'You are the FUEL coach. Focus: the day\'s food plan, timed to the training, and the journal against it.',
   recover:  'You are the RECOVERY coach. Focus: settling the day, wind-down, tomorrow\'s readiness. Lower the temperature; short sentences.',
   sleep:    'You are the SLEEP coach. Focus: sleep quality, HRV, RHR, the morning readiness picture. Never alarmist about one bad night.',
   analyze:  'You are the ANALYST — the sports scientist of the group. Focus: weight and W/kg trends, and (soon) ride analysis: session verdicts, power curve, FTP estimation. Numbers with meaning, never numbers alone.'
@@ -34,7 +33,7 @@ async function loadThread(persona) {
 }
 
 const TOOLS = [
-  { name: 'get_state', description: 'Fuel state: ledger balance, carbs on board, meals today', input_schema: { type: 'object', properties: {} } },
+  { name: 'get_state', description: 'Where the day stands: the food day, the targets, what is eaten, compliance, the cue and what the plan says to eat next', input_schema: { type: 'object', properties: {} } },
   { name: 'get_weight', description: 'Latest weigh-in and 7-day trend', input_schema: { type: 'object', properties: {} } },
   { name: 'get_sleep', description: 'WHOOP sleep performance, hours, recovery, HRV, RHR', input_schema: { type: 'object', properties: {} } },
   { name: 'get_route_weather', description: 'Weather now/evening, wind vs the planned route', input_schema: { type: 'object', properties: {} } },
@@ -42,8 +41,6 @@ const TOOLS = [
   { name: 'get_race_week', description: "Weeks to race, phase, this week's buckets: needed/done/remaining", input_schema: { type: 'object', properties: {} } },
   { name: 'get_availability', description: "Today's calendar-derived training windows (from Google Calendar), best window length, recovery color, and the engine's session recommendation. Also weekly available vs recommended hours.",
     input_schema: { type: 'object', properties: { scope: { type: 'string', enum: ['today', 'week'] } } } },
-  { name: 'get_prescription', description: 'Lunch or dinner in Energy Bank units',
-    input_schema: { type: 'object', properties: { meal: { type: 'string', enum: ['lunch', 'dinner'] } }, required: ['meal'] } },
   { name: 'log_meal', description: 'Write a meal to the ledger. CONFIRM first.',
     input_schema: { type: 'object', properties: { name: { type: 'string' }, meal: { type: 'string' },
       kcal: { type: 'number' }, carbs_g: { type: 'number' }, protein_g: { type: 'number' }, fat_g: { type: 'number' } }, required: ['name', 'kcal'] } },
@@ -123,7 +120,7 @@ async function nutritionLookup(query) {
 
 async function runTool(name, input) {
   try {
-    if (name === 'get_state') return await fuelState();
+    if (name === 'get_state') { const d = await require('./food').dayReport(require('./tz').todayKey()); return { fuel_day: d.fuel_day, target: d.target, eaten: d.actual, compliance: d.compliance.overall, cue: d.cue, next: d.suggestion }; }
     if (name === 'get_weight') return await getJSON('withings-trend', { note: 'no scale connected yet' });
     if (name === 'get_sleep') return await sleepLatest();
     if (name === 'get_route_weather') return await routeWeather(NaN);
@@ -140,7 +137,6 @@ async function runTool(name, input) {
       const w = await weekState().catch(() => null);
       return { ...day, ...calendar.recommendToday(day, rec, w ? w.remaining : null) };
     }
-    if (name === 'get_prescription') return await prescription(input.meal || 'dinner', 0);
     if (name === 'log_meal') return await logMeal(input);
     if (name === 'log_training') return await logTraining(input);
     if (name === 'get_research') return await pubmedSearch(input.query, input.max_results);
