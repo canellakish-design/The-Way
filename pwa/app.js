@@ -1320,7 +1320,7 @@ function briefHTML(b, x){
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
 let WX = {};
-const H0 = 5, H1 = 21;
+const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
 function freeHours(d){
   const ev = (d.events||[]).filter(e => e.source !== "plan" && e.source !== "ride" && e.start_min != null && e.end_min != null);
