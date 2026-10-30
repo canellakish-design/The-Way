@@ -133,7 +133,11 @@ function breakthroughsOf(rides) {
   const out = [];
   for (let i = 0; i < sorted.length; i++) {
     const r = sorted[i];
-    const before = fit(pointsOf(sorted.slice(0, i)), { floor: false });
+    // a baseline needs something to stand on: three rides and eight durations before this one
+    if (i < 3) continue;
+    const ptsBefore = pointsOf(sorted.slice(0, i));
+    if (ptsBefore.filter(p => p.dur_s >= 120).length < 8) continue;
+    const before = fit(ptsBefore, { floor: false });
     if (!before || !r.mmp) continue;
     const hits = [];
     for (const dur of DURS) {
