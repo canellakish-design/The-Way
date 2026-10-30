@@ -190,10 +190,13 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
   background:var(--card); border:1px solid var(--ink); box-shadow:var(--shadow); text-align:left; min-width:0;
   font:inherit; text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer; width:100%; min-height:0}
 .score:active{transform:none}
-/* Plain boxes: the card colour and a solid ink outline. The tone lives in
-   the number and the word, not in a fill. */
-.score[data-tone]{background:var(--card); border:2px solid var(--ink)}
-.score[data-tone="none"]{border-color:var(--line)}
+/* Matte boxes: a light tint of the tone behind the number, a solid outline
+   in the tone. The soft tints are the ones the cards use inside. */
+.score[data-tone]{background:var(--card); border:2px solid var(--line)}
+.score[data-tone="good"]{background:var(--green-soft); border-color:var(--green)}
+.score[data-tone="warn"]{background:var(--amber-soft); border-color:var(--amber)}
+.score[data-tone="bad"]{background:var(--red-soft); border-color:var(--red)}
+.score[data-tone="neutral"]{background:#1C1E22; border-color:var(--line)}
 .score.on{box-shadow:none; transform:translate(3px,3px); outline:2px solid var(--ink)}
 .score .slabel{font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted)}
 .score .snum{font-family:var(--mono); font-size:44px; font-weight:700; line-height:1; letter-spacing:-2px;
