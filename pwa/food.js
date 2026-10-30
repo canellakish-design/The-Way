@@ -98,7 +98,7 @@ function energyHTML(e){
     sessions: (e.sessions||[]).map(s => ({ min: s.min, end_min: s.end_min, name: s.name, col: s.band ? fuelCol(s.band.key==="green"?100:s.band.key==="yellow"?50:0) : null })),
     dots: (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return { min: m.min, val: p.pct, filled: m.logged && (m.carbs_g > 0 || !m.protein_only), title: `${hm12(m.time)} ${m.name||""} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}` }; }),
     nowMin, guides: [35,60] });
-  const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}</span>`).join(" · ");
+  const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
     <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
     ${c.svg}

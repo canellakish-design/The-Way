@@ -53,6 +53,21 @@ async function sessionsFor(date) {
         end_at: logged && start ? new Date(start.getTime() + m.duration_s * 1000).toISOString() : null });
     }
   } catch (e) { /* no plan store yet */ }
+  // A planned session whose start has passed with no ride logged has not
+  // started: it slides to now, so the fuel and water curves do not burn for
+  // a ride that is not happening and the post-ride meal moves with it. The
+  // ride itself, once Strava has it, replaces the plan with the real start.
+  if (date === tz.todayKey()) {
+    const p = tz.parts(new Date()); const nowMin = p.h * 60 + p.mi;
+    for (const s of out) {
+      const start = F.toMin(s.time);
+      if (s.done || start == null || start >= nowMin - 10) continue;
+      const to = Math.ceil(nowMin / 5) * 5;
+      s.slid_from = s.time; s.time = F.toHM(to);
+      s.end_time = F.toHM(to + s.minutes);
+      s.start_at = tz.zonedToUTC(...date.split('-').map(Number), Math.floor(to / 60), to % 60).toISOString();
+    }
+  }
   try {
     const { calendar } = require('./workouts');
     const cal = await calendar(date, date);
@@ -152,7 +167,7 @@ async function guidelinesFor(date) {
     cue: today ? F.cue(day, sessions) : null,
     meals: F.mealPlan(day, sessions, t),
     sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
-      start_at: s.start_at || null, end_at: s.end_at || null })) };
+      slid_from: s.slid_from || null, start_at: s.start_at || null, end_at: s.end_at || null })) };
 }
 
 // ---- the photo -> the model -> an entry ----

@@ -116,7 +116,7 @@ function model(o) {
     const whole = sessionBurn(s, o.ftp) / 60 * STEP;
     for (let t = m; t < m + mins; t += STEP) { const i = idx(t); if (i >= 0 && i < n) { burn[i] += whole * share; burnLegs[i] += whole * (1 - share); inRide[i] = true; } }
     for (let t = m + mins; t < m + mins + RESYNTH_FAST_H * 60; t += STEP) { const i = idx(t); if (i >= 0 && i < n) afterRide[i] = true; }
-    sessions.push({ name: s.name, time: s.time, min: m, end_min: m + mins, minutes: mins, done: !!s.done, g_per_h: Math.round(whole / STEP * 60), need: needFor(s), hard: isHard(s) });
+    sessions.push({ name: s.name, time: s.time, min: m, end_min: m + mins, minutes: mins, done: !!s.done, slid_from: s.slid_from || null, g_per_h: Math.round(whole / STEP * 60), need: needFor(s), hard: isHard(s) });
   }
   // an on-the-bike feed is capped at what the gut can take
   const add = (arr, atMin, k, capPerStep) => { const i0 = idx(atMin); for (let j = 0; j < k.length; j++) { const i = i0 + j; if (i >= 0 && i < n) arr[i] += capPerStep ? Math.min(capPerStep, k[j]) : k[j]; } };
@@ -190,7 +190,7 @@ function model(o) {
     else if (!legsOk && need.legs) advice = `Legs are low (${p.legs_pct}%) for ${short1}. Carbs on the bike, 40 to 60 g an hour, and a carb dinner.`;
     else if (!legsFloor && !s.hard) advice = `Legs are low (${p.legs_pct}%). Ride ${short1} easy and eat carbs tonight.`;
     else if (need.quick <= 25 && p.pct < 35 && s.min > now) advice = `Low on purpose: ${short1} runs on fat. Nothing more needed before it.`;
-    return { name: s.name, time: s.time, min: s.min, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, legs_pct: p.legs_pct,
+    return { name: s.name, time: s.time, slid_from: s.slid_from, min: s.min, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, legs_pct: p.legs_pct,
       need: need.quick, need_legs: need.legs, band: b, advice };
   });
   const lows = []; let runLow = null;
