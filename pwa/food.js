@@ -281,8 +281,10 @@ V.food = async function(){
             <div class="small">${c.guidelines.meals||0} photo${c.guidelines.meals===1?"":"s"}${c.guidelines.score!=null?` · guidelines ${c.guidelines.score}`:""}${c.macros&&c.macros.overall!=null&&c.guidelines.meals?` · macros ${c.macros.overall}`:""}</div></span></div>
         ${checksList(c.guidelines.checks)}
         ${m ? `<ul class="agenda totals">${macroRow("carbs","carbs_g")}${macroRow("protein","protein_g")}${macroRow("fat","fat_g")}${macroRow("kcal","kcal")}</ul>` : ""}
-        ${day.suggestion && !day.suggestion.none ? `<div class="snack"><b>Suggested next</b> — ${esc(day.suggestion.name)}${day.suggestion.servings>1?` ×${day.suggestion.servings}`:""}
-          <div class="small">${day.suggestion.kcal} kcal · ${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P · ${day.suggestion.fat_g}F — ${esc(day.suggestion.why)}, score ${day.suggestion.score_before} → <b>${day.suggestion.score_after}</b></div></div>` : ""}
+        ${day.suggestion && !day.suggestion.none ? `<div class="snack"><b>Next on the plan</b> — ${esc(day.suggestion.name)}
+          <div class="small">${esc(day.suggestion.what||"")}</div>
+          <div class="small">~${day.suggestion.kcal} kcal · ${day.suggestion.low_carb?"under ":""}${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P${day.suggestion.score_after!=null?` — compliance ${day.suggestion.score_before??"—"} → <b>${day.suggestion.score_after}</b>`:""}</div>
+          ${isToday?`<button class="cam snackcam" data-cam="${esc(day.suggestion.snap||"snack")}">Snap it</button>`:""}</div>` : ""}
       </div>
       <div class="card" id="fMicro"><h4>Micronutrients · three days</h4>${microHTML(day.micros, day)}</div>
       <span class="eyebrow">The journal · ${(n=>`${n} ${n===1?"meal":"meals"}`)(day.entries.filter(e=>!e.supplement&&!e.drink_only).length)}${day.entries.some(e=>e.drink_only)?` · ${day.entries.filter(e=>e.drink_only).length} drink${day.entries.filter(e=>e.drink_only).length===1?"":"s"}`:""}</span>
@@ -357,7 +359,10 @@ V.food = async function(){
   const fileEl = document.getElementById("snapFile"), rollEl = document.getElementById("rollFile"), form = document.getElementById("snapForm");
   let file = null;
   document.getElementById("snapBtn").onclick = ()=> fileEl.click();
-  document.querySelectorAll("[data-cam]").forEach(b => b.onclick = ()=>{
+  // the camera buttons beside each meal and on the suggestion are drawn after
+  // the day loads, so the click is caught on the page, not wired per button
+  view.addEventListener("click", (ev)=>{
+    const b = ev.target.closest("[data-cam]"); if (!b || !view.contains(b)) return;
     const sel = document.getElementById("snapMeal"); if (sel) sel.value = b.dataset.cam;
     const w = document.getElementById("writeMeal"); if (w) w.value = b.dataset.cam;
     fileEl.click();

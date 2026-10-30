@@ -76,11 +76,20 @@ function macroScore(actual, target) {
     remaining: Math.round((target - actual) * 10) / 10 };
 }
 
+// A floor (from the plan's low-carb slots, food-math.dueSoFar) turns the
+// figure above it into a cap: anything from the floor to the figure is on target.
+function withFloor(scored, actual, floor) {
+  if (!scored || floor == null || !(actual < scored.target) || actual < floor) return scored;
+  return Object.assign({}, scored, { score: 100, direction: 'within the plan', remaining: 0 });
+}
 function scoreDay(actual, target) {
   if (!target) return null;
   const per = {};
   for (const m of MACROS) per[m] = macroScore(actual ? (actual[m] || 0) : 0, target[m]);
   per.kcal = macroScore(actual ? (actual.kcal || 0) : 0, target.kcal);
+  per.carbs_g = withFloor(per.carbs_g, actual ? (actual.carbs_g || 0) : 0, target.carbs_floor_g);
+  per.kcal = withFloor(per.kcal, actual ? (actual.kcal || 0) : 0, target.kcal_floor);
+  per.fat_g = withFloor(per.fat_g, actual ? (actual.fat_g || 0) : 0, target.fat_floor_g);
   const scored = MACROS.map(m => per[m] && per[m].score).filter(s => s != null);
   const overall = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null;
   return { per_macro: per, overall };
@@ -173,7 +182,8 @@ async function compliance(date) {
     source: actual ? actual.from : null,
     compliance: scored,
     // Nothing to close a gap against until something has been eaten.
-    suggestion: actual && (actual.kcal > 0 || food.entries.length) ? suggestSnack(actual, food.target, { day: food.day, post: !!(food.cue && food.cue.key === 'post') }) : null,
+    // the next slot of the plan, sized to the slot (food.js); the old whole-day snack chooser is gone
+    suggestion: food.suggestion || null,
     meals: food.entries.length,
     // Mid-morning you are "under" on everything and that is not a failure.
     // Say what the number means rather than letting it be read as a verdict.

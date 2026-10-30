@@ -305,13 +305,36 @@ function guidelineScore(day, entries, rides) {
 function dueSoFar(meals, target, nowHM) {
   if (!target || !Array.isArray(meals) || !meals.length) return null;
   const now = toMin(nowHM);
-  const due = meals.filter(m => !m.extra && toMin(m.time) <= now + 45);
-  if (!due.length) return { kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, share: 0, meals: 0, next: meals[0].time };
+  // Every slot whose time has come counts, the bottle on the bike included:
+  // the planned bottle must not read as "over" once it is drunk.
+  const due = meals.filter(m => toMin(m.time) <= now + 45);
+  const realMeals = due.filter(m => !m.extra);
+  if (!realMeals.length) return { kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, share: 0, meals: 0, next: (meals.find(m => !m.extra) || meals[0]).time };
   const kcal = due.reduce((a, m) => a + (m.kcal || 0), 0);
-  const share = target.kcal ? Math.min(1, kcal / target.kcal) : 0;
+  // fat is spread over the real meals only: a bottle on the bike carries none
+  const share = target.kcal ? Math.min(1, realMeals.reduce((a, m) => a + (m.kcal || 0), 0) / target.kcal) : 0;
   const nxt = meals.find(m => !m.extra && toMin(m.time) > now + 45);
+  // Floors: a low-carb slot's carbs are a cap, not a target, and such a slot
+  // is light by design. Eating under them is within the plan, so the macro
+  // score treats anything between the floor and the due figure as on target.
+  const lowCarb = due.filter(m => m.low_carb);
+  const lowKcal = lowCarb.reduce((a, m) => a + (m.kcal || 0), 0);
+  const carbsFloor = due.filter(m => !m.low_carb).reduce((a, m) => a + (m.carbs_g || 0), 0);
+  const kcalFloor = kcal - Math.round(lowKcal * 0.6);
+  const fat = Math.round(target.fat_g * share);
   return { kcal, carbs_g: due.reduce((a, m) => a + (m.carbs_g || 0), 0), protein_g: due.reduce((a, m) => a + (m.protein_g || 0), 0),
-    fat_g: Math.round(target.fat_g * share), share: Math.round(share * 100) / 100, meals: due.length, next: nxt ? nxt.time : null };
+    fat_g: fat, share: Math.round(share * 100) / 100, meals: realMeals.length, next: nxt ? nxt.time : null,
+    carbs_floor_g: carbsFloor, kcal_floor: kcalFloor, fat_floor_g: lowCarb.length ? Math.round(fat * (1 - 0.6 * lowKcal / Math.max(1, realMeals.reduce((a, m) => a + (m.kcal || 0), 0)))) : null, low_carb_due: lowCarb.length };
+}
+
+// What the plan says to eat next: the first slot with nothing logged against
+// it, from the one whose time is nearest now (a slot up to 45 minutes gone
+// still counts as next). The suggestion the pages show is this, sized to the
+// slot, never a snack picked against the whole day.
+function nextSlot(meals, nowHM) {
+  const now = toMin(nowHM);
+  const open = (meals || []).filter(m => !(m.logged || []).length);
+  return open.find(m => toMin(m.time) >= now - 45) || null;
 }
 
 function overall(macroScore, guideline) {
@@ -362,5 +385,5 @@ function mealMatch(plan, logged) {
   return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM, dueSoFar, mealMatch,
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch,
   guidelineScore, overall, band, FIT_POINTS };

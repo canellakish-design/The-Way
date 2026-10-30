@@ -252,7 +252,7 @@ async function dayReport(date) {
   const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
-  const { scoreDay, suggestSnack } = require('./intake');
+  const { scoreDay } = require('./intake');
   // Macros are read against what the plan says should be in by now (today), or the whole day (a past day).
   const nowHM0 = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   const due = date === tz.todayKey() ? F.dueSoFar(g.meals, g.target, nowHM0) : null;
@@ -288,7 +288,7 @@ async function dayReport(date) {
     hydration, energy,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
-    suggestion: entries.length && date === tz.todayKey() ? suggestSnack(actual, g.target, { day: g.day, post: !!(g.cue && g.cue.key === 'post') }) : null,
+    suggestion: date === tz.todayKey() ? nextUp(g, entries, actual, macro, nowHM0) : null,
     basis: 'day-to-date photos against the day\'s guidelines and the whole-day target'
   };
 }
@@ -418,6 +418,34 @@ async function liveHydration(date, entries, g, nowMin) {
   live.target = { total: live.target_ml, base: live.target_ml - live.sessions.reduce((a, s) => a + s.loss_ml, 0), ride: live.sessions.reduce((a, s) => a + s.loss_ml, 0) };
   live.note = live.advice || (live.now.band.key === 'blue' ? 'Ahead of the morning.' : `${(Math.abs(live.now.ml) / 1000).toFixed(1)} L ${live.now.ml < 0 ? 'down' : 'up'} on the morning.`);
   return live;
+}
+
+// The suggestion is the plan's next slot, sized to the slot, with the
+// compliance it would leave: what the plan says to eat next, not a snack
+// chosen against the whole day. After the last slot, only a protein gap
+// earns a word (whey or cottage cheese, as the plan's snack says).
+function nextUp(g, entries, actual, macroNow, nowHM) {
+  const { scoreDay } = require('./intake');
+  const meals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot && !e.supplement && (!e.drink_only || m.slot === 'on the bike')).map(e => e.id) }));
+  const nx = F.nextSlot(meals, nowHM);
+  const before = macroNow ? macroNow.overall : null;
+  if (!nx) {
+    const short = Math.round((g.target.protein_g || 0) - (actual.protein_g || 0));
+    if (short >= 20) return { slot: 'snack', time: null, name: 'Whey or cottage cheese', what: `Protein is ${short} g short of the day. A scoop of whey or a bowl of cottage cheese closes most of it.`,
+      kcal: 160, carbs_g: 5, protein_g: 25, fat_g: 3, why: 'every planned meal is logged; protein is what is left', score_before: before, score_after: null, snap: 'snack' };
+    return { none: true, why: 'every planned meal is logged' };
+  }
+  const fat = Math.max(0, Math.round(((nx.kcal || 0) - 4 * (nx.carbs_g || 0) - 4 * (nx.protein_g || 0)) / 9));
+  // the compliance it would leave: the day to date plus this slot, against what is due once the slot's time has come
+  const after = { kcal: (actual.kcal || 0) + (nx.kcal || 0), carbs_g: (actual.carbs_g || 0) + (nx.carbs_g || 0), protein_g: (actual.protein_g || 0) + (nx.protein_g || 0), fat_g: (actual.fat_g || 0) + fat };
+  const dueThen = F.dueSoFar(meals, g.target, nx.time);   // includes this slot: its time has come
+  const scoredAfter = dueThen && dueThen.kcal > 0 ? scoreDay(after, Object.assign({}, g.target, dueThen)) : null;
+  const late = F.toMin(nx.time) < F.toMin(nowHM) - 5;
+  return { slot: nx.slot, time: nx.time, name: `${nx.slot}${nx.time ? ' at ' + tz.hm12(nx.time) : ''}`, what: nx.what,
+    kcal: nx.kcal || 0, carbs_g: nx.carbs_g || 0, protein_g: nx.protein_g || 0, fat_g: fat, low_carb: !!nx.low_carb, late,
+    why: late ? 'its time has come' : 'next on the plan',
+    score_before: before, score_after: scoredAfter ? scoredAfter.overall : null,
+    snap: nx.slot === 'before' || nx.slot === 'after' || nx.slot === 'on the bike' ? 'snack' : nx.slot };
 }
 
 // Remove one entry from a day (and from the ledger). Returns the entry, or null.

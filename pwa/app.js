@@ -2123,11 +2123,11 @@ function complianceHTML(c){
   };
   const s = c.suggestion;
   const snack = !s ? ""
-    : s.none ? `<div class="small">No snack improves the score without going over on calories.</div>`
-    : `<div class="snack"><b>Suggested snack</b> — ${esc(s.name)}${s.servings>1?` ×${s.servings}`:""}
-        <div class="small">${s.kcal} kcal · ${s.carbs_g}C · ${s.protein_g}P · ${s.fat_g}F —
-          ${esc(s.why)}, compliance ${s.score_before} → <b>${s.score_after}</b></div>
-        <button id="snackLog" data-name="${esc(s.name)}" data-k="${s.kcal}" data-c="${s.carbs_g}" data-p="${s.protein_g}" data-f="${s.fat_g}">Log this snack</button></div>`;
+    : s.none ? `<div class="small">Every planned meal is logged.</div>`
+    : `<div class="snack"><b>Next on the plan</b> — ${esc(s.name)}
+        <div class="small">${esc(s.what||"")}</div>
+        <div class="small">~${s.kcal} kcal · ${s.low_carb?"under ":""}${s.carbs_g}C · ${s.protein_g}P${s.score_after!=null?` — compliance ${s.score_before??"—"} → <b>${s.score_after}</b>`:""}</div>
+        <a class="btn" href="#food?snap=${encodeURIComponent(s.snap||"snack")}">Snap it</a></div>`;
   const B = window.foodBits || {};
   return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall ?? "—"}</span>
       <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}${
