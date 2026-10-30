@@ -145,7 +145,7 @@ function mealPlan(day, sessions, target) {
     .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
     .sort((a, b) => a.start - b.start)[0];
   const meal = (time, slot, what, share, carbShare, protein) => ({
-    time: toHM(time), slot, what,
+    time: toHM(Math.round(time / 5) * 5), slot, what,
     kcal: r5(t.kcal * share), carbs_g: r5(t.carbs_g * carbShare), protein_g: protein
   });
   const out = [];
@@ -159,8 +159,9 @@ function mealPlan(day, sessions, target) {
   const dinner = time => meal(time, 'dinner', restDay ? 'Protein, vegetables and the one starch of the day.'
     : day === 'high' ? 'Protein, vegetables, and a proper starch. Carbs still count today.' : 'Protein and vegetables, starch beside it.', 0.35, restDay ? 0.50 : 0.40, 55);
   const snack = time => meal(time, 'snack', 'Whey or cottage cheese if protein is short of 190 g.', 0.10, 0.10, 25);
+  // Breakfast is as late as the training allows: he would rather sleep.
   if (!timed) {
-    out.push(bfast(7 * 60), lunch(12 * 60 + 30), dinner(18 * 60 + 30), snack(20 * 60 + 30));
+    out.push(bfast(9 * 60), lunch(13 * 60), dinner(18 * 60 + 30), snack(20 * 60 + 30));
     return out;
   }
   const { start, end, x } = timed;
@@ -183,14 +184,19 @@ function mealPlan(day, sessions, target) {
   const after = (slot, share, carbShare) => meal(end + 30, slot, (day === 'high'
     ? 'Within 2 hours of the ride: 45 g protein and carbs. Post-ride bowl, or chocolate milk and a rice ball.'
     : 'Within 2 hours of the ride: 45 g protein and carbs. Post-ride bowl.'), share, carbShare, 50);
-  const early = start < 7 * 60 + 30;
+  // A carb breakfast wants 2.5 h before a hard ride; a light low-carb one 1.5 h
+  // before Zone 1. Breakfast sits at the latest of those, and if that would mean
+  // getting up before 6:30 it becomes coffee and whey 45 minutes out, with
+  // breakfast after the ride instead.
+  const gap = day === 'high' ? 150 : 90;
+  const early = start - gap < 6 * 60 + 30;
 
   if (start < 11 * 60) {
     // Morning ride: breakfast before it (or nothing before a dawn ride), the post-ride meal, then the day.
     if (early) out.push(meal(start - 45, 'before', day === 'high'
       ? `Small and quick before ${name}: a banana or two rice cakes with honey.`
       : `Coffee and a 20 g whey shake before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
-    else out.push(bfast(start - 150, name));
+    else out.push(bfast(start - gap, name));
     out.push(onBike);
     out.push(after(early ? 'breakfast' : 'after', early ? 0.28 : 0.22, day === 'high' ? 0.30 : 0.35));
     const l = Math.max(end + 150, 12 * 60 + 30);
@@ -198,9 +204,9 @@ function mealPlan(day, sessions, target) {
     out.push(dinner(Math.max(18 * 60 + 30, l + 300)));
     out.push(snack(20 * 60 + 45));
   } else if (start < 15 * 60) {
-    // Midday ride: breakfast carries the pre-ride role, the post-ride meal is lunch.
-    out.push(bfast(Math.min(7 * 60 + 30, start - 150), name));
-    if (start - 150 >= 9 * 60 + 30) out.push(meal(start - 120, 'before', day === 'high'
+    // Midday ride: breakfast carries the pre-ride role (as late as 9:30), the post-ride meal is lunch.
+    out.push(bfast(Math.min(9 * 60 + 30, start - gap), name));
+    if (start - gap > 9 * 60 + 30 + 60) out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBike);
@@ -208,9 +214,9 @@ function mealPlan(day, sessions, target) {
     out.push(dinner(Math.max(18 * 60 + 30, end + 240)));
     out.push(snack(20 * 60 + 45));
   } else {
-    // Evening ride: the day is normal up to lunch, a light pre-ride meal, and the post-ride meal is dinner.
-    out.push(bfast(7 * 60));
-    out.push(lunch(12 * 60 + 30));
+    // Evening ride: a late breakfast, lunch, a light pre-ride meal, and the post-ride meal is dinner.
+    out.push(bfast(9 * 60));
+    out.push(lunch(13 * 60));
     out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a banana and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
