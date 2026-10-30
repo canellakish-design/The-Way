@@ -79,7 +79,7 @@ V.calendar = async function(){
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(w.time):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
         <span class="pn">${esc(w.name)}</span>
         <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
-        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">×</button></a>`);
+        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></a>`);
     }
     for (const e of d.intervals) rows.push(`<div class="pitem icu">
         <span class="pk">intervals.icu${e.time?" · "+esc(e.time):""}</span>

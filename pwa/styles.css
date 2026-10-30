@@ -409,6 +409,7 @@ details.why{margin-top:8px} details.why summary{font-family:var(--mono); font-si
 
 /* delete, one tap: an × on every journal entry and planned session */
 .jfit{display:flex; flex-direction:column; align-items:flex-end; gap:6px}
-.jdel,.pdel{margin:0; padding:0; width:30px; height:30px; line-height:28px; border:1px solid var(--line); background:transparent; color:var(--muted); font-size:20px; box-shadow:none; text-align:center}
-.jdel:hover,.pdel:hover{color:var(--red); border-color:var(--red)}
+.jdel,.pdel,.tdel{margin:0; padding:0; width:32px; height:32px; border:1px solid var(--line); background:transparent; color:var(--muted); box-shadow:none; display:inline-flex; align-items:center; justify-content:center; vertical-align:middle}
+.jdel:hover,.pdel:hover,.tdel:hover,.jdel:active,.pdel:active,.tdel:active{color:var(--red); border-color:var(--red)}
+ul.agenda li .tag .tdel{margin-left:8px; width:28px; height:28px}
 .pitem.planned{position:relative} .pdel{position:absolute; top:8px; right:8px}

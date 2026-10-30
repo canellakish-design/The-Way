@@ -1245,11 +1245,13 @@ function fmtMinLocal(m){
   return h+":"+String(mm).padStart(2,"0")+ap;
 }
 
+const TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
+window.TRASH = TRASH;
 function dayRows(d, plan, isToday){
   const rows = (d.events||[]).map(e=>({
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
-    lane: LANE[e.source] || LANE.calendar
+    lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null
   }));
   (d.windows||[]).forEach(w=> rows.push({
     start: w.start_min, end: w.end_min, from: w.from, to: w.to,
@@ -1288,7 +1290,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     return `<li class="${r.lane.cls} ${state}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}</span></li>`;
+      <span class="tag">${state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = isToday && rec ? `${open} · <b>${esc(rec)}</b>` : open;
@@ -1824,12 +1826,16 @@ V.today = async function(){
     if (e.key === "Home") { offset = 0; repaint(); }
   };
   document.addEventListener("keydown", __dayKeys);
-  let touchX = null;
-  view.addEventListener("touchstart", e=>{ touchX = e.changedTouches[0].clientX; }, {passive:true});
+  // A swipe changes the day only when it is deliberate: most of the screen's
+  // width, nearly flat, and not a scroll. A brush of the thumb does nothing.
+  let touchX = null, touchY = null, touchT = 0;
+  view.addEventListener("touchstart", e=>{ const t = e.changedTouches[0]; touchX = t.clientX; touchY = t.clientY; touchT = Date.now(); }, {passive:true});
   view.addEventListener("touchend", e=>{
     if (touchX == null) return;
-    const dx = e.changedTouches[0].clientX - touchX; touchX = null;
-    if (Math.abs(dx) > 60) step(dx < 0 ? 1 : -1);
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchX, dy = t.clientY - touchY, dt = Date.now() - touchT; touchX = touchY = null;
+    const need = Math.max(200, view.clientWidth * 0.55);
+    if (Math.abs(dx) >= need && Math.abs(dy) < 40 && dt < 900) step(dx < 0 ? 1 : -1);
   }, {passive:true});
 
   const stamp = ()=>{
@@ -1919,6 +1925,14 @@ V.today = async function(){
       } finally { syncing = false; }
     };
 
+    // the trash can beside a planned session on the day
+    view.addEventListener("click", async (e)=>{
+      const b = e.target.closest("[data-delw]"); if (!b) return;
+      e.preventDefault();
+      if (!confirm("Take this session off the calendar?")) return;
+      try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); syncAll("deleted"); }
+      catch(err){ alert(err.message); }
+    });
     syncAll("first load");
     __dayTimers.push(setInterval(()=>{
       if (location.hash !== "#today") return clearDayTimers();
