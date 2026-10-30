@@ -1460,8 +1460,6 @@ V.today = async function(){
       <button id="dayNext" aria-label="Next day">›</button>
     </div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
-    <div class="card" id="body"><h4>The scale</h4>
-      <div class="small">reaching the bridge…</div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
     <button id="toPlan" class="primary">The plan</button>
     <button id="toClock">Bedside clock</button>
