@@ -59,7 +59,9 @@ The day: normal.`
 const z1 = min => min >= 90
   ? [step('Settle', m(10), hr(95, 110)), step('Zone one', m(min - 15), hr(100, 116)), step('Easy', m(5), hr(90, 105))]
   : [step('Settle', m(5), pc(50, 58), cad(85, 95)), step('Zone one', m(min - 8), pc(60, 68), cad(85, 95)), step('Easy', m(3), pc(50))];
-const z1Notes = min => min >= 120 ? EAT.long : min >= 75 ? EAT.mid : EAT.short;
+// 90 and 105 minutes are road rides (heart-rate led), so their note says so.
+const roadHead = t => t.replace(/^ZONE 1 on the trainer:[^\n]*/, 'ZONE 1 on the road: heart rate under 116 the whole ride. Flat route. If it climbs, the watts come down.');
+const z1Notes = min => min >= 120 ? EAT.long : min >= 90 ? roadHead(EAT.mid) : min >= 75 ? EAT.mid : EAT.short;
 // Step for step the same as Zwift's own "40/20's #1", so the copy intervals.icu
 // pushes to the Zwift home screen is the real session.
 const set = (label, off_s) => rep(label, 5, [step('On', 40, pc(109), cad(95)), step('Off', off_s, pc(55), cad(80))]);
