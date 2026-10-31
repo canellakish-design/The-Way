@@ -1620,6 +1620,33 @@ V.today = async function(){
       ring.style.opacity = num == null ? ".35" : "1";
     }
   };
+  // The line under the chain says what today actually holds, and the gate on it:
+  // the planned session by name and time, then whether the week lets it be hard.
+  // No generic "green light": the plan is the plan, the chain says easy or as written.
+  const todayLine = (d)=>{
+    const t = workoutsToday();
+    const planned = t ? t.planned.filter(p => !/lift|push$|pull|upper|legs|pump|weight/i.test(p.name) && !/weight/i.test(p.sport || "")) : [];
+    const lifts = t ? t.planned.filter(p => /lift|push$|pull|upper|legs|pump|weight/i.test(p.name) || /weight/i.test(p.sport || "")) : [];
+    const C = chainData && chainData.links;
+    const weekBad = C && ((C.recovery && C.recovery.week_state === "bad") || (C.sleep && C.sleep.state === "bad"));
+    const weekDip = C && C.recovery && C.recovery.week_state === "warn";
+    const r = d && d.recovery, red = r && r.band && r.band.key === "red";
+    const hard = p => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(p.name);
+    const say = p => `${p.name}${p.time ? " at " + hm12(p.time) : ""}${p.done ? " · done" : ""}`;
+    if (!t) return "";
+    if (!planned.length && !lifts.length) return red ? "Rest day, and the body agrees." : "Rest day.";
+    const parts = [];
+    if (planned.length) parts.push(planned.map(say).join(", "));
+    if (lifts.length) parts.push(lifts.map(say).join(", "));
+    let gate = "";
+    const todo = planned.filter(p => !p.done);
+    if (red && todo.length) gate = "Red morning: make it easy, or skip it.";
+    else if (weekBad && todo.some(hard)) gate = `The week is below your band${C.sleep && C.sleep.state === "bad" ? " on short sleep" : ""}: swap the hard session for Zone 1.`;
+    else if (weekBad && todo.length) gate = "Keep it easy; the week is below your band.";
+    else if (weekDip && todo.some(hard)) gate = "A dipped week: make this the only hard day.";
+    else if (todo.some(hard)) gate = "The week is in your band: ride it as written.";
+    return `Today: ${parts.join(" · ")}.${gate ? " " + gate : ""}`;
+  };
   const verdictOf = (d)=>{
     const r = d.recovery, f = d.fatigue, t = d.training;
     const strava = d.sources && d.sources.strava && d.sources.strava.connected;
@@ -1687,7 +1714,7 @@ V.today = async function(){
       const w = d.sources && d.sources.whoop;
       paintTile("recovery", null, "", "", src.garmin_configured ? "no morning from the Garmin yet" : w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "no watch connected");
     }
-    if (vd) vd.textContent = verdictOf(d);
+    if (vd) vd.textContent = todayLine(d);
     drawFood();
     drawWeightTile();
     drawMicroTile();
