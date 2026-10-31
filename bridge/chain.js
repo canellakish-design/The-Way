@@ -185,7 +185,6 @@ async function report() {
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
     const isWeight = x => /weight|lift|strength/i.test(String(x.sport || x.type || ''));
     for (const day of cal.days || []) {
-      liftsPlanned += (day.planned || []).filter(w => isWeight(w) && !w.logged && day.date >= today).length;
       const planned = (day.planned || []).filter(w => !isWeight(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
         + (day.intervals || []).filter(e => !isWeight(e)).reduce((a, e) => a + (e.minutes || 0), 0);
       const done = (day.done || []).filter(r => !isWeight(r)).reduce((a, r) => a + (r.minutes || 0), 0)
@@ -193,6 +192,12 @@ async function report() {
       work.planned_min += planned; work.done_min += done; work.days.push({ date: day.date, planned_min: planned, done_min: done });
     }
   } catch (e) { work = { planned_min: 0, done_min: 0, days: [] }; }
+  // lifts already on the calendar for the week ahead (the first week's word, before a session is logged)
+  try {
+    const { calendar } = require('./workouts');
+    const ahead = await calendar(today, tz.shiftKey(today, 6));
+    for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
+  } catch (e) { /* none counted */ }
   // the morning after a hard day: a low reading is expected, and says so
   let hardYesterday = null;
   try {
