@@ -1029,7 +1029,7 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    target is where the chain breaks; the line under the row says so. The
    boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
    still open. */
-const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
+const CHAIN = [["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 function chainHTML(){

@@ -1,6 +1,6 @@
 // ============================================================
-// chain.js — the front page's chain: Sleep → Food → Micros → Water → Lift →
-// Ride → Recovery → Weight, every link on the same seven-day clock, and where it breaks.
+// chain.js — the front page's chain: Sleep → Hydration → Macros → Micros →
+// Lift → Ride → Recovery → Weight, every link on the same seven-day clock, and where it breaks.
 //
 // Weight is the lagging indicator at the end; the links before it are what
 // move it, in roughly the order they act: sleep sets appetite and recovery,
@@ -22,7 +22,7 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['sleep', 'food', 'micros', 'water', 'lift', 'work', 'recovery', 'weight'];
+const ORDER = ['sleep', 'water', 'food', 'micros', 'lift', 'work', 'recovery', 'weight'];
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
 const r0 = x => x == null ? null : Math.round(x);
@@ -55,9 +55,9 @@ function verdict(links) {
   } else {
     const say = {
       sleep: () => `sleep: ${L.sleep.week} h a night this week. Appetite and recovery follow it.`,
-      food: () => `food: on plan ${L.food.days_on} of ${L.food.days_logged} logged days, averaging ${L.food.week}.`,
+      food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days, averaging ${L.food.week}.`,
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
-      water: () => `water: averaging ${L.water.week} this week; the scale will wobble with it.`,
+      water: () => `hydration: ${L.water.week}% of target this week; the scale wobbles with it.`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden.`,
       lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
       recovery: () => `recovery: averaging ${L.recovery.week}. The training is landing on a body that is not absorbing it.`
