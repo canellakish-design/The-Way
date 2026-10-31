@@ -154,7 +154,13 @@ async function report() {
     const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today);
     const L = require('./lifts');
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
-    lift = { sessions: wk.length, target: 5, today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
+    // the plan's clock: from the first session on this plan; the first week is judged on pace, a ninth week is a deload
+    const first = (d.sessions || []).filter(x => L.TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
+    const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
+    const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
+    const expected = !first ? 0 : dayN < 7 ? Math.min(5, Math.ceil(5 * dayN / 7)) : 5;
+    lift = { sessions: wk.length, target: 5, expected, started: !!first, deload: weekNo > 0 && weekNo % 9 === 0, week_no: weekNo,
+      today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ }
   // weight: the seven-day mean against the seven before
   let weight = null;
@@ -171,7 +177,12 @@ async function report() {
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'of target', basis: 'what was drunk against each day\'s target, averaged over the week' },
     work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan', basis: 'minutes ridden against minutes of riding planned, this week; the lifting is its own link' },
-    lift: { week: Math.round(lift.sessions / lift.target * 100), state: stateOf('lift', lift.sessions / lift.target), sessions: lift.sessions, target: lift.target, today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : null, week_list: lift.week, unit: 'of plan', basis: 'sessions logged on the Lift tab this week against the plan\'s five' },
+    // grey before the first session and in a deload week; in the first week, judged against the sessions due so far
+    lift: { week: lift.started ? Math.round(lift.sessions / lift.target * 100) : null,
+      state: !lift.started || lift.deload ? 'none' : stateOf('lift', lift.sessions / Math.max(1, lift.expected)),
+      sessions: lift.sessions, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
+      today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : (!lift.started ? 'not started' : lift.deload ? 'deload week' : null), week_list: lift.week, unit: 'of plan',
+      basis: 'sessions logged on the Lift tab in the last seven days against the plan\'s five; the first week is judged on pace' },
     recovery: { week: recWeek, state: stateOf('recovery', recWeek), today: recToday ? recToday.score : null, today_word: recToday && recToday.estimated ? 'estimated' : null, unit: 'average', days: recs.slice(-7), basis: 'Garmin training readiness, or an estimate from HRV against the month and the night\'s sleep' },
     weight: { week: weight ? weight.week_change_lb : null, state: stateOf('weight', weight ? weight.week_change_lb : null), today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null, unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, basis: 'the seven-day mean weight against the seven days before it' }
   };

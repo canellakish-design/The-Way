@@ -1046,7 +1046,7 @@ function paintChain(c){
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
-    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : `${L.sessions}/${L.target}`; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : "this week"; }
+    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : L.started ? `${L.sessions}/${L.target}` : "—"; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : (L.today_word || "this week"); }
     if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
   }
@@ -1700,7 +1700,7 @@ V.today = async function(){
         ${L ? `<ul class="agenda totals">${(L.week_list || []).slice().reverse().map(x => row(`${esc(x.date.slice(5).replace("-", "/"))} · ${esc(x.name)}`, `${(x.volume_lb / 1000).toFixed(1)}k lb`)).join("") || `<li><span class="n">Nothing logged this week</span><span class="tag">0 of ${L.target}</span></li>`}</ul>
           <div class="small">${L.sessions} of ${L.target} sessions. ${esc(L.basis)}.</div>` : `<div class="small">loading…</div>`}
         <div class="rowbtns"><a class="btn primary" href="#lift">The Lift tab</a></div>
-        <details class="why"><summary>why it is here</summary><div class="small">The lifting sits beside the riding as the week's work: five sessions on the Matthews plan. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike. Four of five is green, three is amber.</div></details>`;
+        <details class="why"><summary>how it is coloured</summary><div class="small">Sessions logged in the last seven days against the plan's five. Green at four or five, amber at three, red at two or fewer. Grey before the first session is saved and through a deload week (every ninth). In the first week the count is judged against the sessions due so far, so two by Wednesday is green, not red. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike.</div></details>`;
       box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "micros"){
