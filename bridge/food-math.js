@@ -254,15 +254,27 @@ function onBike(mins, hard) {
 
 // The slot a photo belongs to: the nearest planned meal within 90 minutes,
 // else by the clock.
-function slotFor(plan, hm) {
+// Which slot a logged meal belongs to. The word he used wins when it names
+// a slot of the day's plan ("breakfast" at 6:47 is breakfast, however late
+// the plan put it). Otherwise the nearest slot within 90 minutes; a meal
+// eaten up to four hours before the first slot is the first slot (an early
+// breakfast on a rest day whose plan says 9:00); after that the nearest
+// slot within two and a half hours. null only when nothing is near.
+function slotFor(plan, hm, mealHint) {
+  const slots = (plan || []).filter(p => p.slot && toMin(p.time) != null);
+  const hint = String(mealHint || '').toLowerCase().trim();
+  if (hint && hint !== 'supplement') {
+    const direct = slots.find(p => p.slot === hint);
+    if (direct) return direct.slot;
+    if (hint === 'snack') { const sn = slots.find(p => p.slot === 'snack'); if (sn) return 'snack'; }
+  }
   const m = toMin(hm);
   if (m == null) return null;
-  let best = null;
-  for (const p of plan || []) {
-    const d = Math.abs(toMin(p.time) - m);
-    if (d <= 90 && (!best || d < best.d)) best = { p, d };
-  }
-  return best ? best.p.slot : null;
+  const nearest = (limit) => { let best = null; for (const p of slots) { const d = Math.abs(toMin(p.time) - m); if (d <= limit && (!best || d < best.d)) best = { p, d }; } return best ? best.p.slot : null; };
+  const near = nearest(90); if (near) return near;
+  const real = slots.filter(p => !p.extra).sort((a, b) => toMin(a.time) - toMin(b.time));
+  if (real.length && m < toMin(real[0].time) && toMin(real[0].time) - m <= 240) return real[0].slot;
+  return nearest(150);
 }
 
 // One photo's verdict, from the model's assessment, to points.

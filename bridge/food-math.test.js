@@ -169,6 +169,16 @@ ok('a low-carb breakfast is low carb: 20 g, and eating under it is as planned', 
   assert.strictEqual(F.mealMatch(bike, [{ kcal: 0, carbs_g: 0, fluid_ml: 600, drink_only: true }]), null);   // water is not the bottle of Tailwind
   assert.strictEqual(F.mealMatch(bike, [{ kcal: 180, carbs_g: 45, fluid_ml: 600, drink_only: true }]).key, 'green');
 });
+ok('slotFor: the word he used wins; an early breakfast is breakfast; far from everything is nothing', () => {
+  const plan = [{ slot: 'breakfast', time: '09:00' }, { slot: 'lunch', time: '13:00' }, { slot: 'dinner', time: '18:30' }, { slot: 'snack', time: '20:30' }];
+  assert.strictEqual(F.slotFor(plan, '06:47', 'breakfast'), 'breakfast');
+  assert.strictEqual(F.slotFor(plan, '06:47'), 'breakfast');           // up to four hours before the first slot
+  assert.strictEqual(F.slotFor(plan, '11:58', 'lunch'), 'lunch');
+  assert.strictEqual(F.slotFor(plan, '15:20'), 'lunch');               // within two and a half hours of the nearest
+  assert.strictEqual(F.slotFor(plan, '15:40'), null);                  // beyond it
+  assert.strictEqual(F.slotFor(plan, '04:00'), null);
+  assert.strictEqual(F.slotFor(plan, '16:10', 'snack'), 'snack');
+});
 console.log(n + ' passed');
 
 ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a low-carb slot and a far slot roll nothing', () => {

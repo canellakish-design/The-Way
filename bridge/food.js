@@ -278,7 +278,8 @@ async function analyze(images, g, meal, notes, written) {
 async function dayReport(date) {
   const g = await guidelinesFor(date);
   const doc = await dayDoc(date);
-  const entries = doc.entries.map(e => Object.assign({}, e, { photo: undefined }));
+  // an entry saved without a slot (eaten far from the plan's time, before the wider rule) is slotted on the way out
+  const entries = doc.entries.map(e => Object.assign({}, e, { photo: undefined }, !e.slot && !e.supplement && !e.drink_only ? { slot: F.slotFor(g.meals, e.time, e.meal) } : {}));
   const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
@@ -527,7 +528,7 @@ async function addPhoto(body) {
   const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   const entry = {
     id, at: new Date().toISOString(), date, time: nowHM,
-    slot: F.slotFor(g.meals, nowHM),
+    slot: F.slotFor(g.meals, nowHM, body.meal),
     meal: meal || a.meal_guess || 'snack',
     name: String(a.food_name || 'meal').slice(0, 80), portion: String(a.portion || '').slice(0, 120),
     kcal: Math.max(0, Math.round(a.kcal || 0)), carbs_g: Math.max(0, Math.round(a.carbs_g || 0)),
@@ -569,7 +570,7 @@ async function addKnown(body) {
   const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal) ? b.meal : null;
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
   const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
-  const slot = F.slotFor(g.meals, nowHM);
+  const slot = F.slotFor(g.meals, nowHM, b.meal || body.meal);
   const tags = Array.isArray(b.tags) ? b.tags : [];
   const entry = {
     id, at: new Date().toISOString(), date, time: nowHM, slot,
