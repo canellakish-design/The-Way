@@ -306,6 +306,18 @@ async function report() {
   const doneByDate = {};
   for (const s of sessions) if (s.date >= today && s.template !== 'pump') doneByDate[s.date] = s.template;
   for (const x of days) if (doneByDate[x.date]) x.locked = doneByDate[x.date];
+  // a lift already on the calendar (planned, not yet done) holds its day too
+  try {
+    const { calendar } = require('./workouts');
+    const cal = await calendar(days[0].date, days[days.length - 1].date);
+    for (const day of cal.days || []) {
+      const x = days.find(y => y.date === day.date); if (!x || x.locked) continue;
+      const w = (day.planned || []).find(w => /weight/i.test(w.sport || ''));
+      if (!w) continue;
+      const t = ALL.find(t => t.key !== 'pump' && (new RegExp('^' + t.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(w.name) || (t.short && new RegExp('\\(' + t.short + '\\)', 'i').test(w.name))));
+      if (t) x.locked = t.key;
+    }
+  } catch (e) { /* the placement stands on its own */ }
   const week = placeWeek(days, { done: doneByDate }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
   // the pump fits any day but legs and the day before it
   week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = x.lift !== 'legs' && !(next && next.lift === 'legs'); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); });
