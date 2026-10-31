@@ -594,3 +594,19 @@ ul.agenda.wins li, ul.agenda.courses li{display:grid; grid-template-columns:56px
 ul.agenda.wins li .n, ul.agenda.courses li .n{white-space:normal}
 ul.agenda.wins li .tag, ul.agenda.courses li .tag{grid-column:2; justify-self:start; text-align:left; margin-top:2px}
 ul.agenda.courses li .t{font-size:13px}
+/* the chain on the front page */
+.chain{display:flex; align-items:stretch; gap:0; margin:2px 0 0}
+.chain .score.cbox, .chain .score.cbox[data-tone]{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; text-align:center; gap:1px; padding:7px 2px 6px; background:var(--card); border:2px solid var(--line); box-shadow:none}
+.chain .score.cbox[data-week="good"]{border-color:var(--green)} .chain .score.cbox[data-week="warn"]{border-color:var(--amber)} .chain .score.cbox[data-week="bad"]{border-color:var(--red)}
+.chain .score.cbox.on{outline:2px solid var(--ink); transform:none}
+.chain .cbox .slabel{font-size:8px; letter-spacing:.8px; white-space:nowrap}
+.chain .cbox .cnum{font-family:var(--mono); font-size:17px; font-weight:700; line-height:1.1; letter-spacing:-.5px; font-variant-numeric:tabular-nums}
+.chain .cbox .cweek{font-family:var(--mono); font-size:6.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); white-space:nowrap}
+.chain .cbox .ctoday{display:flex; flex-direction:column; align-items:center; margin-top:4px; max-width:100%; min-height:22px}
+.chain .cbox .ctoday .snum{font-size:11px; font-weight:700; letter-spacing:0; margin:0; line-height:1.1}
+.chain .cbox .ctoday .sword{font-size:7px; letter-spacing:.4px; max-width:100%}
+.chain .cbox .ssub{display:none}
+.carrow{flex:0 0 9px; display:flex; align-items:center; justify-content:center; color:var(--line); font-size:13px; line-height:1}
+.carrow.good{color:var(--green)} .carrow.warn{color:var(--amber)} .carrow.bad{color:var(--red)} .carrow.broken{font-size:10px; font-weight:700}
+.chainword{margin:8px 2px 0; color:var(--ink)}
+@media (max-width:400px){ .chain .cbox .cnum{font-size:15px} .chain .cbox .slabel{font-size:7.5px; letter-spacing:.5px} .chain .score.cbox, .chain .score.cbox[data-tone]{padding:6px 1px 5px} }

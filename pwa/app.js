@@ -1023,6 +1023,31 @@ function fmtMinLocal(m){
 const RING_KEYS = ["recovery", "fatigue", "weight", "bodyfat", "workouts", "food", "hydration", "micros"];
 const RING_LABELS = { recovery: "Recovery", fatigue: "Fatigue", weight: "Weight", bodyfat: "Body fat", workouts: "Workouts", food: "Food", hydration: "Hydration", micros: "Micros" };
 const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
+/* The chain: Sleep → Food → Micros → Water → Work → Recovery → Weight, each
+   box its seven-day value (bridge/chain.js) with today small under it, the
+   arrows coloured by the link before them. The first link that is not on
+   target is where the chain breaks; the line under the row says so. The
+   boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
+   still open. */
+const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["work","workouts","Work"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
+function chainHTML(){
+  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true">›</span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctoday"><span class="snum">—</span><span class="sword"></span><span class="ssub"></span></span></button>`).join("");
+}
+function paintChain(c){
+  if (!c || !c.links) return;
+  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "avg", work: "of plan", recovery: "avg", weight: "lb/wk" };
+  for (const [ck, k] of CHAIN){
+    const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
+    const num = L.week == null ? "—" : ck === "work" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
+    const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = L.state === "none" ? "var(--muted)" : toneC(L.state === "good" ? "good" : L.state === "warn" ? "warn" : "bad");
+    el.querySelector(".cweek").textContent = UNIT[ck];
+    el.dataset.week = L.state || "none";
+    if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
+    if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
+    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.textContent = c.break_at === ck ? "✕" : "›"; }
+  }
+  const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
+}
 function ringsHTML(){
   return RING_KEYS.map(k => `<button class="score ringtile" data-k="${k}">
     <span class="slabel">${RING_LABELS[k]}</span>
@@ -1328,7 +1353,8 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
-    <div class="scores" id="scores">${ringsHTML()}</div>
+    <div class="chain" id="scores">${chainHTML()}</div>
+    <div class="chainword small" id="chainWord">&nbsp;</div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
@@ -1469,7 +1495,7 @@ V.today = async function(){
   };
   // What the fitness number means for a masters amateur: CTL in TSS a day.
   const fitLevel = c => c == null ? "" : c < 25 ? "base" : c < 45 ? "recreational" : c < 65 ? "solid" : c < 85 ? "strong" : "racer";
-  let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null;
+  let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null, chainData = null;
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
@@ -1653,9 +1679,17 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
+    if (openScore === "sleep"){
+      const L = chainData && chainData.links && chainData.links.sleep;
+      html = `<h4>Sleep · the week</h4>
+        ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
+          <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
+        <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
+      box.innerHTML = html; box.hidden = false; return;
+    }
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · this week</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
@@ -1776,6 +1810,7 @@ V.today = async function(){
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
       get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } }),
+      get("/chain", v => { chainData = v; paintChain(v); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
