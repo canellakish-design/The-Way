@@ -1037,7 +1037,7 @@ function chainHTML(){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "of target", work: "of plan", lift: "of plan", recovery: "avg", weight: "lb/wk" };
+  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "target", work: "plan", lift: "plan", recovery: "avg", weight: "lb/wk" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;

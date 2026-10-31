@@ -624,3 +624,7 @@ ul.agenda.courses li .t{font-size:13px}
 .carrow.broken i{width:24px; height:24px; margin:-12px 0 0 -12px; background:var(--red); border-color:var(--red); color:#fff}
 .carrow.broken i svg{width:13px; height:13px}
 @media (max-width:400px){ .carrow, .chain .carrow{flex-basis:5px; width:5px} .carrow i{width:18px; height:18px; margin:-9px 0 0 -9px} .carrow i svg{width:11px; height:11px} }
+/* the unit row leaves room for the badges on the seams */
+.chain .cbox .cweek{padding:0 8px; max-width:100%; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box}
+.carrow i{width:18px; height:18px; margin:-9px 0 0 -9px} .carrow i svg{width:11px; height:11px}
+.carrow.broken i{width:22px; height:22px; margin:-11px 0 0 -11px}
