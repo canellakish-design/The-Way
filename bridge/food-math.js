@@ -459,7 +459,7 @@ function mealMatch(plan, logged) {
     if (RANK[k] > RANK[keyR] || keyR === 'green') {
       keyR = k;
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
-      const clip = why => { const m = /\bbut\s+([^,.;]{8,60})/i.exec(String(why || '')); return m ? m[1].trim() : null; };
+      const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
       wordR = k === 'green' ? 'rules met' : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = a.why || null;
     }
