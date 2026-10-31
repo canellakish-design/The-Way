@@ -286,7 +286,9 @@ async function dayReport(date) {
   const { scoreDay } = require('./intake');
   // A drink is a drink, with or without calories: a pint, a latte, a juice counts in the totals and the
   // hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
-  const isDrink = e => !!(e.drink || e.drink_only) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+  // A plate that mentions its drink ("a wrap and two bottles of water") is still a plate: the drink
+  // flag alone does not make it one; little protein and few calories do.
+  const isDrink = e => (!!e.drink_only || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300)) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
   // The snack's words follow the day: how short protein is, not "if".
   const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
   const planMeals = g.meals.map(m => m.slot !== 'snack' ? m : Object.assign({}, m, { what: (() => {
@@ -328,7 +330,7 @@ async function dayReport(date) {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
-    meals: F.rollForward(planMeals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && !isDrink(e) && (!e.drink_only || (m.slot === 'on the bike' && (e.carbs_g || 0) >= 10)));
+    meals: F.rollForward(planMeals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && !isDrink(e));
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
       return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
