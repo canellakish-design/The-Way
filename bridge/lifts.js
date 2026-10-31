@@ -16,8 +16,8 @@
 // the range; a set that cannot reach the bottom of the range drops the
 // weight a step. Eight weeks on, then a deload week.
 //
-// The gear is a kettlebell set and a Bowflex, so each lift here is the
-// book's lift on that gear; the barbell original is in the note, for a gym.
+// The five are the book's barbell and dumbbell lifts, done at school or at
+// Lifetime; each note names the home version on the Bowflex and the bells.
 //
 // Where the five land in the week: legs goes on the day before a day off
 // the bike or a long coaching day (so the soreness falls on a day with no
@@ -35,48 +35,48 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const BELLS = [18, 26, 35, 44, 53, 62, 70, 80, 88];     // the common kettlebell sizes, in pounds
-// ex(name, sets, lo, hi, kind, start, note, inc): kind bell | bowflex | reps | time; inc is the step on the Bowflex
-const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' ? 10 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
+// ex(name, sets, lo, hi, kind, start, note, inc): kind bar | db | cable | bell | bowflex | reps | time; inc is the step in pounds
+const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' || kind === 'bar' || kind === 'cable' ? 10 : kind === 'db' ? 5 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
 const TEMPLATES = [
   { key: 'push', name: 'Push', short: 'Push', minutes: 55, order: 1,
-    why: 'Chest, shoulders and triceps. The book: bench, incline bench, dumbbell bench, triceps pushdown.',
+    why: 'Chest, shoulders and triceps: bench, incline bench, dumbbell bench, triceps pushdown. At school or Lifetime.',
     exercises: [
-      ex('Bowflex chest press', 3, 4, 6, 'bowflex', 110, 'The book\'s barbell bench press. Shoulder blades pinned, bar to the chest.'),
-      ex('Bowflex incline press', 3, 4, 6, 'bowflex', 90, 'Incline bench. Bench at 30 degrees if the Bowflex seat allows.'),
-      ex('Kettlebell floor press', 3, 4, 6, 'bell', 44, 'Two bells, the dumbbell bench press. Elbows at 45 degrees.'),
-      ex('Bowflex triceps pushdown', 3, 6, 8, 'bowflex', 50, 'Elbows pinned to the sides.', 5)
+      ex('Barbell bench press', 3, 4, 6, 'bar', 135, 'Shoulder blades pinned, bar to the chest, feet planted. At home: Bowflex chest press.', 10),
+      ex('Incline barbell bench press', 3, 4, 6, 'bar', 115, 'Bench at 30 degrees. At home: Bowflex incline press.', 10),
+      ex('Dumbbell bench press', 3, 4, 6, 'db', 50, 'The weight of one dumbbell. Elbows at 45 degrees. At home: kettlebell floor press.', 5),
+      ex('Triceps pushdown', 3, 6, 8, 'cable', 50, 'Elbows pinned to the sides. At home: Bowflex pushdown.', 5)
     ] },
   { key: 'pull', name: 'Pull and calves', short: 'Pull', minutes: 55, order: 2,
-    why: 'Back and biceps, calves at the end. The book: deadlift, barbell row, lat pulldown, calf raise.',
+    why: 'Back and biceps, calves at the end: deadlift, barbell row, lat pulldown, calf raise.',
     exercises: [
-      ex('Kettlebell deadlift', 3, 4, 6, 'bell', 70, 'Two bells, or the heaviest one between the feet. The barbell deadlift. Hips back, bar close, stand tall.'),
-      ex('Bowflex seated row', 3, 4, 6, 'bowflex', 110, 'Barbell row. Pull to the belly, squeeze the blades, no shrug.'),
-      ex('Bowflex lat pulldown', 3, 4, 6, 'bowflex', 110, 'Chest up, elbows down and back.'),
-      ex('Standing calf raise', 3, 8, 10, 'bell', 53, 'One bell in hand, toes on a step. Pause at the top and the bottom.', 0)
+      ex('Barbell deadlift', 3, 4, 6, 'bar', 185, 'Hips back, bar close, stand tall; reset every rep. At home: two-bell kettlebell deadlift.', 10),
+      ex('Barbell row', 3, 4, 6, 'bar', 115, 'Pull to the belly, squeeze the blades, no shrug. At home: Bowflex seated row.', 10),
+      ex('Lat pulldown', 3, 4, 6, 'cable', 120, 'Chest up, elbows down and back. At home: Bowflex lat pulldown.', 10),
+      ex('Standing calf raise', 3, 8, 10, 'cable', 150, 'Machine, or a bell in hand with toes on a step. Pause at the top and the bottom.', 10)
     ] },
   { key: 'upper-1', name: 'Upper body and core', short: 'Upper 1', minutes: 50, order: 3,
-    why: 'The book\'s first upper day: close-grip bench, barbell row, seated dumbbell press, then core.',
+    why: 'The book\'s first upper day: close-grip bench, one-arm dumbbell row, seated dumbbell press, then core.',
     exercises: [
-      ex('Bowflex close-grip press', 3, 4, 6, 'bowflex', 100, 'Hands shoulder width, elbows tucked. Close-grip bench press.'),
-      ex('Kettlebell one-arm row', 3, 4, 6, 'bell', 62, 'Each side. Hand on the bench, pull to the hip.'),
-      ex('Kettlebell seated press', 3, 4, 6, 'bell', 44, 'Two bells, seated. The dumbbell shoulder press. Ribs down.'),
-      ex('Hanging knee raise', 3, 10, 15, 'reps', 0, 'Or lying leg raise. Slow down, no swing.')
+      ex('Close-grip bench press', 3, 4, 6, 'bar', 115, 'Hands shoulder width, elbows tucked. At home: Bowflex close-grip press.', 10),
+      ex('One-arm dumbbell row', 3, 4, 6, 'db', 55, 'Each side, hand on the bench, pull to the hip. At home: kettlebell one-arm row.', 5),
+      ex('Seated dumbbell press', 3, 4, 6, 'db', 40, 'The weight of one dumbbell. Ribs down. At home: kettlebell seated press.', 5),
+      ex('Captain\'s chair leg raise', 3, 10, 15, 'reps', 0, 'Slow down, no swing. At home: hanging knee raise or lying leg raise.')
     ] },
   { key: 'legs', name: 'Legs', short: 'Legs', minutes: 55, order: 4,
-    why: 'The book\'s leg day: squat, leg press, Romanian deadlift, calf raise. The cycling day of the five: placed the day before a day off the bike or on a long coaching day.',
+    why: 'The book\'s leg day: back squat, leg press, Romanian deadlift, calf raise. The cycling day of the five: placed the day before a day off the bike or on a long coaching day.',
     exercises: [
-      ex('Kettlebell front squat', 3, 4, 6, 'bell', 53, 'Two bells in the rack. The barbell back squat. Below parallel, knees out.'),
-      ex('Bulgarian split squat', 3, 6, 8, 'bell', 35, 'Each leg, rear foot on the bench, a bell in each hand. The leg press.'),
-      ex('Kettlebell Romanian deadlift', 3, 4, 6, 'bell', 70, 'Two bells. Hinge until the hamstrings pull, no lower; the bells stay on the thighs.'),
-      ex('Standing calf raise', 3, 8, 10, 'bell', 53, 'One bell in hand, toes on a step.', 0)
+      ex('Barbell back squat', 3, 4, 6, 'bar', 155, 'Below parallel, knees out, brace. At home: two-bell kettlebell front squat.', 10),
+      ex('Leg press', 3, 6, 8, 'cable', 270, 'Feet shoulder width, knees to the chest, do not lock out. At home: Bulgarian split squat with bells.', 20),
+      ex('Romanian deadlift', 3, 4, 6, 'bar', 135, 'Hinge until the hamstrings pull, no lower; the bar stays on the thighs. At home: two-bell kettlebell RDL.', 10),
+      ex('Standing calf raise', 3, 8, 10, 'cable', 150, 'Machine, or a bell in hand with toes on a step.', 10)
     ] },
   { key: 'upper-2', name: 'Upper body and core', short: 'Upper 2', minutes: 50, order: 5,
     why: 'The book\'s second upper day: overhead press, dumbbell row, curls, then core.',
     exercises: [
-      ex('Bowflex shoulder press', 3, 4, 6, 'bowflex', 80, 'The barbell overhead press. Glutes tight, press straight up.'),
-      ex('Bowflex seated row', 3, 4, 6, 'bowflex', 110, 'Dumbbell row in the book; the row again here, to the belly.'),
-      ex('Kettlebell curl', 3, 6, 8, 'bell', 26, 'One bell, both hands on the horns, or a bell in each hand. No swing.', 0),
-      ex('Bowflex cable crunch', 3, 10, 12, 'bowflex', 60, 'Kneeling, crunch the ribs to the hips.', 5)
+      ex('Barbell overhead press', 3, 4, 6, 'bar', 85, 'Glutes tight, press straight up, head through at the top. At home: Bowflex shoulder press.', 10),
+      ex('Dumbbell row', 3, 4, 6, 'db', 55, 'Each side. At home: Bowflex seated row.', 5),
+      ex('Alternating dumbbell curl', 3, 6, 8, 'db', 25, 'The weight of one dumbbell; no swing. At home: kettlebell curl.', 5),
+      ex('Cable crunch', 3, 10, 12, 'cable', 80, 'Kneeling, crunch the ribs to the hips. At home: Bowflex cable crunch.', 5)
     ] }
 ];
 // The pump: a short home session on the Bowflex and the kettlebell, upper
@@ -101,8 +101,9 @@ const nameOf = key => (ALL.find(t => t.key === key) || {}).name || LEGACY[key] |
 const e1rm = (lb, reps) => lb > 0 && reps > 0 ? Math.round(lb * (1 + reps / 30)) : null;
 function nextBell(lb) { const i = BELLS.findIndex(b => b > lb); return i < 0 ? lb + 10 : BELLS[i]; }
 function prevBell(lb) { const below = BELLS.filter(b => b < lb); return below.length ? below[below.length - 1] : Math.max(0, lb - 10); }
-function increment(def, lb) { return def.kind === 'bell' ? nextBell(lb) : def.kind === 'bowflex' ? lb + (def.inc || 10) : lb; }
-function decrement(def, lb) { return def.kind === 'bell' ? prevBell(lb) : def.kind === 'bowflex' ? Math.max(0, lb - (def.inc || 10)) : lb; }
+const WEIGHTED = new Set(['bell', 'bowflex', 'bar', 'db', 'cable']);
+function increment(def, lb) { return def.kind === 'bell' ? nextBell(lb) : WEIGHTED.has(def.kind) ? lb + (def.inc || 10) : lb; }
+function decrement(def, lb) { return def.kind === 'bell' ? prevBell(lb) : WEIGHTED.has(def.kind) ? Math.max(0, lb - (def.inc || 10)) : lb; }
 
 // The target for an exercise given the last time it was done (Matthews'
 // double progression: a hard set at the top of the range adds weight, a set
@@ -142,11 +143,12 @@ const BLOCKS = [
   { key: 'endurance', name: 'Strength-endurance', weeks: 8, shift: 2, start: 'ninety' },
   { key: 'strength2', name: 'Strength', weeks: 8, shift: 0, start: 'plus' }
 ];
-const roundTo = (def, lb) => def.kind === 'bell' ? (BELLS.find(b => b >= lb - 1) || Math.ceil(lb / 10) * 10) : Math.max(0, Math.round(lb / 5) * 5);
+const roundTo = (def, lb) => def.kind === 'bell' ? (BELLS.find(b => b >= lb - 1) || Math.ceil(lb / 10) * 10) : Math.max(0, Math.round(lb / (def.inc || 5)) * (def.inc || 5));
 function stepEvery(def, weekInBlock) {
   if (def.kind === 'time' || def.kind === 'reps') return 2;
   if (def.kind === 'bell') return 3;
-  return def.reps_hi <= 6 ? (weekInBlock <= 4 ? 2 : 3) : 3;
+  if (def.kind === 'db') return 3;                                          // five-pound dumbbell jumps come slower
+  return def.reps_hi <= 6 ? (weekInBlock <= 4 ? 2 : 3) : 3;                 // bar and cable compounds
 }
 function mondayOf(key) { const d = new Date(key + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); }
 function periodization(templates, sessions, today) {

@@ -45,7 +45,7 @@ Before: carb breakfast 2 to 3 hours before (70 g oats and fruit). Carbs the even
 On the bike: one bottle of Tailwind, 2 scoops (50 g carbs). Fan on.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
-  lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes the day before a day off the bike or a long coaching day. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets. Log it set by set on the Lift tab; it tells you the next weight.
+  lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes the day before a day off the bike or a long coaching day. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets, at school or Lifetime; the Pump at home is extra. Log it set by set on the Lift tab; it tells you the next weight.
 
 EAT
 Before: a normal meal 1 to 2 hours before, or the whey shake if it is first thing.
