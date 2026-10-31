@@ -27,6 +27,8 @@ ok('verdict: the first link from the left that is off is the break; all good and
   assert.deepStrictEqual(C.ORDER, ['sleep', 'food', 'micros', 'water', 'work', 'lift', 'recovery', 'weight']);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
   assert.ok(/breaks at lifting: 1 of 5 sessions/.test(C.verdict(noLift).text));
+  const noRide = Object.assign({}, all, { work: { week: 40, state: 'bad', done_min: 120, planned_min: 300 } });
+  assert.ok(/breaks at riding: 120 of 300 planned minutes ridden/.test(C.verdict(noRide).text));
   assert.strictEqual(C.stateOf('lift', 0.8), 'good'); assert.strictEqual(C.stateOf('lift', 0.6), 'warn');
 });
 console.log(n + ' passed');
