@@ -1105,8 +1105,12 @@ function dayRows(d, plan, isToday){
       const a = hm(m.time); if (a == null) continue;
       const logged = (m.logged || []).length > 0, mt = logged && m.match ? m.match : null;
       const what = String(m.what || "").split(/(?<=\.)\s/)[0].slice(0, 70);
-      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
-        lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: m.what || null });
+      // logged: the plate as eaten with its numbers, the plan's in brackets; not yet: the plan
+      const ate = logged ? (f.entries || []).filter(e => (m.logged || []).includes(e.id) && !e.supplement) : [];
+      const ateText = ate.length ? `${ate.map(e => e.name).join(", ")} · ${mt ? `${mt.kcal} kcal · ${mt.carbs_g}C · ${mt.protein_g}P` : ""} (plan ${m.kcal} · ${m.carbs_g}C · ${m.protein_g}P)` : null;
+      const why = mt && mt.rules && mt.rules.why ? mt.rules.why : null;
+      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
+        lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
   }
   // the rides that happened, from Strava, when no planned row already holds them

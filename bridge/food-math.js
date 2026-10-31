@@ -444,10 +444,28 @@ function mealMatch(plan, logged) {
   const miss = p => p.both ? (plan.rolled_out && p.off > 0 ? 0 : Math.abs(p.off)) : Math.max(0, -p.off);
   const worst = parts.reduce((a, p) => miss(p) > miss(a) ? p : a, parts[0] || { k: 'kcal', off: 0, both: true });
   const w = miss(worst);
-  const key = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
+  const keyM = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
   const dir = worst.off > 0 ? 'over' : 'under';
-  const word = key === 'green' ? 'as planned' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
-  return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k };
+  const wordM = keyM === 'green' ? 'macros on' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
+  // The rules are the other half of the grade: the plate's assessment against
+  // the day's guidelines (fits yes, partly, no). One grade, the worse of the
+  // two, so the word on the card and the word at logging time agree.
+  const RANK = { green: 0, yellow: 1, red: 2 };
+  let keyR = 'green', wordR = 'rules met', whyR = null;
+  for (const e of l) {
+    const a = e.assessment; if (!a || !a.fits) continue;
+    const k = a.fits === 'no' ? 'red' : a.fits === 'partly' ? 'yellow' : 'green';
+    if (RANK[k] <= RANK[keyR] && keyR !== 'green') continue;
+    if (RANK[k] > RANK[keyR] || keyR === 'green') {
+      keyR = k;
+      wordR = k === 'green' ? 'rules met' : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : (k === 'red' ? 'against the rules' : 'rules partly met');
+      whyR = a.why || null;
+    }
+  }
+  const key = RANK[keyR] > RANK[keyM] ? keyR : keyM;
+  const word = key === 'green' ? 'as planned' : RANK[keyR] > RANK[keyM] ? wordR : (RANK[keyM] > RANK[keyR] ? wordM : `${wordM} · ${wordR}`);
+  return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k,
+    macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
 
 module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward,

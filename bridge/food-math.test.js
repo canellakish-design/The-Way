@@ -180,6 +180,18 @@ ok('slotFor: the word he used wins; an early breakfast is breakfast; far from ev
   assert.strictEqual(F.slotFor(plan, '19:10', 'snack'), 'snack');
   assert.strictEqual(F.slotFor(plan, '06:19', 'snack'), null);           // a morning coffee is not the evening snack
 });
+ok('mealMatch: one grade from macros and the rules; a wrap that hits the macros but breaks the starch rule is yellow, and says why', () => {
+  const lunch = { slot: 'lunch', time: '13:00', kcal: 585, carbs_g: 50, protein_g: 50 };
+  const wrap = [{ kcal: 580, carbs_g: 52, protein_g: 40, assessment: { protein_source: true, carbs: 'some', vegetables: true, processed: false, fits: 'partly', why: 'the tortilla is the second starch' } }];
+  const m = F.mealMatch(lunch, wrap);
+  assert.strictEqual(m.key, 'yellow'); assert.strictEqual(m.macros.key, 'green'); assert.strictEqual(m.rules.key, 'yellow'); assert.ok(/rules partly met|starch/.test(m.word), m.word);
+  const clean = F.mealMatch(lunch, [{ kcal: 580, carbs_g: 52, protein_g: 48, assessment: { protein_source: true, carbs: 'some', vegetables: true, processed: false, fits: 'yes' } }]);
+  assert.strictEqual(clean.key, 'green'); assert.strictEqual(clean.word, 'as planned');
+  const biscuit = F.mealMatch({ slot: 'breakfast', time: '09:00', kcal: 505, carbs_g: 25, protein_g: 45 }, [{ kcal: 550, carbs_g: 39, protein_g: 21, assessment: { protein_source: false, carbs: 'heavy', vegetables: false, processed: true, fits: 'no' } }]);
+  assert.strictEqual(biscuit.key, 'red'); assert.ok(/processed|carbs/.test(biscuit.word), biscuit.word);
+  const noAssess = F.mealMatch(lunch, [{ kcal: 580, carbs_g: 52, protein_g: 48 }]);
+  assert.strictEqual(noAssess.key, 'green');
+});
 console.log(n + ' passed');
 
 ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a low-carb slot and a far slot roll nothing', () => {

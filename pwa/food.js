@@ -405,11 +405,16 @@ V.food = async function(){
   fileEl.onchange = ()=> picked(fileEl);
   rollEl.onchange = ()=> picked(rollEl);
   document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; };
-  const showVerdict = (e)=>{
+  // the verdict at logging time is the slot's grade, the same word the card shows, with the plate's reading under it
+  const showVerdict = (e, dayNow)=>{
     const a = e.assessment;
-    document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC((FIT[a.fits]||FIT.partly).tone)}">
-      <div class="jname">${esc(e.name)} ${fitBadge(a)}</div>
-      <div class="small">${esc(e.meal)} · ${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}</div>
+    const m = dayNow && (dayNow.meals||[]).find(x => (x.logged||[]).includes(e.id));
+    const mt = m && m.match;
+    const tone = mt ? (mt.key === "green" ? "good" : mt.key === "yellow" ? "warn" : "bad") : (FIT[a.fits]||FIT.partly).tone;
+    document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC(tone)}">
+      <div class="jname">${esc(e.name)} ${mt ? `<span class="fit" style="color:${toneC(tone)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a)}</div>
+      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}${m ? ` · the slot wanted ${m.kcal} kcal · ${m.carbs_g}C · ${m.protein_g}P` : ""}</div>
+      ${mt && mt.macros && mt.rules ? `<div class="small">macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
       <div>${esc(a.why)}</div></div>`;
   };
   /* ---- the advisor: what is in front of him, or what is near him ---- */
@@ -484,7 +489,7 @@ V.food = async function(){
     btn.disabled = true; msg.textContent = "Reading it…";
     try{
       const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined })});
-      showVerdict(r.entry);
+      showVerdict(r.entry, r.day);
       wform.hidden = true; msg.textContent = ""; document.getElementById("writeText").value = ""; document.getElementById("writeMeal").value = "";
       day = r.day; draw(); cheerIf(r);
     }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
@@ -501,7 +506,7 @@ V.food = async function(){
         images:[{image_base64, media_type:"image/jpeg"}], thumb_base64,
         meal: document.getElementById("snapMeal").value || undefined,
         notes: document.getElementById("snapNote").value || undefined })});
-      showVerdict(r.entry);
+      showVerdict(r.entry, r.day);
       form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
       day = r.day; draw(); cheerIf(r);
