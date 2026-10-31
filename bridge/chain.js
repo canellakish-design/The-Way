@@ -60,11 +60,38 @@ function verdict(links) {
       water: () => `hydration: ${L.water.week}% of target this week; the scale wobbles with it.`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden.`,
       lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
-      recovery: () => `recovery: averaging ${L.recovery.week}. The training is landing on a body that is not absorbing it.`
+      recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
     }[first]();
     text = `Chain breaks at ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
   }
+  // a green recovery on a week that asked for little is not credit
+  if (L.recovery && L.recovery.state === 'good' && L.work && L.lift && (L.work.state === 'bad' || L.work.state === 'warn') && (L.lift.state === 'bad' || L.lift.state === 'warn')) text += ' Recovery is green because little was asked of it.';
   return { break_at: first || null, text };
+}
+
+// ---- recovery against the rider's own band ----------------------------------
+// The week's HRV (the mean of ln rMSSD over the last seven nights) against a
+// 60-day baseline of the same, with a step of half the baseline's night-to-
+// night spread (the smallest worthwhile change, Plews and Buchheit). Inside
+// or above the band is green; one step under is a dip; two steps under, or
+// one step under with the resting heart rate up and short sleep, is red.
+// Fewer than fourteen nights and there is no band yet. The baseline moves
+// with the rider, so green keeps meaning normal for the rider he is now.
+const mean = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+const sd = xs => { if (xs.length < 2) return null; const m = mean(xs); return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1)); };
+function recoveryState(o) {
+  const n = (o.hrv_week || []).length + (o.hrv_base || []).length;
+  if (n < 14 || (o.hrv_week || []).length < 3 || (o.hrv_base || []).length < 7) return { state: 'none', steps: null, pct: null, why: `${n} nights so far; a band needs fourteen` };
+  const lw = mean(o.hrv_week.map(Math.log)), lb = mean(o.hrv_base.map(Math.log)), s = Math.max(0.03, (sd(o.hrv_base.map(Math.log)) || 0.08) * 0.5);
+  const steps = (lw - lb) / s, pct = Math.round((Math.exp(lw - lb) - 1) * 100);
+  const rhrUp = o.rhr_week != null && o.rhr_base != null && o.rhr_sd != null && o.rhr_week > o.rhr_base + Math.max(0.8, 0.5 * o.rhr_sd);
+  const shortSleep = o.sleep_week != null && o.sleep_week < 6.25;
+  let state, why;
+  if (steps <= -2) { state = 'bad'; why = `HRV ${pct}% under your band, two steps down`; }
+  else if (steps <= -1 && rhrUp && shortSleep) { state = 'bad'; why = `HRV ${pct}% under your band with resting HR up and short sleep`; }
+  else if (steps <= -1) { state = 'warn'; why = `HRV ${pct}% under your band: a dip`; }
+  else { state = 'good'; why = steps >= 1 ? `HRV ${pct > 0 ? '+' : ''}${pct}% above your band` : `HRV inside your band (${pct > 0 ? '+' : ''}${pct}%)`; }
+  return { state, steps: Math.round(steps * 10) / 10, pct, rhr_up: !!rhrUp, why };
 }
 
 // ---- the week's facts ----------------------------------------------------
@@ -111,12 +138,19 @@ async function report() {
   const readDays = past.filter(d => rows[d]).length + 1;
 
   // sleep and recovery: the Garmin's mornings through intervals.icu
-  let nights = [], recs = [];
+  let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
   try {
     const iv = require('./intervals');
     if (iv.configured()) {
-      const w = await iv.wellnessRange(tz.shiftKey(today, -40), today);
+      const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
       const all = (w.days || []);
+      const weekFrom = dates[0], baseFrom = tz.shiftKey(today, -60);
+      const hrvWeek = all.filter(d => d.date >= weekFrom && d.hrv > 0).map(d => d.hrv);
+      const hrvBase = all.filter(d => d.date >= baseFrom && d.date < weekFrom && d.hrv > 0).map(d => d.hrv);
+      const rhrW = all.filter(d => d.date >= weekFrom && d.rhr > 0).map(d => d.rhr), rhrB = all.filter(d => d.date >= baseFrom && d.date < weekFrom && d.rhr > 0).map(d => d.rhr);
+      const sleepW = all.filter(d => d.date >= weekFrom && d.sleep_h >= 2.5).map(d => d.sleep_h);
+      band = recoveryState({ hrv_week: hrvWeek, hrv_base: hrvBase, rhr_week: mean(rhrW), rhr_base: mean(rhrB), rhr_sd: sd(rhrB), sleep_week: mean(sleepW) });
+      hrvWeekMs = hrvWeek.length ? Math.round(mean(hrvWeek)) : null; hrvBaseMs = hrvBase.length ? Math.round(mean(hrvBase)) : null; rhrWeek = rhrW.length ? Math.round(mean(rhrW)) : null;
       const M = require('./scores-math');
       for (const d of all) {
         if (d.date < dates[0]) continue;
@@ -147,6 +181,15 @@ async function report() {
       work.planned_min += planned; work.done_min += done; work.days.push({ date: day.date, planned_min: planned, done_min: done });
     }
   } catch (e) { work = { planned_min: 0, done_min: 0, days: [] }; }
+  // the morning after a hard day: a low reading is expected, and says so
+  let hardYesterday = null;
+  try {
+    const { calendar } = require('./workouts');
+    const cal = await calendar(tz.shiftKey(today, -1), tz.shiftKey(today, -1));
+    const d0 = (cal.days || [])[0];
+    const hard = d0 ? (d0.done || []).find(r => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(r.name || '').replace(/intervals\.?\s*icu/ig, '')) || (r.tss || 0) >= 60 || (r.minutes || 0) >= 120) : null;
+    hardYesterday = hard ? hard.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 30) : null;
+  } catch (e) { hardYesterday = null; }
   // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
   let lift = { sessions: 0, target: 5, today: [], week: [] };
   try {
@@ -183,7 +226,16 @@ async function report() {
       sessions: lift.sessions, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : (!lift.started ? 'not started' : lift.deload ? 'deload week' : null), week_list: lift.week, unit: 'of plan',
       basis: 'sessions logged on the Lift tab in the last seven days against the plan\'s five; the first week is judged on pace' },
-    recovery: { week: recWeek, state: stateOf('recovery', recWeek), today: recToday ? recToday.score : null, today_word: recToday && recToday.estimated ? 'estimated' : null, unit: 'average', days: recs.slice(-7), basis: 'Garmin training readiness, or an estimate from HRV against the month and the night\'s sleep' },
+    recovery: (() => {
+      const todayScore = recToday ? recToday.score : null;
+      const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';
+      const dip = dayBand && dayBand !== 'good' && hardYesterday;
+      // the border is the week against the band; a red morning takes it red for the day
+      const state = band.state === 'none' ? 'none' : dayBand === 'bad' ? 'bad' : band.state;
+      return { week: band.pct, state, week_state: band.state, steps: band.steps, why: band.why, hrv_week_ms: hrvWeekMs, hrv_base_ms: hrvBaseMs, rhr_week: rhrWeek, rhr_up: band.rhr_up,
+        score_week: recWeek, today: todayScore, today_band: dayBand, today_word: dip ? `dip after ${hardYesterday} · normal` : dayBand === 'bad' ? 'red morning: easy day' : (recToday && recToday.estimated ? 'estimated' : null),
+        hard_yesterday: hardYesterday, days: recs.slice(-7), unit: 'vs band', basis: 'the week\'s HRV against your own 60-day band (a step is half its night-to-night spread); the morning line is the day\'s readiness' };
+    })(),
     weight: { week: weight ? weight.week_change_lb : null, state: stateOf('weight', weight ? weight.week_change_lb : null), today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null, unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, basis: 'the seven-day mean weight against the seven days before it' }
   };
   const v = verdict(links);
@@ -195,4 +247,4 @@ function attach(app) {
     try { res.json(await report()); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, report, verdict, stateOf, ORDER };
+module.exports = { attach, report, verdict, stateOf, recoveryState, ORDER };

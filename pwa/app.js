@@ -1040,12 +1040,13 @@ function paintChain(c){
   const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "target", work: "plan", lift: "plan", recovery: "avg", weight: "lb/wk" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
     const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
+    if (ck === "recovery"){ const sw = el.querySelector(".sword"); if (L.today_word && sw) sw.textContent = L.today_word; }
     if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : L.started ? `${L.sessions}/${L.target}` : "—"; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : (L.today_word || "this week"); }
     if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
@@ -1780,7 +1781,9 @@ V.today = async function(){
       const when = age == null ? "" : age < 1 ? "just synced" : age < 24 ? `synced ${Math.round(age)}h ago` : `synced ${Math.round(age/24)}d ago`;
       const base = r.baseline_days >= 7 ? `30-day median` : `baseline after ${7 - r.baseline_days} more morning${7 - r.baseline_days === 1 ? "" : "s"}`;
       const rs = (d.sources && d.sources.recovery) || { source: "whoop" }, garmin = rs.source === "garmin";
+      const CB = chainData && chainData.links && chainData.links.recovery;
       html = `<h4>Recovery · last night${garmin ? " · Garmin" : ""}</h4>
+        ${CB && CB.week_state && CB.week_state !== "none" ? `<div class="cue" style="border-color:${toneC(CB.week_state)}"><b>The week:</b> ${esc(CB.why || "")}. HRV ${CB.hrv_week_ms ?? "—"} ms this week against ${CB.hrv_base_ms ?? "—"} ms over 60 days${CB.rhr_week ? `; resting HR ${CB.rhr_week}${CB.rhr_up ? ", up" : ""}` : ""}.${CB.today_word ? ` This morning: ${esc(CB.today_word)}.` : ""}</div>` : CB && CB.why ? `<div class="small">No band yet: ${esc(CB.why)}.</div>` : ""}
         ${r.score != null ? `<ul class="agenda totals">
           ${row(garmin ? (/estimated/.test(rs.basis||"") ? "readiness, estimated" : "Garmin readiness") : "WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
           ${garmin && rs.body_battery != null ? row("Body Battery, high", `${rs.body_battery}`) : ""}

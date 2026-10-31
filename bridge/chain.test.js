@@ -31,4 +31,20 @@ ok('verdict: the first link from the left that is off is the break; all good and
   assert.ok(/breaks at riding: 120 of 300 planned minutes ridden/.test(C.verdict(noRide).text));
   assert.strictEqual(C.stateOf('lift', 0.8), 'good'); assert.strictEqual(C.stateOf('lift', 0.6), 'warn');
 });
+
+ok('recovery: the week against the rider\'s own band; a dip is one step, two is red; no band under fourteen nights', () => {
+  const base = []; for (let i = 0; i < 40; i++) base.push(50 * Math.exp(((i % 7) - 3) * 0.03));
+  const inBand = C.recoveryState({ hrv_week: [50, 52, 49, 51, 50, 53, 48], hrv_base: base, rhr_week: 52, rhr_base: 52, rhr_sd: 2, sleep_week: 7 });
+  assert.strictEqual(inBand.state, 'good');
+  const up = C.recoveryState({ hrv_week: [58, 60, 59, 61, 57, 60, 58], hrv_base: base, rhr_week: 50, rhr_base: 52, rhr_sd: 2, sleep_week: 7 });
+  assert.strictEqual(up.state, 'good'); assert.ok(up.pct > 10, 'pct ' + up.pct);
+  const dip = C.recoveryState({ hrv_week: [47, 46, 48, 47, 46, 47, 48], hrv_base: base, rhr_week: 52, rhr_base: 52, rhr_sd: 2, sleep_week: 7 });
+  assert.strictEqual(dip.state, 'warn', JSON.stringify(dip));
+  const red = C.recoveryState({ hrv_week: [42, 41, 43, 42, 40, 42, 41], hrv_base: base, rhr_week: 56, rhr_base: 52, rhr_sd: 2, sleep_week: 6 });
+  assert.strictEqual(red.state, 'bad');
+  const few = C.recoveryState({ hrv_week: [50, 52], hrv_base: base.slice(0, 5) });
+  assert.strictEqual(few.state, 'none');
+  const L = { sleep: { week: 7.4, state: 'good' }, water: { week: 90, state: 'good' }, food: { week: 88, state: 'good', days_on: 6, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, lift: { week: 20, state: 'bad', sessions: 1, target: 5 }, work: { week: 30, state: 'bad', done_min: 60, planned_min: 200 }, recovery: { week: 4, state: 'good', why: 'HRV inside your band (+4%)' }, weight: { week: 0.1, state: 'warn' } };
+  assert.ok(/little was asked/.test(C.verdict(L).text), C.verdict(L).text);
+});
 console.log(n + ' passed');
