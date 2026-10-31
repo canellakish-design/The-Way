@@ -1039,7 +1039,8 @@ function paintChain(c){
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
-    const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = L.state === "none" ? "var(--muted)" : toneC(L.state === "good" ? "good" : L.state === "warn" ? "warn" : "bad");
+    const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
+    const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
