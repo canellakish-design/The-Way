@@ -317,8 +317,10 @@ async function dayReport(date) {
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
-    meals: F.rollForward(g.meals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const first = mine.filter(e => !e.supplement && !e.drink_only && /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
-      return Object.assign({}, m, { logged: mine.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
+    // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
+    meals: F.rollForward(g.meals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && (!e.drink_only || (m.slot === 'on the bike' && (e.carbs_g || 0) >= 10)));
+      const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
+      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
