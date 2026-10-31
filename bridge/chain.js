@@ -1,6 +1,6 @@
 // ============================================================
 // chain.js — the front page's chain: Sleep → Food → Micros → Water → Work →
-// Recovery → Weight, every link on the same seven-day clock, and where it breaks.
+// Lift → Recovery → Weight, every link on the same seven-day clock, and where it breaks.
 //
 // Weight is the lagging indicator at the end; the links before it are what
 // move it, in roughly the order they act: sleep sets appetite and recovery,
@@ -22,7 +22,7 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['sleep', 'food', 'micros', 'water', 'work', 'recovery', 'weight'];
+const ORDER = ['sleep', 'food', 'micros', 'water', 'work', 'lift', 'recovery', 'weight'];
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
 const r0 = x => x == null ? null : Math.round(x);
@@ -34,6 +34,7 @@ function stateOf(key, v) {
     case 'sleep': return v >= 7 ? 'good' : v >= 6.25 ? 'warn' : 'bad';
     case 'food': case 'micros': case 'water': return v >= 80 ? 'good' : v >= 60 ? 'warn' : 'bad';
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
+    case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
     case 'recovery': return v >= 67 ? 'good' : v >= 50 ? 'warn' : 'bad';
     case 'weight': return v <= -0.3 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
   }
@@ -58,6 +59,7 @@ function verdict(links) {
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
       water: () => `water: averaging ${L.water.week} this week; the scale will wobble with it.`,
       work: () => `workouts: ${L.work.done_min} of ${L.work.planned_min} planned minutes done.`,
+      lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
       recovery: () => `recovery: averaging ${L.recovery.week}. The training is landing on a body that is not absorbing it.`
     }[first]();
     text = `Chain breaks at ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
@@ -137,6 +139,15 @@ async function report() {
     const cal = await calendar(dates[0], today);
     for (const day of cal.days || []) { work.planned_min += day.totals.planned_min || 0; work.done_min += day.totals.done_min || 0; work.days.push({ date: day.date, planned_min: day.totals.planned_min, done_min: day.totals.done_min }); }
   } catch (e) { work = { planned_min: 0, done_min: 0, days: [] }; }
+  // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
+  let lift = { sessions: 0, target: 5, today: [], week: [] };
+  try {
+    const d = await getJSON('lifts', { sessions: [] });
+    const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today);
+    const L = require('./lifts');
+    const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
+    lift = { sessions: wk.length, target: 5, today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
+  } catch (e) { /* no lifts yet */ }
   // weight: the seven-day mean against the seven before
   let weight = null;
   try { weight = await require('./weighin').state(); } catch (e) { weight = null; }
@@ -152,6 +163,7 @@ async function report() {
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'of target', basis: 'what was drunk against each day\'s target, averaged over the week' },
     work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan', basis: 'minutes ridden or lifted against minutes planned, this week' },
+    lift: { week: Math.round(lift.sessions / lift.target * 100), state: stateOf('lift', lift.sessions / lift.target), sessions: lift.sessions, target: lift.target, today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : null, week_list: lift.week, unit: 'of plan', basis: 'sessions logged on the Lift tab this week against the plan\'s five' },
     recovery: { week: recWeek, state: stateOf('recovery', recWeek), today: recToday ? recToday.score : null, today_word: recToday && recToday.estimated ? 'estimated' : null, unit: 'average', days: recs.slice(-7), basis: 'Garmin training readiness, or an estimate from HRV against the month and the night\'s sleep' },
     weight: { week: weight ? weight.week_change_lb : null, state: stateOf('weight', weight ? weight.week_change_lb : null), today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null, unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, basis: 'the seven-day mean weight against the seven days before it' }
   };

@@ -610,3 +610,8 @@ ul.agenda.courses li .t{font-size:13px}
 .carrow.good{color:var(--green)} .carrow.warn{color:var(--amber)} .carrow.bad{color:var(--red)} .carrow.broken{font-size:10px; font-weight:700}
 .chainword{margin:8px 2px 0; color:var(--ink)}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:15px} .chain .cbox .slabel{font-size:7.5px; letter-spacing:.5px} .chain .score.cbox, .chain .score.cbox[data-tone]{padding:6px 1px 5px} }
+/* eight links: tighter */
+.chain .score.cbox, .chain .score.cbox[data-tone]{padding:6px 1px 5px}
+.chain .cbox .slabel{font-size:7.5px; letter-spacing:.5px} .chain .cbox .cnum{font-size:15px} .carrow{flex-basis:7px; font-size:11px}
+.chain .cbox .ctoday .sword{font-size:6.5px}
+@media (max-width:400px){ .chain .cbox .cnum{font-size:13.5px} .chain .cbox .cweek{font-size:6px} .chain .cbox .slabel{font-size:7px; letter-spacing:.3px} .carrow{flex-basis:6px; font-size:10px} }

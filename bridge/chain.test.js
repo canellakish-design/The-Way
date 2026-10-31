@@ -12,7 +12,7 @@ ok('states: one rule a link', () => {
 });
 
 ok('verdict: the first link from the left that is off is the break; all good and flat blames the target', () => {
-  const L = { sleep: { week: 7.4, state: 'good' }, food: { week: 71, state: 'warn', days_on: 3, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, water: { week: 90, state: 'good' }, work: { week: 95, state: 'good', done_min: 300, planned_min: 315 }, recovery: { week: 72, state: 'good' }, weight: { week: 0.2, state: 'warn' } };
+  const L = { sleep: { week: 7.4, state: 'good' }, food: { week: 71, state: 'warn', days_on: 3, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, water: { week: 90, state: 'good' }, work: { week: 95, state: 'good', done_min: 300, planned_min: 315 }, lift: { week: 80, state: 'good', sessions: 4, target: 5 }, recovery: { week: 72, state: 'good' }, weight: { week: 0.2, state: 'warn' } };
   const v = C.verdict(L);
   assert.strictEqual(v.break_at, 'food'); assert.ok(/breaks at food: on plan 3 of 7/.test(v.text), v.text); assert.ok(/flat this week/.test(v.text));
   const all = Object.assign({}, L, { food: { week: 88, state: 'good', days_on: 6, days_logged: 7 } });
@@ -24,6 +24,9 @@ ok('verdict: the first link from the left that is off is the break; all good and
   assert.strictEqual(C.verdict(sleepy).break_at, 'sleep');
   const lowMicro = Object.assign({}, all, { micros: { week: 55, state: 'bad', gaps: ['iron', 'calcium'] } });
   const v3 = C.verdict(lowMicro); assert.strictEqual(v3.break_at, 'micros'); assert.ok(/low on iron, calcium/.test(v3.text), v3.text);
-  assert.deepStrictEqual(C.ORDER, ['sleep', 'food', 'micros', 'water', 'work', 'recovery', 'weight']);
+  assert.deepStrictEqual(C.ORDER, ['sleep', 'food', 'micros', 'water', 'work', 'lift', 'recovery', 'weight']);
+  const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
+  assert.ok(/breaks at lifting: 1 of 5 sessions/.test(C.verdict(noLift).text));
+  assert.strictEqual(C.stateOf('lift', 0.8), 'good'); assert.strictEqual(C.stateOf('lift', 0.6), 'warn');
 });
 console.log(n + ' passed');

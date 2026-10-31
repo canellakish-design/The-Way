@@ -1029,21 +1029,22 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    target is where the chain breaks; the line under the row says so. The
    boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
    still open. */
-const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["work","workouts","Work"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
+const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["work","workouts","Ride"],["lift","lift","Lift"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
 function chainHTML(){
   return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true">›</span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctoday"><span class="snum">—</span><span class="sword"></span><span class="ssub"></span></span></button>`).join("");
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "of target", work: "of plan", recovery: "avg", weight: "lb/wk" };
+  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "of target", work: "of plan", lift: "of plan", recovery: "avg", weight: "lb/wk" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" || ck === "water" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
     const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
     const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
+    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : `${L.sessions}/${L.target}`; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : "this week"; }
     if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.textContent = c.break_at === ck ? "✕" : "›"; }
   }
@@ -1680,7 +1681,7 @@ V.today = async function(){
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep" && openScore !== "lift")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "sleep"){
@@ -1689,6 +1690,15 @@ V.today = async function(){
         ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
           <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
+      box.innerHTML = html; box.hidden = false; return;
+    }
+    if (openScore === "lift"){
+      const L = chainData && chainData.links && chainData.links.lift;
+      html = `<h4>Lifting · the week</h4>
+        ${L ? `<ul class="agenda totals">${(L.week_list || []).slice().reverse().map(x => row(`${esc(x.date.slice(5).replace("-", "/"))} · ${esc(x.name)}`, `${(x.volume_lb / 1000).toFixed(1)}k lb`)).join("") || `<li><span class="n">Nothing logged this week</span><span class="tag">0 of ${L.target}</span></li>`}</ul>
+          <div class="small">${L.sessions} of ${L.target} sessions. ${esc(L.basis)}.</div>` : `<div class="small">loading…</div>`}
+        <div class="rowbtns"><a class="btn primary" href="#lift">The Lift tab</a></div>
+        <details class="why"><summary>why it is here</summary><div class="small">The lifting sits beside the riding as the week's work: five sessions on the Matthews plan. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike. Four of five is green, three is amber.</div></details>`;
       box.innerHTML = html; box.hidden = false; return;
     }
     if (openScore === "micros"){
