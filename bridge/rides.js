@@ -135,7 +135,9 @@ async function analyze(ride, opts) {
         out.whoop = { strain: sc.strain != null ? Math.round(sc.strain * 10) / 10 : null, kilojoule: sc.kilojoule != null ? Math.round(sc.kilojoule) : null, id: w.id };
       } else if (!out.hr) out.sources.hr += '; no WHOOP workout matched this ride';
     } catch (e) {
-      out.sources.whoop = /403|401/.test(e.message) ? 'WHOOP needs reconnecting with workout access (visit /whoop/auth)' : 'WHOOP: ' + e.message;
+      // the WHOOP is retired (the Garmin carries recovery now): a dead token is not news on every ride, only a ride with no heart rate is
+      if (/token|401|403|refresh/i.test(e.message)) { if (!out.hr) out.sources.hr = (out.sources.hr || 'no heart-rate stream') + '; no strap on this ride'; }
+      else out.sources.whoop = 'WHOOP: ' + e.message;
     }
   }
   // A Strava failure (a rate limit) is not a result: do not cache it as one.
