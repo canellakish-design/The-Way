@@ -670,3 +670,6 @@ table.period tr.now td{background:var(--green-soft)} table.period tr.now td:firs
 .pumptag.on{color:var(--green)}
 ul.agenda li.lane-rx{border-left:3px solid #7FB3E6} ul.agenda li.lane-rx .n{color:var(--ink)}
 .rxlog{font:inherit; font-size:11px; padding:3px 8px}
+/* a row's tag never squeezes its name: capped width, wraps when it must */
+ul.agenda li .tag{max-width:36%; white-space:normal; overflow-wrap:anywhere; text-align:right}
+ul.agenda li .n{min-width:0; overflow-wrap:anywhere}
