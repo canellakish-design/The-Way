@@ -196,8 +196,13 @@ function model(o) {
     else if (!legsOk && need.legs) advice = `Legs are low (${p.legs_pct}%) for ${short1}. Carbs on the bike, 60 g an hour, and a carb dinner.`;
     else if (!legsFloor && !s.hard) advice = `Legs are low (${p.legs_pct}%). Ride ${short1} easy and eat carbs tonight.`;
     else if (need.quick <= 25 && p.pct < 35 && s.min > now) advice = `Low on purpose: ${short1} runs on fat. Nothing more needed before it.`;
+    // the feeding window: food lands over two to three hours, so carbs for a session go in
+    // between 2½ hours and an hour before it; the bottle starts a quarter of an hour before
+    const feed = short > 10 && s.min > now && need.quick > 25 ? { g: short, from: toHM(Math.max(now, s.min - 150)), to: toHM(Math.max(now, s.min - 60)), bottle_from: toHM(Math.max(now, s.min - 15)) } : null;
+    // when the quick store first reaches what the session needs, from now on (null = not before it starts)
+    const readyPt = series.find(q => q.m >= now && q.m <= s.min && q.pct >= need.quick);
     return { name: s.name, time: s.time, slid_from: s.slid_from, min: s.min, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, legs_pct: p.legs_pct,
-      need: need.quick, need_legs: need.legs, band: b, advice };
+      need: need.quick, need_legs: need.legs, band: b, advice, feed, ready_at: readyPt ? readyPt.t : null, ready_now: quickOk };
   });
   const lows = []; let runLow = null;
   for (const p of series) { if (p.m < now) continue; if (p.pct < 35) { if (!runLow) runLow = { from: p.t, to: p.t }; else runLow.to = p.t; } else { if (runLow) lows.push(runLow); runLow = null; } }

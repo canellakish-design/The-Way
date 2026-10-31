@@ -6,9 +6,14 @@ const HOME_LAT = process.env.HOME_LAT || 39.0;
 const HOME_LON = process.env.HOME_LON || -76.5;
 const ROUTE_BEARING = 135;
 
+// windDeg is where the wind comes FROM (the meteorological convention Open-Meteo
+// uses); heading is the way the bike points. d is how far the wind's source is
+// from straight ahead: 0 means the wind comes from where you are going, a
+// headwind; 180 means it comes from behind, a tailwind. (This read the other
+// way round until October 2026, so every route-weather line was inverted.)
 function windKind(windDeg, heading) {
   const d = Math.abs(((windDeg - heading) + 540) % 360 - 180);
-  return d < 45 ? 'tailwind' : d < 135 ? 'crosswind' : 'headwind';
+  return d < 45 ? 'headwind' : d < 135 ? 'crosswind' : 'tailwind';
 }
 async function routeWeather(hour) {
   const p = await getJSON('plan', null);

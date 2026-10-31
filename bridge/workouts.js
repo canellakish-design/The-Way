@@ -58,6 +58,12 @@ function clean(body, prev) {
     name: String(b.name != null ? b.name : (p.name || 'Workout')).slice(0, 80) || 'Workout',
     notes: String(b.notes != null ? b.notes : (p.notes || '')).slice(0, 2000),
     route_id: b.route_id != null ? String(b.route_id).replace(/\D/g, '').slice(0, 12) || null : (p.route_id || null),
+    // the course picked for the ride (courses.js): name, length, climbing and its two headings
+    course: b.course === null ? null : b.course && typeof b.course === 'object' ? {
+      id: String(b.course.id || '').slice(0, 60) || null, name: String(b.course.name || '').slice(0, 80) || null,
+      km: Number(b.course.km) || null, gain_m: Number(b.course.gain_m) || null,
+      bearing_out: b.course.bearing_out != null ? Math.round(Number(b.course.bearing_out)) : null, bearing_back: b.course.bearing_back != null ? Math.round(Number(b.course.bearing_back)) : null,
+      virtual: !!b.course.virtual } : (p.course || null),
     steps: b.steps ? W.normItems(b.steps) : (p.steps || []),
     sync: p.sync || { state: 'off' },
     created: p.created || new Date().toISOString(),
@@ -394,7 +400,7 @@ async function plannedDays(from, to) {
     const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
     const timed = sm != null && sm > 0;
     (days[w.date] = days[w.date] || []).push({
-      summary: w.name, detail: [mins + ' min', m.tss + ' TSS', w.sport].join(' · '),
+      summary: w.name, detail: [mins + ' min', m.tss + ' TSS', w.sport].concat(w.course && w.course.name ? [w.course.name] : []).join(' · '), course: w.course || null,
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,

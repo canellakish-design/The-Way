@@ -191,7 +191,7 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { day:"today", agent:"plan", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
+const REDIRECTS = { day:"today", agent:"ride", plan:"ride", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
@@ -202,7 +202,7 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"],["lift","Lift"]];
+  const NAV = [["today","Day"],["ride","Ride"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"],["lift","Lift"]];
   const cur = h === "workout" ? "calendar" : h;
   if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();

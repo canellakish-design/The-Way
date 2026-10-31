@@ -8,6 +8,7 @@ app.use(express.json({ limit: '15mb' }));
 require('./fuel-log').attach(app);
 require('./plan').attach(app);
 require('./weather').attach(app);
+require('./courses').attach(app);
 require('./race').attach(app);
 require('./whoop').attach(app);
 require('./calendar').attach(app);

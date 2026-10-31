@@ -573,3 +573,7 @@ li.xrow.medalled{border-color:#b8860b; box-shadow:inset 3px 0 0 #f0c040}
 .wxsky .wxico svg{width:15px; height:15px; display:block}
 .wxsky .wxh.wxwind{height:28px; flex-direction:column; gap:0}
 .wxsky .wxh.wxwind i{position:static; font-size:7.5px; line-height:1; margin-top:1px; color:inherit}
+/* the ride tab */
+ul.agenda.wins li.win.out{border-left:3px solid var(--green)} ul.agenda.wins li.win.ok{border-left:3px solid var(--amber)} ul.agenda.wins li.win.in{border-left:3px solid var(--line)}
+ul.agenda.courses li .t{font-family:var(--mono); color:var(--muted)} ul.agenda.courses li.picked{background:var(--green-soft)} .cwind{display:block; color:var(--ink)}
+.rwin, .rpick{font:inherit; font-size:12px; padding:4px 8px}
