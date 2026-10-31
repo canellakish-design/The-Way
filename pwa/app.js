@@ -1342,7 +1342,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
     // the tag stays short; the long reason lives in the detail that opens on tap
     const shortWord = mt => { const w = mt.word || ""; if (w.length <= 18) return w; const rk = mt.rules && mt.rules.key, mk = mt.macros && mt.macros.key; const RANK = { green: 0, yellow: 1, red: 2 }; if (rk && mk && RANK[rk] > RANK[mk]) return rk === "red" ? "rules broken" : "rules partly"; return mt.macros && mt.macros.word && mt.macros.word.length <= 18 ? mt.macros.word : (mt.key === "red" ? "off plan" : "a bit off"); };
-    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(shortWord(r.meal.match))}</span>` : "logged") : (/next$/.test(r.title) ? "next" : state === "past" ? "nothing logged" : "plan")) : null;
+    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(shortWord(r.meal.match))}</span>` : "logged") : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : state === "past" ? "nothing logged" : "plan")) : null;
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? `<span class="wxdot ${wxh.grade}" title="${attr(`${wxh.temp_f}°, wind ${wxh.wind_mph} ${wxh.wind_from}, ${wxh.rain_pct}% rain`)}"></span>` : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
@@ -2161,6 +2161,9 @@ V.today = async function(){
     });
     // the trash can beside a planned session on the day
     view.addEventListener("click", async (e)=>{
+      // "log" beside a meal that is still open: the Food page, with that meal picked and the pen ready
+      const ml = e.target.closest("[data-meallog]");
+      if (ml){ e.stopPropagation(); e.preventDefault(); location.hash = "#food?log=" + encodeURIComponent(ml.dataset.meallog); return; }
       const rx = e.target.closest("[data-supplog]");
       if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); bridge("/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog })}).then(()=> syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
       const b = e.target.closest("[data-delw]"); if (!b) return;

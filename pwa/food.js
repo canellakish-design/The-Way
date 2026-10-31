@@ -481,6 +481,15 @@ V.food = async function(){
   const wform = document.getElementById("writeForm");
   document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };
   document.getElementById("writeCancel").onclick = ()=>{ wform.hidden = true; };
+  // opened from the Day card's "log" beside a meal: that meal picked, the pen open, the camera a tap away
+  const wantLog = params().log;
+  if (wantLog && MEALS.includes(wantLog)){
+    const sel = document.getElementById("snapMeal"); if (sel) sel.value = wantLog;
+    const w = document.getElementById("writeMeal"); if (w) w.value = wantLog;
+    wform.hidden = false; form.hidden = true;
+    document.getElementById("snap").scrollIntoView({ behavior: "smooth", block: "start" });
+    setTimeout(()=> document.getElementById("writeText").focus({ preventScroll: true }), 350);
+  }
   document.getElementById("writeLog").onclick = async ()=>{
     const text = document.getElementById("writeText").value.trim();
     if (!text) return;
