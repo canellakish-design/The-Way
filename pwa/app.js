@@ -191,7 +191,7 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { day:"today", agent:"ride", plan:"ride", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
+const REDIRECTS = { day:"today", agent:"ride", plan:"ride", activate:"settings", train:"calendar", sleep:"today", analyze:"ride", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
