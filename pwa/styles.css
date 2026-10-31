@@ -628,3 +628,10 @@ ul.agenda.courses li .t{font-size:13px}
 .chain .cbox .cweek{padding:0 8px; max-width:100%; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box}
 .carrow i{width:18px; height:18px; margin:-9px 0 0 -9px} .carrow i svg{width:11px; height:11px}
 .carrow.broken i{width:22px; height:22px; margin:-11px 0 0 -11px}
+/* the fitness card: the words tucked left, the line given the room */
+.score.hero{padding:10px 12px 8px; gap:10px; align-items:stretch}
+.score.hero .herotext{flex:0 0 38%; max-width:38%; flex-direction:column; align-items:flex-start; gap:0; justify-content:center}
+.score.hero .snum{font-size:38px; line-height:1}
+.score.hero .sword{font-size:11px} .score.hero .ssub{font-size:11.5px; white-space:normal; line-height:1.3}
+.score.hero .spark{flex:1 1 62%; max-width:none; width:62%; height:84px; min-height:84px; align-self:stretch}
+@media (max-width:560px){ .score.hero .snum{font-size:34px} .score.hero .spark{height:78px; min-height:78px} }
