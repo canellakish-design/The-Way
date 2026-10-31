@@ -317,7 +317,8 @@ async function dayReport(date) {
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
-    meals: F.rollForward(g.meals, entries).map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id), match: F.mealMatch(m, entries.filter(e => e.slot === m.slot)) })),
+    meals: F.rollForward(g.meals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const first = mine.filter(e => !e.supplement && !e.drink_only && /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
+      return Object.assign({}, m, { logged: mine.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },

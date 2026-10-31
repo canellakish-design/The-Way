@@ -1102,8 +1102,8 @@ function dayRows(d, plan, isToday){
       if (!m.time || seen.has(m.slot)) continue;
       if (!m.kcal && !(m.slot === "on the bike" && (m.carbs_g || 0) >= 10)) continue;
       seen.add(m.slot);
-      const a = hm(m.time); if (a == null) continue;
       const logged = (m.logged || []).length > 0, mt = logged && m.match ? m.match : null;
+      const a = hm(logged && m.time_logged ? m.time_logged : m.time); if (a == null) continue;   // a logged meal sits at the time it was eaten
       const what = String(m.what || "").split(/(?<=\.)\s/)[0].slice(0, 70);
       // logged: the plate as eaten with its numbers, the plan's in brackets; not yet: the plan
       const ate = logged ? (f.entries || []).filter(e => (m.logged || []).includes(e.id) && !e.supplement) : [];
