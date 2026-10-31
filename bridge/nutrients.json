@@ -1300,6 +1300,23 @@
       "folate_ug": 400,
       "vitamin_c_mg": 90,
       "vitamin_a_ug": 900
+    },
+    {
+      "key": "creatine",
+      "name": "Creatine, 5 g",
+      "note": "Creatine monohydrate, 5 g a day, any time, with anything. No loading phase. The best-supported supplement for strength and short hard efforts; adds a pound or two of water in the first two weeks, which is not fat."
+    },
+    {
+      "key": "beetroot",
+      "name": "Beetroot shot",
+      "note": "A concentrated shot or 300 ml of juice, about 6 to 8 mmol nitrate, 2 to 3 hours before a ride. Evidence for economy at the easy end and a small gain in hard efforts; no mouthwash within the hour, it kills the bacteria that do the work.",
+      "potassium_mg": 300
+    },
+    {
+      "key": "sodium_bicarb",
+      "name": "Sodium bicarbonate",
+      "note": "0.2 to 0.3 g per kg, about 20 to 29 g, split across the hour before a hard session, with food. For one-to-seven-minute efforts only (the 40/20s, a test); never on an easy day. If the gut objects, the lower dose or enteric capsules.",
+      "sodium_mg": 5500
     }
   ],
   "windows": {

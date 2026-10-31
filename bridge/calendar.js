@@ -596,6 +596,28 @@ async function scheduleReport(q) {
           category: classify(e.summary, d.manual, calDefault) };
       });
       const days = scheduleDays(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), n, iv.days, back);
+      // The supplements, as rows tied to the day's rides: beetroot before the
+      // first ride, bicarbonate before a hard one, magnesium in the evening.
+      // Derived, never stored, so they follow a ride that moves and never
+      // double up. Today's rows know whether the dose is already logged.
+      try {
+        const S = require('./supps');
+        const todayKey = tz.todayKey();
+        let todayEntries = [], yEntries = [];
+        try { const { getJSON } = require('./storage'); todayEntries = ((await getJSON('food-' + todayKey, null)) || {}).entries || []; yEntries = ((await getJSON('food-' + tz.shiftKey(todayKey, -1), null)) || {}).entries || []; } catch (e) { /* no journal */ }
+        for (const day of days) {
+          const rides = (day.events || []).filter(e => e.category === 'training' && e.kind === 'ride' && e.start_min != null)
+            .map(e => ({ name: e.summary, time: S.toHM(e.start_min), sport: 'Ride', done: false }));
+          const r = S.dueFor(day.date, rides, day.today ? todayEntries : [], null, day.today ? yEntries : []);
+          for (const x of r.due) {
+            if (!x.time || x.key === 'creatine') continue;                          // creatine is any time: it lives under the Lift box
+            const sm = S.toMin(x.time); if (sm == null || sm < 5 * 60) continue;
+            day.events.push({ summary: x.name, detail: x.why, category: 'supplement', source: 'rx', kind: 'supplement', calendar: 'The Way', allDay: false, blocking: false,
+              minutes: 10, start_min: sm, end_min: sm + 10, from: fmtMin(sm), to: fmtMin(sm + 10), rx_key: x.key, taken: !!x.taken, for_session: x.session || null });
+          }
+          day.events.sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
+        }
+      } catch (e) { /* the day stands without them */ }
       // The day's fuel targets, from the day's training (food-math.js).
       await attachMacros(days);
       const sources = {

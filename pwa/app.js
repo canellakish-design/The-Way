@@ -1002,6 +1002,7 @@ const LANE = {
   calendar:  { tag:"cal",     cls:"lane-cal"   },
   ride:      { tag:"ride",    cls:"lane-icu"   },
   food:      { tag:"food",    cls:"lane-food"  },
+  rx:        { tag:"rx",      cls:"lane-rx"    },
   open:      { tag:"open",    cls:"lane-open"  }
 };
 function durLabel(min){
@@ -1079,7 +1080,8 @@ function dayRows(d, plan, isToday){
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
     lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
-    desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
+    desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar",
+    rx: e.rx_key || null, taken: !!e.taken
   }));
   // The hub: today's card carries what the other tabs decided. From Food
   // and Live, the feeding window before each session and the meals that
@@ -1327,7 +1329,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? `<span class="wxdot ${wxh.grade}" title="${attr(`${wxh.temp_f}°, wind ${wxh.wind_mph} ${wxh.wind_from}, ${wxh.rain_pct}% rain`)}"></span>` : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="tag">${r.rx ? (r.taken ? `<span class="mword green">✓ taken</span>` : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : "rx")) : mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -2109,6 +2111,8 @@ V.today = async function(){
     });
     // the trash can beside a planned session on the day
     view.addEventListener("click", async (e)=>{
+      const rx = e.target.closest("[data-supplog]");
+      if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); bridge("/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog })}).then(()=> syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
       const b = e.target.closest("[data-delw]"); if (!b) return;
       e.preventDefault();
       if (!confirm("Take this session off the calendar?")) return;

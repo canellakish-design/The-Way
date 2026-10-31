@@ -307,6 +307,9 @@ async function dayReport(date) {
   const nowP = tz.parts(new Date());
   const nowMin = date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null;
   const hydration = await liveHydration(date, entries, g, nowMin);
+  // the four supplements: what is due today and what was taken (supps.js)
+  let supps = null;
+  try { const S = require('./supps'); const y = await getJSON(dayKey(tz.shiftKey(date, -1)), null); supps = S.dueFor(date, g.sessions, entries, nowMin, (y && y.entries) || []); } catch (e) { supps = null; }
   // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
   let energy = null;
   try { energy = await liveFuel(date, entries, g, nowMin); } catch (e) { energy = null; }
@@ -315,7 +318,7 @@ async function dayReport(date) {
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     meals: F.rollForward(g.meals, entries).map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id), match: F.mealMatch(m, entries.filter(e => e.slot === m.slot)) })),
     actual: Object.assign(actual, { meals: meals.length }), entries,
-    hydration, energy,
+    hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: date === tz.todayKey() ? nextUp(g, entries, actual, macro, nowHM0) : null,

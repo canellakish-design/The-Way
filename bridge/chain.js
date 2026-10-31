@@ -50,6 +50,7 @@ function verdict(links) {
   let text;
   if (!first) {
     if (w.week == null) text = 'Every link holds. The scale has not said yet.';
+    else if (w.creatine_water && w.week > 0) text = `Every link holds and weight is ${wWord}: creatine started ${w.creatine_days} days ago, and a pound or two of that is water. Judge it from day 14.`;
     else if (w.state === 'good') text = `The chain holds: weight ${wWord}.`;
     else text = `Every link holds and weight is ${wWord}: the calorie target is the suspect, not the week.`;
   } else {
@@ -95,7 +96,7 @@ function recoveryState(o) {
 }
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 2;   // bump when what a row holds changes; older rows are re-read
+const ROW_V = 3;   // bump when what a row holds changes; older rows are re-read
 async function pastDay(date, store) {
   if (store.days[date] && store.days[date].v === ROW_V) return store.days[date];
   const food = require('./food');
@@ -104,7 +105,11 @@ async function pastDay(date, store) {
   // water for a past day is what was drunk against the day's target, not the
   // end-of-day balance (which reads low on every day the last glass was not logged)
   const h = r.hydration || {};
-  const row = { v: ROW_V, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / h.target_ml * 100)) : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null };
+  const supps = (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key);
+  const rideDay = (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || ''));
+  const hardDay = (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, '')));
+  const row = { v: ROW_V, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / h.target_ml * 100)) : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+    supps, ride: rideDay, hard: hardDay };
   store.days[date] = row; store.dirty = true;
   return row;
 }
@@ -130,7 +135,10 @@ async function report() {
     const h = r.hydration || {};
     // today counts toward the week only once the day is mostly drunk: the share of the target so far, scaled to the share of the waking day gone
     const p = tz.parts(new Date()); const dayShare = Math.max(0.2, Math.min(1, (p.h * 60 + p.mi - 6 * 60) / (16 * 60)));
-    todayRow = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / (h.target_ml * dayShare) * 100)) : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null, micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
+    todayRow = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / (h.target_ml * dayShare) * 100)) : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+      supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
+      ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
+      hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))), micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
   } catch (e) { todayRow = null; }
   if (store.dirty) { delete store.dirty; for (const k of Object.keys(store.days)) if (k < tz.shiftKey(today, -45)) delete store.days[k]; await setJSON('chain-days', store).catch(() => {}); }
   const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
@@ -207,6 +215,17 @@ async function report() {
     lift = { sessions: wk.length, pumps, target: 5, expected, started: !!first, deload: weekNo > 0 && weekNo % 9 === 0, week_no: weekNo,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ }
+  // the supplements over the week, and when creatine began (its water on the scale)
+  const S = require('./supps');
+  const suppRows = past.map(d => rows[d]).filter(Boolean).concat(todayRow ? [todayRow] : []);
+  const rxWeek = S.weekOf(suppRows);
+  let creatineStart = null;
+  try {
+    for (let i = 20; i >= 0; i--) { const k = tz.shiftKey(today, -i); const doc = await getJSON('food-' + k, null); if (doc && (doc.entries || []).some(e => e && e.supplement && e.key === 'creatine')) { creatineStart = k; break; } }
+  } catch (e) { creatineStart = null; }
+  const creatineDays = creatineStart ? Math.round((Date.parse(today) - Date.parse(creatineStart)) / 864e5) + 1 : null;
+  const rxToday = todayRow && todayRow.rx ? todayRow.rx : null;
+  const rxLine = link => rxToday ? rxToday.due.filter(x => x.link === link).map(x => `${x.key === 'sodium_bicarb' ? 'bicarb' : x.key === 'magnesium' ? 'Mg' : x.key}${x.taken ? ' ✓' : x.time ? ' ' + tz.hm12(x.time) : ' due'}`).join(' · ') : '';
   // weight: the seven-day mean against the seven before
   let weight = null;
   try { weight = await require('./weighin').state(); } catch (e) { weight = null; }
@@ -217,16 +236,19 @@ async function report() {
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date >= tz.shiftKey(today, -1) ? recs[recs.length - 1] : null;
   const workRatio = work.planned_min > 0 ? work.done_min / work.planned_min : (work.done_min > 0 ? 1 : null);
   const links = {
-    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: lastNight && lastNight.score != null ? `score ${lastNight.score}` : (lastNight ? 'last night' : 'no watch'), unit: 'h a night', nights: nights.slice(-7), basis: 'hours asleep per night, from the Garmin through intervals.icu' },
+    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}` : (lastNight ? 'last night' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
+      rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'of target', basis: 'what was drunk against each day\'s target, averaged over the week' },
-    work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan', basis: 'minutes ridden against minutes of riding planned, this week; the lifting is its own link' },
+    work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
+      today_word: rxLine('work') || null, rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb }, basis: 'minutes ridden against minutes of riding planned, this week; the lifting is its own link' },
     // grey before the first session and in a deload week; in the first week, judged against the sessions due so far
     lift: { week: lift.started ? Math.round(lift.sessions / lift.target * 100) : null,
       state: !lift.started || lift.deload ? 'none' : stateOf('lift', lift.sessions / Math.max(1, lift.expected)),
       sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
-      today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : (!lift.started ? 'not started' : lift.deload ? 'deload week' : null), week_list: lift.week, unit: 'of plan',
+      today: lift.today.length, today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? 'not started' : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: 'of plan',
+      rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
       basis: 'sessions logged on the Lift tab in the last seven days against the plan\'s five; the first week is judged on pace' },
     recovery: (() => {
       const todayScore = recToday ? recToday.score : null;
@@ -238,7 +260,16 @@ async function report() {
         score_week: recWeek, today: todayScore, today_band: dayBand, today_word: dip ? `dip after ${hardYesterday} · normal` : dayBand === 'bad' ? 'red morning: easy day' : (recToday && recToday.estimated ? 'estimated' : null),
         hard_yesterday: hardYesterday, days: recs.slice(-7), unit: 'vs band', basis: 'the week\'s HRV against your own 60-day band (a step is half its night-to-night spread); the morning line is the day\'s readiness' };
     })(),
-    weight: { week: weight ? weight.week_change_lb : null, state: stateOf('weight', weight ? weight.week_change_lb : null), today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null, unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, basis: 'the seven-day mean weight against the seven days before it' }
+    weight: (() => {
+      const wk = weight ? weight.week_change_lb : null;
+      // creatine's first two weeks put a pound or two of water on the scale: not the week going wrong
+      const creatineWater = creatineDays != null && creatineDays <= 14;
+      let state = stateOf('weight', wk);
+      if (creatineWater && (state === 'bad' || state === 'warn') && wk != null && wk <= 2.5) state = 'warn';
+      return { week: wk, state, today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: creatineWater ? `creatine day ${creatineDays}: water` : (weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null),
+        unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, creatine_water: creatineWater, creatine_days: creatineDays,
+        basis: `the seven-day mean weight against the seven days before it${creatineWater ? '; creatine started ' + creatineDays + ' days ago, so a pound or two of this is water and the week is not called up until day 14' : ''}` };
+    })()
   };
   const v = verdict(links);
   return { order: ORDER, links, break_at: v.break_at, verdict: v.text, days: DAYS, read_days: readDays };
