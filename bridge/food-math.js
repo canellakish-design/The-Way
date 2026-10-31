@@ -264,12 +264,13 @@ function slotFor(plan, hm, mealHint) {
   const slots = (plan || []).filter(p => p.slot && toMin(p.time) != null);
   const hint = String(mealHint || '').toLowerCase().trim();
   if (hint && hint !== 'supplement') {
-    const direct = slots.find(p => p.slot === hint);
+    const direct = hint !== 'snack' ? slots.find(p => p.slot === hint) : null;   // "snack" is judged by time below
     if (direct) return direct.slot;
-    if (hint === 'snack') { const sn = slots.find(p => p.slot === 'snack'); if (sn) return 'snack'; }
   }
   const m = toMin(hm);
   if (m == null) return null;
+  // "snack" names the plan's snack only when that slot is near (within three hours); a morning coffee is not the evening snack
+  if (hint === 'snack') { const sn = slots.find(p => p.slot === 'snack'); return sn && Math.abs(toMin(sn.time) - m) <= 180 ? 'snack' : null; }
   const nearest = (limit) => { let best = null; for (const p of slots) { const d = Math.abs(toMin(p.time) - m); if (d <= limit && (!best || d < best.d)) best = { p, d }; } return best ? best.p.slot : null; };
   const near = nearest(90); if (near) return near;
   const real = slots.filter(p => !p.extra).sort((a, b) => toMin(a.time) - toMin(b.time));

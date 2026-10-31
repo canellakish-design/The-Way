@@ -177,7 +177,8 @@ ok('slotFor: the word he used wins; an early breakfast is breakfast; far from ev
   assert.strictEqual(F.slotFor(plan, '15:20'), 'lunch');               // within two and a half hours of the nearest
   assert.strictEqual(F.slotFor(plan, '15:40'), null);                  // beyond it
   assert.strictEqual(F.slotFor(plan, '04:00'), null);
-  assert.strictEqual(F.slotFor(plan, '16:10', 'snack'), 'snack');
+  assert.strictEqual(F.slotFor(plan, '19:10', 'snack'), 'snack');
+  assert.strictEqual(F.slotFor(plan, '06:19', 'snack'), null);           // a morning coffee is not the evening snack
 });
 console.log(n + ' passed');
 
