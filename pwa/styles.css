@@ -567,3 +567,9 @@ ul.agenda.lexlist li{display:block; padding:10px 12px} .lexhead{display:flex; ju
 svg.medal{vertical-align:-4px; margin-right:5px; filter:drop-shadow(0 0 3px rgba(240,192,64,.6))}
 li.xrow.medalled{border-color:#b8860b; box-shadow:inset 3px 0 0 #f0c040}
 .xbt{border:1px solid #b8860b; background:rgba(240,192,64,.08); padding:8px 10px; margin:6px 0 8px} .xbt > b{color:#f0c040} .xbthits{margin:6px 0}
+/* the sky and the wind over the strips */
+.wxstack.wxsky{margin-bottom:5px}
+.wxsky .wxh.wxico{height:20px; background:none; cursor:default; display:flex; align-items:center; justify-content:center; border-radius:0}
+.wxsky .wxico svg{width:15px; height:15px; display:block}
+.wxsky .wxh.wxwind{height:28px; flex-direction:column; gap:0; color:var(--ink)}
+.wxsky .wxh.wxwind i{position:static; font-size:7.5px; line-height:1; margin-top:1px}

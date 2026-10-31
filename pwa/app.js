@@ -1146,6 +1146,33 @@ function freeHours(d){
   }
   return out;
 }
+/* the sky and the wind, hour by hour, above the two strips: a small picture
+   of the sky (sun, cloud, rain) and an arrow the way the wind is blowing,
+   with its speed under it */
+const SKY_SVG = {
+  sun: '<svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="4" fill="#F0C040"/><g stroke="#F0C040" stroke-width="1.6" stroke-linecap="round"><path d="M10 1.5v2.5M10 16v2.5M1.5 10H4M16 10h2.5M4 4l1.8 1.8M14.2 14.2L16 16M4 16l1.8-1.8M14.2 5.8L16 4"/></g></svg>',
+  moon: '<svg viewBox="0 0 20 20"><path d="M13.5 2.5a7.5 7.5 0 1 0 4 13.3A6.5 6.5 0 0 1 13.5 2.5z" fill="#D8D6CC"/></svg>',
+  partly: '<svg viewBox="0 0 20 20"><circle cx="7" cy="7" r="3.5" fill="#F0C040"/><path d="M6 17h9a3 3 0 0 0 .4-6A4.5 4.5 0 0 0 6.8 9.6 3.7 3.7 0 0 0 6 17z" fill="#C9C7BE"/></svg>',
+  "partly-night": '<svg viewBox="0 0 20 20"><path d="M9 2a5 5 0 1 0 3 9 4.3 4.3 0 0 1-3-9z" fill="#D8D6CC" opacity=".8"/><path d="M6 17h9a3 3 0 0 0 .4-6A4.5 4.5 0 0 0 6.8 9.6 3.7 3.7 0 0 0 6 17z" fill="#C9C7BE"/></svg>',
+  cloud: '<svg viewBox="0 0 20 20"><path d="M5 16h10a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 5.8 7.6 4.2 4.2 0 0 0 5 16z" fill="#A9A7A0"/></svg>',
+  fog: '<svg viewBox="0 0 20 20"><g stroke="#A9A7A0" stroke-width="1.8" stroke-linecap="round"><path d="M3 7h14M4 11h12M6 15h9"/></g></svg>',
+  drizzle: '<svg viewBox="0 0 20 20"><path d="M5 12h10a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 5.8 3.6 4.2 4.2 0 0 0 5 12z" fill="#A9A7A0"/><g stroke="#7FB3E6" stroke-width="1.6" stroke-linecap="round"><path d="M7 14.5v1.5M10.5 14.5v1.5M14 14.5v1.5"/></g></svg>',
+  rain: '<svg viewBox="0 0 20 20"><path d="M5 11h10a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 5.8 2.6 4.2 4.2 0 0 0 5 11z" fill="#A9A7A0"/><g stroke="#7FB3E6" stroke-width="1.8" stroke-linecap="round"><path d="M7 13l-1 4M11 13l-1 4M15 13l-1 4"/></g></svg>',
+  snow: '<svg viewBox="0 0 20 20"><path d="M5 11h10a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 5.8 2.6 4.2 4.2 0 0 0 5 11z" fill="#A9A7A0"/><g fill="#EEF4FF"><circle cx="7" cy="14.5" r="1.2"/><circle cx="11" cy="16.5" r="1.2"/><circle cx="14.5" cy="14" r="1.2"/></g></svg>',
+  thunder: '<svg viewBox="0 0 20 20"><path d="M5 10h10a3.5 3.5 0 0 0 .5-7A5 5 0 0 0 5.8 1.6 4.2 4.2 0 0 0 5 10z" fill="#A9A7A0"/><path d="M11 10l-3.5 5h3l-1 4 4-6h-3z" fill="#F0C040"/></svg>'
+};
+const SKY_WORD = { sun: "sunny", moon: "clear", partly: "partly cloudy", "partly-night": "partly cloudy", cloud: "cloudy", fog: "fog", drizzle: "drizzle", rain: "rain", snow: "snow", thunder: "thunderstorms" };
+// the arrow points the way the wind blows (the forecast gives where it comes from)
+const windSVG = (deg, mph) => `<svg viewBox="0 0 20 20" class="warrow" style="opacity:${mph >= 14 ? 1 : mph >= 7 ? .8 : .5}"><g transform="rotate(${((deg || 0) + 180) % 360} 10 10)" stroke="currentColor" stroke-width="${mph >= 14 ? 2.4 : 1.8}" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M10 17V3M10 3L6 7M10 3l4 4"/></g></svg>`;
+function skyStrips(w, n){
+  if (!w) return "";
+  const hs = w.hours.filter(h => h.hour >= H0 && h.hour <= H1);
+  if (!hs.some(h => h.sky)) return "";
+  const sky = hs.map(h => `<span class="wxh wxico" title="${attr(`${hlbl(h.hour)}: ${SKY_WORD[h.sky] || ""}, ${h.temp_f}°, ${h.rain_pct}% rain`)}">${SKY_SVG[h.sky] || ""}</span>`).join("");
+  const wind = hs.map(h => `<span class="wxh wxico wxwind" title="${attr(`${hlbl(h.hour)}: wind ${h.wind_mph} mph from the ${h.wind_from}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}`)}">${windSVG(h.wind_deg, h.wind_mph)}<i>${h.wind_mph}</i></span>`).join("");
+  return `<div class="wxstack wxsky"><span class="wxlab">wind</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wind}</div>
+    <span class="wxlab">sky</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${sky}</div></div>`;
+}
 function hourStrips(d){
   const w = WX[d.date];
   const cal = freeHours(d);
@@ -1167,6 +1194,7 @@ function hourStrips(d){
   const overlay = wins.map(r => { const h0 = H0 + r.i0, h1 = H0 + r.i1 + 1; const len = r.i1 - r.i0 + 1;
     return `<a class="wxwin ${r.kind}" href="#workout?date=${esc(d.date)}&time=${String(h0).padStart(2,"0")}:00&where=${r.kind}" style="left:calc(${r.i0}/${n}*100% + 1px);width:calc(${len}/${n}*100% - 2px)" title="${attr(`${hlbl(h0)}–${hlbl(h1)}: ${len} h free, ${r.kind === "out" ? "outdoors" : "indoors"}`)}"></a>`; }).join("");
   return `<div class="wxstrip">
+    ${skyStrips(w, n)}
     <div class="wxstack"><span class="wxlab">conditions</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wxBoxes}</div>
       <span class="wxlab">schedule</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${calBoxes}</div><div class="wxover">${overlay}</div></div>
     <div class="small wxnote"><span class="wxwhy">${w ? `light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))}` : ""}</span></div></div>`;

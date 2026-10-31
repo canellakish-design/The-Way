@@ -44,6 +44,20 @@ async function routeWeather(hour) {
 // back to seven ahead. Open-Meteo, no key.
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const compass = deg => COMPASS[Math.round(((deg % 360) + 360) % 360 / 45) % 8];
+// The sky in one word, from the WMO weather code (what Open-Meteo gives) and
+// the cloud cover: thunder, snow, rain, drizzle, fog, cloud, partly, sun (moon at night).
+function skyOf(code, cloud, isDay) {
+  if (code == null && cloud == null) return null;
+  if (code >= 95) return 'thunder';
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return 'snow';
+  if ((code >= 61 && code <= 67) || (code >= 80 && code <= 82)) return 'rain';
+  if (code >= 51 && code <= 57) return 'drizzle';
+  if (code === 45 || code === 48) return 'fog';
+  const c = cloud != null ? cloud : code === 3 ? 90 : code === 2 ? 60 : code === 1 ? 30 : 0;
+  if (c >= 80) return 'cloud';
+  if (c >= 30) return isDay ? 'partly' : 'partly-night';
+  return isDay ? 'sun' : 'moon';
+}
 async function forecastAt(dateKey, startMin, minutes, opts) {
   const o = opts || {};
   const lat = o.lat || HOME_LAT, lon = o.lon || HOME_LON, bearing = o.bearing || ROUTE_BEARING;
@@ -82,7 +96,7 @@ function gradeHour(h, sunrise, sunset) {
 }
 async function outlook(from, to) {
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${HOME_LAT}&longitude=${HOME_LON}` +
-    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,cloud_cover,is_day` +
     `&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=7&past_days=3&timezone=auto`;
   const r = await fetch(u); if (!r.ok) throw new Error('open-meteo ' + r.status);
   const d = await r.json(); const h = d.hourly, dd = d.daily;
@@ -94,8 +108,10 @@ async function outlook(from, to) {
     const hours = [];
     for (let hh = 0; hh < 24; hh++) {
       const i = h.time.indexOf(`${date}T${String(hh).padStart(2, '0')}:00`); if (i < 0) continue;
+      const code = h.weather_code ? h.weather_code[i] : null, cloud = h.cloud_cover ? h.cloud_cover[i] : null, isDay = h.is_day ? h.is_day[i] !== 0 : true;
       const pt = { hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
-        wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(h.wind_direction_10m[i]) };
+        wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(h.wind_direction_10m[i]), wind_deg: Math.round(h.wind_direction_10m[i]),
+        code, cloud_pct: cloud, is_day: isDay, sky: skyOf(code, cloud, isDay) };
       hours.push(Object.assign(pt, gradeHour(pt, sr, ss)));
     }
     // the best stretch: the longest run of green hours, then amber
@@ -140,4 +156,4 @@ function attach(app) {
     try { res.json(await routeWeather(parseInt(req.query.hour, 10))); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, routeWeather, forecastAt, windKind, outlook, kit, gradeHour };
+module.exports = { attach, routeWeather, forecastAt, windKind, outlook, kit, gradeHour, skyOf };
