@@ -118,7 +118,7 @@ ok('mealPlan: meals are timed around the session', () => {
   assert.strictEqual(rest.length, 4);
   assert.ok(rest.every(m => /^\d{2}:\d{2}$/.test(m.time)));
   assert.strictEqual(F.slotFor(vo2, '06:45'), 'breakfast');
-  assert.strictEqual(F.slotFor(vo2, '02:30'), null);   // far from every slot
+  assert.strictEqual(F.slotFor(vo2, '00:30'), null);   // far from every slot
 });
 
 ok('dueSoFar: the plan\'s meals whose time has come', () => {
