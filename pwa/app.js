@@ -1014,20 +1014,20 @@ function fmtMinLocal(m){
 }
 
 
-/* The eight numbers as rings: two dials of four, each ring filling clockwise
-   from the top in its own tone, nested like activity rings. Body on the
-   left (how the body is), Today on the right (how the day is going). The
-   legend beside each dial is the same button the box used to be: tap it and
-   the card beneath explains the number. */
-const RING_GROUPS = [["Body", ["recovery", "fatigue", "weight", "bodyfat"]], ["Today", ["workouts", "food", "hydration", "micros"]]];
+/* The eight numbers as rings, one each, in the grid the squares had: the
+   outline of the circle fills clockwise from the top by how the number is
+   doing, in the number's own colour, the number itself in the middle (the
+   WHOOP gauge). The tile is still the button it was: tap it and the card
+   beneath explains the number. */
+const RING_KEYS = ["recovery", "fatigue", "weight", "bodyfat", "workouts", "food", "hydration", "micros"];
 const RING_LABELS = { recovery: "Recovery", fatigue: "Fatigue", weight: "Weight", bodyfat: "Body fat", workouts: "Workouts", food: "Food", hydration: "Hydration", micros: "Micros" };
-const RING_R = [52, 41, 30, 19], RING_W = 9;
+const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
 function ringsHTML(){
-  return RING_GROUPS.map(([name, keys]) => `<div class="dial" data-group="${name.toLowerCase()}"><span class="slabel dlabel">${name}</span>
-    <svg class="rings" viewBox="0 0 120 120" aria-hidden="true">${keys.map((k, i) => { const r = RING_R[i], C = (2 * Math.PI * r).toFixed(2);
-      return `<circle class="rtrack" cx="60" cy="60" r="${r}" stroke-width="${RING_W}"/><circle class="rfill" data-k="${k}" cx="60" cy="60" r="${r}" stroke-width="${RING_W}" stroke-dasharray="0 ${C}" transform="rotate(-90 60 60)"/>`; }).join("")}</svg>
-    <div class="dlegend">${keys.map(k => `<button class="score" data-k="${k}"><span class="sdot"></span><span class="smain"><span class="slabel">${RING_LABELS[k]}</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></span><span class="snum">—</span></button>`).join("")}</div>
-  </div>`).join("");
+  return RING_KEYS.map(k => `<button class="score ringtile" data-k="${k}">
+    <span class="slabel">${RING_LABELS[k]}</span>
+    <span class="ringwrap"><svg class="rings" viewBox="0 0 100 100" aria-hidden="true"><circle class="rtrack" cx="50" cy="50" r="${RING_R}" stroke-width="${RING_W}"/><circle class="rfill" data-k="${k}" cx="50" cy="50" r="${RING_R}" stroke-width="${RING_W}" stroke-dasharray="0 ${RING_C}" transform="rotate(-90 50 50)"/></svg><span class="snum">—</span></span>
+    <span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span>
+  </button>`).join("");
 }
 const TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
 window.TRASH = TRASH;
@@ -1497,8 +1497,7 @@ V.today = async function(){
     el.dataset.tone = num == null ? "none" : (tone || "neutral");
     const w = el.querySelector(".sword"); w.textContent = word || "\u00a0"; w.style.color = toneC(tone);
     el.querySelector(".ssub").innerHTML = sub || "&nbsp;";
-    const dot = el.querySelector(".sdot"); if (dot) dot.style.color = num == null ? "var(--muted)" : toneC(tone);
-    const ring = view.querySelector(`.rfill[data-k="${k}"]`);
+    const ring = el.querySelector(`.rfill[data-k="${k}"]`);
     if (ring){
       const C = 2 * Math.PI * (+ring.getAttribute("r"));
       let f = fill != null ? fill : num == null ? 0 : (typeof num === "number" && num >= 0 && num <= 100 ? num / 100 : 1);
