@@ -185,7 +185,21 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 
 /* the three scores: Training, Recovery, Fatigue — three boxes side by side.
    Each is a button: tap one and the card beneath explains the number. */
-.scores{display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:2px 0 0}
+.scores{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:2px 0 0}
+/* the dials: four rings nested, filling clockwise from the top; the legend beside them is the buttons */
+.dial{display:grid; grid-template-columns:minmax(96px,42%) 1fr; gap:6px 8px; align-items:center; border:2px solid var(--line); background:var(--card); padding:10px 8px 8px; min-width:0}
+.rings{width:100%; height:auto; display:block}
+.rings .rtrack{fill:none; stroke:rgba(255,255,255,.08)} .rings .rfill{fill:none; stroke-linecap:round; transition:stroke-dasharray .9s cubic-bezier(.2,.7,.2,1), stroke .4s}
+.rings .rname{font-family:var(--mono); font-size:9px; letter-spacing:1.5px; text-transform:uppercase; fill:var(--muted)}
+.dlegend{display:flex; flex-direction:column; gap:1px; min-width:0}
+.dlegend .score, .dlegend .score[data-tone]{flex-direction:row; align-items:center; gap:7px; padding:5px 4px; background:transparent; border:0; box-shadow:none; border-radius:4px}
+.dlegend .score.on{outline:0; transform:none; background:rgba(255,255,255,.07)}
+.dlegend .score .sdot{width:9px; height:9px; border-radius:50%; flex:none; border:2.5px solid currentColor; color:var(--muted)}
+.dlegend .score .smain{display:flex; flex-direction:column; min-width:0; flex:1; gap:0}
+.dlegend .score .slabel{font-size:9.5px; letter-spacing:1.2px}
+.dlegend .score .snum{font-size:20px; letter-spacing:-1px; margin:0; flex:none}
+.dlegend .score .sword{font-size:9.5px; letter-spacing:1px}
+.dlegend .score .ssub{font-size:10.5px}
 .score{display:flex; flex-direction:column; align-items:flex-start; gap:2px; margin:0; padding:12px 12px 10px;
   background:var(--card); border:1px solid var(--ink); box-shadow:var(--shadow); text-align:left; min-width:0;
   font:inherit; text-transform:none; letter-spacing:0; color:var(--ink); cursor:pointer; width:100%; min-height:0}
@@ -216,7 +230,9 @@ ul.agenda-big li.gap{font-size:12px; padding:6px 0 6px 12px}
 .scoredetail{margin-top:10px}
 .scores ~ .nowbar{margin-top:14px}
 @media (max-width:560px){
-  .scores{gap:6px; grid-template-columns:repeat(4,1fr)}
+  .scores{gap:6px; grid-template-columns:1fr 1fr}
+  .dial{grid-template-columns:1fr; padding:8px 6px 6px; gap:4px}
+  .dlegend .score .ssub{display:none}
   .score{padding:9px 7px 8px; gap:1px}
   .score .snum{font-size:26px; letter-spacing:-1.5px}
   .score .slabel{font-size:9.5px; letter-spacing:1px}
@@ -540,12 +556,16 @@ ul.agenda.lexlist li{display:block; padding:10px 12px} .lexhead{display:flex; ju
 .lday b{font-size:13px} .lday .small{font-size:10px; line-height:1.2; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%}
 .lday.off{opacity:.55} .lday.today{border-color:var(--green)} .lday.done b{color:var(--green)}
 .lday .ld{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted)}
-/* stars: a meal on the plan */
-#stars{position:fixed; inset:0; pointer-events:none; z-index:60; display:grid; place-items:center; overflow:hidden}
-#stars .star{position:absolute; left:50%; top:50%; font-size:22px; line-height:1; transform:translate(-50%,-50%) scale(0); animation:starfly var(--d,1200ms) cubic-bezier(.2,.7,.2,1) forwards; text-shadow:0 0 8px currentColor; will-change:transform,opacity}
-@keyframes starfly{0%{transform:translate(-50%,-50%) scale(0) rotate(0); opacity:0} 12%{opacity:1; transform:translate(-50%,-50%) scale(var(--s,1)) rotate(0)} 100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(0.2) rotate(var(--rot)); opacity:0}}
-#stars .starword{font-family:var(--mono); letter-spacing:3px; text-transform:uppercase; font-size:13px; color:#f5d76e; text-shadow:0 0 12px rgba(245,215,110,.8); animation:starword 2000ms ease-out forwards}
-@keyframes starword{0%{opacity:0; transform:translateY(8px) scale(.9)} 20%{opacity:1; transform:translateY(0) scale(1)} 75%{opacity:1} 100%{opacity:0; transform:translateY(-10px)}}
+/* the cheer: a meal on the plan */
+#cheer{position:fixed; inset:0; pointer-events:none; z-index:60; overflow:hidden}
+#cheer .bit{position:absolute; left:50%; top:50%; color:var(--green); font-size:20px; font-weight:700; line-height:1; transform:translate(-50%,-50%) scale(0); animation:bitfly var(--d,900ms) cubic-bezier(.2,.7,.2,1) .28s forwards; text-shadow:0 0 8px rgba(111,224,154,.8); will-change:transform,opacity}
+@keyframes bitfly{0%{transform:translate(-50%,-50%) scale(0); opacity:0} 15%{opacity:1; transform:translate(-50%,-50%) scale(var(--s,1))} 100%{transform:translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.15); opacity:0}}
+#cheer .chk{position:absolute; left:50%; top:50%; width:120px; height:120px; margin:-60px 0 0 -60px; animation:chkpop .9s cubic-bezier(.2,1.5,.4,1) forwards; filter:drop-shadow(0 0 18px rgba(111,224,154,.75)); will-change:transform}
+#cheer .chk svg{width:100%; height:100%; display:block}
+@keyframes chkpop{0%{transform:scale(0); opacity:0} 50%{transform:scale(1.3); opacity:1} 72%{transform:scale(.92)} 100%{transform:scale(1); opacity:1}}
+.mealplan li .mk.ok.onplan, .mealplan li.cheered .mk.ok{color:#6fe09a; font-size:19px; font-weight:700; text-shadow:0 0 8px rgba(111,224,154,.7)}
+.mealplan li.cheered .mk.ok{animation:mkland .5s cubic-bezier(.2,1.5,.4,1)}
+@keyframes mkland{0%{transform:scale(1.8)} 100%{transform:scale(1)}}
 /* the gold medal on a breakthrough ride */
 svg.medal{vertical-align:-4px; margin-right:5px; filter:drop-shadow(0 0 3px rgba(240,192,64,.6))}
 li.xrow.medalled{border-color:#b8860b; box-shadow:inset 3px 0 0 #f0c040}

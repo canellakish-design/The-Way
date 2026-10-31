@@ -80,29 +80,64 @@ async function bridge(pathname, opts){
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function attr(t){ return esc(t).replace(/"/g,"&quot;"); }
 let __ttsSpeaking = false, __lastSpoken = "";
-/* Stars for a meal that lands on the plan: a burst from the middle of the
-   screen, gone in under two seconds. Pure CSS motion, one element a star. */
-function celebrate(){
+/* A meal that lands on the plan: a chime, a green check that pops open in
+   the middle of the screen with bits flung out of it, then flies down to
+   the meal's own card and sits there. The sound is made here (sine notes,
+   no file); iOS only lets sound start inside a tap, so the log buttons
+   call primeSound() as they are pressed and the chime plays when the
+   answer comes back. */
+let __audio = null;
+function primeSound(){ try{ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; if (!__audio) __audio = new AC(); if (__audio.state === "suspended") __audio.resume(); }catch{} }
+function playCheer(){
   try{
-    const old = document.getElementById("stars"); if (old) old.remove();
-    const wrap = document.createElement("div"); wrap.id = "stars"; wrap.setAttribute("aria-hidden", "true");
-    const N = 42, cols = ["#f5d76e", "#ffe9a8", "#9be39b", "#ffffff", "#f0c040"];
-    for (let i = 0; i < N; i++){
-      const st = document.createElement("span"); st.className = "star";
-      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.4, dist = 120 + Math.random() * 220;
-      st.style.setProperty("--dx", Math.cos(ang) * dist + "px"); st.style.setProperty("--dy", Math.sin(ang) * dist - 40 + "px");
-      st.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg"); st.style.setProperty("--d", (900 + Math.random() * 700) + "ms");
-      st.style.setProperty("--s", (0.6 + Math.random() * 0.9).toFixed(2)); st.style.color = cols[i % cols.length];
-      st.style.animationDelay = (Math.random() * 120) + "ms";
-      st.textContent = "✦";
-      wrap.appendChild(st);
-    }
-    const word = document.createElement("div"); word.className = "starword"; word.textContent = "On the plan"; wrap.appendChild(word);
-    document.body.appendChild(wrap);
-    setTimeout(()=>{ try{ wrap.remove(); }catch{} }, 2200);
+    primeSound(); const a = __audio; if (!a) return;
+    const t0 = a.currentTime + 0.02;
+    [[523.25, 0], [659.25, .10], [783.99, .20], [1046.5, .32]].forEach(([f, dt]) => {
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t0 + dt); g.gain.exponentialRampToValueAtTime(0.16, t0 + dt + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dt + 0.5);
+      o.connect(g).connect(a.destination); o.start(t0 + dt); o.stop(t0 + dt + 0.55);
+    });
   }catch{}
 }
-window.celebrate = celebrate;
+const CHECK_SVG = '<svg viewBox="0 0 120 120" width="120" height="120" aria-hidden="true"><circle cx="60" cy="60" r="54" fill="#1f7a3a" stroke="#6fe09a" stroke-width="4"/><path d="M34 62l16 16 36-40" fill="none" stroke="#fff" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function celebrate(opts){
+  const o = opts || {};
+  try{
+    playCheer();
+    const old = document.getElementById("cheer"); if (old) old.remove();
+    const wrap = document.createElement("div"); wrap.id = "cheer"; wrap.setAttribute("aria-hidden", "true");
+    const N = 30;
+    for (let i = 0; i < N; i++){
+      const b = document.createElement("span"); b.className = "bit";
+      const ang = (i / N) * Math.PI * 2 + (Math.random() - 0.5) * 0.35, dist = 120 + Math.random() * 190;
+      b.style.setProperty("--dx", Math.cos(ang) * dist + "px"); b.style.setProperty("--dy", Math.sin(ang) * dist + "px");
+      b.style.setProperty("--d", (700 + Math.random() * 500) + "ms"); b.style.setProperty("--s", (0.5 + Math.random() * 0.9).toFixed(2));
+      b.textContent = i % 4 ? "✓" : "✦";
+      wrap.appendChild(b);
+    }
+    const chk = document.createElement("div"); chk.className = "chk"; chk.innerHTML = CHECK_SVG; wrap.appendChild(chk);
+    document.body.appendChild(wrap);
+    // the meal's card: bring it into view while the check is still popping
+    const li = o.slot ? document.querySelector(`.mealplan li[data-slot="${(window.CSS && CSS.escape) ? CSS.escape(o.slot) : o.slot}"]`) : null;
+    if (li){ try{ li.scrollIntoView({ block: "center", behavior: "smooth" }); }catch{} }
+    setTimeout(()=>{
+      const target = li ? li.querySelector(".mk") : null;
+      const from = chk.getBoundingClientRect();
+      if (target && from.width){
+        const to = target.getBoundingClientRect();
+        const dx = (to.left + to.width / 2) - (from.left + from.width / 2), dy = (to.top + to.height / 2) - (from.top + from.height / 2);
+        const scale = Math.max(0.14, Math.min(0.3, (to.width || 18) / from.width));
+        const anim = chk.animate([{ transform: "translate(0,0) scale(1)", opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${scale})`, opacity: 1 }], { duration: 650, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
+        anim.onfinish = ()=>{ li.classList.add("cheered"); try{ wrap.remove(); }catch{} };
+      } else {
+        chk.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(.6)", opacity: 0 }], { duration: 500, fill: "forwards" }).onfinish = ()=>{ try{ wrap.remove(); }catch{} };
+      }
+    }, 1000);
+    setTimeout(()=>{ try{ wrap.remove(); }catch{} }, 4000);
+  }catch{}
+}
+window.celebrate = celebrate; window.primeSound = primeSound;
 function speak(t){
   try{
     const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
@@ -976,6 +1011,23 @@ function fmtMinLocal(m){
   return h+":"+String(mm).padStart(2,"0")+ap;
 }
 
+
+/* The eight numbers as rings: two dials of four, each ring filling clockwise
+   from the top in its own tone, nested like activity rings. Body on the
+   left (how the body is), Today on the right (how the day is going). The
+   legend beside each dial is the same button the box used to be: tap it and
+   the card beneath explains the number. */
+const RING_GROUPS = [["Body", ["recovery", "fatigue", "weight", "bodyfat"]], ["Today", ["workouts", "food", "hydration", "micros"]]];
+const RING_LABELS = { recovery: "Recovery", fatigue: "Fatigue", weight: "Weight", bodyfat: "Body fat", workouts: "Workouts", food: "Food", hydration: "Hydration", micros: "Micros" };
+const RING_R = [51, 39, 27, 15], RING_W = 10;
+function ringsHTML(){
+  return RING_GROUPS.map(([name, keys]) => `<div class="dial" data-group="${name.toLowerCase()}">
+    <svg class="rings" viewBox="0 0 120 120" aria-hidden="true">${keys.map((k, i) => { const r = RING_R[i], C = (2 * Math.PI * r).toFixed(2);
+      return `<circle class="rtrack" cx="60" cy="60" r="${r}" stroke-width="${RING_W}"/><circle class="rfill" data-k="${k}" cx="60" cy="60" r="${r}" stroke-width="${RING_W}" stroke-dasharray="0 ${C}" transform="rotate(-90 60 60)"/>`; }).join("")}
+      <text class="rname" x="60" y="63" text-anchor="middle">${name}</text></svg>
+    <div class="dlegend">${keys.map(k => `<button class="score" data-k="${k}"><span class="sdot"></span><span class="smain"><span class="slabel">${RING_LABELS[k]}</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></span><span class="snum">—</span></button>`).join("")}</div>
+  </div>`).join("");
+}
 const TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
 window.TRASH = TRASH;
 // the gold medal: a breakthrough ride (signature.js), tap the row for the story
@@ -1204,16 +1256,7 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
-    <div class="scores" id="scores">
-      <button class="score" data-k="recovery"><span class="slabel">Recovery</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="fatigue"><span class="slabel">Fatigue</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="weight"><span class="slabel">Weight</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="bodyfat"><span class="slabel">Body fat</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="workouts"><span class="slabel">Workouts</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="food"><span class="slabel">Food</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="hydration"><span class="slabel">Hydration</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-      <button class="score" data-k="micros"><span class="slabel">Micros</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></button>
-    </div>
+    <div class="scores" id="scores">${ringsHTML()}</div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
@@ -1395,15 +1438,15 @@ V.today = async function(){
     else tone = (lastEnd && nowMin > lastEnd + 30) || (t.compliance && t.compliance.band === "red") ? "bad" : "neutral";
     const sub = t.count === 0 ? (t.done ? `${t.done} unplanned ride${t.done===1?"":"s"}` : "rest day")
       : next ? `${next.time ? hm12(next.time) + " · " : ""}${next.name}` : (t.compliance && t.compliance.word ? t.compliance.word : "all done");
-    paintTile("workouts", t.done, word, tone, sub);
+    paintTile("workouts", t.done, word, tone, sub, t.count ? Math.min(1, t.done / t.count) : 1);
   };
   const drawHydrationTile = ()=>{
     const h = foodData && foodData.hydration;
     if (!h){ paintTile("hydration", null, "", "", foodData ? "snap a drink" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
     const b = h.now ? h.now.band : h.band, ml = h.now ? h.now.ml : null;
-    if (ml == null){ paintTile("hydration", h.score, b.word, b.tone, "snap a drink"); return; }
+    if (ml == null){ paintTile("hydration", h.score, b.word, b.tone, "snap a drink", (h.score || 0) / 100); return; }
     const num = ml > 300 ? `+${(ml/1000).toFixed(1)}` : `−${(Math.abs(ml)/1000).toFixed(1)}`;
-    paintTile("hydration", num, b.word, b.tone === "info" ? "neutral" : b.tone, `L on the morning · ${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk`);
+    paintTile("hydration", num, b.word, b.tone === "info" ? "neutral" : b.tone, `L on the morning · ${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk`, (h.score || 0) / 100);
   };
   const drawWeightTile = ()=>{
     const w = bodyData;
@@ -1414,7 +1457,9 @@ V.today = async function(){
     if (wk != null){ word = wk < -0.2 ? "down" : wk > 0.2 ? "up" : "flat"; tone = wk < -0.2 ? "good" : wk > 0.2 ? "bad" : "neutral"; sub = `${sgn(wk)} lb/wk`; }
     else if (since != null){ word = since < 0 ? "down" : since > 0 ? "up" : "at start"; tone = since < 0 ? "good" : since > 0 ? "warn" : "neutral"; sub = `${sgn(since)} lb since ${w.start_lb}`; }
     if (w.latest && !w.latest.logged_today) sub = sub || "not today";
-    paintTile("weight", Math.round(w.latest.lb), word, tone, sub || `${w.latest.lb} lb`);
+    // the ring fills as the week goes the way the program wants: a pound down in the week is full
+    const wfill = wk != null ? -wk / 1 : since != null ? -since / 5 : 0.5;
+    paintTile("weight", Math.round(w.latest.lb), word, tone, sub || `${w.latest.lb} lb`, wfill);
   };
   // Body fat from the scale's composition; the word is the week-over-week
   // move of the 7-day mean (bridge/weighin.js trends). Down is the direction.
@@ -1426,7 +1471,7 @@ V.today = async function(){
     const word = d == null ? "" : d < -0.2 ? "down" : d > 0.2 ? "up" : "flat";
     const tone = d == null ? "neutral" : d < -0.2 ? "good" : d > 0.2 ? "bad" : "neutral";
     const sub = d != null ? `${sgn(d)} pts/wk${c.fat_mass_lb != null ? ` · ${c.fat_mass_lb} lb fat` : ""}` : (c.fat_mass_lb != null ? `${c.fat_mass_lb} lb fat` : "first reading");
-    paintTile("bodyfat", c.fat_pct, word, tone, sub);
+    paintTile("bodyfat", c.fat_pct, word, tone, sub, d != null ? 0.5 - d : 0.5);   // half a point down a week fills it
   };
   const foodBand = o => o == null ? null : o >= 80 ? { word: "on target", tone: "good" } : o >= 60 ? { word: "close", tone: "warn" } : { word: "off", tone: "bad" };
   const drawFood = ()=>{
@@ -1441,15 +1486,26 @@ V.today = async function(){
     const k = c.compliance.per_macro && c.compliance.per_macro.kcal;
     paintTile("food", o, b.word, b.tone, `${c.meals||0} photo${c.meals===1?"":"s"}${k && k.target ? ` · ${Math.round(k.actual / k.target * 100)}% kcal` : ""}`);
   };
-  const paintTile = (k, num, word, tone, sub)=>{
+  // fill: how full the ring is, 0 to 1. Left out, a number from 0 to 100 is its own fill.
+  const paintTile = (k, num, word, tone, sub, fill)=>{
     const el = view.querySelector(`.score[data-k="${k}"]`);
     if (!el) return;
     el.querySelector(".snum").textContent = num == null ? "—" : num;
     el.querySelector(".snum").style.color = num == null ? "var(--muted)" : toneC(tone);
-    // The box itself carries the colour: the tone fills the background.
+    // The hero box carries the colour as a background; a legend row carries it on its dot.
     el.dataset.tone = num == null ? "none" : (tone || "neutral");
-    const w = el.querySelector(".sword"); w.textContent = word || " "; w.style.color = toneC(tone);
+    const w = el.querySelector(".sword"); w.textContent = word || "\u00a0"; w.style.color = toneC(tone);
     el.querySelector(".ssub").innerHTML = sub || "&nbsp;";
+    const dot = el.querySelector(".sdot"); if (dot) dot.style.color = num == null ? "var(--muted)" : toneC(tone);
+    const ring = view.querySelector(`.rfill[data-k="${k}"]`);
+    if (ring){
+      const C = 2 * Math.PI * (+ring.getAttribute("r"));
+      let f = fill != null ? fill : num == null ? 0 : (typeof num === "number" && num >= 0 && num <= 100 ? num / 100 : 1);
+      f = Math.max(0, Math.min(1, f));
+      ring.setAttribute("stroke-dasharray", `${(C * f).toFixed(2)} ${C.toFixed(2)}`);
+      ring.style.stroke = num == null ? "var(--muted)" : toneC(tone);
+      ring.style.opacity = num == null ? ".35" : "1";
+    }
   };
   const verdictOf = (d)=>{
     const r = d.recovery, f = d.fatigue, t = d.training;
@@ -1490,7 +1546,7 @@ V.today = async function(){
         t.ramp ? `${sgn(t.ramp_7d)} this week · ${t.ramp.word}` : `${t.tss_7d} TSS this week`);
       drawSpark(d.series);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
-        `form ${sgn(f.tsb)}`);
+        `form ${sgn(f.tsb)}`, t.ctl ? f.atl / (2 * t.ctl) : 0.5);   // fatigue against fitness: twice the fitness is a full ring
     } else {
       paintTile("training", null, "", "", "Strava not connected");
       paintTile("fatigue", null, "", "", "");

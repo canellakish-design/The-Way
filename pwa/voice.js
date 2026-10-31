@@ -38,7 +38,7 @@ function sheet(){
   document.body.appendChild(s);
   document.getElementById("vClose").onclick = close;
   document.getElementById("vNew").onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
-  document.getElementById("vSend").onclick = ()=> send(document.getElementById("vText").value.trim());
+  document.getElementById("vSend").onclick = ()=>{ if (window.primeSound) primeSound(); send(document.getElementById("vText").value.trim()); };
   document.getElementById("vType").onclick = ()=>{ const b = document.getElementById("vTypeBox"); b.hidden = !b.hidden; if (!b.hidden) document.getElementById("vText").focus(); };
   const hold = document.getElementById("vHold");
   if (hold) wireHold(hold);
@@ -121,7 +121,7 @@ function abortListening(){
 // hold = talk; a quick tap toggles the sheet
 function wireHold(el, onTap){
   let downAt = 0, mine = false;
-  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} startListening(); };
+  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} if (window.primeSound) primeSound(); startListening(); };
   const up = (e)=>{
     if (!mine) return; mine = false; holding = false; e.preventDefault();
     const quick = Date.now() - downAt < HOLD_MS;
@@ -147,7 +147,8 @@ async function send(text){
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
-    if ((r.actions||[]).some(a => a.celebrate) && typeof celebrate === "function") celebrate();
+    const cheer = (r.actions||[]).find(a => a.celebrate);
+    if (cheer && typeof celebrate === "function") celebrate({ slot: cheer.slot || null });
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
   }catch(e){ status(e.message); history.pop(); keep(); drawThread(); }
   sending = false;

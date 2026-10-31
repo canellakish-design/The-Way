@@ -13,7 +13,7 @@ function cheerIf(r){
     const e = r && r.entry, meals = r && r.day && r.day.meals || [];
     if (!e || (e.kcal || 0) < 100) return;
     const m = meals.find(x => (x.logged || []).includes(e.id));
-    if (m && m.match && m.match.key === "green" && typeof celebrate === "function") celebrate();
+    if (m && m.match && m.match.key === "green" && typeof celebrate === "function") celebrate({ slot: m.slot });
   }catch{}
 }
 const pad = n => String(n).padStart(2,"0");
@@ -287,9 +287,10 @@ V.food = async function(){
         <ul class="agenda mealplan">${(day.meals||[]).map(m=>{
           const logged = (m.logged||[]).length, now = nowHM();
           const mealOf = m.slot === "before" || m.slot === "after" ? "snack" : (MEALS.includes(m.slot) ? m.slot : "snack");
-          const mark = logged ? `<span class="mk ok" title="logged">✓</span>` : (isToday && m.time < now) ? `<span class="mk no" title="nothing logged">✗</span>` : `<span class="mk"></span>`;
           const mt = logged && m.match ? m.match : null;
-          return `<li class="${logged?"done":(isToday&&m.time<now?"past":"")}${mt?` match ${mt.key}`:""}"><span class="t">${esc(hm12(m.time))}</span>
+          // a meal that landed on the plan keeps the green check the cheer flew onto it
+          const mark = logged ? `<span class="mk ok${mt && mt.key === "green" ? " onplan" : ""}" title="${mt && mt.key === "green" ? "on the plan" : "logged"}">✓</span>` : (isToday && m.time < now) ? `<span class="mk no" title="nothing logged">✗</span>` : `<span class="mk"></span>`;
+          return `<li data-slot="${esc(m.slot)}" class="${logged?"done":(isToday&&m.time<now?"past":"")}${mt?` match ${mt.key}`:""}"><span class="t">${esc(hm12(m.time))}</span>
             <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}${m.plan_kcal!=null&&m.plan_kcal!==m.kcal?` <s>${m.plan_kcal}</s>`:""}</span>`:m.covered_by?`<span class="small"> covered</span>`:""}${mt?`<span class="small mword"> ${mt.kcal} kcal · ${mt.carbs_g}C${mt.protein_g?` · ${mt.protein_g}P`:""} · ${esc(mt.word)}</span>`:""}</span>
             <span class="tag mealtag">${mark}${isToday?`<button class="cam" data-cam="${esc(mealOf)}" aria-label="Snap this meal"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></button>`:""}</span></li>`; }).join("")}</ul>
       </div>
@@ -433,11 +434,13 @@ V.food = async function(){
     if (r.reply && typeof speak === "function") speak(r.reply);
     adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
+      if (window.primeSound) primeSound();
       try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
       catch(e){ b.textContent = "failed"; }
     });
     adviseOut.querySelectorAll("[data-adorder]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
+      if (window.primeSound) primeSound();
       try{ const rr = await bridge("/food/item",{method:"POST",headers:J,body:decodeURIComponent(b.dataset.adorder)}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
       catch(e){ b.textContent = "failed"; }
     });
@@ -476,6 +479,7 @@ V.food = async function(){
   document.getElementById("writeLog").onclick = async ()=>{
     const text = document.getElementById("writeText").value.trim();
     if (!text) return;
+    if (window.primeSound) primeSound();
     const msg = document.getElementById("writeMsg"), btn = document.getElementById("writeLog");
     btn.disabled = true; msg.textContent = "Reading it…";
     try{
@@ -488,6 +492,7 @@ V.food = async function(){
   };
   document.getElementById("snapLog").onclick = async ()=>{
     if (!file) return;
+    if (window.primeSound) primeSound();
     const msg = document.getElementById("snapMsg"), btn = document.getElementById("snapLog");
     btn.disabled = true; msg.textContent = "Reading the plate…";
     try{

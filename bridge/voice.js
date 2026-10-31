@@ -184,9 +184,9 @@ async function run(a) {
     case 'meal': case 'drink': {
       const e = await food.addPhoto({ text: a.text, meal: a.meal || undefined });
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
-      let celebrate = false;
-      try { const day = await food.dayReport(e.date); const m = (day.meals || []).find(x => (x.logged || []).includes(e.id)); celebrate = !!(m && m.match && m.match.key === 'green' && (e.kcal || 0) >= 100); } catch (err) { celebrate = false; }
-      return { ok: true, summary: `${a.type === 'drink' ? 'Drink' : 'Meal'} logged: ${e.name}, ${e.kcal} kcal${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''}.${celebrate ? ' On the plan.' : ''}`, entry_id: e.id, celebrate };
+      let celebrate = false, slot = null;
+      try { const day = await food.dayReport(e.date); const m = (day.meals || []).find(x => (x.logged || []).includes(e.id)); slot = m ? m.slot : null; celebrate = !!(m && m.match && m.match.key === 'green' && (e.kcal || 0) >= 100); } catch (err) { celebrate = false; }
+      return { ok: true, summary: `${a.type === 'drink' ? 'Drink' : 'Meal'} logged: ${e.name}, ${e.kcal} kcal${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''}.${celebrate ? ' On the plan.' : ''}`, entry_id: e.id, celebrate, slot };
     }
     case 'supplement': {
       const e = await food.addSupplement(a.supplement);
