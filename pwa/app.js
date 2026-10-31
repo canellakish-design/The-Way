@@ -202,8 +202,8 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["ride","Ride"],["calendar","Calendar"],["food","Food"],["live","Live"],["zones","Zones"],["lift","Lift"]];
-  const cur = h === "workout" ? "calendar" : h;
+  const NAV = [["today","Day"],["ride","Ride"],["calendar","Calendar"],["food","Food"],["live","Live"],["lift","Lift"]];
+  const cur = h === "workout" ? "calendar" : h === "zones" ? "ride" : h;   // zones lives under Ride
   if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
   (V[h] || V.settings)();
 }
@@ -634,7 +634,7 @@ V.sleep = async function(){
    the thresholds were found, and how the recent riding split across the
    zones. The seven-zone tables fold away underneath. */
 V.zones = async function(){
-  view.innerHTML = `<span class="eyebrow">Zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
+  view.innerHTML = `<span class="eyebrow"><a href="#ride" style="color:inherit;text-decoration:none">Ride</a> · Zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   let z = null;
   try{ z = await bridge("/zones"); }catch(e){ document.getElementById("zonesPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
   const a = z.anchors, sg = z.signature || {}, sig = sg.signature, ZC = { z1:"var(--green)", z2:"var(--amber)", z3:"var(--red)" };
@@ -992,6 +992,7 @@ const LANE = {
   plan:      { tag:"plan",    cls:"lane-icu"   },
   calendar:  { tag:"cal",     cls:"lane-cal"   },
   ride:      { tag:"ride",    cls:"lane-icu"   },
+  food:      { tag:"food",    cls:"lane-food"  },
   open:      { tag:"open",    cls:"lane-open"  }
 };
 function durLabel(min){
@@ -1041,6 +1042,32 @@ function dayRows(d, plan, isToday){
     lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
     desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar"
   }));
+  // The hub: today's card carries what the other tabs decided. From Food
+  // and Live, the feeding window before each session and the meals that
+  // touch the training (before, on the bike, after) plus the next one due;
+  // the full plan stays on the Food tab.
+  if (isToday && HUB.food){
+    const f = HUB.food, hm = t => hhmmToMin(t);
+    for (const sx of (f.energy && f.energy.sessions || [])){
+      if (!sx.feed || hm(sx.feed.from) == null) continue;
+      const a = hm(sx.feed.from), b = Math.max(a + 30, hm(sx.feed.to) || a + 30);
+      rows.push({ start: a, end: b, from: fmtMinLocal(a), to: fmtMinLocal(b), title: `Fuel for ${sx.name.replace(/,.*$/, "")}: ${sx.feed.g} g carbs`, detail: `bottle from ${hm12(sx.feed.bottle_from)}`, lane: LANE.food, source: "food", href: "#live", feed: true,
+        desc: `${sx.feed.g} g of carbs between ${hm12(sx.feed.from)} and ${hm12(sx.feed.to)} puts the quick store at ${sx.need}% for the start${sx.ready_at && !sx.ready_now ? `; as things stand it is ready at ${hm12(sx.ready_at)}` : ""}.` });
+    }
+    const nextSlot = f.suggestion && !f.suggestion.none ? f.suggestion.slot : null;
+    const seen = new Set();
+    for (const m of (f.meals || [])){
+      const touches = m.slot === "before" || m.slot === "after" || (m.slot === "on the bike" && (m.carbs_g || 0) >= 10);
+      if (!(touches || m.slot === nextSlot) || !m.time || seen.has(m.slot)) continue;
+      if (!m.kcal && m.slot !== "on the bike") continue;
+      seen.add(m.slot);
+      const a = hm(m.time); if (a == null) continue;
+      const logged = (m.logged || []).length > 0, mt = logged && m.match ? m.match : null;
+      const what = String(m.what || "").split(/(?<=\.)\s/)[0].slice(0, 70);
+      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
+        lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: m.what || null });
+    }
+  }
   // a breakthrough ride nobody planned still gets its medal: its own row, at the ride's time
   for (const b of (BTS[d.date] || [])) {
     if (rows.some(r => (r.source === "plan" || r.source === "intervals") && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title))) break;
@@ -1086,7 +1113,8 @@ function eventDetailHTML(x){
     ${x.bt ? breakthroughHTML(x.bt, x.ride) : ""}
     ${x.location?`<div><b>Where:</b> ${esc(x.location)}</div>`:""}
     ${x.desc?`<div class="xdesc">${esc(x.desc)}</div>`:""}
-    ${!x.location&&!x.desc&&!x.wid&&!editable?`<div class="small">Nothing more on this one.</div>`:""}
+    ${x.href?`<div class="rowbtns"><a class="btn" href="${attr(x.href)}">${x.href === "#live" ? "Live fuel" : x.href === "#food" ? "Food" : "Open"}</a></div>`:""}
+    ${!x.location&&!x.desc&&!x.wid&&!editable&&!x.href?`<div class="small">Nothing more on this one.</div>`:""}
     ${x.wid?`<div class="small">loading the session…</div>`:""}
     ${editable?`<details class="addev evedit" data-key="${attr(x.edit)}"><summary>edit</summary>
       <div class="row2"><span><label>What</label><input class="evTitle" value="${attr(x.title)}"></span><span><label>Date</label><input class="evDate" type="date" value="${attr(x.date||"")}"></span></div>
@@ -1134,6 +1162,7 @@ function briefHTML(b, x){
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
 let WX = {}, WGRADE = {}, FUELV = {}, BTS = {};   // BTS: breakthrough rides by date (signature.js), for the medal on the day
+let HUB = { food: null };                         // today's food answer, for the meal and feeding rows on the day card
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
 function freeHours(d){
@@ -1223,6 +1252,16 @@ function placeNowDot(){
   }
   dot.hidden = false; dot.style.top = Math.round(top) + "px";
 }
+// One line of conditions on the day card; the strips themselves live on the Ride tab.
+function conditionsLine(d){
+  const w = WX[d.date]; if (!w) return "";
+  const hs = w.hours.filter(h => h.hour >= H0 && h.hour <= H1);
+  let best = null, run = null;
+  for (const h of hs){ if (h.grade === "good"){ if (!run) run = { a: h.hour, b: h.hour + 1 }; else run.b = h.hour + 1; if (!best || run.b - run.a > best.b - best.a) best = run; } else run = null; }
+  const winds = hs.map(h => h.wind_mph), wmin = Math.min(...winds), wmax = Math.max(...winds);
+  const words = best ? `green outside ${hlbl(best.a)}–${hlbl(best.b)}` : hs.some(h => h.grade === "ok") ? "marginal outside" : "indoors today";
+  return `<div class="small condline"><span class="wxdot ${best ? "good" : hs.some(h => h.grade === "ok") ? "ok" : "bad"}"></span>${esc(words)} · wind ${wmin === wmax ? wmin : `${wmin}–${wmax}`} mph · light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))} · <a href="#ride">Ride</a></div>`;
+}
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
   const rows = dayRows(d, plan, isToday);
@@ -1244,10 +1283,12 @@ function dayCard(d, plan, nowMin, rec, solo){
     // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
     const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title);
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
-    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null }))}">
+    const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
+    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(r.meal.match.word)}</span>` : "logged") : (/next$/.test(r.title) ? "next" : "plan")) : null;
+    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? `<span class="wxdot ${wxh.grade}" title="${attr(`${wxh.temp_f}°, wind ${wxh.wind_mph} ${wxh.wind_from}, ${wxh.rain_pct}% rain`)}"></span>` : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="tag">${mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -1258,7 +1299,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <div class="dayhead"><h4>${isToday?"Today · ":""}${esc(d.label)}</h4><a class="btn" href="#food">Food log</a></div>
-    ${macroRow}${hourStrips(d)}
+    ${macroRow}${conditionsLine(d)}
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
@@ -1734,7 +1775,7 @@ V.today = async function(){
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
-      get("/food/today", v => { foodData = v; }),
+      get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;

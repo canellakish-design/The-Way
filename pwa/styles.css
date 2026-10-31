@@ -577,3 +577,20 @@ li.xrow.medalled{border-color:#b8860b; box-shadow:inset 3px 0 0 #f0c040}
 ul.agenda.wins li.win.out{border-left:3px solid var(--green)} ul.agenda.wins li.win.ok{border-left:3px solid var(--amber)} ul.agenda.wins li.win.in{border-left:3px solid var(--line)}
 ul.agenda.courses li .t{font-family:var(--mono); color:var(--muted)} ul.agenda.courses li.picked{background:var(--green-soft)} .cwind{display:block; color:var(--ink)}
 .rwin, .rpick{font:inherit; font-size:12px; padding:4px 8px}
+/* the day as the hub: food rows, the conditions dot on a ride row, the condensed top */
+ul.agenda li.lane-food{border-left:3px solid #6fe09a} ul.agenda li.lane-food .tag{color:var(--muted)}
+ul.agenda li .mword.green{color:#6fe09a} ul.agenda li .mword.yellow{color:var(--amber)} ul.agenda li .mword.red{color:var(--red)}
+.wxdot{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; vertical-align:1px; background:#1E2024}
+.wxdot.good{background:#2E7D4A} .wxdot.ok{background:#8A6A14} .wxdot.bad{background:#7A2E26}
+.condline{margin:6px 0 2px} .condline a{color:var(--ink)}
+.score.hero{padding:8px 12px; margin:2px 0 6px; align-items:center}
+.score.hero .herotext{flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap}
+.score.hero .snum{font-size:30px; margin:0} .score.hero .ssub{white-space:normal}
+.score.hero .spark{min-height:36px; max-width:40%}
+@media (max-width:560px){ .score.hero .snum{font-size:26px} .score.hero .spark{min-height:32px} }
+.ringwrap{max-width:64px} .score.ringtile .snum{font-size:17px} .score.ringtile .ssub{display:none}
+@media (max-width:560px){ .ringwrap{max-width:56px} .score.ringtile .snum{font-size:15px} .score.ringtile, .score.ringtile[data-tone]{padding:6px 2px 5px} }
+ul.agenda.wins li, ul.agenda.courses li{display:grid; grid-template-columns:56px 1fr; gap:2px 10px; align-items:start}
+ul.agenda.wins li .n, ul.agenda.courses li .n{white-space:normal}
+ul.agenda.wins li .tag, ul.agenda.courses li .tag{grid-column:2; justify-self:start; text-align:left; margin-top:2px}
+ul.agenda.courses li .t{font-size:13px}
