@@ -191,18 +191,20 @@ async function report() {
     hardYesterday = hard ? hard.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 30) : null;
   } catch (e) { hardYesterday = null; }
   // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
-  let lift = { sessions: 0, target: 5, today: [], week: [] };
+  let lift = { sessions: 0, pumps: 0, target: 5, today: [], week: [] };
   try {
     const d = await getJSON('lifts', { sessions: [] });
-    const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today);
     const L = require('./lifts');
+    const all7 = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today);
+    const pumps = all7.filter(x => x.template === 'pump').length;
+    const wk = all7.filter(x => x.template !== 'pump');
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
     // the plan's clock: from the first session on this plan; the first week is judged on pace, a ninth week is a deload
     const first = (d.sessions || []).filter(x => L.TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
     const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
     const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
     const expected = !first ? 0 : dayN < 7 ? Math.min(5, Math.ceil(5 * dayN / 7)) : 5;
-    lift = { sessions: wk.length, target: 5, expected, started: !!first, deload: weekNo > 0 && weekNo % 9 === 0, week_no: weekNo,
+    lift = { sessions: wk.length, pumps, target: 5, expected, started: !!first, deload: weekNo > 0 && weekNo % 9 === 0, week_no: weekNo,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ }
   // weight: the seven-day mean against the seven before
@@ -223,7 +225,7 @@ async function report() {
     // grey before the first session and in a deload week; in the first week, judged against the sessions due so far
     lift: { week: lift.started ? Math.round(lift.sessions / lift.target * 100) : null,
       state: !lift.started || lift.deload ? 'none' : stateOf('lift', lift.sessions / Math.max(1, lift.expected)),
-      sessions: lift.sessions, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
+      sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, today_word: lift.today.length ? lift.today.join(', ') : (!lift.started ? 'not started' : lift.deload ? 'deload week' : null), week_list: lift.week, unit: 'of plan',
       basis: 'sessions logged on the Lift tab in the last seven days against the plan\'s five; the first week is judged on pace' },
     recovery: (() => {

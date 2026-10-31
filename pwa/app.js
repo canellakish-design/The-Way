@@ -802,9 +802,9 @@ V.lift = async function(){
       <div class="lweek">${L.week.map(x => `<a class="lday${x.lift?"":" off"}${x.done?" done":""}${x.date===today?" today":""}" href="#lift?t=${esc(x.lift||L.next)}" title="${esc(x.why||"")}">
         <span class="ld">${esc(String(x.label||x.date).split(" ").slice(0,1).join(""))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
         <b>${x.lift ? esc(shortOf(x.lift)) : "—"}</b>
-        <span class="small">${dayLine(x)}</span></a>`).join("")}</div>
+        <span class="small">${dayLine(x)}</span>${x.pumped ? `<span class="small pumptag on">+pump</span>` : x.pump_ok ? `<span class="small pumptag">pump ok</span>` : ""}</a>`).join("")}</div>
       <div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.</div>
-      <div class="small">${L.this_week} of ${L.target_per_week} this week · week ${L.week_no}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""}</div>
+      <div class="small">${L.this_week} of ${L.target_per_week} this week${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""} · week ${L.week_no}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""}</div>
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
     </div>` : "";
@@ -820,7 +820,7 @@ V.lift = async function(){
     ${weekHTML}
     <div class="card"><h4>${esc(T.name)}${T.short && /Upper/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(L.next_date.slice(5).replace("-","/")) : ""}` : ""}</h4>
       <div class="small">${esc(T.why)}</div>
-      <div class="small">${T.hard_sets} hard sets · about ${T.minutes} min · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
+      <div class="small">${T.hard_sets} hard sets · about ${T.minutes} min${T.supplement ? " · extra, not one of the five" : ""} · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
       <ul class="agenda lexlist">${T.exercises.map(exHTML).join("")}</ul>
       <label for="lNotes">Notes</label><input id="lNotes" placeholder="how it felt, anything that hurt">
       <div class="rowbtns"><button class="primary" id="lSave">Save the session</button><button id="lPlan">Put this one on the calendar</button></div>
@@ -1056,7 +1056,7 @@ function paintChain(c){
     el.dataset.week = L.state || "none";
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
     if (ck === "recovery"){ const sw = el.querySelector(".sword"); if (L.today_word && sw) sw.textContent = L.today_word; }
-    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : L.started ? `${L.sessions}/${L.target}` : "—"; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : (L.today_word || "this week"); }
+    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : L.started ? `${L.sessions}/${L.target}${L.pumps ? ` +${L.pumps}` : ""}` : "—"; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : (L.today_word || (L.pumps ? `+${L.pumps} pump` : "this week")); }
     if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
   }

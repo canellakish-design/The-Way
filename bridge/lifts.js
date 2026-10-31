@@ -79,8 +79,24 @@ const TEMPLATES = [
       ex('Bowflex cable crunch', 3, 10, 12, 'bowflex', 60, 'Kneeling, crunch the ribs to the hips.', 5)
     ] }
 ];
+// The pump: a short home session on the Bowflex and the kettlebell, upper
+// body and core only so the legs stay fresh for the riding and the heavy
+// days. Light loads taken close to failure (10 to 15 reps) grow muscle about
+// as well as heavy ones; they build less strength, which is the five's job.
+// It supplements the five, never replaces one, and does not count toward
+// them. Any day but legs and the day before it.
+const PUMP = { key: 'pump', name: 'Pump at home', short: 'Pump', minutes: 20, supplement: true,
+  why: 'Fifteen to twenty minutes on the Bowflex and the bell, upper body and core, every set close to failure. Volume for the arms, shoulders and back that barely touches recovery. Does not count toward the five.',
+  exercises: [
+    ex('Bowflex seated row', 3, 10, 15, 'bowflex', 70, 'Close to failure on every set; a minute between.', 5),
+    ex('Bowflex chest press', 2, 10, 15, 'bowflex', 70, '', 5),
+    ex('Kettlebell seated press', 2, 10, 15, 'bell', 26, 'One bell, each side.'),
+    ex('Kettlebell curl', 2, 10, 15, 'bell', 18, 'Both hands on the horns.'),
+    ex('Plank', 2, 45, 60, 'time', 0, 'Seconds. Hips level, breathe.')
+  ] };
+const ALL = TEMPLATES.concat([PUMP]);
 const LEGACY = { 'lift-a': 'Lift A: hinge and push', 'lift-b': 'Lift B: squat and pull' };   // the two sessions this plan replaced
-const nameOf = key => (TEMPLATES.find(t => t.key === key) || {}).name || LEGACY[key] || key;
+const nameOf = key => (ALL.find(t => t.key === key) || {}).name || LEGACY[key] || key;
 
 const e1rm = (lb, reps) => lb > 0 && reps > 0 ? Math.round(lb * (1 + reps / 30)) : null;
 function nextBell(lb) { const i = BELLS.findIndex(b => b > lb); return i < 0 ? lb + 10 : BELLS[i]; }
@@ -134,7 +150,7 @@ function stepEvery(def, weekInBlock) {
 }
 function mondayOf(key) { const d = new Date(key + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); }
 function periodization(templates, sessions, today) {
-  const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));
+  const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));   // the pump does not start the clock
   const week1 = mondayOf(first ? first.date : today);
   const weekNow = Math.floor((Date.parse(today) - Date.parse(week1)) / (7 * 864e5)) + 1;
   const lastOf = {};
@@ -279,16 +295,18 @@ async function report() {
   const sessions = d.sessions.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.at).localeCompare(String(b.at)));
   const lastOf = {};
   for (const s of sessions) for (const e of s.exercises || []) lastOf[e.name] = { date: s.date, sets: e.sets };
-  const templates = TEMPLATES.map(t => ({ key: t.key, name: t.name, short: t.short, minutes: t.minutes, why: t.why, order: t.order,
+  const templates = ALL.map(t => ({ key: t.key, name: t.name, short: t.short, minutes: t.minutes, why: t.why, order: t.order || 9, supplement: !!t.supplement,
     hard_sets: t.exercises.reduce((a, e) => a + e.sets, 0),
     exercises: t.exercises.map(e => Object.assign({}, e, { last: lastOf[e.name] || null, target: target(e, lastOf[e.name]) })) }));
   // the week: what was lifted already this week holds its day; the rest is placed
   const today = tz.todayKey();
   const days = await weekDays(7);
   const doneByDate = {};
-  for (const s of sessions) if (s.date >= today) doneByDate[s.date] = s.template;
+  for (const s of sessions) if (s.date >= today && s.template !== 'pump') doneByDate[s.date] = s.template;
   for (const x of days) if (doneByDate[x.date]) x.locked = doneByDate[x.date];
   const week = placeWeek(days, { done: doneByDate }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
+  // the pump fits any day but legs and the day before it
+  week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = x.lift !== 'legs' && !(next && next.lift === 'legs'); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); });
   // next: today's, if not done; else the next placed day
   const todayX = week.find(x => x.date === today);
   const nextX = todayX && todayX.lift && !todayX.done ? todayX : week.find(x => x.lift && !x.done && x.date > today) || null;
@@ -298,7 +316,8 @@ async function report() {
     const best = Math.max(0, ...(e.sets || []).map(x => e1rm(x.lb, x.reps) || 0));
     if (best) (history[e.name] = history[e.name] || []).push({ date: s.date, e1rm: best, top_lb: Math.max(...e.sets.map(x => x.lb || 0)) });
   }
-  const weekCount = sessions.filter(s => s.date >= tz.shiftKey(today, -6)).length;
+  const weekCount = sessions.filter(s => s.date >= tz.shiftKey(today, -6) && s.template !== 'pump').length;
+  const pumpCount = sessions.filter(s => s.date >= tz.shiftKey(today, -6) && s.template === 'pump').length;
   const last = sessions[sessions.length - 1] || null;
   // eight weeks on, one off: counted from the first session of this plan
   const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));
@@ -311,13 +330,13 @@ async function report() {
     sessions: sessions.slice(-15).reverse().map(s => ({ id: s.id, date: s.date, template: s.template, name: nameOf(s.template),
       notes: s.notes || '', volume_lb: (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0),
       exercises: (s.exercises || []).map(e => ({ name: e.name, sets: e.sets })) })),
-    history, this_week: weekCount, target_per_week: 5,
-    rules: ['Legs the day before a day off the bike or a long coaching day, or on a long coaching day.', 'No lift on the two biggest riding days.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.'] };
+    history, this_week: weekCount, target_per_week: 5, pumps_this_week: pumpCount,
+    rules: ['Legs the day before a day off the bike or a long coaching day, or on a long coaching day.', 'No lift on the two biggest riding days.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.'] };
 }
 
 async function save(body) {
   const b = body || {};
-  const t = TEMPLATES.find(x => x.key === b.template);
+  const t = ALL.find(x => x.key === b.template);
   if (!t) throw new Error('unknown session');
   const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date || '') ? b.date : tz.todayKey();
   const exercises = (Array.isArray(b.exercises) ? b.exercises : []).map(e => ({
@@ -363,4 +382,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, TEMPLATES, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
+module.exports = { attach, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
