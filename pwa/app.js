@@ -1097,16 +1097,27 @@ function dayRows(d, plan, isToday){
     }
     const nextSlot = f.suggestion && !f.suggestion.none ? f.suggestion.slot : null;
     const seen = new Set();
+    // every meal of the day, so the morning is still there in the evening: logged ones carry their grade
     for (const m of (f.meals || [])){
-      const touches = m.slot === "before" || m.slot === "after" || (m.slot === "on the bike" && (m.carbs_g || 0) >= 10);
-      if (!(touches || m.slot === nextSlot) || !m.time || seen.has(m.slot)) continue;
-      if (!m.kcal && m.slot !== "on the bike") continue;
+      if (!m.time || seen.has(m.slot)) continue;
+      if (!m.kcal && !(m.slot === "on the bike" && (m.carbs_g || 0) >= 10)) continue;
       seen.add(m.slot);
       const a = hm(m.time); if (a == null) continue;
       const logged = (m.logged || []).length > 0, mt = logged && m.match ? m.match : null;
       const what = String(m.what || "").split(/(?<=\.)\s/)[0].slice(0, 70);
       rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: m.what || null });
+    }
+  }
+  // the rides that happened, from Strava, when no planned row already holds them
+  if (isToday && HUB.food){
+    for (const sx of (HUB.food.sessions || [])){
+      if (!sx.done || !sx.time) continue;
+      const a = hhmmToMin(sx.time); if (a == null) continue;
+      const held = rows.some(r => (r.source === "plan" || r.source === "intervals") && r.start != null && Math.abs(r.start - a) <= 45);
+      if (held) continue;
+      const b = a + (sx.minutes || 60);
+      rows.push({ start: a, end: b, from: fmtMinLocal(a), to: fmtMinLocal(b), title: sx.name.replace(/^Zwift - Intervals icu: /i, ""), detail: `${sx.minutes} min · ridden`, lane: LANE.ride, source: "ride", desc: null });
     }
   }
   // a breakthrough ride nobody planned still gets its medal: its own row, at the ride's time
@@ -1325,7 +1336,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title);
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
     const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
-    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(r.meal.match.word)}</span>` : "logged") : (/next$/.test(r.title) ? "next" : "plan")) : null;
+    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(r.meal.match.word)}</span>` : "logged") : (/next$/.test(r.title) ? "next" : state === "past" ? "nothing logged" : "plan")) : null;
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? `<span class="wxdot ${wxh.grade}" title="${attr(`${wxh.temp_f}°, wind ${wxh.wind_mph} ${wxh.wind_from}, ${wxh.rain_pct}% rain`)}"></span>` : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
