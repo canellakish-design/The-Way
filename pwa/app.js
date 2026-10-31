@@ -2300,6 +2300,33 @@ V.settings = function(){
 /* ---------------- boot ---------------- */
 
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("service-worker.js");
+
+/* A page left open on the counter or on the home screen runs the code it
+   loaded, however many deploys later. So the page asks the server for the
+   current index.html when it comes back to the foreground and every ten
+   minutes, reads the app.js version in it, and reloads itself when a newer
+   one is out. */
+(function(){
+  const here = (document.querySelector('script[src^="app.js?v="]') || {}).src || "";
+  const mine = (/[?&]v=(\d+)/.exec(here) || [])[1];
+  if (!mine) return;
+  let busy = false;
+  async function check(){
+    if (busy || document.visibilityState !== "visible") return;
+    busy = true;
+    try{
+      const r = await fetch("/index.html?u=" + Date.now(), { cache: "no-store" });
+      const t = r.ok ? await r.text() : "";
+      const live = (/app\.js\?v=(\d+)/.exec(t) || [])[1];
+      if (live && +live > +mine) location.reload();
+    }catch{}
+    busy = false;
+  }
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("focus", check);
+  setInterval(check, 10 * 60 * 1000);
+  setTimeout(check, 15000);
+})();
 window.addEventListener("hashchange", nav);
 // Setting the hash fires hashchange, which calls nav() — calling it here too
 // booted the view twice, racing two copies of the day against each other.
