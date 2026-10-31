@@ -671,5 +671,7 @@ table.period tr.now td{background:var(--green-soft)} table.period tr.now td:firs
 ul.agenda li.lane-rx{border-left:3px solid #7FB3E6} ul.agenda li.lane-rx .n{color:var(--ink)}
 .rxlog{font:inherit; font-size:11px; padding:3px 8px}
 /* a row's tag never squeezes its name: capped width, wraps when it must */
-ul.agenda li .tag{max-width:36%; white-space:normal; overflow-wrap:anywhere; text-align:right}
-ul.agenda li .n{min-width:0; overflow-wrap:anywhere}
+ul.agenda li{grid-template-columns:64px minmax(0,1fr) minmax(84px,max-content)}
+ul.agenda li .tag{max-width:40%; white-space:normal; overflow-wrap:normal; word-break:normal; text-align:right; line-height:1.25}
+ul.agenda li .n{min-width:0; overflow-wrap:break-word}
+@media (max-width:420px){ ul.agenda li{grid-template-columns:56px minmax(0,1fr) minmax(76px,max-content); gap:8px} }
