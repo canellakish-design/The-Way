@@ -571,5 +571,5 @@ li.xrow.medalled{border-color:#b8860b; box-shadow:inset 3px 0 0 #f0c040}
 .wxstack.wxsky{margin-bottom:5px}
 .wxsky .wxh.wxico{height:20px; background:none; cursor:default; display:flex; align-items:center; justify-content:center; border-radius:0}
 .wxsky .wxico svg{width:15px; height:15px; display:block}
-.wxsky .wxh.wxwind{height:28px; flex-direction:column; gap:0; color:var(--ink)}
-.wxsky .wxh.wxwind i{position:static; font-size:7.5px; line-height:1; margin-top:1px}
+.wxsky .wxh.wxwind{height:28px; flex-direction:column; gap:0}
+.wxsky .wxh.wxwind i{position:static; font-size:7.5px; line-height:1; margin-top:1px; color:inherit}

@@ -1163,13 +1163,15 @@ const SKY_SVG = {
 };
 const SKY_WORD = { sun: "sunny", moon: "clear", partly: "partly cloudy", "partly-night": "partly cloudy", cloud: "cloudy", fog: "fog", drizzle: "drizzle", rain: "rain", snow: "snow", thunder: "thunderstorms" };
 // the arrow points the way the wind blows (the forecast gives where it comes from)
-const windSVG = (deg, mph) => `<svg viewBox="0 0 20 20" class="warrow" style="opacity:${mph >= 14 ? 1 : mph >= 7 ? .8 : .5}"><g transform="rotate(${((deg || 0) + 180) % 360} 10 10)" stroke="currentColor" stroke-width="${mph >= 14 ? 2.4 : 1.8}" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M10 17V3M10 3L6 7M10 3l4 4"/></g></svg>`;
+// the arrow's colour is the wind's verdict: under 12 mph green, 12 to 15 amber, over 15 red
+const windTone = mph => mph > 15 ? "var(--red)" : mph >= 12 ? "var(--amber)" : "var(--green)";
+const windSVG = (deg, mph) => `<svg viewBox="0 0 20 20" class="warrow" style="color:${windTone(mph)}"><g transform="rotate(${((deg || 0) + 180) % 360} 10 10)" stroke="currentColor" stroke-width="${mph > 15 ? 2.6 : mph >= 12 ? 2.2 : 1.9}" stroke-linecap="round" stroke-linejoin="round" fill="none"><path d="M10 17V3M10 3L6 7M10 3l4 4"/></g></svg>`;
 function skyStrips(w, n){
   if (!w) return "";
   const hs = w.hours.filter(h => h.hour >= H0 && h.hour <= H1);
   if (!hs.some(h => h.sky)) return "";
   const sky = hs.map(h => `<span class="wxh wxico" title="${attr(`${hlbl(h.hour)}: ${SKY_WORD[h.sky] || ""}, ${h.temp_f}°, ${h.rain_pct}% rain`)}">${SKY_SVG[h.sky] || ""}</span>`).join("");
-  const wind = hs.map(h => `<span class="wxh wxico wxwind" title="${attr(`${hlbl(h.hour)}: wind ${h.wind_mph} mph from the ${h.wind_from}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}`)}">${windSVG(h.wind_deg, h.wind_mph)}<i>${h.wind_mph}</i></span>`).join("");
+  const wind = hs.map(h => `<span class="wxh wxico wxwind" style="color:${windTone(h.wind_mph)}" title="${attr(`${hlbl(h.hour)}: wind ${h.wind_mph} mph from the ${h.wind_from}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}`)}">${windSVG(h.wind_deg, h.wind_mph)}<i>${h.wind_mph}</i></span>`).join("");
   return `<div class="wxstack wxsky"><span class="wxlab">wind</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${wind}</div>
     <span class="wxlab">sky</span><div class="wxrow" style="grid-template-columns:repeat(${n},1fr)">${sky}</div></div>`;
 }
