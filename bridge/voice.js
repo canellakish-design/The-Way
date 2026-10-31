@@ -125,6 +125,9 @@ async function context() {
 function promptFor(text, ctx, continuing) {
   return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 55 and training through a slow weight loss. You know the whole plan below (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. ${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'} Turn what he said into actions, and write one spoken reply.
 
+How the app works (the architecture, the models and their rules, the standing rules):
+${require('./advisor-brief')}
+
 Where the day stands:
 ${ctx}
 
