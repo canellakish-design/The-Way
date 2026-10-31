@@ -1635,8 +1635,14 @@ V.today = async function(){
       return "Vary the week: seven same-sized days carry more strain than the load says. Make one of them long and one of them nothing.";
     if (r.band && r.band.key === "yellow" && strava && f.tsb < -10 && g.state !== "ok" && g.state !== "high")
       return "Zone 1 today. Save the 40/20s for a green morning.";
+    // the week has a say: a green morning on a week below your own band, or a week of short nights, is not a green light
+    const C = chainData && chainData.links;
+    if (C && ((C.recovery && C.recovery.week_state === "bad") || (C.sleep && C.sleep.state === "bad")) && r.band && r.band.key === "green")
+      return `Green morning${r.score != null ? ` (${r.score})` : ""}, but the week is not: ${C.recovery && C.recovery.week_state === "bad" ? "HRV below your band" : "sleep under five hours a night"}. Keep today easy; the hard day waits for a green week.`;
+    if (C && ((C.recovery && C.recovery.week_state === "warn")) && r.band && r.band.key === "green")
+      return `Green morning${r.score != null ? ` (${r.score})` : ""} on a dipped week: ride the plan, but if it is a hard day, make it the only one this week.`;
     if ((g.state === "high" || g.state === "ok" || (r.band && r.band.key === "green")) && (!strava || f.tsb >= -10))
-      return "Green light. If the plan says VO2, today is the day.";
+      return "Green light: this morning and the week both sit in your band. If the plan says VO2, today is the day.";
     if (strava && t.ramp && t.ramp.key === "too-fast")
       return "Fitness is climbing faster than +6 a week. Hold the volume this week.";
     return "Train as planned.";
@@ -1837,7 +1843,7 @@ V.today = async function(){
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
       get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } }),
-      get("/chain", v => { chainData = v; paintChain(v); }),
+      get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
