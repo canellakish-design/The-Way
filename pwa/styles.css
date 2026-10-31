@@ -652,3 +652,10 @@ ul.agenda.courses li .t{font-size:13px}
 .score.hero .herotext{flex:0 0 auto; max-width:46%; min-width:0}
 .score.hero .spark{flex:1 1 auto; width:auto; min-width:0}
 @media (max-width:560px){ .score.hero .herotext{flex-basis:auto; max-width:48%} }
+/* the line is the point of the card: smaller number, taller and wider line */
+.score.hero{padding:8px 12px; gap:12px}
+.score.hero .snum, .score.hero .herotext .snum{font-size:26px}
+.score.hero .sword{font-size:10px} .score.hero .ssub{font-size:11px} .score.hero .slabel{font-size:10px}
+.score.hero .herotext{max-width:34%}
+.score.hero .spark{height:96px; min-height:96px}
+@media (max-width:560px){ .score.hero .snum, .score.hero .herotext .snum{font-size:24px} .score.hero .herotext{max-width:36%} .score.hero .spark{height:88px; min-height:88px} }
