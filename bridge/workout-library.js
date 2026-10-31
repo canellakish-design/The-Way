@@ -73,7 +73,8 @@ const z1Notes = min => min >= 120 ? EAT.long : min >= 90 ? roadHead(EAT.mid) : m
 const set = (label, off_s) => rep(label, 5, [step('On', 40, pc(109), cad(95)), step('Off', off_s, pc(55), cad(80))]);
 
 const LIBRARY = [
-  ...[45, 60, 75, 90, 105, 120, 135, 150].map(min => ({
+  // no 45: a Zone 1 ride shorter than an hour is not worth the saddle
+  ...[60, 75, 90, 105, 120, 135, 150].map(min => ({
     key: 'z1-' + min, name: `Zone 1, ${min} min`, sport: min >= 90 ? 'Ride' : 'VirtualRide',
     notes: z1Notes(min), steps: z1(min)
   })),
