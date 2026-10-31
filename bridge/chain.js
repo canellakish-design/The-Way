@@ -66,15 +66,16 @@ function verdict(links) {
 }
 
 // ---- the week's facts ----------------------------------------------------
+const ROW_V = 2;   // bump when what a row holds changes; older rows are re-read
 async function pastDay(date, store) {
-  if (store.days[date]) return store.days[date];
+  if (store.days[date] && store.days[date].v === ROW_V) return store.days[date];
   const food = require('./food');
   const r = await food.dayReport(date);
   const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
   // water for a past day is what was drunk against the day's target, not the
   // end-of-day balance (which reads low on every day the last glass was not logged)
   const h = r.hydration || {};
-  const row = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / h.target_ml * 100)) : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null };
+  const row = { v: ROW_V, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / h.target_ml * 100)) : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null };
   store.days[date] = row; store.dirty = true;
   return row;
 }
@@ -88,7 +89,7 @@ async function report() {
   // food and water: today live, past days from the store (a couple read fresh per call)
   let fresh = 0; const rows = {};
   for (const d of past) {
-    if (store.days[d]) { rows[d] = store.days[d]; continue; }
+    if (store.days[d] && store.days[d].v === ROW_V) { rows[d] = store.days[d]; continue; }
     if (fresh >= NEW_PER_CALL) continue;
     try { rows[d] = await pastDay(d, store); fresh++; } catch (e) { /* that day stays unread */ }
   }
