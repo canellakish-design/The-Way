@@ -644,3 +644,6 @@ ul.agenda.courses li .t{font-size:13px}
 .score.hero .spark{flex:1 1 60%; width:60%; height:70px; min-height:70px; align-self:center}
 @media (max-width:560px){ .score.hero .snum{font-size:32px} .score.hero .spark{height:64px; min-height:64px} .score.hero .herotext{flex-basis:42%; max-width:42%} }
 .chain .cbox .slabel{max-width:100%; overflow:hidden; text-overflow:clip; letter-spacing:.3px}
+/* the two long names fit their boxes */
+.chain .cbox[data-ck="water"] .slabel, .chain .cbox[data-ck="recovery"] .slabel{font-size:6.1px; letter-spacing:0}
+@media (max-width:400px){ .chain .cbox[data-ck="water"] .slabel, .chain .cbox[data-ck="recovery"] .slabel{font-size:5.6px} }
