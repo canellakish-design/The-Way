@@ -108,6 +108,74 @@ function target(def, last) {
 
 async function db() { return getJSON('lifts', { sessions: [] }); }
 
+// ---- the periodization: the next 26 weeks from where the weights are now ----
+// Three blocks on the Matthews pattern, each eight weeks and a deload:
+//   Block 1, strength: the templates as written (4 to 6 on the big lifts).
+//   Block 2, strength-endurance: every range two reps higher (6 to 8 on the
+//     big lifts), starting at about 90% of where block 1 ends.
+//   Block 3, strength: 4 to 6 again, starting one step above block 1's end.
+// Within a block the weights are projected at the rate the double
+// progression tends to deliver: a Bowflex compound lift steps up every two
+// weeks for the first four, then every three; a kettlebell lift climbs a
+// bell every three weeks; a small lift steps every three weeks; timed and
+// bodyweight work adds its increment every two. Every week the real
+// sessions come in, the projection starts again from them, so this is a
+// forecast that keeps correcting itself, never a schedule to hit at any cost.
+const BLOCKS = [
+  { key: 'strength', name: 'Strength', weeks: 8, shift: 0, start: 'current' },
+  { key: 'endurance', name: 'Strength-endurance', weeks: 8, shift: 2, start: 'ninety' },
+  { key: 'strength2', name: 'Strength', weeks: 8, shift: 0, start: 'plus' }
+];
+const roundTo = (def, lb) => def.kind === 'bell' ? (BELLS.find(b => b >= lb - 1) || Math.ceil(lb / 10) * 10) : Math.max(0, Math.round(lb / 5) * 5);
+function stepEvery(def, weekInBlock) {
+  if (def.kind === 'time' || def.kind === 'reps') return 2;
+  if (def.kind === 'bell') return 3;
+  return def.reps_hi <= 6 ? (weekInBlock <= 4 ? 2 : 3) : 3;
+}
+function mondayOf(key) { const d = new Date(key + 'T12:00:00Z'); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return d.toISOString().slice(0, 10); }
+function periodization(templates, sessions, today) {
+  const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));
+  const week1 = mondayOf(first ? first.date : today);
+  const weekNow = Math.floor((Date.parse(today) - Date.parse(week1)) / (7 * 864e5)) + 1;
+  const lastOf = {};
+  for (const s of sessions) for (const e of s.exercises || []) lastOf[e.name] = { date: s.date, sets: e.sets };
+  const out = [];
+  for (const t of templates) {
+    const rows = [];
+    // the starting point of each exercise: the next target from the last time, else the template's start
+    const cur = {}; for (const e of t.exercises) { const tg = target(e, lastOf[e.name] || null); cur[e.name] = e.kind === 'time' || e.kind === 'reps' ? tg.reps : tg.lb; }
+    const block1End = {};
+    let w = 1;
+    for (const b of BLOCKS) {
+      const startOf = {};
+      for (const e of t.exercises) {
+        const v = cur[e.name];
+        if (e.kind === 'time' || e.kind === 'reps') startOf[e.name] = b.start === 'current' ? v : b.start === 'ninety' ? Math.max(e.reps_lo, Math.round(v * 0.9)) : v + (e.kind === 'time' ? 15 : 2);
+        else startOf[e.name] = b.start === 'current' ? v : b.start === 'ninety' ? roundTo(e, v * 0.9) : increment(e, v);
+      }
+      const val = Object.assign({}, startOf);
+      for (let k = 1; k <= b.weeks; k++) {
+        if (k > 1) for (const e of t.exercises) {
+          if ((k - 1) % stepEvery(e, k) === 0) val[e.name] = e.kind === 'time' || e.kind === 'reps' ? Math.min(e.reps_hi * 2 + e.reps_lo, val[e.name] + (e.kind === 'time' ? 15 : 2)) : increment(e, val[e.name]);
+        }
+        rows.push({ week: w, from: tz.shiftKey(week1, (w - 1) * 7), block: b.key, block_name: b.name, deload: false, now: w === weekNow,
+          targets: t.exercises.map(e => ({ name: e.name, lb: e.kind === 'time' || e.kind === 'reps' ? 0 : val[e.name], reps_lo: e.kind === 'time' || e.kind === 'reps' ? val[e.name] : e.reps_lo + b.shift, reps_hi: e.kind === 'time' || e.kind === 'reps' ? val[e.name] : e.reps_hi + b.shift, kind: e.kind })) });
+        w++;
+      }
+      // the block's end seeds the next; a deload week follows
+      for (const e of t.exercises) cur[e.name] = val[e.name];
+      if (b.key === 'strength') Object.assign(block1End, val);
+      if (b.key === 'endurance') for (const e of t.exercises) cur[e.name] = block1End[e.name];   // block 3 climbs from block 1's end, not block 2's lighter loads
+      rows.push({ week: w, from: tz.shiftKey(week1, (w - 1) * 7), block: b.key, block_name: b.name, deload: true, now: w === weekNow,
+        targets: t.exercises.map(e => ({ name: e.name, lb: e.kind === 'time' || e.kind === 'reps' ? 0 : val[e.name], reps_lo: e.kind === 'time' || e.kind === 'reps' ? val[e.name] : e.reps_lo + b.shift, reps_hi: e.kind === 'time' || e.kind === 'reps' ? val[e.name] : e.reps_lo + b.shift + 1, kind: e.kind, half_sets: true })) });
+      w++;
+    }
+    out.push({ key: t.key, name: t.name, short: t.short, rows });
+  }
+  return { week1, week_now: weekNow, weeks: out[0] ? out[0].rows.length : 0, blocks: BLOCKS.map(b => ({ key: b.key, name: b.name, weeks: b.weeks })), templates: out,
+    basis: 'from the next target of each lift (the last session, or the template\'s start), projected at the rate the double progression tends to deliver; re-projected from the real sessions each time one is saved' };
+}
+
 // ---- the week ---------------------------------------------------------
 // days: [{ date, ride: {name, minutes, tss, hard} | null, coaching_min, long_coaching, off }]
 // Returns the same days with .lift set to a template key or null, plus why.
@@ -236,7 +304,8 @@ async function report() {
   const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));
   const weekNo = first ? Math.floor((Date.parse(today) - Date.parse(first.date)) / (7 * 864e5)) + 1 : 1;
   const deload = weekNo % 9 === 0;
-  return { templates, next: nextX ? nextX.lift : 'push', next_date: nextX ? nextX.date : null, week, plan: 'Bigger Leaner Stronger, five days',
+  const plan = periodization(TEMPLATES, sessions, today);
+  return { templates, next: nextX ? nextX.lift : 'push', next_date: nextX ? nextX.date : null, week, plan: 'Bigger Leaner Stronger, five days', periodization: plan,
     week_no: weekNo, deload, deload_note: deload ? 'Deload week: the same lifts, half the hard sets, two reps shy of the top of the range. The weights stay.' : null,
     last: last ? { date: last.date, template: last.template, name: nameOf(last.template) } : null,
     sessions: sessions.slice(-15).reverse().map(s => ({ id: s.id, date: s.date, template: s.template, name: nameOf(s.template),
@@ -294,4 +363,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, TEMPLATES, target, e1rm, nextBell, prevBell, placeWeek, report, save, scheduleWeek, LONG_COACHING_MIN };
+module.exports = { attach, TEMPLATES, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };

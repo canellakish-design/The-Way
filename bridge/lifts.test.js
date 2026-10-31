@@ -63,4 +63,21 @@ ok('the week: legs the day before a day off the bike or a long coaching day; no 
   assert.strictEqual(w2.find(x => x.date === '2026-11-06').lift, 'legs');
   assert.strictEqual(w2.filter(x => x.lift === 'legs').length, 1);
 });
+ok('periodization: 27 weeks in three blocks with deloads; weights climb from the start, block 2 lighter and two reps higher, block 3 above block 1', () => {
+  const P = L.periodization(L.TEMPLATES, [], '2026-11-02');
+  const push = P.templates.find(t => t.key === 'push');
+  assert.strictEqual(push.rows.length, 27);
+  assert.strictEqual(push.rows.filter(r => r.deload).length, 3);
+  const chest = w => push.rows[w - 1].targets.find(t => t.name === 'Bowflex chest press');
+  assert.strictEqual(chest(1).lb, 110); assert.ok(chest(8).lb > chest(1).lb, 'climbs');
+  assert.strictEqual(chest(10).reps_lo, 6); assert.strictEqual(chest(10).reps_hi, 8);          // block 2: two reps higher
+  assert.ok(chest(10).lb < chest(8).lb, 'block 2 starts lighter');
+  assert.ok(chest(19).lb > chest(8).lb, 'block 3 climbs from block 1\'s end'); assert.strictEqual(chest(19).reps_lo, 4);
+  assert.strictEqual(push.rows[8].deload, true); assert.ok(push.rows[8].targets[0].half_sets);
+  // a logged session moves the starting point
+  const P2 = L.periodization(L.TEMPLATES, [{ date: '2026-11-02', template: 'push', exercises: [{ name: 'Bowflex chest press', sets: [{ reps: 6, lb: 130 }, { reps: 5, lb: 130 }, { reps: 5, lb: 130 }] }] }], '2026-11-03');
+  const c2 = P2.templates.find(t => t.key === 'push').rows[0].targets.find(t => t.name === 'Bowflex chest press');
+  assert.strictEqual(c2.lb, 140);
+  assert.strictEqual(P2.week_now, 1);
+});
 console.log(n + ' passed');

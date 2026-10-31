@@ -808,6 +808,14 @@ V.lift = async function(){
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
     </div>` : "";
+  // the plan ahead: 26 weeks for the session on screen, projected from where the weights are now
+  const P = L.periodization, PT = P && P.templates.find(t => t.key === key);
+  const periodHTML = PT ? `<div class="card"><h4>The plan ahead · ${esc(T.short)} · ${P.weeks} weeks</h4>
+      <div class="small">Three blocks: strength (4 to 6), strength-endurance (6 to 8, lighter), strength again from above where the first block ended. A deload week closes each. Targets are a forecast from your last session and move with every one you save.</div>
+      <div class="ptable"><table class="period"><thead><tr><th>wk</th><th>from</th>${PT.rows[0].targets.map(t => `<th>${esc(t.name.replace(/^(Kettlebell|Bowflex) /, ""))}</th>`).join("")}</tr></thead>
+        <tbody>${PT.rows.map(r => `<tr class="${r.block}${r.deload ? " deload" : ""}${r.now ? " now" : ""}"><td>${r.week}</td><td>${esc(r.from.slice(5).replace("-", "/"))}</td>${r.targets.map(t => `<td>${t.kind === "time" ? `${t.reps_lo} s` : t.kind === "reps" ? `${t.reps_lo}` : `<b>${t.lb}</b> × ${t.reps_lo}–${t.reps_hi}`}${r.deload ? `<span class="small"> ½</span>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      <div class="small">Pounds × reps. ½ marks a deload week: half the hard sets at the same weight. Week ${P.week_now} is where you are.</div>
+    </div>` : "";
   document.getElementById("liftPage").innerHTML = `
     ${weekHTML}
     <div class="card"><h4>${esc(T.name)}${T.short && /Upper/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(L.next_date.slice(5).replace("-","/")) : ""}` : ""}</h4>
@@ -819,6 +827,7 @@ V.lift = async function(){
       <div class="small" id="lMsg"></div>
       <details class="why"><summary>how the targets move</summary><div class="small">Mike Matthews' double progression (Bigger Leaner Stronger). The big lifts work in 4 to 6 reps, about 80 to 85% of a one-rep max, three minutes between hard sets; the small lifts in 6 to 8 or 8 to 10. When a hard set reaches the top of its range the weight goes up next time (ten pounds on the Bowflex, the next bell for a kettlebell, five on a small lift) and the reps drop back to the bottom; a set that cannot reach the bottom of the range takes the weight back a step. Nine to twelve hard sets a session, each of the five once every seven days, eight weeks on and then a deload. Legs is the cycling day of the five, so it goes the day before a day off the bike or a long coaching day, where the soreness costs no ride. The lifts are the book's, on the kettlebells and the Bowflex; the barbell original is in each note for a gym.</div></details>
     </div>
+    ${periodHTML}
     ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session. This is where lifting shows up: not in the ride CTL.</div></div>` : ""}
     ${L.sessions && L.sessions.length ? `<div class="card"><h4>Sessions</h4><ul class="agenda">${L.sessions.map(s => `<li><span class="t">${esc(s.date.slice(5).replace("-","/"))}</span><span class="n">${esc(s.name)}<span class="small"> ${s.exercises.map(e => `${e.name.replace(/^(Kettlebell|Bowflex) /, "")} ${e.sets.map(x => (x.lb ? x.lb + "×" : "") + x.reps).join(",")}`).join(" · ")}${s.notes ? " · " + esc(s.notes) : ""}</span></span><span class="tag">${(s.volume_lb/1000).toFixed(1)}k lb <button class="tdel" data-dell="${esc(s.id)}" aria-label="Remove">${TRASH}</button></span></li>`).join("")}</ul></div>` : ""}`;
   document.getElementById("lSave").onclick = async ()=>{
