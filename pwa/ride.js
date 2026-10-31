@@ -121,7 +121,11 @@ V.ride = async function(){
     try{
       if (ride && ride.id && !ride.done) { await bridge("/workouts/" + encodeURIComponent(ride.id), { method: "PUT", headers: J, body: JSON.stringify({ time: at })}); msg(`${ride.name} moved to ${hm12(at)}.`); }
       else if (ride && !ride.id) { msg(`${ride.name} is planned in intervals.icu; move it there, or plan a ride here and it takes the window.`); b.disabled = false; return; }
-      else { const mins = 90; await bridge("/workouts", { method: "POST", headers: J, body: JSON.stringify({ name: `Zone 1, ${mins} min`, sport: b.dataset.kind === "in" ? "VirtualRide" : "Ride", date, time: at, notes: "Planned from the Ride tab.", steps: [{ kind: "step", label: "Zone 1", dur_s: mins * 60, target: { type: "free" } }] }) }); msg(`Planned: Zone 1, ${mins} min at ${hm12(at)}. Pick a course below.`); }
+      else {
+        // the ride is sized to the window: a light day on the calendar is a long Zone 1 day (an hour at least, two and a half at most, half an hour left to shower)
+        const win = wins.find(x => x.h0 === h), lenMin = win ? (win.h1 - win.h0) * 60 : 90;
+        const mins = Math.max(60, Math.min(150, Math.floor((lenMin - 30) / 15) * 15));
+        await bridge("/workouts", { method: "POST", headers: J, body: JSON.stringify({ name: `Zone 1, ${mins} min`, sport: b.dataset.kind === "in" ? "VirtualRide" : "Ride", date, time: at, notes: `Planned from the Ride tab, sized to a ${Math.round(lenMin / 60 * 10) / 10} h window.`, steps: [{ kind: "step", label: "Zone 1", dur_s: mins * 60, target: { type: "free" } }] }) }); msg(`Planned: Zone 1, ${mins} min at ${hm12(at)}, sized to the window. Pick a course below.`); }
       setTimeout(()=> V.ride(), 900);
     }catch(e){ msg(e.message); b.disabled = false; }
   });
