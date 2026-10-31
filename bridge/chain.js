@@ -244,7 +244,13 @@ async function report() {
 
 function attach(app) {
   app.get('/chain', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json(await report()); } catch (e) { res.status(500).json({ error: e.message }); } });
+    try {
+      const r = await report();
+      // a compact copy for the advisor, which cannot afford the full read inside a turn
+      try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at,
+        links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null }])) }); } catch (e) { /* no store */ }
+      res.json(r);
+    } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
 module.exports = { attach, report, verdict, stateOf, recoveryState, ORDER };

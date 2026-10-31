@@ -1,5 +1,5 @@
 "use strict";
-/* THE WAY — the microphone: the advisor, as a conversation.
+/* THE WAY — the microphone: the training and nutrition advisor, as a conversation.
    Hold the button and talk; let go and it answers, out loud and in the
    thread. Hold again to answer back: "yes, do that", "the second one",
    "make it an hour instead". The bridge (bridge/voice.js) carries the last
@@ -26,7 +26,7 @@ function sheet(){
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">The advisor</span><span><button class="linkish" id="vNew">new conversation</button> · <button class="linkish" id="vClose">close</button></span></div>
+    <div class="vhead"><span class="eyebrow">Training and nutrition advisor</span><span><button class="linkish" id="vNew">new conversation</button> · <button class="linkish" id="vClose">close</button></span></div>
     <div class="vthread" id="vThread"></div>
     <div class="vheard" id="vHeard"></div>
     <div class="vrow">${SR ? `<button class="primary big vhold" id="vHold">Hold to talk</button>` : ""}<button class="big" id="vType">Type</button></div>
@@ -156,7 +156,7 @@ async function send(text){
 
 // the round button, on every page: hold to talk, tap to open the thread
 const b = document.createElement("button");
-b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Hold to talk to the advisor");
+b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Hold to talk to the training and nutrition advisor");
 b.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4zm6-4a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V22h2v-3.07A8 8 0 0 0 20 11h-2z"/></svg>`;
 if (SR) wireHold(b, ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else open(); });
 else b.onclick = ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else { open(); const t = document.getElementById("vTypeBox"); if (t) t.hidden = false; } };

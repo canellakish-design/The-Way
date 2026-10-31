@@ -112,7 +112,13 @@ async function build() {
 
 function attach(app) {
   app.get('/scores', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json(await build()); }
+    try {
+      const out = await build();
+      // a compact copy for the advisor
+      try { const t = out.training || {}, f = out.fatigue || {}, r = out.recovery || {};
+        await setJSON('scores-last', { at: Date.now(), ctl: t.ctl, ramp_7d: t.ramp_7d, ramp: t.ramp ? t.ramp.word : null, tss_7d: t.tss_7d, atl: f.atl, tsb: f.tsb, form: f.form ? f.form.word : null, recovery: r.score, recovery_word: r.band ? r.band.word : null, hrv: r.hrv, rhr: r.rhr, source: out.sources && out.sources.recovery ? out.sources.recovery.source : null }); } catch (e) { /* no store */ }
+      res.json(out);
+    }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
 

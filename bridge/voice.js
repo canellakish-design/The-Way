@@ -58,10 +58,15 @@ async function context() {
   const nowMin = p.h * 60 + p.mi;
   const W = require('./workout-math');
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
-  const [day, sched, wx] = await Promise.all([
+  const [day, sched, wx, week, chain, scores, sig, lifts] = await Promise.all([
     race(require('./food').dayReport(today), 6000, null),
     race(require('./calendar').scheduleReport({ days: 2 }), 5000, null),
-    race(require('./weather').forecastAt(today, Math.max(nowMin, 7 * 60), 8 * 60), 2500, null)
+    race(require('./weather').forecastAt(today, Math.max(nowMin, 7 * 60), 8 * 60), 2500, null),
+    race(require('./workouts').calendar(today, tz.shiftKey(today, 6)), 4000, null),
+    getJSON('chain-last', null).catch(() => null),
+    getJSON('scores-last', null).catch(() => null),
+    race(require('./signature').report(), 2500, null),
+    getJSON('lifts', { sessions: [] }).catch(() => ({ sessions: [] }))
   ]);
   const lines = [`Today is ${today}, a ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(today + 'T12:00:00Z').getUTCDay()]}; the time is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}.`];
   if (day) {
@@ -90,11 +95,35 @@ async function context() {
     if (typeof sched.recovery === 'string') lines.push(`WHOOP recovery today: ${sched.recovery} (${sched.recovery === 'green' ? 'ready' : sched.recovery === 'yellow' ? 'moderate, keep it easy' : 'low, rest or Zone 1 only'}).`);
   }
   if (wx && wx.summary) lines.push(`Weather for riding today: ${wx.summary}.`);
+  // the week ahead, as the plan has it
+  if (week && week.days) {
+    const ahead = week.days.filter(d => d.date > today).map(d => {
+      const items = (d.planned || []).map(w => `${w.name}${w.time ? ' ' + tz.hm12(w.time) : ''}${w.course && w.course.name ? ' on ' + w.course.name : ''}`)
+        .concat((d.intervals || []).map(e => `${e.name}${e.time ? ' ' + tz.hm12(e.time) : ''}`));
+      return items.length ? `${d.date.slice(5)}: ${items.join(', ')}` : null;
+    }).filter(Boolean);
+    lines.push(ahead.length ? 'THE WEEK AHEAD (planned): ' + ahead.join(' · ') + '.' : 'Nothing planned for the rest of the week yet.');
+  }
+  // fitness and form (CTL from the rides), from the last read of the scores
+  if (scores && scores.ctl != null) lines.push(`Fitness (CTL) ${scores.ctl}, ${scores.ramp_7d >= 0 ? '+' : ''}${scores.ramp_7d} this week (${scores.ramp}); fatigue (ATL) ${scores.atl}, form ${scores.tsb} (${scores.form}). Green for fitness is a rise of 2 to 6 a week.`);
+  // the chain on the front page: the week's links and where it breaks
+  if (chain && chain.links && Date.now() - (chain.at || 0) < 12 * 3600e3) {
+    const L = chain.links, w = (k, u) => L[k] && L[k].week != null ? `${k} ${L[k].week}${u || ''} (${L[k].state})` : `${k} —`;
+    lines.push(`THE CHAIN this week: ${[w('sleep', ' h/night'), w('water', '% of target'), w('food', ' avg'), w('micros'), w('lift', '% of plan'), w('work', '% of plan'), w('recovery', '% vs band'), w('weight', ' lb/wk')].join('; ')}. Verdict: ${chain.verdict}${L.recovery && L.recovery.today_word ? ` This morning's recovery: ${L.recovery.today} (${L.recovery.today_word}).` : L.recovery && L.recovery.today != null ? ` This morning's recovery: ${L.recovery.today}.` : ''}`);
+  }
+  // the signature and zones
+  if (sig && sig.signature) lines.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 116 and under.`);
+  // the lifting
+  if (lifts && lifts.sessions) {
+    const wk = lifts.sessions.filter(x => x.date >= tz.shiftKey(today, -6));
+    const last = lifts.sessions[lifts.sessions.length - 1];
+    lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${last.date}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
+  }
   return lines.join('\n');
 }
 
 function promptFor(text, ctx, continuing) {
-  return `You are the voice of one cyclist's training and food app, and his advisor. He is 55 and training through a slow weight loss. ${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'} Turn what he said into actions, and write one spoken reply.
+  return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 55 and training through a slow weight loss. You know the whole plan below (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. ${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'} Turn what he said into actions, and write one spoken reply.
 
 Where the day stands:
 ${ctx}
