@@ -120,21 +120,23 @@ function celebrate(opts){
     document.body.appendChild(wrap);
     // the meal's card: bring it into view while the check is still popping
     const li = o.slot ? document.querySelector(`.mealplan li[data-slot="${(window.CSS && CSS.escape) ? CSS.escape(o.slot) : o.slot}"]`) : null;
+    const target = li ? li.querySelector(".mk") : null;
+    if (target) target.style.visibility = "hidden";                 // the card's own check waits for the flying one
     if (li){ try{ li.scrollIntoView({ block: "center", behavior: "smooth" }); }catch{} }
+    const land = ()=>{ if (!target) return; target.textContent = "✓"; target.className = "mk ok onplan"; target.title = "on the plan"; target.style.visibility = ""; li.classList.add("cheered"); };
     setTimeout(()=>{
-      const target = li ? li.querySelector(".mk") : null;
       const from = chk.getBoundingClientRect();
       if (target && from.width){
         const to = target.getBoundingClientRect();
         const dx = (to.left + to.width / 2) - (from.left + from.width / 2), dy = (to.top + to.height / 2) - (from.top + from.height / 2);
         const scale = Math.max(0.14, Math.min(0.3, (to.width || 18) / from.width));
         const anim = chk.animate([{ transform: "translate(0,0) scale(1)", opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(${scale})`, opacity: 1 }], { duration: 650, easing: "cubic-bezier(.4,0,.2,1)", fill: "forwards" });
-        anim.onfinish = ()=>{ li.classList.add("cheered"); try{ wrap.remove(); }catch{} };
+        anim.onfinish = ()=>{ land(); try{ wrap.remove(); }catch{} };
       } else {
         chk.animate([{ transform: "scale(1)", opacity: 1 }, { transform: "scale(.6)", opacity: 0 }], { duration: 500, fill: "forwards" }).onfinish = ()=>{ try{ wrap.remove(); }catch{} };
       }
     }, 1000);
-    setTimeout(()=>{ try{ wrap.remove(); }catch{} }, 4000);
+    setTimeout(()=>{ land(); try{ wrap.remove(); }catch{} }, 4000);
   }catch{}
 }
 window.celebrate = celebrate; window.primeSound = primeSound;
@@ -1019,12 +1021,11 @@ function fmtMinLocal(m){
    the card beneath explains the number. */
 const RING_GROUPS = [["Body", ["recovery", "fatigue", "weight", "bodyfat"]], ["Today", ["workouts", "food", "hydration", "micros"]]];
 const RING_LABELS = { recovery: "Recovery", fatigue: "Fatigue", weight: "Weight", bodyfat: "Body fat", workouts: "Workouts", food: "Food", hydration: "Hydration", micros: "Micros" };
-const RING_R = [51, 39, 27, 15], RING_W = 10;
+const RING_R = [52, 41, 30, 19], RING_W = 9;
 function ringsHTML(){
-  return RING_GROUPS.map(([name, keys]) => `<div class="dial" data-group="${name.toLowerCase()}">
+  return RING_GROUPS.map(([name, keys]) => `<div class="dial" data-group="${name.toLowerCase()}"><span class="slabel dlabel">${name}</span>
     <svg class="rings" viewBox="0 0 120 120" aria-hidden="true">${keys.map((k, i) => { const r = RING_R[i], C = (2 * Math.PI * r).toFixed(2);
-      return `<circle class="rtrack" cx="60" cy="60" r="${r}" stroke-width="${RING_W}"/><circle class="rfill" data-k="${k}" cx="60" cy="60" r="${r}" stroke-width="${RING_W}" stroke-dasharray="0 ${C}" transform="rotate(-90 60 60)"/>`; }).join("")}
-      <text class="rname" x="60" y="63" text-anchor="middle">${name}</text></svg>
+      return `<circle class="rtrack" cx="60" cy="60" r="${r}" stroke-width="${RING_W}"/><circle class="rfill" data-k="${k}" cx="60" cy="60" r="${r}" stroke-width="${RING_W}" stroke-dasharray="0 ${C}" transform="rotate(-90 60 60)"/>`; }).join("")}</svg>
     <div class="dlegend">${keys.map(k => `<button class="score" data-k="${k}"><span class="sdot"></span><span class="smain"><span class="slabel">${RING_LABELS[k]}</span><span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span></span><span class="snum">—</span></button>`).join("")}</div>
   </div>`).join("");
 }
@@ -1503,7 +1504,7 @@ V.today = async function(){
       let f = fill != null ? fill : num == null ? 0 : (typeof num === "number" && num >= 0 && num <= 100 ? num / 100 : 1);
       f = Math.max(0, Math.min(1, f));
       ring.setAttribute("stroke-dasharray", `${(C * f).toFixed(2)} ${C.toFixed(2)}`);
-      ring.style.stroke = num == null ? "var(--muted)" : toneC(tone);
+      ring.style.stroke = num == null ? "var(--muted)" : (tone === "good" || tone === "warn" || tone === "bad") ? toneC(tone) : "rgba(255,255,255,.6)";
       ring.style.opacity = num == null ? ".35" : "1";
     }
   };
