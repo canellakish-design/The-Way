@@ -284,6 +284,16 @@ async function dayReport(date) {
   const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
   const { scoreDay } = require('./intake');
+  // A drink is a drink, with or without calories: a pint, a latte, a juice counts in the totals and the
+  // hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
+  const isDrink = e => !!(e.drink || e.drink_only) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+  // The snack's words follow the day: how short protein is, not "if".
+  const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
+  const planMeals = g.meals.map(m => m.slot !== 'snack' ? m : Object.assign({}, m, { what: (() => {
+    const short = (g.target.protein_g || 0) - proteinSoFar;
+    if (date !== tz.todayKey()) return m.what;
+    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: whey or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
+  })() }));
   // Macros are read against what the plan says should be in by now (today), or the whole day (a past day).
   const nowHM0 = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   const due = date === tz.todayKey() ? F.dueSoFar(g.meals, g.target, nowHM0) : null;
@@ -318,14 +328,14 @@ async function dayReport(date) {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
-    meals: F.rollForward(g.meals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && (!e.drink_only || (m.slot === 'on the bike' && (e.carbs_g || 0) >= 10)));
+    meals: F.rollForward(planMeals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && !isDrink(e) && (!e.drink_only || (m.slot === 'on the bike' && (e.carbs_g || 0) >= 10)));
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
       return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
-    suggestion: date === tz.todayKey() ? nextUp(g, entries, actual, macro, nowHM0) : null,
+    suggestion: date === tz.todayKey() ? nextUp(Object.assign({}, g, { meals: planMeals }), entries, actual, macro, nowHM0) : null,
     basis: 'the journal against the day\'s guidelines, and the macros against what the plan says should be in by now'
   };
 }
