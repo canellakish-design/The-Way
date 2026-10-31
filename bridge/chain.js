@@ -1,6 +1,6 @@
 // ============================================================
-// chain.js — the front page's chain: Sleep → Food → Micros → Water → Work →
-// Lift → Recovery → Weight, every link on the same seven-day clock, and where it breaks.
+// chain.js — the front page's chain: Sleep → Food → Micros → Water → Lift →
+// Ride → Recovery → Weight, every link on the same seven-day clock, and where it breaks.
 //
 // Weight is the lagging indicator at the end; the links before it are what
 // move it, in roughly the order they act: sleep sets appetite and recovery,
@@ -22,7 +22,7 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['sleep', 'food', 'micros', 'water', 'work', 'lift', 'recovery', 'weight'];
+const ORDER = ['sleep', 'food', 'micros', 'water', 'lift', 'work', 'recovery', 'weight'];
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
 const r0 = x => x == null ? null : Math.round(x);

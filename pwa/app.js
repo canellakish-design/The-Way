@@ -1029,9 +1029,11 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    target is where the chain breaks; the line under the row says so. The
    boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
    still open. */
-const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["work","workouts","Ride"],["lift","lift","Lift"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
+const CHAIN = [["sleep","sleep","Sleep"],["food","food","Food"],["micros","micros","Micros"],["water","hydration","Water"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recov"],["weight","weight","Weight"]];
+const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 function chainHTML(){
-  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true">›</span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctoday"><span class="snum">—</span><span class="sword"></span><span class="ssub"></span></span></button>`).join("");
+  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctoday"><span class="snum">—</span><span class="sword"></span><span class="ssub"></span></span></button>`).join("");
 }
 function paintChain(c){
   if (!c || !c.links) return;
@@ -1046,7 +1048,7 @@ function paintChain(c){
     if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
     if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : `${L.sessions}/${L.target}`; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : "this week"; }
     if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
-    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.textContent = c.break_at === ck ? "✕" : "›"; }
+    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
   }
   const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
 }

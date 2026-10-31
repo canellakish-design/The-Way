@@ -615,3 +615,12 @@ ul.agenda.courses li .t{font-size:13px}
 .chain .cbox .slabel{font-size:7.5px; letter-spacing:.5px} .chain .cbox .cnum{font-size:15px} .carrow{flex-basis:7px; font-size:11px}
 .chain .cbox .ctoday .sword{font-size:6.5px}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:13.5px} .chain .cbox .cweek{font-size:6px} .chain .cbox .slabel{font-size:7px; letter-spacing:.3px} .carrow{flex-basis:6px; font-size:10px} }
+/* the arrows sit on the seams between the boxes, in a dark round badge, so they read without taking width */
+.chain{overflow:visible}
+.carrow, .chain .carrow{flex:0 0 6px; width:6px; position:relative; overflow:visible; font-size:0; color:var(--line)}
+.carrow i{position:absolute; left:50%; top:50%; width:20px; height:20px; margin:-10px 0 0 -10px; border-radius:50%; background:#0A0A0B; border:1.5px solid currentColor; display:flex; align-items:center; justify-content:center; z-index:2; box-shadow:0 0 0 2px #0A0A0B}
+.carrow i svg{width:12px; height:12px; display:block}
+.carrow.good{color:var(--green)} .carrow.warn{color:var(--amber)} .carrow.bad{color:var(--red)} .carrow.none{color:var(--line)}
+.carrow.broken i{width:24px; height:24px; margin:-12px 0 0 -12px; background:var(--red); border-color:var(--red); color:#fff}
+.carrow.broken i svg{width:13px; height:13px}
+@media (max-width:400px){ .carrow, .chain .carrow{flex-basis:5px; width:5px} .carrow i{width:18px; height:18px; margin:-9px 0 0 -9px} .carrow i svg{width:11px; height:11px} }
