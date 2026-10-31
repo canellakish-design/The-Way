@@ -71,7 +71,10 @@ async function pastDay(date, store) {
   const food = require('./food');
   const r = await food.dayReport(date);
   const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
-  const row = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: r.hydration ? r.hydration.score : null, drunk_ml: r.hydration ? r.hydration.drunk_ml : null };
+  // water for a past day is what was drunk against the day's target, not the
+  // end-of-day balance (which reads low on every day the last glass was not logged)
+  const h = r.hydration || {};
+  const row = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / h.target_ml * 100)) : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null };
   store.days[date] = row; store.dirty = true;
   return row;
 }
@@ -94,7 +97,10 @@ async function report() {
     const food = require('./food');
     const r = await food.dayReport(today);
     const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
-    todayRow = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: r.hydration && r.hydration.now ? r.hydration.score : null, water_now: r.hydration && r.hydration.now ? r.hydration.now : null, drunk_ml: r.hydration ? r.hydration.drunk_ml : null, micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
+    const h = r.hydration || {};
+    // today counts toward the week only once the day is mostly drunk: the share of the target so far, scaled to the share of the waking day gone
+    const p = tz.parts(new Date()); const dayShare = Math.max(0.2, Math.min(1, (p.h * 60 + p.mi - 6 * 60) / (16 * 60)));
+    todayRow = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.target_ml ? Math.min(100, Math.round((h.drunk_ml || 0) / (h.target_ml * dayShare) * 100)) : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null, micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
   } catch (e) { todayRow = null; }
   if (store.dirty) { delete store.dirty; for (const k of Object.keys(store.days)) if (k < tz.shiftKey(today, -45)) delete store.days[k]; await setJSON('chain-days', store).catch(() => {}); }
   const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
@@ -111,7 +117,8 @@ async function report() {
       const M = require('./scores-math');
       for (const d of all) {
         if (d.date < dates[0]) continue;
-        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score });
+        // a night under two and a half hours is the watch off the wrist, not a night: kept in the list, left out of the mean
+        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5 });
         let score = d.readiness;
         if (score == null && (d.hrv != null || d.sleep_h != null)) {
           const hist = all.filter(x => x.date < d.date && x.hrv != null).slice(-30).map(x => x.hrv);
@@ -133,7 +140,7 @@ async function report() {
   let weight = null;
   try { weight = await require('./weighin').state(); } catch (e) { weight = null; }
 
-  const sleepWeek = r1(avg(nights.map(n => n.hours)));
+  const sleepWeek = r1(avg(nights.filter(n => n.counted).map(n => n.hours)));
   const lastNight = nights.length ? nights[nights.length - 1] : null;
   const foodWeek = r0(avg(foodDays)), waterWeek = r0(avg(waterDays));
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date >= tz.shiftKey(today, -1) ? recs[recs.length - 1] : null;
@@ -142,7 +149,7 @@ async function report() {
     sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: lastNight && lastNight.score != null ? `score ${lastNight.score}` : (lastNight ? 'last night' : 'no watch'), unit: 'h a night', nights: nights.slice(-7), basis: 'hours asleep per night, from the Garmin through intervals.icu' },
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
-    water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'score', basis: 'the hydration score (100 at the morning, 0 at 2% down) averaged over the week' },
+    water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'of target', basis: 'what was drunk against each day\'s target, averaged over the week' },
     work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan', basis: 'minutes ridden or lifted against minutes planned, this week' },
     recovery: { week: recWeek, state: stateOf('recovery', recWeek), today: recToday ? recToday.score : null, today_word: recToday && recToday.estimated ? 'estimated' : null, unit: 'average', days: recs.slice(-7), basis: 'Garmin training readiness, or an estimate from HRV against the month and the night\'s sleep' },
     weight: { week: weight ? weight.week_change_lb : null, state: stateOf('weight', weight ? weight.week_change_lb : null), today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: weight && weight.latest ? (weight.latest.logged_today ? 'today' : 'last reading') : null, unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, basis: 'the seven-day mean weight against the seven days before it' }

@@ -1035,10 +1035,10 @@ function chainHTML(){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "avg", work: "of plan", recovery: "avg", weight: "lb/wk" };
+  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "of target", work: "of plan", recovery: "avg", weight: "lb/wk" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "work" || ck === "water" ? `${L.week}%` : ck === "weight" ? (L.week > 0 ? `+${L.week}` : `${L.week}`) : `${L.week}`;
     const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = L.state === "none" ? "var(--muted)" : toneC(L.state === "good" ? "good" : L.state === "warn" ? "warn" : "bad");
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
