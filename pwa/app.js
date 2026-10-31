@@ -1644,7 +1644,7 @@ V.today = async function(){
     const t = d.training, f = d.fatigue, r = d.recovery;
     if (strava && t){
       paintTile("training", t.ctl, fitLevel(t.ctl), t.ramp ? t.ramp.tone : "",
-        t.ramp ? `${sgn(t.ramp_7d)} this week · ${t.ramp.word}` : `${t.tss_7d} TSS this week`);
+        t.ramp ? `${sgn(t.ramp_7d)}/wk · ${t.ramp.word}` : `${t.tss_7d} TSS/wk`);
       drawSpark(d.series);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
         `form ${sgn(f.tsb)}`, t.ctl ? f.atl / (2 * t.ctl) : 0.5);   // fatigue against fitness: twice the fitness is a full ring
