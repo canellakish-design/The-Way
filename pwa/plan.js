@@ -173,7 +173,7 @@ V.workout = async function(){
       const t = lib[+b.dataset.i];
       // 7:00 is the house start, nothing earlier; the meal plan hangs off this time. A window
       // tapped on the day passes its own start.
-      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? p.time : "07:00";
+      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? p.time : (() => { const dnow = new Date(); let m = dnow.getHours() * 60 + dnow.getMinutes() + 15; m = Math.ceil(m / 15) * 15; m = Math.max(7 * 60, Math.min(21 * 60, m)); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); })();   // the next quarter hour, never before 7 a.m.
       const where = p.where === "out" ? "Ride" : p.where === "in" ? "VirtualRide" : null;
       W = t ? {name:t.name, date:date0, time:t0, sport:where || t.sport, notes:t.notes||"", steps:clone(t.steps)}
             : {name:"Workout", date:date0, time:t0, sport:where || "Ride", notes:"", steps:[blankStep()]};
@@ -243,7 +243,7 @@ V.workout = async function(){
       const first = !saved; saved = r; W = clone(r); W.time = W.time || "";
       if (first) history.replaceState(null, "", "#workout?id="+encodeURIComponent(r.id));
       editor();
-    }catch(e){ msg.textContent = e.message; }
+    }catch(e){ msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); }
   }
 
   function drawSteps(){

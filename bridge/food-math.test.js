@@ -233,7 +233,6 @@ ok('mealMatch: one grade from macros and the rules; a wrap that hits the macros 
   const noAssess = F.mealMatch(lunch, [{ kcal: 580, carbs_g: 52, protein_g: 48 }]);
   assert.strictEqual(noAssess.key, 'green');
 });
-console.log(n + ' passed');
 
 ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a low-carb slot and a far slot roll nothing', () => {
   const plan = [
@@ -289,3 +288,12 @@ ok('a second session later in the day moves the meals around it: dinner after an
   assert.ok(lunch && F.toMin(lunch.time) <= 14 * 60, 'lunch clear of the ride: ' + (lunch && lunch.time));
   assert.ok(plan2.every((m, i) => i === 0 || F.toMin(m.time) >= F.toMin(plan2[i - 1].time)), 'in time order');
 });
+
+ok('the Now line names the meal by the clock: no breakfast talk before an afternoon ride', () => {
+  const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const start = new Date(); start.setHours(15, 0, 0, 0);
+  const c = F.cue('normal', [{ name: 'Zone 1, 60 min', time: '15:00', minutes: 60, start_at: start.toISOString() }], at(13, 55));
+  assert.ok(c && !/breakfast/i.test(c.text), c && c.text);
+  assert.ok(/light|protein/i.test(c.text), c.text);
+});
+console.log(n + ' passed');

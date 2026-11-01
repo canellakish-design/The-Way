@@ -218,9 +218,10 @@ async function report() {
     // the Plan link: the week ahead as it stands on the calendar
     const isW = x => /weight|lift|strength|^run$|^virtualrun$|^walk$|^hike$/i.test(String(x.sport || x.type || ''));
     for (const day of ahead.days || []) {
-      const rides = (day.planned || []).filter(w => !isW(w)).map(w => ({ name: w.name, time: w.time || null, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), logged: !!w.logged }))
+      const rides = (day.planned || []).filter(w => !isW(w)).map(w => ({ name: w.name, time: w.time || null, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), logged: !!w.logged, ridden: !!w.compliance }))
         .concat((day.intervals || []).filter(e => !isW(e)).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes || 0, logged: false })));
-      const lifts = (day.planned || []).filter(w => isW(w)).map(w => ({ name: w.name, time: w.time || null }));
+      const isLiftW = w => /weight|lift|strength/i.test(String(w.sport || '')) || /\blift\b|^push\b|\bpull\b|\bupper\b|\blegs\b|\bpump\b/i.test(String(w.name || ''));
+      const lifts = (day.planned || []).filter(isLiftW).map(w => ({ name: w.name, time: w.time || null }));
       planAhead.days.push({ date: day.date, rides, lifts, ride_min: rides.reduce((a, r) => a + r.minutes, 0) });
       planAhead.ride_min += rides.reduce((a, r) => a + r.minutes, 0); planAhead.rides += rides.length; planAhead.untimed += rides.filter(r => !r.time).length; planAhead.lifts += lifts.length;
     }
@@ -278,7 +279,7 @@ async function report() {
       const rideShare = Math.min(1, planAhead.ride_min / PLAN_RIDE_MIN), liftShare = Math.min(1, planAhead.lifts / 5), timed = planAhead.rides ? (planAhead.rides - planAhead.untimed) / planAhead.rides : 1;
       const score = 0.5 * rideShare + 0.3 * liftShare + 0.2 * timed;
       const td = planAhead.days.find(d => d.date === today) || { rides: [], lifts: [] };
-      const firstRide = td.rides.find(r => !r.logged) || td.rides[0], firstLift = td.lifts[0];
+      const firstRide = td.rides.find(r => !r.logged && !r.ridden) || td.rides[td.rides.length - 1], firstLift = td.lifts[0];
       const todayWord = firstRide ? `${firstRide.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 26)}${firstRide.time ? ` ${tz.hm12(firstRide.time)}` : ', no time'}` : firstLift ? `${firstLift.name.slice(0, 20)}${firstLift.time ? ` ${tz.hm12(firstLift.time)}` : ''}` : 'rest';
       return { week: Math.round(score * 100), state: stateOf('plan', score), ride_min: planAhead.ride_min, ride_target_min: PLAN_RIDE_MIN, rides: planAhead.rides, untimed: planAhead.untimed, lifts: planAhead.lifts,
         today: td.rides.length + td.lifts.length, today_word: todayWord, today_state: firstRide ? (firstRide.time ? 'good' : 'warn') : firstLift ? 'good' : 'none', days: planAhead.days, unit: 'ahead',

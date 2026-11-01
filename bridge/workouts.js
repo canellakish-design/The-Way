@@ -342,15 +342,18 @@ function gradeOne(w, rides) {
 // ride going to the planned session whose start time is nearest, and only
 // that one: a morning ride never also counts for the afternoon's. A session
 // still ahead of now with no ride on it is not graded yet.
+const isRideSport = w => !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String((w && w.sport) || ''));
 function gradeDay(planned, rides, dayOver, nowMin) {
   const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
   const mine = planned.map(() => []);
   for (const r of rides) {
     let best = -1, bd = Infinity;
-    planned.forEach((w, i) => { const a = toMin(w.time), b = toMin(r.time); const d = a == null || b == null ? 600 : Math.abs(a - b); if (d < bd) { bd = d; best = i; } });
+    planned.forEach((w, i) => { if (!isRideSport(w)) return; const a = toMin(w.time), b = toMin(r.time); const d = a == null || b == null ? 600 : Math.abs(a - b); if (d < bd) { bd = d; best = i; } });
     if (best >= 0) mine[best].push(r);
   }
   return planned.map((w, i) => {
+    // a run or a lift has no Strava ride to answer to: logged by hand once its time has passed, else still ahead
+    if (!isRideSport(w)) return w.logged ? Object.assign({}, w, { compliance: { pct: 100, band: 'green', basis: 'logged by hand' } }) : w;
     if (!mine[i].length && !dayOver && w.time && nowMin != null && toMin(w.time) > nowMin) return w;   // still ahead
     return gradeOne(w, mine[i]);
   });
@@ -399,7 +402,7 @@ async function calendar(from, to, o) {
   const days = [];
   for (let k = from; k <= to; k = tz.shiftKey(k, 1)) {
     const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1)
-      .map(w => pastNow(w, today) && !(ridesByDate[k] || []).length ? Object.assign({}, w, { logged: true }) : w);
+      .map(w => pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? Object.assign({}, w, { logged: true }) : w);
     const i = icuR.events.filter(e => e.date === k);
     const done = doneR.rides.filter(r => r.date === k);
     const logged = p.filter(w => w.logged);
@@ -610,4 +613,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { dedupeRides, gradeDay, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };

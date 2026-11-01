@@ -126,6 +126,8 @@ function cue(day, sessions, nowIso) {
     if (next.dt <= 180) return { key: 'pre', text: early
       ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or rice cakes 45 minutes before, breakfast after.`
                         : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a 20 g whey shake, then go. Zone 1 needs no carbs before it; the protein protects the muscle. Breakfast after.`)
+      : toMin(next.x.time) != null && toMin(next.x.time) >= 11 * 60
+      ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: something light with protein now, Greek yogurt, a whey shake or a small rice bowl. Nothing heavy.`
       : day === 'high'
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: carb breakfast now, oats and fruit, then water.`
       : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: low carb breakfast now. Protein smoothie, eggs or Greek yogurt, no toast.` };

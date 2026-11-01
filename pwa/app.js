@@ -194,6 +194,7 @@ view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
 const REDIRECTS = { day:"today", agent:"ride", plan:"ride", activate:"settings", train:"calendar", sleep:"today", analyze:"ride", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
+  { const vv = document.getElementById("view"); if (vv) vv.dataset.rev = String(Date.now()); }
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
   let h = location.hash.replace("#","").split("?")[0] || defaultView();
   if (REDIRECTS[h]){ location.hash = "#"+REDIRECTS[h]; return; }
@@ -856,7 +857,7 @@ V.lift = async function(){
       if (typed && !time){ m2.textContent = `Could not read "${typed}" as a time. Try 5:30p.`; return; }
       if (!time){ m2.textContent = "Pick a time."; return; }
       m2.textContent = "placing…";
-      try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date, time, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); m2.textContent = `On the calendar: ${T.name}, ${date} at ${hm12(time)}.`; }
+      try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date, time, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); m2.textContent = `On the calendar: ${T.name}, ${new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })} at ${hm12(time)}.`; }
       catch(e){ m2.textContent = e.message; }
     };
   };
@@ -1453,7 +1454,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const g = r.wid && WGRADE[r.wid];
     const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
     // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
-    const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title);
+    const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength|\brun\b|treadmill|zwift|trainer/i.test(r.title) && !/virtualride|^run$|walk|hike/i.test(r.sport||"");
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
     const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
     // the tag stays short; the long reason lives in the detail that opens on tap
@@ -1770,7 +1771,7 @@ V.today = async function(){
     const r = d && d.recovery, red = r && r.band && r.band.key === "red";
     const hard = p => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(p.name);
     const say = p => `${p.name}${p.time ? " at " + hm12(p.time) : ""}${p.done ? " · done" : ""}`;
-    if (!t) return "";
+    if (!t || !C) return "";   // in one piece: the session and its gate arrive together, once the chain is here
     if (!planned.length && !lifts.length) return red ? "Rest day, and the body agrees." : "Rest day.";
     const parts = [];
     if (planned.length) parts.push(planned.map(say).join(", "));
@@ -2021,7 +2022,7 @@ V.today = async function(){
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/progress", v => { drawProgress(v); }),
-      get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v) return; el.textContent = v.word || ""; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
+      get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
@@ -2311,6 +2312,7 @@ V.today = async function(){
       e.preventDefault();
       if (!confirm("Take this session off the calendar?")) return;
       b.disabled = true;
+      const row = b.closest("li"); if (row){ const det = row.nextElementSibling; if (det && det.classList.contains("xdetail")) det.remove(); row.remove(); }   // gone from the card at once; the sync makes it official
       try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); view.__syncAll("deleted"); }
       catch(err){ if (/404|no such workout/i.test(err.message)) view.__syncAll("deleted"); else { b.disabled = false; alert(err.message); } }
     });
@@ -2409,7 +2411,7 @@ function complianceHTML(c, food){
     const sub = logged ? `logged ${hm12(m.time_logged || m.time)}` : m.time < nowHM() ? `${hm12(m.time)} · nothing logged` : `at ${hm12(m.time)}`;
     return macroBars(slot, got, want, sub, logged);
   };
-  return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall ?? "—"}</span>
+  return `<div class="macros"><span class="mfuel">Compliance ${F.compliance && F.compliance.overall != null ? F.compliance.overall : (c.compliance.overall ?? "—")}</span>
       <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}</span></div>
     ${block("breakfast")}${block("lunch")}${block("dinner")}
     ${macroBars("the day", { carbs_g: sum(entries, "carbs_g"), protein_g: sum(entries, "protein_g"), fat_g: sum(entries, "fat_g") }, c.target, `${sum(entries, "kcal")} of ${c.target.kcal} kcal`, true, true)}

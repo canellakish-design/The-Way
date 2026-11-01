@@ -222,8 +222,8 @@ function placeWeek(days, o) {
     if (x.locked && x.locked !== 'legs') s = -2e3;
     return s;
   };
-  let legsIdx = -1, best = -1e9;
-  d.forEach((x, i) => { const s = legsScore(x, i); if (s > best) { best = s; legsIdx = i; } });
+  let legsIdx = d.findIndex(x => x.locked === 'legs'), best = -1e9;   // legs already on the calendar this week: it stands
+  if (legsIdx < 0) d.forEach((x, i) => { const s = legsScore(x, i); if (s > best) { best = s; legsIdx = i; } });
   if (legsIdx >= 0) {
     const x = d[legsIdx], next = d[legsIdx + 1];
     x.lift = 'legs';
@@ -252,7 +252,7 @@ function placeWeek(days, o) {
     if (s < bestS) { bestS = s; bestP = p; }
   }
   (bestP || four).forEach((k, j) => { const i = slots[j]; if (i != null) { d[i].lift = k; d[i].why = d[i].ride ? `with the ride (${d[i].ride.name})` : d[i].long_coaching ? 'a coaching day, no ride' : 'a day off the bike'; } });
-  for (const x of d) if (x.locked && x.locked !== 'any') { x.lift = x.locked; x.why = x.why || 'logged'; }
+  for (const x of d) if (x.locked && x.locked !== 'any') { x.lift = x.locked; x.why = opts.done && opts.done[x.date] ? 'logged' : 'on the calendar'; }
   return d;
 }
 function permutations(a) { if (a.length <= 1) return [a]; const out = []; a.forEach((x, i) => { for (const p of permutations(a.slice(0, i).concat(a.slice(i + 1)))) out.push([x].concat(p)); }); return out; }

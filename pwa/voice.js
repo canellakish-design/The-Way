@@ -131,6 +131,9 @@ function wireHold(el, onTap){
   };
   el.addEventListener("pointerdown", down);
   el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up); el.addEventListener("pointerleave", (e)=>{ if (holding) up(e); });
+  // a plain mouse click, when no pointer event handled it (a desktop browser without pointer events, or one that swallowed them)
+  let lastPointer = 0; const stamp = ()=>{ lastPointer = Date.now(); }; el.addEventListener("pointerup", stamp); el.addEventListener("pointerdown", stamp);
+  el.addEventListener("click", ()=>{ if (Date.now() - lastPointer > 400 && onTap) onTap(); });
   el.addEventListener("contextmenu", e => e.preventDefault());
 }
 

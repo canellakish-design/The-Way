@@ -1,6 +1,6 @@
 // node bridge/workouts.test.js
 const assert = require('assert');
-const { pastNow, gradeOne, dayCompliance, hrLoad, clean, nameForLength } = require('./workouts');
+const { pastNow, gradeOne, dayCompliance, hrLoad, clean, nameForLength, gradeDay } = require('./workouts');
 const tz = require('./tz');
 
 let n = 0;
@@ -68,7 +68,6 @@ ok('hrLoad: an hour at threshold is 100; easy hours score far less', () => {
   assert.ok(hrLoad(3600, 150, st) > 130, 'hard hour above threshold');
 });
 
-console.log(n + ' passed');
 
 ok('no workouts before 7 a.m.: 06:30 is refused on the server, 07:00 is accepted; a cleared time is fine', () => {
   assert.throws(() => clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '06:30', steps }), /No workouts before 7 a\.m\./);
@@ -84,3 +83,13 @@ ok('a library-shaped name follows the length of its steps; a custom name is left
   assert.strictEqual(nameForLength('Saturday club ride', [{ kind: 'step', dur_s: 7200 }]), 'Saturday club ride');
   assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '15:00', steps: [{ kind: 'step', label: 'Zone 1', dur_s: 5400, target: { type: 'free' } }] }).name, 'Zone 1, 90 min');
 });
+
+ok('a run or a lift is never graded against a Strava ride: logged once past, else ahead; the ride grades the ride', () => {
+  const plan = (name, sport, time, min, logged) => ({ name, sport, time, logged: !!logged, metrics: { duration_s: min * 60, tss: Math.round(min * 0.5) } });
+  const planned = [plan('Zone 1, 150 min', 'VirtualRide', '09:45', 150), plan('Treadmill run', 'Run', '13:00', 30, true), plan('Push', 'WeightTraining', '17:30', 55)];
+  const out = gradeDay(planned, [{ id: 1, time: '09:49', minutes: 83, tss: 59 }], false, 14 * 60);
+  assert.strictEqual(out[0].compliance.pct, 55);
+  assert.strictEqual(out[1].compliance.pct, 100); assert.ok(/logged by hand/.test(out[1].compliance.basis));
+  assert.ok(!out[2].compliance, 'the lift ahead is not graded');
+});
+console.log(n + ' passed');

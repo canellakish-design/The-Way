@@ -57,6 +57,8 @@ V.ride = async function(){
   cal2.forEach(c => { const kind = c.free ? (gradeAt(c.hour) === "good" ? "out" : gradeAt(c.hour) === "ok" ? "ok" : "in") : null;
     if (kind && run && run.kind === kind) run.h1 = c.hour + 1; else { if (run) wins.push(run); run = kind ? { h0: c.hour, h1: c.hour + 1, kind } : null; } });
   if (run) wins.push(run);
+  // today: a window already gone is not offered, and one under way starts now
+  if (date === today){ const nowH = new Date().getHours(); for (let i = wins.length - 1; i >= 0; i--){ if (wins[i].h1 <= nowH) wins.splice(i, 1); else if (wins[i].h0 < nowH) wins[i].h0 = nowH; } }
   const pctAt = hm => { if (!energy || !energy.series) return null; const m = hm2mm(hm); const pt = energy.series.find(q => q.m >= m) || energy.series[energy.series.length-1]; return pt ? pt.pct : null; };
   const need = ride && ride.hard ? 60 : (ride && ride.minutes >= 120 ? 40 : 25);
   const wxAt = h => w && w.hours.find(q => q.hour === h);

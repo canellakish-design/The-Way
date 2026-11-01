@@ -91,8 +91,9 @@ async function buildSessions(date, o) {
     const { gradeOne } = require('./workouts');
     const lastEnd = Math.max(...done.map(d => F.toMin(d.end_time) ?? 0));
     const lastRide = done.slice().sort((a, b) => (F.toMin(a.end_time) ?? 0) - (F.toMin(b.end_time) ?? 0)).pop();
-    const covered = planned.filter(p => !(F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
-    const ahead = planned.filter(p => F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30);
+    // only rides are measured against the ride; a run or a lift keeps its own place in the day
+    const covered = planned.filter(p => F.isRideSession(p) && !(F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
+    const ahead = planned.filter(p => !F.isRideSession(p) || (F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
     const rides = done.map(r => ({ minutes: r.minutes, tss: r.tss }));
     const graded = covered.map(p => Object.assign({}, p, { compliance: gradeOne({ metrics: { duration_s: (p.minutes || 0) * 60, tss: p.tss || 0 } }, rides).compliance }));
     const compliant = graded.length > 0 && graded.every(p => p.compliance.pct >= 85);
@@ -335,6 +336,9 @@ For each: one plain sentence, under 220 characters, spoken to him as "you" (neve
 
 async function dayReport(date) {
   const g = await guidelinesFor(date);
+  // a lift in the day: its calories are counted, and the rules say what it asks of the plate
+  for (const sx of (g.sessions || [])) if (/weight|lift|strength/i.test(String(sx.sport || '')) || /\blift\b|^push\b|\bpull\b|\bupper\b|\blegs\b/i.test(String(sx.name || '')))
+    g.guidelines = (g.guidelines || []).concat([{ key: 'lift', text: `Lift${sx.time ? ' at ' + tz.hm12(sx.time) : ''}: about ${Math.round((sx.kcal || (sx.tss ? sx.tss * 175 * 0.036 : 180)))} kcal added to the day; 25 g of protein within the hour after it.` }]);
   const doc = await dayDoc(date);
   // an entry saved without a slot (eaten far from the plan's time, before the wider rule) is slotted on the way out
   const entries = doc.entries.map(e => F.alcoholRule(Object.assign({}, e, { photo: undefined }, !e.slot && !e.supplement && !e.drink_only ? { slot: F.slotFor(g.meals, e.time, e.meal) } : {})));
@@ -388,12 +392,15 @@ async function dayReport(date) {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
-    meals: F.rollForward(planMeals, entries).map(m0 => { const mine = entries.filter(e => e.slot === m0.slot); const food = mine.filter(e => !e.supplement && !isDrink(e));
+    meals: (() => { const rolled = F.rollForward(planMeals, entries);
+      // two slots with one name (a bottle for each ride): an entry belongs to the one nearest its time
+      const own = (m0, e) => { const same = rolled.filter(x => x.slot === m0.slot); if (same.length < 2) return true; const d = x => Math.abs((F.toMin(e.time) ?? 0) - (F.toMin(x.time) ?? 0)); return same.reduce((a, x) => d(x) < d(a) ? x : a, same[0]).time === m0.time; };
+      return rolled.map(m0 => { const mine = entries.filter(e => e.slot === m0.slot && own(m0, e)); const food = mine.filter(e => !e.supplement && !isDrink(e));
       // the slot's plan as it stood when its first plate was logged, if that plate carries one
       const fro = food.map(e => e.plan).find(p => p && p.slot === m0.slot && p.kcal != null);
       const m = fro ? Object.assign({}, m0, { kcal: fro.kcal, carbs_g: fro.carbs_g, protein_g: fro.protein_g, low_carb: !!fro.low_carb, what: fro.what || m0.what, frozen_at: fro.at || null }) : m0;
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
-      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }),
+      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }); })(),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     stale_readings: staleOf(doc.entries).stale.length, stale_key: (staleOf(doc.entries).latest || {}).id || null,
     hydration, energy, supps,
@@ -761,7 +768,10 @@ function attach(app) {
       const e = doc.entries.find(x => x.id === req.params.id);
       if (!e) return res.status(404).json({ error: 'no such entry' });
       if (b.plan && typeof b.plan === 'object' && b.plan.kcal != null) e.plan = { slot: String(b.plan.slot || e.slot || ''), kcal: Math.round(+b.plan.kcal), carbs_g: Math.round(+b.plan.carbs_g || 0), protein_g: Math.round(+b.plan.protein_g || 0), low_carb: !!b.plan.low_carb, what: String(b.plan.what || '').slice(0, 200), at: String(b.plan.at || e.time || '') };
+      const onlyKcal = b.kcal != null && Number.isFinite(Number(b.kcal)) && ['carbs_g', 'protein_g', 'fat_g'].every(k => b[k] == null || Number(b[k]) === Number(e[k]));
+      if (onlyKcal && e.kcal > 0) { const f = Number(b.kcal) / e.kcal; for (const k of ['carbs_g', 'protein_g', 'fat_g']) e[k] = Math.max(0, Math.round((e[k] || 0) * f)); }   // the plate got bigger or smaller, not a different plate
       for (const k of ['kcal', 'carbs_g', 'protein_g', 'fat_g']) if (b[k] != null && Number.isFinite(Number(b[k]))) e[k] = Math.max(0, Math.round(Number(b[k])));
+      for (const x of doc.entries) if (x.why_as_of) delete x.why_as_of;   // the day changed: every sentence is re-read, this plate's first
       if (b.name) e.name = String(b.name).slice(0, 80);
       if (['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal)) e.meal = b.meal;
       if (['yes', 'partly', 'no'].includes(b.fits)) e.assessment.fits = b.fits;
@@ -772,7 +782,9 @@ function attach(app) {
       const led = await getJSON('fuel-log', { meals: [] });
       const m = led.meals.find(x => x.food_id === e.id);
       if (m) { Object.assign(m, { name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g }); await setJSON('fuel-log', led); }
-      res.json({ ok: true, entry: e, day: await dayReport(date) });
+      try { await recheckDay(date); } catch (err) { /* the sentences catch up on the next read */ }
+      const fresh = (await dayDoc(date)).entries.find(x => x.id === e.id) || e;
+      res.json({ ok: true, entry: fresh, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   // Two or more entries were one meal: fold them into one. With `text`, the
@@ -834,6 +846,7 @@ function attach(app) {
       const date = isDate(req.query.date) ? req.query.date : tz.todayKey();
       const gone = await removeEntry(req.params.id, date);
       if (!gone) return res.status(404).json({ error: 'no such entry' });
+      try { await recheckDay(date); } catch (err) { /* the sentences catch up on the next read */ }
       res.json({ ok: true, removed: gone, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }

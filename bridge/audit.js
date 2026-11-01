@@ -81,9 +81,8 @@ async function run(o) {
   // 3. the day's sentences: none left stale by a later entry
   try {
     const rep = await food.dayReport(today);
-    let rechecked = 0;
-    if (rep.stale_readings) { try { const r = await food.recheckDay(today); rechecked = r.rechecked || 0; } catch (e) { /* next pass */ } }
-    checks.push({ key: 'sentences', ok: true, fixed: rechecked, detail: rep.stale_readings ? `${rep.stale_readings} sentence${rep.stale_readings === 1 ? '' : 's'} re-read against the day as it stands` : 'every sentence reads against the day as it stands', items: [] });
+    // the re-read itself is a model call and runs on the Food page's own clock; here it is only counted
+    checks.push({ key: 'sentences', ok: true, fixed: 0, detail: rep.stale_readings ? `${rep.stale_readings} sentence${rep.stale_readings === 1 ? '' : 's'} waiting to be re-read on the next Food page load` : 'every sentence reads against the day as it stands', items: [] });
     // 4. the day's sessions agree across the food plan and the calendar
     const cal = await require('./workouts').calendar(today, today);
     const day = cal.days && cal.days[0];
