@@ -37,7 +37,10 @@ async function run(o) {
       const g = await food.guidelinesFor(date);
       let backfilled = 0, doubles = [], changed = false;
       const plates = doc.entries.filter(e => !e.supplement);
+      const F = require('./food-math');
       for (const e of plates) {
+        // a plate saved without a slot (before the wider rule) is slotted here the way the day report slots it
+        if (!e.slot && !e.drink_only && e.time) { const sl = F.slotFor(g.meals, e.time, e.meal); if (sl) { e.slot = sl; changed = true; } }
         if (!e.plan && !e.drink_only && e.slot) {
           const m = (g.meals || []).find(x => x.slot === e.slot);
           if (m && m.kcal != null) { e.plan = { slot: e.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: e.time, backfilled: true }; backfilled++; changed = true; }
