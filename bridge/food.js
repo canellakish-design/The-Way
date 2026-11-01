@@ -275,6 +275,61 @@ async function analyze(images, g, meal, notes, written) {
   return out;
 }
 
+// ---- rechecks: a sentence written at 7:20 must not speak for the day at 9:00 ----
+// Every reading is a snapshot of the day at that minute. When a later entry lands, the earlier
+// sentences are re-read against the day as it now stands, in one cheap text call, and kept with
+// the time of the re-read; the first words are kept as why_then. The verdict on the plate itself
+// (fits) never changes here: only what the sentence says about the rest of the day.
+const RECHECK_MODEL = process.env.FOOD_RECHECK_MODEL || 'claude-haiku-5-5';
+function staleOf(entries) {
+  const live = entries.filter(e => !e.supplement && e.assessment && e.assessment.why && e.at);
+  if (live.length < 2) return { latest: null, stale: [] };
+  const latest = live.slice().sort((a, b) => String(a.at).localeCompare(String(b.at))).pop();
+  return { latest, stale: live.filter(e => e.id !== latest.id && e.why_as_of !== latest.id) };
+}
+async function recheckDay(date) {
+  const doc = await dayDoc(date);
+  const { latest, stale } = staleOf(doc.entries);
+  if (!latest || !stale.length) return { rechecked: 0 };
+  const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+  if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
+  const g = await guidelinesFor(date);
+  const sum = k => Math.round(doc.entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
+  const line = e => `${tz.hm12(e.time)} ${e.drink_only ? 'drink' : e.slot || e.meal}: ${e.name}, ${e.kcal} kcal, ${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat${F.alcoholOf(e) ? ` (alcohol, ${F.alcoholOf(e)} drink${F.alcoholOf(e) === 1 ? '' : 's'})` : ''}`;
+  const prompt = `You are the nutrition coach for one cyclist, 55, 98 kg, losing weight slowly while training. Each journal entry carries one sentence you wrote when it was logged. The day has moved on since; rewrite the sentences below so each is true of the day AS IT NOW STANDS.
+Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
+Today's rules:
+${g.guidelines.map(x => '- ' + x.text).join('\n')}
+The journal now, in order:
+${doc.entries.filter(e => !e.supplement).slice().sort((a, b) => String(a.time).localeCompare(String(b.time))).map(line).join('\n')}
+Totals now: ${sum('kcal')} kcal, ${sum('carbs_g')} g carbs, ${sum('protein_g')} g protein, ${sum('fat_g')} g fat.
+Sentences to rewrite:
+${stale.map(e => `- id ${e.id}, ${tz.hm12(e.time)} ${e.name}: "${e.assessment.why}"`).join('\n')}
+For each: one plain sentence, under 220 characters, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. No advice about meals that have already happened. Times in 12-hour form.`;
+  const schema = { type: 'object', additionalProperties: false, required: ['readings'], properties: { readings: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
+  const r = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
+    body: JSON.stringify({ model: RECHECK_MODEL, max_tokens: 1500, fallbacks: 'default', output_config: { format: { type: 'json_schema', schema } }, messages: [{ role: 'user', content: prompt }] })
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error('recheck ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
+  const block = (j.content || []).find(c => c.type === 'text');
+  let out; try { out = JSON.parse(block.text.replace(/```json|```/g, '').trim()); } catch { throw new Error('recheck answer was not JSON'); }
+  const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
+  let n = 0;
+  const fresh = await dayDoc(date);      // re-read: a log may have landed while the model thought
+  for (const rd of (out.readings || [])) {
+    const e = fresh.entries.find(x => x.id === rd.id); if (!e || !e.assessment || !rd.why) continue;
+    const why = String(rd.why).slice(0, 240);
+    if (why !== e.assessment.why) { e.why_then = e.why_then || e.assessment.why; e.assessment.why = why; e.why_at = nowHM; n++; }
+    e.why_as_of = latest.id;
+  }
+  for (const e of stale) { const x = fresh.entries.find(y => y.id === e.id); if (x) x.why_as_of = latest.id; }   // asked and answered, even if unchanged
+  await setJSON(dayKey(date), fresh);
+  return { rechecked: n, asked: stale.length };
+}
+
 async function dayReport(date) {
   const g = await guidelinesFor(date);
   const doc = await dayDoc(date);
@@ -334,6 +389,7 @@ async function dayReport(date) {
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
       return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
+    stale_readings: staleOf(doc.entries).stale.length, stale_key: (staleOf(doc.entries).latest || {}).id || null,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
@@ -640,6 +696,13 @@ function attach(app) {
   app.post('/food/item', async (req, res) => { if (!auth(req, res)) return;
     try { const entry = await addKnown(req.body); res.json({ ok: true, entry, day: await dayReport(entry.date) }); }
     catch (e) { res.status(400).json({ ok: false, error: e.message }); } });
+  // re-read the day's earlier sentences against the day as it now stands
+  app.post('/food/recheck', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const date = /^\d{4}-\d{2}-\d{2}$/.test((req.body || {}).date || '') ? req.body.date : tz.todayKey();
+      const r = await recheckDay(date);
+      res.json(Object.assign({ ok: true }, r, { day: await dayReport(date) }));
+    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
   app.post('/food/text', async (req, res) => { if (!auth(req, res)) return;
     try {
       const entry = await addPhoto({ text: (req.body || {}).text, meal: (req.body || {}).meal });
@@ -761,4 +824,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };
+module.exports = { attach, dayReport, recheckDay, guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };

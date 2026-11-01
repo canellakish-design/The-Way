@@ -348,7 +348,7 @@ V.food = async function(){
           <div class="jname">${esc(e.name)}</div>
           <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}`}</div></div>
         <div class="jfit">${fitBadge(a)}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div>
-      <div class="small jwhy">${esc(a.why||"")}</div>
+      <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
       <div class="jmore">
         ${e.written?`<div class="small">You wrote: “${esc(e.written)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
@@ -368,6 +368,13 @@ V.food = async function(){
     catch(e){ day = null; }
     if (location.hash.split("?")[0] !== "#food") return;
     draw();
+    recheck();
+  };
+  // earlier sentences of the day are re-read whenever something newer has landed; once per newest entry
+  const recheck = async ()=>{
+    if (!day || !day.stale_readings || !day.stale_key || window.__recheckTried === day.stale_key) return;
+    window.__recheckTried = day.stale_key;
+    try{ const r = await bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ date })}); if (r && r.day && location.hash.split("?")[0] === "#food"){ day = r.day; draw(); } }catch{}
   };
   load();
 

@@ -375,6 +375,7 @@ ul.agenda.mealplan li.past{opacity:.55}
 .jthumb{width:72px; height:72px; object-fit:cover; border:1px solid var(--line)}
 .jname{font-weight:600; font-size:17px; line-height:1.25}
 .jwhy{margin-top:8px}
+.jwhy .reread{font-family:var(--mono); font-size:10px; letter-spacing:.5px; color:var(--muted); white-space:nowrap}
 .jmore{display:none; border-top:1px dashed var(--line); margin-top:10px; padding-top:8px}
 .jentry.open .jmore{display:block}
 .jentry{cursor:pointer}
