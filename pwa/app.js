@@ -655,7 +655,7 @@ V.zones = async function(){
     const tpLine = sig ? `<line x1="${L}" x2="${W-R}" y1="${Y(sig.tp).toFixed(1)}" y2="${Y(sig.tp).toFixed(1)}" stroke="var(--amber)" opacity=".8" stroke-dasharray="4 3"></line><text x="${W-R-2}" y="${(Y(sig.tp)-4).toFixed(1)}" class="egl" text-anchor="end">TP ${sig.tp}</text>` : "";
     const ftpLine = a.planning_ftp && (!sig || a.planning_ftp !== sig.tp) ? `<line x1="${L}" x2="${W-R}" y1="${Y(a.planning_ftp).toFixed(1)}" y2="${Y(a.planning_ftp).toFixed(1)}" stroke="#F2F1EC" opacity=".4" stroke-dasharray="2 3"></line><text x="${L+2}" y="${(Y(a.planning_ftp)-4).toFixed(1)}" class="egl">FTP ${a.planning_ftp}</text>` : "";
     return `<svg viewBox="0 0 ${W} ${H}" class="egsvg pdsvg" preserveAspectRatio="none">${yt}${tpLine}${ftpLine}${line}${dots}${ticks}</svg>
-      <div class="small">Dots are the best average power he has held for each length of time in the last ${sg.lookback_days || 90} days; the line is the curve the three numbers draw. A green dot sits above the curve: a breakthrough.</div>`;
+      <div class="small">Dots are the best average power you have held for each length of time in the last ${sg.lookback_days || 90} days; the line is the curve the three numbers draw. A green dot sits above the curve: a breakthrough.</div>`;
   };
   const bests = sg.bests || {};
   const bestsHTML = [20,30,40,50,60].map(m => { const b = bests[m]; return `<li><span class="n"><b>${m} min</b>${b ? `<span class="small"> ${esc(b.name||"")} · ${esc(b.date||"")}</span>` : `<span class="small"> no ride that long with power yet</span>`}</span><span class="tag">${b ? `<b>${b.watts} W</b>${b.curve ? `<span class="small"> curve ${b.curve}</span>` : ""}` : "—"}</span></li>`; }).join("");
@@ -1111,6 +1111,18 @@ function dayRows(d, plan, isToday){
       const why = mt && mt.rules && mt.rules.why ? mt.rules.why : null;
       rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
+    }
+    // drinks with calories (a pint, a latte) never stand in for a meal, but they are in the day: their own row, graded
+    for (const e of (f.entries || [])){
+      if (e.supplement || !e.time) continue;
+      const n = e.alcohol || 0;
+      const drink = n > 0 || e.drink_only || (e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300);
+      if (!drink || ((e.kcal || 0) < 100 && !n)) continue;
+      const a = hm(e.time); if (a == null) continue;
+      const key = n >= 2 ? "red" : n === 1 ? "yellow" : (e.assessment && e.assessment.fits === "no") ? "red" : (e.assessment && e.assessment.fits === "partly") ? "yellow" : "green";
+      const word = n >= 2 ? `${n} drinks` : n === 1 ? "one drink" : "a drink";
+      rows.push({ start: a, end: a + 20, from: fmtMinLocal(a), to: fmtMinLocal(a + 20), title: "drink", detail: `${e.name} · ${e.kcal} kcal · ${e.carbs_g}C`,
+        lane: LANE.food, source: "food", href: "#food", meal: { logged: true, match: { key, word, macros: { word: `${e.kcal} kcal` }, rules: { word } }, slot: null }, desc: (e.assessment && e.assessment.why) || null });
     }
   }
   // the rides that happened, from Strava, when no planned row already holds them
