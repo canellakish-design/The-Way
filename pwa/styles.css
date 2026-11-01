@@ -791,3 +791,8 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .gradehero .ghr{margin-top:8px; font-size:15px; display:flex; align-items:center; gap:6px; flex-wrap:wrap}
 .gradehero .ghr .cgrade{font-size:14px; padding:4px 7px; margin:0}
 @media (max-width:400px){ .cgrade.huge{font-size:46px; min-width:72px; padding:10px 10px} .gradehero{gap:12px; padding:14px} }
+
+/* a totals row never squeezes its name to a letter a line: the name keeps a floor, the tag wraps on the right */
+ul.agenda.totals li{grid-template-columns:minmax(84px,1fr) minmax(0,58%); gap:10px; align-items:start}
+ul.agenda.totals li .n{white-space:normal; min-width:0}
+ul.agenda.totals li .tag{text-align:right; white-space:normal; line-height:1.35; justify-self:end; min-width:0}
