@@ -483,6 +483,10 @@ function mealMatch(plan, logged, ctx) {
   let keyR = 'green', wordR = 'rules met', whyR = null;
   // The sentence on the card is the plate's own reading, never a drink's: a pint logged before
   // dinner was read before dinner existed. A drink still sets the word and the colour.
+  // flags are judged against the whole slot, never one item: a pint beside a pound of shrimp
+  // has no protein source, the plate has plenty
+  const slotProtein = l.some(e => e.assessment && e.assessment.protein_source) || got.protein_g >= Math.max(20, 0.5 * (plan.protein_g || 0));
+  const slotVeg = l.some(e => e.assessment && e.assessment.vegetables);
   const plates = l.filter(e => !e.alcohol && e.assessment && e.assessment.why);
   const worstPlate = plates.reduce((a, e) => !a || RANK[e.assessment.fits === 'no' ? 'red' : e.assessment.fits === 'partly' ? 'yellow' : 'green'] > RANK[a.assessment.fits === 'no' ? 'red' : a.assessment.fits === 'partly' ? 'yellow' : 'green'] ? e : a, null);
   const plateWhy = worstPlate ? worstPlate.assessment.why : null;
@@ -494,7 +498,7 @@ function mealMatch(plan, logged, ctx) {
       keyR = k;
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
-      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30 && !e.drink && !e.drink_only) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
+      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!slotProtein && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!slotVeg && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = plateWhy || a.why || null;
     }
   }

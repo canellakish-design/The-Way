@@ -155,6 +155,11 @@ ok('alcohol: counted, never on plan; one drink partly, three no; the slot it sit
   const dinnerPlan = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
   const soda = F.mealMatch(dinnerPlan, [{ name: 'Large cola', drink: 'cola', kcal: 200, carbs_g: 50, protein_g: 0, assessment: { fits: 'no', protein_source: false } }, { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes', protein_source: true } }]);
   assert.notStrictEqual(soda.rules.word, 'no protein source');
+  // a bare starch logged beside a plate with vegetables and protein is judged with the plate
+  const bread = F.mealMatch(dinnerPlan, [{ name: 'Dinner roll', kcal: 150, carbs_g: 28, protein_g: 4, assessment: { fits: 'partly', protein_source: false, vegetables: false, carbs: 'some', why: 'A roll on its own.' } }, { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes', protein_source: true, vegetables: true } }]);
+  assert.ok(!/no protein|no vegetables/.test(bread.rules.word), bread.rules.word);
+  const alone = F.mealMatch(dinnerPlan, [{ name: 'Dinner roll', kcal: 150, carbs_g: 28, protein_g: 4, assessment: { fits: 'partly', protein_source: false, vegetables: false, carbs: 'some' } }]);
+  assert.strictEqual(alone.rules.word, 'no protein source');
   assert.strictEqual(F.alcoholRule({ name: 'Three pints of lager beer', kcal: 600, assessment: { fits: 'yes' } }).assessment.fits, 'no');
   assert.strictEqual(F.alcoholRule({ name: 'Pint of lager beer', kcal: 200, assessment: { fits: 'yes' } }).assessment.fits, 'partly');
   const dinner = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
