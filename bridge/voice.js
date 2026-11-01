@@ -27,7 +27,7 @@ const { LIBRARY } = require('./workout-library');
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 
 const SUPPS = () => require('./micro-math').TABLE.supplements.map(s => s.key);
-const FIELDS = ['type', 'text', 'meal', 'supplement', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport'];
+const FIELDS = ['type', 'text', 'meal', 'supplement', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport', 'sleep_h', 'sleep_score', 'recovery', 'hrv', 'rhr'];
 const SCHEMA = () => ({
   type: 'object', additionalProperties: false, required: ['actions', 'reply'],
   properties: {
@@ -35,7 +35,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -43,7 +43,8 @@ const SCHEMA = () => ({
         date: { type: 'string' }, time: { type: 'string' }, new_date: { type: 'string' },
         library_key: { type: 'string', enum: [''].concat(LIBRARY.map(l => l.key)) },
         name: { type: 'string' }, minutes: { type: 'integer' },
-        sport: { type: 'string', enum: ['', 'Ride', 'VirtualRide', 'WeightTraining'] }
+        sport: { type: 'string', enum: ['', 'Ride', 'VirtualRide', 'WeightTraining'] },
+        sleep_h: { type: 'number' }, sleep_score: { type: 'integer' }, recovery: { type: 'integer' }, hrv: { type: 'integer' }, rhr: { type: 'integer' }
       } } }
   }
 });
@@ -143,6 +144,7 @@ Action types:
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - note: anything about how he feels or slept, text = his words.
+- wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
@@ -300,6 +302,12 @@ async function run(a, x) {
       d.notes = d.notes.slice(-200);
       await setJSON('voice-notes', d);
       return { ok: true, summary: 'Noted.' };
+    }
+    case 'wellness': {
+      const W = require('./wellness');
+      const day = await W.set({ date: a.date || undefined, sleep_h: a.sleep_h || undefined, sleep_score: a.sleep_score || undefined, recovery: a.recovery || undefined, hrv: a.hrv || undefined, rhr: a.rhr || undefined, source: a.text || 'by hand' });
+      const bits = [day.sleep_h != null ? `sleep ${day.sleep_h} h` : null, day.sleep_score != null ? `sleep score ${day.sleep_score}` : null, day.recovery != null ? `recovery ${day.recovery}` : null, day.hrv != null ? `HRV ${day.hrv}` : null, day.rhr != null ? `resting HR ${day.rhr}` : null].filter(Boolean);
+      return { ok: true, summary: `Morning recorded for ${day.date}: ${bits.join(', ')}${day.source && day.source !== 'by hand' ? ` (${day.source})` : ''}.` };
     }
     case 'save_place': {
       const P = require('./places');

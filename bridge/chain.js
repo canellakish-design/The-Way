@@ -154,7 +154,7 @@ async function report() {
     const iv = require('./intervals');
     if (iv.configured()) {
       const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
-      const all = (w.days || []);
+      const all = await require('./wellness').overlay(w.days || []);   // a morning entered by hand wins for its date
       const weekFrom = dates[0], baseFrom = tz.shiftKey(today, -60);
       const hrvWeek = all.filter(d => d.date >= weekFrom && d.hrv > 0).map(d => d.hrv);
       const hrvBase = all.filter(d => d.date >= baseFrom && d.date < weekFrom && d.hrv > 0).map(d => d.hrv);
@@ -166,14 +166,14 @@ async function report() {
       for (const d of all) {
         if (d.date < dates[0]) continue;
         // a night under two and a half hours is the watch off the wrist, not a night: kept in the list, left out of the mean
-        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5 });
+        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5, manual: d.manual || null });
         let score = d.readiness;
         if (score == null && (d.hrv != null || d.sleep_h != null)) {
           const hist = all.filter(x => x.date < d.date && x.hrv != null).slice(-30).map(x => x.hrv);
           const b = M.vsBaseline ? M.vsBaseline(d.hrv, hist) : { delta_pct: 0 };
           score = Math.max(10, Math.min(100, Math.round(60 + ((b && b.delta_pct) || 0) * 1.2 + ((d.sleep_h || 7) - 7) * 8)));
         }
-        if (score != null) recs.push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null });
+        if (score != null) recs.push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null, manual: d.manual || null });
       }
     }
   } catch (e) { nights = []; recs = []; }
@@ -247,7 +247,7 @@ async function report() {
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date === today ? recs[recs.length - 1] : null;
   const workRatio = work.planned_min > 0 ? work.done_min / work.planned_min : (work.done_min > 0 ? 1 : null);
   const links = {
-    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}` : (lastNight ? 'last night' : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
+    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
       rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },

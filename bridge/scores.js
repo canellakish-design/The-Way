@@ -54,14 +54,14 @@ async function build() {
       const iv = require('./intervals');
       if (iv.configured()) {
         const w = await iv.wellnessRange(tz.shiftKey(today, -35), today);
-        const rows = (w.days || []).filter(d => d.hrv != null || d.rhr != null || d.sleep_h != null);
+        const rows = (await require('./wellness').overlay(w.days || [])).filter(d => d.hrv != null || d.rhr != null || d.sleep_h != null);
         const latest = rows.filter(d => d.date >= tz.shiftKey(today, -1)).pop() || null;
         if (latest) {
           const hist = rows.filter(d => d.date !== latest.date).slice(-30);
           const hrvB = M.vsBaseline(latest.hrv, hist.map(d => d.hrv));
           // Garmin's readiness when it reports one; else a score from HRV against
           // the month and the night's sleep, said to be an estimate
-          let score = latest.readiness, basis = 'Garmin training readiness';
+          let score = latest.readiness, basis = latest.manual ? `entered by hand (${latest.manual})` : 'Garmin training readiness';
           if (score == null) {
             score = Math.max(10, Math.min(100, Math.round(60 + (hrvB.delta_pct || 0) * 1.2 + ((latest.sleep_h || 7) - 7) * 8)));
             basis = 'estimated from HRV against your 30-day baseline and last night\'s sleep';
