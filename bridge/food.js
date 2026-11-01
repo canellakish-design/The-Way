@@ -305,7 +305,7 @@ ${doc.entries.filter(e => !e.supplement).slice().sort((a, b) => String(a.time).l
 Totals now: ${sum('kcal')} kcal, ${sum('carbs_g')} g carbs, ${sum('protein_g')} g protein, ${sum('fat_g')} g fat.
 Sentences to rewrite:
 ${stale.map(e => `- id ${e.id}, ${tz.hm12(e.time)} ${e.name}: "${e.assessment.why}"`).join('\n')}
-For each: one plain sentence, under 220 characters, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. No advice about meals that have already happened. Times in 12-hour form.`;
+For each: one plain sentence, under 220 characters, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. No advice about meals that have already happened. Times in 12-hour form. Answer with JSON only: {"readings":[{"id":"...","why":"..."}]}.`;
   const schema = { type: 'object', additionalProperties: false, required: ['readings'], properties: { readings: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -314,8 +314,9 @@ For each: one plain sentence, under 220 characters, spoken to him as "you" (neve
   });
   const j = await r.json();
   if (!r.ok) throw new Error('recheck ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
-  const block = (j.content || []).find(c => c.type === 'text');
-  let out; try { out = JSON.parse(block.text.replace(/```json|```/g, '').trim()); } catch { throw new Error('recheck answer was not JSON'); }
+  const text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
+  let out; try { out = JSON.parse(text.replace(/```json|```/g, '').trim()); }
+  catch { const m = /\{[\s\S]*\}/.exec(text); try { out = JSON.parse(m ? m[0] : ''); } catch { throw new Error(`recheck answer was not JSON (${j.stop_reason || 'no stop reason'}; ${(j.content || []).map(c => c.type).join(',') || 'no content'}): ${text.slice(0, 120)}`); } }
   const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   let n = 0;
   const fresh = await dayDoc(date);      // re-read: a log may have landed while the model thought

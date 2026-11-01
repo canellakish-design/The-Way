@@ -1229,7 +1229,16 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {}, FUELV = {}, BTS = {};   // BTS: breakthrough rides by date (signature.js), for the medal on the day
+let WX = {}, WGRADE = {}, FUELV = {}, BTS = {};
+// the conditions grade, A+ to F, from the hours a ride covers (scores come from the bridge, weather.js)
+const GLETTERS = [[97,"A+"],[92,"A"],[88,"A−"],[84,"B+"],[79,"B"],[74,"B−"],[69,"C+"],[63,"C"],[57,"C−"],[50,"D+"],[40,"D"],[0,"F"]];
+function condGrade(hours){ const hs = (hours||[]).filter(h => h && h.cscore != null); if (!hs.length) return null;
+  const mean = hs.reduce((a,h) => a + h.cscore, 0) / hs.length, worst = hs.reduce((a,h) => h.cscore < a.cscore ? h : a, hs[0]);
+  let score = 0.6 * mean + 0.4 * worst.cscore; if (worst.cscore < 15) score = Math.min(30, score); score = Math.round(score);
+  const letter = GLETTERS.find(([m]) => score >= m)[1]; return { score, letter, why: (worst.cwhy || []).slice(0, 2), tier: letter[0].toLowerCase() }; }
+function gradeBadge(g){ return g ? `<span class="cgrade ${g.tier}" title="${attr(`conditions ${g.letter}${g.why.length ? ": " + g.why.join(", ") : ""}`)}">${g.letter}</span>` : ""; }
+const hoursOver = (w, startMin, endMin) => w ? w.hours.filter(h => h.hour >= Math.floor(startMin/60) && h.hour < Math.max(Math.floor(startMin/60) + 1, Math.ceil(endMin/60))) : [];
+window.condGrade = condGrade; window.gradeBadge = gradeBadge; window.hoursOver = hoursOver;   // BTS: breakthrough rides by date (signature.js), for the medal on the day
 let HUB = { food: null };                         // today's food answer, for the meal and feeding rows on the day card
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h => { const x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
@@ -1328,7 +1337,9 @@ function conditionsLine(d){
   for (const h of hs){ if (h.grade === "good"){ if (!run) run = { a: h.hour, b: h.hour + 1 }; else run.b = h.hour + 1; if (!best || run.b - run.a > best.b - best.a) best = run; } else run = null; }
   const winds = hs.map(h => h.wind_mph), wmin = Math.min(...winds), wmax = Math.max(...winds);
   const words = best ? `green outside ${hlbl(best.a)}–${hlbl(best.b)}` : hs.some(h => h.grade === "ok") ? "marginal outside" : "indoors today";
-  return `<div class="small condline"><span class="wxdot ${best ? "good" : hs.some(h => h.grade === "ok") ? "ok" : "bad"}"></span>${esc(words)} · wind ${wmin === wmax ? wmin : `${wmin}–${wmax}`} mph · light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))} · <a href="#ride">Ride</a></div>`;
+  // the best two hours of the day, graded
+  let top = null; for (let a = H0; a + 2 <= H1 + 1; a++){ const g = condGrade(hs.filter(h => h.hour >= a && h.hour < a + 2)); if (g && (!top || g.score > top.g.score)) top = { a, g }; }
+  return `<div class="small condline">${top ? gradeBadge(top.g) : `<span class="wxdot ${best ? "good" : hs.some(h => h.grade === "ok") ? "ok" : "bad"}"></span>`}${top ? `best ${esc(hlbl(top.a))}–${esc(hlbl(top.a + 2))} · ` : ""}${esc(words)} · wind ${wmin === wmax ? wmin : `${wmin}–${wmax}`} mph · light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))} · <a href="#ride">Ride</a></div>`;
 }
 function dayCard(d, plan, nowMin, rec, solo){
   const isToday = !!d.today;
@@ -1357,7 +1368,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(shortWord(r.meal.match))}</span>` : "logged") : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : state === "past" ? "nothing logged" : "plan")) : null;
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? `<span class="wxdot ${wxh.grade}" title="${attr(`${wxh.temp_f}°, wind ${wxh.wind_mph} ${wxh.wind_from}, ${wxh.rain_pct}% rain`)}"></span>` : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${r.rx ? (r.taken ? `<span class="mword green">✓ taken</span>` : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : "rx")) : mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";

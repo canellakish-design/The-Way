@@ -583,6 +583,9 @@ ul.agenda li.lane-food{border-left:3px solid #6fe09a} ul.agenda li.lane-food .ta
 ul.agenda li .mword.green{color:#6fe09a} ul.agenda li .mword.yellow{color:var(--amber)} ul.agenda li .mword.red{color:var(--red)}
 .wxdot{display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:6px; vertical-align:1px; background:#1E2024}
 .wxdot.good{background:#2E7D4A} .wxdot.ok{background:#8A6A14} .wxdot.bad{background:#7A2E26}
+.cgrade{display:inline-block; font-family:var(--mono); font-weight:700; font-size:11px; line-height:1; padding:3px 5px; border:1.5px solid currentColor; border-radius:3px; margin-right:6px; vertical-align:1px; letter-spacing:0; font-variant-numeric:tabular-nums}
+.cgrade.a{color:var(--green)} .cgrade.b{color:#B9D27A} .cgrade.c{color:var(--amber)} .cgrade.d{color:#E39A5A} .cgrade.f{color:var(--red)}
+.glegend{margin-top:6px; font-size:12px}
 .condline{margin:6px 0 2px} .condline a{color:var(--ink)}
 .score.hero{padding:8px 12px; margin:2px 0 6px; align-items:center}
 .score.hero .herotext{flex-direction:row; align-items:baseline; gap:10px; flex-wrap:wrap}

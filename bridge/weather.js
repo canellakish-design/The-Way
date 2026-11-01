@@ -68,9 +68,11 @@ async function forecastAt(dateKey, startMin, minutes, opts) {
   const lat = o.lat || HOME_LAT, lon = o.lon || HOME_LON, bearing = o.bearing || ROUTE_BEARING;
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,wind_speed_10m,wind_direction_10m,wind_gusts_10m,relative_humidity_2m` +
-    `&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=7&past_days=3&timezone=auto`;
+    `&daily=sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&forecast_days=7&past_days=3&timezone=auto`;
   const r = await fetch(u); if (!r.ok) throw new Error('open-meteo ' + r.status);
   const d = await r.json(); const h = d.hourly;
+  const dk = d.daily && d.daily.time ? d.daily.time.indexOf(dateKey) : -1;
+  const sr = dk >= 0 ? +d.daily.sunrise[dk].slice(11, 13) + (+d.daily.sunrise[dk].slice(14, 16) >= 30 ? 1 : 0) : null, ss = dk >= 0 ? +d.daily.sunset[dk].slice(11, 13) : null;
   const h0 = Math.floor((startMin == null ? 7 * 60 : startMin) / 60), h1 = Math.ceil(((startMin == null ? 7 * 60 : startMin) + (minutes || 60)) / 60);
   const hours = [];
   for (let hh = h0; hh <= Math.min(23, h1); hh++) {
@@ -80,10 +82,11 @@ async function forecastAt(dateKey, startMin, minutes, opts) {
     hours.push({ hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
       wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(dir), wind_deg: dir, humidity: h.relative_humidity_2m[i],
       ride: windKind(dir, bearing) + ' out, ' + windKind(dir, (bearing + 180) % 360) + ' home' });
+    Object.assign(hours[hours.length - 1], scoreHour(hours[hours.length - 1], sr, ss));
   }
   if (!hours.length) return null;
   const mid = hours[Math.floor(hours.length / 2)];
-  return { date: dateKey, hours, summary: `${mid.temp_f}°F, feels ${mid.feels_f}°, wind ${mid.wind_mph} mph from the ${mid.wind_from}${mid.gust_mph > mid.wind_mph + 8 ? `, gusts ${mid.gust_mph}` : ''}, ${mid.rain_pct}% rain`,
+  return { date: dateKey, hours, conditions: gradeRide(hours), summary: `${mid.temp_f}°F, feels ${mid.feels_f}°, wind ${mid.wind_mph} mph from the ${mid.wind_from}${mid.gust_mph > mid.wind_mph + 8 ? `, gusts ${mid.gust_mph}` : ''}, ${mid.rain_pct}% rain`,
     bearing, source: 'Open-Meteo' };
 }
 // Each hour of a day graded for riding outside: red when it is dark, very
@@ -98,6 +101,33 @@ function gradeHour(h, sunrise, sunset) {
   if (h.wind_mph >= 20 || h.gust_mph >= 32) bad(`wind ${h.wind_mph}, gusts ${h.gust_mph}`); else if (h.wind_mph >= 14 || h.gust_mph >= 25) ok(`wind ${h.wind_mph}, gusts ${h.gust_mph}`);
   if (h.rain_pct >= 60 || h.rain_in >= 0.05) bad(`${h.rain_pct}% rain`); else if (h.rain_pct >= 35) ok(`${h.rain_pct}% rain`);
   return { grade: g, why };
+}
+// The conditions grade: a letter for a ride, A+ a perfect day to F unridable. Each hour starts at
+// 100 and loses points for cold or heat (feels-like), wind on his own bands (under 12 mph green,
+// 12 to 15 amber, over 15 red), gusts well over the wind, rain, and dark. A ride's score is the
+// mean of its hours leaning on the worst one. The letter table is the school one.
+function scoreHour(h, sunrise, sunset) {
+  let s = 100; const why = [];
+  const cut = (n, r) => { s -= n; if (n >= 8) why.push(r); };
+  if (sunrise != null && sunset != null && (h.hour < sunrise || h.hour >= sunset)) cut(100, 'dark');
+  const f = h.feels_f;
+  if (f < 55) cut(f >= 45 ? (55 - f) * 1.5 : 15 + (f >= 35 ? (45 - f) * 2 : 20 + (35 - f) * 3), `${f}° feels`);
+  else if (f > 75) cut(f <= 85 ? (f - 75) : 10 + (f - 85) * 2.5, `${f}° feels`);
+  const w = h.wind_mph || 0;
+  cut(w <= 8 ? 0 : w <= 12 ? (w - 8) * 2 : w <= 15 ? 8 + (w - 12) * 4 : w <= 20 ? 20 + (w - 15) * 6 : w <= 25 ? 50 + (w - 20) * 7 : 85, `wind ${w} mph`);
+  if (h.gust_mph > w + 8) cut(Math.min(15, h.gust_mph - w - 8), `gusts ${h.gust_mph}`);
+  const rp = h.rain_pct || 0, ri = h.rain_in || 0;
+  if (ri >= 0.1) cut(70, 'rain'); else if (rp >= 60 || ri >= 0.05) cut(45, `${rp}% rain`); else if (rp >= 35) cut(15 + (rp - 35) * 0.6, `${rp}% rain`);
+  return { cscore: Math.max(0, Math.round(s)), cwhy: why };
+}
+const LETTERS = [[97, 'A+'], [92, 'A'], [88, 'A−'], [84, 'B+'], [79, 'B'], [74, 'B−'], [69, 'C+'], [63, 'C'], [57, 'C−'], [50, 'D+'], [40, 'D'], [0, 'F']];
+function letterOf(score) { for (const [min, l] of LETTERS) if (score >= min) return l; return 'F'; }
+function gradeRide(hours) {
+  const hs = (hours || []).filter(h => h && h.cscore != null);
+  if (!hs.length) return null;
+  const mean = hs.reduce((a, h) => a + h.cscore, 0) / hs.length, worst = hs.reduce((a, h) => h.cscore < a.cscore ? h : a, hs[0]);
+  const score = Math.round(worst.cscore < 15 ? Math.min(30, 0.6 * mean + 0.4 * worst.cscore) : 0.6 * mean + 0.4 * worst.cscore);
+  return { score, letter: letterOf(score), why: (worst.cwhy || []).slice(0, 2) };
 }
 async function outlook(from, to) {
   const u = `https://api.open-meteo.com/v1/forecast?latitude=${HOME_LAT}&longitude=${HOME_LON}` +
@@ -117,7 +147,7 @@ async function outlook(from, to) {
       const pt = { hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
         wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(h.wind_direction_10m[i]), wind_deg: Math.round(h.wind_direction_10m[i]),
         code, cloud_pct: cloud, is_day: isDay, sky: skyOf(code, cloud, isDay) };
-      hours.push(Object.assign(pt, gradeHour(pt, sr, ss)));
+      hours.push(Object.assign(pt, gradeHour(pt, sr, ss), scoreHour(pt, sr, ss)));
     }
     // the best stretch: the longest run of green hours, then amber
     let best = null, run = null;
@@ -161,4 +191,4 @@ function attach(app) {
     try { res.json(await routeWeather(parseInt(req.query.hour, 10))); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, routeWeather, forecastAt, windKind, outlook, kit, gradeHour, skyOf };
+module.exports = { attach, routeWeather, forecastAt, windKind, outlook, kit, gradeHour, skyOf, scoreHour, gradeRide, letterOf };
