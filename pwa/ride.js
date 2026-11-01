@@ -81,7 +81,24 @@ V.ride = async function(){
   const kit = courses && courses.kit;
   const grade = courses && courses.grade;
 
+  // the first thing on the page: a large grade for the conditions right now (or the day's best hours when
+  // the day is not today), and the planned ride's grade beside it
+  const SKYW = { sun: "sunny", moon: "clear", partly: "partly cloudy", "partly-night": "partly cloudy", cloud: "overcast", fog: "fog", drizzle: "drizzle", rain: "rain", snow: "snow", thunder: "thunder" };
+  const nowH = new Date().getHours();
+  const hNow = w && date === today ? w.hours.find(h => h.hour === nowH) : null;
+  let top = null; if (w && !hNow){ for (let a = H0; a + 2 <= H1 + 1; a++){ const g = condGrade(w.hours.filter(h => h.hour >= a && h.hour < a + 2)); if (g && (!top || g.score > top.g.score)) top = { a, g }; } }
+  const gNow = hNow ? condGrade([hNow]) : top ? top.g : null;
+  const hDesc = h => `${h.temp_f}°, feels ${h.feels_f} · wind ${h.wind_mph} mph ${esc(h.wind_from)}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}${h.rain_pct >= 20 ? ` · ${h.rain_pct}% rain` : ""}${h.sky && SKYW[h.sky] ? ` · ${SKYW[h.sky]}` : ""}`;
+  const rideG = ride && ride.time && w ? condGrade(w.hours.filter(h => h.hour >= (hm2mm(ride.time)/60|0) && h.hour < Math.max((hm2mm(ride.time)/60|0) + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60)))) : null;
+  const hero = gNow ? `<div class="card gradehero"><span class="cgrade huge ${gNow.tier}" title="${attr(`conditions ${gNow.letter}${gNow.why.length ? ": " + gNow.why.join(", ") : ""}`)}">${gNow.letter}</span>
+      <div class="gh"><div class="ghl">${hNow ? `Right now · ${esc(hlbl(nowH))}` : `Best of ${esc(dayName.toLowerCase())} · ${esc(hlbl(top.a))}–${esc(hlbl(top.a + 2))}`}</div>
+        <div class="ghw">${hNow ? hDesc(hNow) : hDesc(w.hours.find(h => h.hour === top.a))}</div>
+        ${gNow.why.length ? `<div class="small">${esc(gNow.why.join(" · "))}</div>` : `<div class="small">nothing against it</div>`}
+        ${ride && ride.time ? `<div class="ghr">${ride.done ? "Ridden" : "Your ride"} at ${esc(hm12(ride.time))}: ${rideG ? gradeBadge(rideG) : "—"}<span class="small">${esc(ride.name)}, ${ride.minutes} min</span></div>` : ""}
+      </div></div>` : "";
+
   document.getElementById("ridePage").innerHTML = `
+    ${hero}
     <div class="card"><h4>Conditions · ${esc(d.label || dayName)}</h4>
       ${hourStrips(d)}
       ${w ? "" : `<div class="small">No forecast for this day yet.</div>`}
