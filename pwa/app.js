@@ -204,9 +204,12 @@ function nav(){
   // Three places the day is run from: the day itself, the calendar where the
   // workouts are planned ahead, and the food journal. Everything else is a
   // tap away from one of them.
-  const NAV = [["today","Day"],["ride","Ride"],["calendar","Calendar"],["food","Food"],["live","Live"],["lift","Lift"]];
-  const cur = h === "workout" ? "calendar" : h === "zones" ? "ride" : h;   // zones lives under Ride
-  if (navEl) navEl.innerHTML = NAV.map(([k,l])=>`<a href="#${k}" class="${k===cur?"on":""}">${l}</a>`).join("");
+  // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
+  // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", flags:"Flags", plan:"The plan", analyze:"Ride" };
+  const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"] };
+  if (navEl) navEl.innerHTML = h === "today" ? "" : `${PARENT[h] ? `<a class="navback" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : ""}<a class="navback day" href="#today">‹ Day</a>`;
+  { const t = document.querySelector("header h1"); if (t && !t.dataset.home){ t.dataset.home = "1"; t.style.cursor = "pointer"; t.onclick = ()=>{ location.hash = "#today"; }; } }
   (V[h] || V.settings)();
 }
 /* The front page is the day, on every device. */
@@ -1868,6 +1871,10 @@ V.today = async function(){
   };
 
   const row = (n, v)=> `<li><span class="n">${n}</span><span class="tag">${v}</span></li>`;
+  // the button at the top of a box's detail: the page where that link of the chain is worked on
+  const GO = { plan:["calendar","Open the calendar"], hydration:["live","Open Live: hydration and fuel"], food:["food","Open Food: log a meal, the plan, the journal"], micros:["food","Open Food: log a meal, the plan, the journal"],
+    lift:["lift","Open Lift: the next session"], workouts:["ride","Open Ride: when and where to ride"], training:["ride","Open Ride"] };
+  const goBar = k => GO[k] ? `<a class="btn primary gobar" href="#${GO[k][0]}">${GO[k][1]} ›</a>` : "";
   const drawScoreDetail = ()=>{
     const box = document.getElementById("scoreDetail");
     if (!box) return;
@@ -1882,7 +1889,7 @@ V.today = async function(){
           <div class="small">${L.ride_min} of ${L.ride_target_min} minutes of riding, ${L.lifts} of 5 lifts${L.untimed ? `, ${L.untimed} ride${L.untimed === 1 ? "" : "s"} without a start time` : ""}. ${esc(L.basis)}.</div>` : `<div class="small">No calendar read yet.</div>`}
         <a class="btn" href="#calendar">Open the calendar</a>
         <details class="why"><summary>why it is first</summary><div class="small">The chain starts with the plan because nothing downstream can be judged against a week that was never laid out: a ride not on the calendar cannot be short, a lift not placed cannot be missed, and the food plan times itself to sessions that exist.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
     }
     if (openScore === "sleep"){
       const L = chainData && chainData.links && chainData.links.sleep;
@@ -1890,7 +1897,7 @@ V.today = async function(){
         ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
           <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
     }
     if (openScore === "lift"){
       const L = chainData && chainData.links && chainData.links.lift;
@@ -1899,13 +1906,13 @@ V.today = async function(){
           <div class="small">${L.sessions} of ${L.target} sessions. ${esc(L.basis)}.</div>` : `<div class="small">loading…</div>`}
         <div class="rowbtns"><a class="btn primary" href="#lift">The Lift tab</a></div>
         <details class="why"><summary>how it is coloured</summary><div class="small">Sessions logged in the last seven days against the plan's five. Green at four or five, amber at three, red at two or fewer. Grey before the first session is saved and through a deload week (every ninth). In the first week the count is judged against the sessions due so far, so two by Wednesday is green, not red. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
     }
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · this week</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
         <details class="why"><summary>how it's scored</summary><div class="small">Thirteen nutrients against their daily targets, averaged; today owes only the share of the day reached so far. Iron and zinc are suggested only after a week low.</div></details>`;
-      box.innerHTML = html; box.hidden = false;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
     }
@@ -1923,14 +1930,14 @@ V.today = async function(){
         </ul>`}
         <a class="btn primary" href="#calendar">The calendar</a> <a class="btn" href="#zones">Training zones</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
     }
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
       html = `<h4>Hydration · today</h4>
         ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
         <div class="rowbtns"><a class="btn primary" href="#live">Live fuel and hydration</a> <a class="btn" href="#food">Snap a drink</a></div>`;
-      box.innerHTML = html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
     }
     if (openScore === "bodyfat"){
       const w = bodyData, c = w && w.composition;
@@ -1938,11 +1945,11 @@ V.today = async function(){
       html = `<h4>Body fat</h4>
         ${c ? `<ul class="agenda totals">${rows}</ul><div class="small">From the Withings scale, ${esc(new Date(c.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}. Moves are the 7-day mean against the week before.</div>` : `<div class="small">${w && w.withings_connected ? "The scale has not reported body fat yet." : "Body fat needs the Withings scale."}</div>`}
         <details class="why"><summary>how it's read</summary><div class="small">A bioimpedance reading swings a point or two with water alone, so the tile's word comes from the weekly mean, not the day. Losing fat while the lean rows hold is the program working.</div></details>`;
-      box.innerHTML = html; box.hidden = false; return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
-      box.innerHTML = html; box.hidden = false; wireBody(box); return;
+      box.innerHTML = goBar(openScore) + html; box.hidden = false; wireBody(box); return;
     }
     if (openScore === "food"){
       const c = complianceData;
@@ -1999,7 +2006,7 @@ V.today = async function(){
         ${w.auth_error && r.score != null && !garmin ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
         <details class="why"><summary>how it's scored</summary><div class="small">${garmin ? "The Garmin's training readiness for the morning when it reports one; otherwise an estimate from HRV against your own 30-day baseline and last night's sleep, said so on the box." : "WHOOP's score for the night."} The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
-    box.innerHTML = html; box.hidden = false;
+    box.innerHTML = goBar(openScore) + html; box.hidden = false;
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");

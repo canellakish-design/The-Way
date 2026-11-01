@@ -12,6 +12,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 - No new features from 1 Nov to 15 Nov. Fixes only, plus one cleanup a day that makes two disagreeing parts read from one source.
 - Claude in Chrome runs `docs/handover-chrome-plan-tests.md` once a week. Its findings go in the second table, not this one: they are caught before Harry sees them.
 - Review on 15 Nov: if the count has not clearly fallen, change the plan.
+- One exception to the freeze, asked for by Harry on 1 Nov: the chain boxes became the navigation and the tab bar went.
 
 ## Corrections Harry made
 

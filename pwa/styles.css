@@ -850,3 +850,10 @@ table.period{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch}
 .pn .kicon, .pm .kicon{vertical-align:-4px}
 .jplan{margin-top:6px; color:var(--muted)}
 #lPlanForm, #lWeekForm{margin:8px 0}
+
+/* no tab bar: the header is the logo, and off the day a way back */
+nav{gap:8px; flex-wrap:nowrap}
+nav a.navback{font-family:var(--mono); font-size:12px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--ink); text-decoration:none; border:1px solid var(--line); padding:7px 10px; border-radius:var(--radius)}
+nav a.navback.day{border-color:var(--ink)}
+header h1{user-select:none}
+.gobar{display:block; text-align:center; margin:0 0 12px; padding:12px 14px}
