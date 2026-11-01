@@ -1067,8 +1067,8 @@ function drawProgress(v){
   const fmt = (m, x) => x == null ? "—" : m.key === "ef" ? x.toFixed(2) : m.key === "decoup" ? `${x}%` : `${Math.round(x)}`;
   const dword = m => m.delta == null ? (m.n && (m.n.now < 1 || m.n.before < 1) ? "not enough rides" : "no change") : m.delta === 0 ? "flat" : `${m.delta > 0 ? "+" : "−"}${fmt(m, Math.abs(m.delta))}${m.key === "tp" || m.key === "p5" ? " W" : ""} vs the 4 weeks before`;
   el.innerHTML = `<h4>Progress · four weeks</h4>
-    <ul class="agenda totals plist">${v.metrics.map(m => `<li class="prow" style="color:${TC[m.state] || TC.none}"><span class="n"><b style="color:var(--ink)">${esc(m.label)}</b><span class="small"> ${esc(dword(m))}</span></span>
-      <span class="tag">${spark(m.series, m.better)}<b class="pnow" style="color:${TC[m.state] || TC.none}">${fmt(m, m.now)}</b><span class="small punit">${esc(m.unit)}</span></span></li>`).join("")}</ul>
+    <ul class="agenda totals plist">${v.metrics.map(m => `<li class="prow" style="color:${TC[m.state] || TC.none}"><span class="n"><b style="color:var(--ink)">${esc(m.label)}</b><span class="small"> ${esc(dword(m))}</span><span class="psparkwrap">${spark(m.series, m.better)}</span></span>
+      <span class="tag"><b class="pnow" style="color:${TC[m.state] || TC.none}">${fmt(m, m.now)}</b><span class="small punit">${esc(m.unit)}</span></span></li>`).join("")}</ul>
     <div class="small">${esc(v.word || "")}</div>
     <details class="why"><summary>what it counts</summary><div class="small">${v.metrics.map(m => `<b>${esc(m.label)}:</b> ${esc(m.why)}.`).join(" ")} The line is the last eight weeks. Fitness (CTL) is not here: it is how much you did, not how the engine answered.</div></details>`;
   el.hidden = false;

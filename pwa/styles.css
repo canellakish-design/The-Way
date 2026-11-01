@@ -827,3 +827,7 @@ ul.agenda.totals.aditems li, ul.agenda.totals.aditems li .n, .herecard .aditems 
 .pspark{flex:0 0 64px; width:64px}
 .pnow{white-space:nowrap}
 .punit{white-space:nowrap}
+.plist li.prow{grid-template-columns:minmax(0,1fr) fit-content(40%)}
+.psparkwrap{display:block; margin-top:4px}
+.plist .tag{flex-wrap:wrap; justify-content:flex-end; max-width:100%}
+.pspark{flex:none}
