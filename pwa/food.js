@@ -273,7 +273,7 @@ V.food = async function(){
     const macroRow = (label,key)=>{ const x = m && m[key]; if (!x) return "";
       return `<li><span class="n">${label}<span class="small"> ${x.actual} of ${x.target}${x.direction!=="on target"?` · ${esc(x.direction)} ${Math.abs(x.deviation_pct)}%`:""}</span></span>
         <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
-    const sessions = (day.sessions||[]).map(s=>`${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
+    const sessions = (day.sessions||[]).map(s=>`${window.kindIcon ? kindIcon(s.name, s.sport) : ""}${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
     el.innerHTML = `
       <a class="btn" href="${isToday?"#live":"#live?date="+date}">Live fuel and hydration</a>
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>

@@ -842,3 +842,9 @@ table.period{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch}
 .plandays li{grid-template-columns:minmax(0,1fr) fit-content(30%)}
 .plandays .plines{display:block; margin-top:3px; line-height:1.45}
 .plandays .tag{font-family:var(--mono); color:var(--muted); white-space:nowrap}
+
+/* the kind of a session, as an icon before its name */
+.kicon{display:inline-flex; width:17px; height:17px; margin-right:6px; vertical-align:-3px; color:var(--muted); flex:none}
+.kicon svg{width:17px; height:17px; display:block}
+.kicon.road{color:var(--green)} .kicon.trainer{color:#8FB4E8} .kicon.mtb{color:#B9D27A} .kicon.run{color:var(--amber)} .kicon.walk{color:var(--amber)} .kicon.lift{color:var(--red)}
+.pn .kicon, .pm .kicon{vertical-align:-4px}

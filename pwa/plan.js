@@ -66,7 +66,7 @@ V.calendar = async function(){
     // when there is one, on its own when nothing was planned.
     const rideLines = (r)=>{
       const a = r.analysis, h = a && a.hr, b = a && a.resp, v = a && a.ve;
-      return `<span class="pm">${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
+      return `<span class="pm">${window.kindIcon ? kindIcon(r.name, r.type) : ""}${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
         ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}`;
     };
     const word = (c)=> c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
@@ -77,7 +77,7 @@ V.calendar = async function(){
       if (withRides) ridesShown = true;
       rows.push(`<a class="pitem planned${c?" graded "+c.band:""}" href="#workout?id=${encodeURIComponent(w.id)}">
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
-        <span class="pn">${esc(w.name)}</span>
+        <span class="pn">${window.kindIcon ? kindIcon(w.name, w.sport) : ""}${esc(w.name)}</span>
         <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
         ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></a>`);
     }

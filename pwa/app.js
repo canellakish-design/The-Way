@@ -1121,6 +1121,27 @@ function ringsHTML(){
     <span class="sword">&nbsp;</span><span class="ssub">&nbsp;</span>
   </button>`).join("");
 }
+// every training session has a kind and wears its icon: road ride, trainer ride, mountain bike, run, walk, lift
+const KIND_ICONS = {
+  road: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="16" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="16" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 16l4-7h5l3 7M10 9l2 7M13 6h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  trainer: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="7" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M7 14l3.5-6h4.5l2 6M10.5 8l1.5 6M13 5h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 20h18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
+  mtb: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 21l5-8 3 4 3-6 4 6 5-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" opacity=".55"/><circle cx="6" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="18" cy="14" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 14l4-6h5l3 6M10 8l2 6M13 5h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  run: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="15" cy="4.5" r="2" fill="currentColor"/><path d="M13 8l-4 3 1.5 3.5L7 20M13 8l3 3 3-1M13 8l-1 5 3 3 1 5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  walk: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="2" fill="currentColor"/><path d="M12 8l-2 5 2 3v5M12 8l2 3 2 1M10 13l-3 2" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  lift: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h18M6 8v8M18 8v8M3.5 9.5v5M20.5 9.5v5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>'
+};
+const KIND_LABEL = { road: "road ride", trainer: "trainer ride", mtb: "mountain bike", run: "run", walk: "walk", lift: "lift" };
+function kindOf(name, sport){
+  const n = String(name || ""), sp = String(sport || "");
+  if (/weight|lift|strength/i.test(sp) || /\blift\b|^push\b|push$|\bpull\b|\bupper\b|\blegs\b|\bpump\b|strength/i.test(n)) return "lift";
+  if (/^run$|virtualrun|trailrun/i.test(sp) || /\brun\b|treadmill|\bjog/i.test(n)) return "run";
+  if (/walk|hike/i.test(sp) || /\bwalk\b|\bhike\b/i.test(n)) return "walk";
+  if (/mountain|\bmtb\b|\btrail\b/i.test(n)) return "mtb";
+  if (/virtualride/i.test(sp) || /zwift|trainer|indoor|turbo/i.test(n)) return "trainer";
+  return "road";
+}
+function kindIcon(name, sport){ const k = kindOf(name, sport); return `<span class="kicon ${k}" title="${KIND_LABEL[k]}">${KIND_ICONS[k]}</span>`; }
+window.kindOf = kindOf; window.kindIcon = kindIcon;
 const TRASH = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M9 3h6l1 2h4v2H4V5h4l1-2zm-3 6h12l-1 12H7L6 9zm3 2v8h2v-8H9zm4 0v8h2v-8h-2z"/></svg>';
 window.TRASH = TRASH;
 // the gold medal: a breakthrough ride (signature.js), tap the row for the story
@@ -1420,7 +1441,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(shortWord(r.meal.match))}</span>` : "logged") : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : state === "past" ? "nothing logged" : "plan")) : null;
     return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
       <span class="tag">${r.rx ? (r.taken ? `<span class="mword green">✓ taken</span>` : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : "rx")) : mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
