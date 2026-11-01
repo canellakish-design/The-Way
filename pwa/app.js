@@ -1076,7 +1076,7 @@ function paintChain(c){
   }
   const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
   // the two row headers: the week's dates, and today with the day's type
-  const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+  const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
   const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
   const th = document.getElementById("chainTodayHead"); if (th) th.textContent = `Today · ${D.toLocaleDateString("en-US", { weekday: "long" })}`;
   const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? `· ${foodData.fuel_day}` : "";

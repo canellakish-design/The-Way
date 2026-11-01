@@ -775,3 +775,5 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .carrow.cwrap i:empty{display:none}
 .carrow.cwrap.good{color:var(--green)} .carrow.cwrap.warn{color:var(--amber)} .carrow.cwrap.bad{color:var(--red)} .carrow.cwrap.none{color:var(--line)}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:23px} .chain .cbox .cnum.long{font-size:18px} .chain .cbox .slabel{font-size:9px} .chain .cbox .cweek{font-size:8px} .score.tcell .snum{font-size:15px} .score.tcell .snum.long{font-size:12.5px} .score.tcell .sword{font-size:8px} }
+.chainhead{flex-wrap:wrap; gap:2px 14px; row-gap:2px}
+.chainhead > span{white-space:nowrap}
