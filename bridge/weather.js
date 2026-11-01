@@ -111,7 +111,7 @@ function scoreHour(h, sunrise, sunset) {
   const cut = (n, r) => { s -= n; if (n >= 8) why.push(r); };
   if (sunrise != null && sunset != null && (h.hour < sunrise || h.hour >= sunset)) cut(100, 'dark');
   const f = h.feels_f;
-  if (f < 55) cut(f >= 45 ? (55 - f) * 1.5 : 15 + (f >= 35 ? (45 - f) * 2 : 20 + (35 - f) * 3), `${f}° feels`);
+  if (f < 55) cut(f >= 40 ? (55 - f) : f >= 30 ? 15 + (40 - f) * 3 : 45 + (30 - f) * 4, `${f}° feels`);   // a point a degree down to 40, three a degree to 30, four below
   else if (f > 75) cut(f <= 85 ? (f - 75) : 10 + (f - 85) * 2.5, `${f}° feels`);
   const w = h.wind_mph || 0;
   cut(w <= 8 ? 0 : w <= 12 ? (w - 8) * 2 : w <= 15 ? 8 + (w - 12) * 4 : w <= 20 ? 20 + (w - 15) * 6 : w <= 25 ? 50 + (w - 20) * 7 : 85, `wind ${w} mph`);

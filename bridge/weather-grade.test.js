@@ -11,7 +11,11 @@ ok('conditions grade: a perfect hour is A+, his wind bands step it down, dark or
   assert.strictEqual(W.gradeRide([W.scoreHour(H({ wind_mph: 27 }), 7, 18)]).letter, 'F');
   assert.strictEqual(W.gradeRide([W.scoreHour(H({ hour: 5 }), 7, 18)]).letter, 'F');
   assert.strictEqual(W.gradeRide([W.scoreHour(H({ rain_pct: 80, rain_in: 0.12 }), 7, 18)]).letter, 'F');
-  const cold = W.gradeRide([W.scoreHour(H({ feels_f: 30 }), 7, 18)]); assert.ok(/^D|^F/.test(cold.letter), cold.letter);
+  const cold = W.gradeRide([W.scoreHour(H({ feels_f: 30 }), 7, 18)]); assert.ok(/^C−|^D|^F/.test(cold.letter), cold.letter);
+  assert.ok(/^D|^F/.test(W.gradeRide([W.scoreHour(H({ feels_f: 24 }), 7, 18)]).letter));
+  // a 40° dawn in the right layers is a B+, not a B-; 47° is an A
+  assert.strictEqual(W.gradeRide([W.scoreHour(H({ feels_f: 40, wind_mph: 5 }), 7, 18)]).letter, 'B+');
+  assert.strictEqual(W.gradeRide([W.scoreHour(H({ feels_f: 47, wind_mph: 3 }), 7, 18)]).letter, 'A');
   // a ride leans on its worst hour: two fine hours and one dark one is still an F
   assert.strictEqual(W.gradeRide([W.scoreHour(H({ hour: 16 }), 7, 18), W.scoreHour(H({ hour: 17 }), 7, 18), W.scoreHour(H({ hour: 18 }), 7, 18)]).letter, 'F');
   const g = W.gradeRide([W.scoreHour(H({ wind_mph: 14, feels_f: 50 }), 7, 18)]); assert.ok(g.why.some(w => /wind 14/.test(w)), JSON.stringify(g.why));
