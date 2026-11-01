@@ -126,9 +126,17 @@ function model(o) {
     if (e.supplement || !e.time) continue;
     const m = toMin(e.time); if (m == null) continue;
     const c = e.carbs_g || 0, pr = e.protein_g || 0;
-    const onBike = e.meal === 'on the bike' || (inRide[Math.max(0, Math.min(n - 1, idx(m)))] && FAST_RE.test(e.name || ''));
+    const onBike = e.meal === 'on the bike' || e.slot === 'on the bike' || (inRide[Math.max(0, Math.min(n - 1, idx(m)))] && FAST_RE.test(e.name || ''));
     const fast = onBike || (e.drink_only && c > 0) || FAST_RE.test(e.name || '');
-    if (c) add(absorb, m, kernel(c, e.fat_g, e.protein_g, fast), onBike ? (MIX_RE.test(e.name || '') ? EXO_MIX_G_PER_H : EXO_G_PER_H) / 12 : 0);
+    // a bottle drunk on the bike and logged when the ride ended was drunk across the ride, not at the
+    // minute it was typed: spread it from the ride's start to its end (or to now, mid-ride)
+    const ride = onBike ? sessions.find(x => x.done && m >= x.min && m <= x.end_min + 90) : null;
+    if (c && ride) {
+      const from = ride.min, to = Math.max(from + STEP, Math.min(ride.end_min, m));
+      const steps = Math.max(1, Math.round((to - from) / 15));
+      for (let k = 0; k < steps; k++) add(absorb, from + k * 15, kernel(c / steps, e.fat_g, e.protein_g, true), (MIX_RE.test(e.name || '') ? EXO_MIX_G_PER_H : EXO_G_PER_H) / 12);
+    }
+    else if (c) add(absorb, m, kernel(c, e.fat_g, e.protein_g, fast), onBike ? (MIX_RE.test(e.name || '') ? EXO_MIX_G_PER_H : EXO_G_PER_H) / 12 : 0);
     if (pr >= 10) add(absorb, m, proteinKernel(pr));
     if (c || pr >= 10 || (e.kcal || 0) >= 80) meals.push({ time: e.time, min: m, carbs_g: c, protein_g: pr, name: e.name, logged: true, protein_only: !c && pr >= 10 });
   }
