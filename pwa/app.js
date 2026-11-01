@@ -1673,7 +1673,7 @@ V.today = async function(){
   // fill: how full the ring is, 0 to 1. Left out, a number from 0 to 100 is its own fill.
   const paintTile = (k, num, word, tone, sub, fill)=>{
     const el = view.querySelector(`.score[data-k="${k}"]`);
-    if (!el) return;
+    if (!el || !el.querySelector(".snum") || !el.querySelector(".ssub")) return;   // the chain boxes are painted by paintChain
     el.querySelector(".snum").textContent = num == null ? "—" : num;
     el.querySelector(".snum").style.color = num == null ? "var(--muted)" : toneC(tone);
     // The hero box carries the colour as a background; a legend row carries it on its dot.
@@ -1864,7 +1864,7 @@ V.today = async function(){
     if (openScore === "food"){
       const c = complianceData;
       html = `<h4>Food · compliance</h4>
-        ${c ? complianceHTML(c) : `<div class="small">bridge unreachable</div>`}
+        ${c ? complianceHTML(c, foodData) : `<div class="small">bridge unreachable</div>`}
         <a class="btn primary" href="#food">Snap a meal</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Half is the macros against what the plan says should be in by now, half is the journal against today's rules. 80 on target, 60 close.</div></details>`;
     } else if (openScore === "training"){
@@ -2287,8 +2287,9 @@ function foodCardHTML(day){
 }
 
 /* ---- compliance, for the Food tile's detail ---- */
-function complianceHTML(c){
+function complianceHTML(c, food){
   if (!c || !c.target) return `<div class="small">No target for today — the bridge couldn't build one.</div>`;
+  const F = food || {};   // the day's plan and journal (/food/today); c is the compliance read
   const p = c.compliance && c.compliance.per_macro;
   if (!p) return "";
   const band = s => s >= 90 ? "var(--green)" : s >= 70 ? "var(--amber)" : "var(--red)";
@@ -2308,11 +2309,11 @@ function complianceHTML(c){
         <div class="small">~${s.kcal} kcal · ${s.low_carb?"under ":""}${s.carbs_g}C · ${s.protein_g}P${s.score_after!=null?` — compliance ${s.score_before??"—"} → <b>${s.score_after}</b>`:""}</div>
         <a class="btn" href="#food?snap=${encodeURIComponent(s.snap||"snack")}">Snap it</a></div>`;
   // three bars a meal, three for the day: the target is the track, what was eaten fills it, the gap is written
-  const entries = (c.entries || []).filter(e => !e.supplement);
+  const entries = (F.entries || []).filter(e => !e.supplement);
   const sum = (list, k) => list.reduce((a, e) => a + (e[k] || 0), 0);
   const dayKcal = c.target.kcal || 1;
   const block = slot => {
-    const m = (c.meals || []).find(x => x.slot === slot); if (!m) return "";
+    const m = (Array.isArray(F.meals) ? F.meals : []).find(x => x.slot === slot); if (!m) return "";
     const mine = entries.filter(e => e.slot === slot);
     const want = { carbs_g: m.carbs_g || 0, protein_g: m.protein_g || 0, fat_g: m.fat_g != null ? m.fat_g : Math.round((c.target.fat_g || 0) * (m.kcal || 0) / dayKcal) };
     const got = { carbs_g: sum(mine, "carbs_g"), protein_g: sum(mine, "protein_g"), fat_g: sum(mine, "fat_g") };
