@@ -1039,7 +1039,7 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    target is where the chain breaks; the line under the row says so. The
    boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
    still open. */
-const CHAIN = [["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
+const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -1050,8 +1050,9 @@ function chainHTML(){
   const cell = ([ck, k]) => `<button class="score tcell" data-k="${k}" data-ck="${ck}" data-tone="none"><span class="snum">—</span><span class="sword">&nbsp;</span></button>`;
   const row = (links, first) => `<div class="crow"><span class="rlab">week</span>${links.map((l, i) => `${i ? `<span class="carrow" data-k="${links[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}${box(l)}`).join("")}</div>
     <div class="chaintoday"><span class="rlab">today</span>${links.map((l, i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}${cell(l)}`).join("")}</div>`;
-  const a = CHAIN.slice(0, 4), b = CHAIN.slice(4);
-  return `${row(a)}<div class="carrow cwrap" data-k="${a[a.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>${row(b)}`;
+  // three rows of three, an arrow wrapping round after the first two
+  const rows = [CHAIN.slice(0, 3), CHAIN.slice(3, 6), CHAIN.slice(6)];
+  return rows.map((r, i) => `${row(r)}${i < rows.length - 1 ? `<div class="carrow cwrap" data-k="${r[r.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>` : ""}`).join("");
 }
 function todayCellsHTML(){ return ""; }
 // the progress strip: four outcomes on a four-week clock, each with its eight-week line
@@ -1074,10 +1075,10 @@ function drawProgress(v){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
+  const UNIT = { plan: "ahead", sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 3); n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
@@ -1102,6 +1103,7 @@ function paintChain(c){
 // what today's cell says for each link: the number, a word, and a tone of its own
 function todayCell(ck, L){
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
+  if (ck === "plan") return { num: L.today ? `${L.today}` : "—", word: L.today_word || "rest", tone: L.today_state || "none" };
   if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? (L.today_word || "") : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
   if (ck === "food") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "" : (L.today >= 80 ? "on plan" : L.today >= 60 ? "near" : "off"), tone: band(L.today, 80, 60) };
@@ -1823,6 +1825,15 @@ V.today = async function(){
     if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep" && openScore !== "lift")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
+    if (openScore === "plan"){
+      const L = chainData && chainData.links && chainData.links.plan;
+      html = `<h4>Plan · the week ahead</h4>
+        ${L && L.days ? `<ul class="agenda totals">${L.days.map(d => row(esc(new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), d.rides.length || d.lifts.length ? `${d.rides.map(r => `${esc(r.name.replace(/^Zwift - Intervals icu: /i, ""))}${r.time ? " " + esc(hm12(r.time)) : " <i>no time</i>"} · ${r.minutes} min`).concat(d.lifts.map(l => `${esc(l.name)}${l.time ? " " + esc(hm12(l.time)) : ""}`)).join("<br>")}` : `<span class="small">nothing planned</span>`)).join("")}</ul>
+          <div class="small">${L.ride_min} of ${L.ride_target_min} minutes of riding, ${L.lifts} of 5 lifts${L.untimed ? `, ${L.untimed} ride${L.untimed === 1 ? "" : "s"} without a start time` : ""}. ${esc(L.basis)}.</div>` : `<div class="small">No calendar read yet.</div>`}
+        <a class="btn" href="#calendar">Open the calendar</a>
+        <details class="why"><summary>why it is first</summary><div class="small">The chain starts with the plan because nothing downstream can be judged against a week that was never laid out: a ride not on the calendar cannot be short, a lift not placed cannot be missed, and the food plan times itself to sessions that exist.</div></details>`;
+      box.innerHTML = html; box.hidden = false; return;
+    }
     if (openScore === "sleep"){
       const L = chainData && chainData.links && chainData.links.sleep;
       html = `<h4>Sleep · the week</h4>

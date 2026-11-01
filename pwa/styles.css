@@ -804,3 +804,18 @@ ul.agenda.totals li .tag{text-align:right; white-space:normal; line-height:1.35;
 .pspark{width:80px; height:24px; display:block; opacity:.9}
 .pnow{font-family:var(--mono); font-size:17px; font-variant-numeric:tabular-nums}
 .punit{font-family:var(--mono); font-size:10px; color:var(--muted)}
+
+/* nine links in three rows of three: room to breathe */
+.chain .score.cbox, .chain .score.cbox[data-tone]{padding:14px 4px 12px}
+.chain .cbox .cnum{font-size:30px}
+.chain .cbox .cnum.long{font-size:24px}
+.chain .cbox .slabel{font-size:11px; letter-spacing:1.2px}
+.chain .cbox .cweek{font-size:9px}
+.score.tcell .snum{font-size:19px}
+.score.tcell .snum.long{font-size:15px}
+.score.tcell .sword{font-size:9.5px}
+.carrow, .chain .carrow{flex:0 0 18px; width:18px}
+.carrow i{width:22px; height:22px; margin:-11px 0 0 -11px}
+.chaintoday .tsp{flex:0 0 18px}
+.carrow.cwrap, .chain .carrow.cwrap{height:26px; margin:8px 0 2px 18px}
+@media (max-width:400px){ .chain .cbox .cnum{font-size:26px} .chain .cbox .cnum.long{font-size:20px} .chain .cbox .slabel{font-size:10px} .score.tcell .snum{font-size:17px} .score.tcell .snum.long{font-size:13.5px} .score.tcell .sword{font-size:8.5px} .chaintoday .tsp{flex-basis:18px} }

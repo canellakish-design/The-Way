@@ -22,7 +22,8 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['sleep', 'water', 'food', 'micros', 'lift', 'work', 'recovery', 'weight'];
+const ORDER = ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'work', 'recovery', 'weight'];
+const PLAN_RIDE_MIN = 360;      // a planned week: six hours of riding on the calendar, five lifts, every ride with a start time
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
 const r0 = x => x == null ? null : Math.round(x);
@@ -39,7 +40,8 @@ function stateOf(key, v) {
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
     case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
     case 'recovery': return v >= 67 ? 'good' : v >= 50 ? 'warn' : 'bad';
-    case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';     // a pound a week down is the pace; 0.8 allows for the scale
+    case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
+    case 'plan': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';     // a pound a week down is the pace; 0.8 allows for the scale
   }
   return 'none';
 }
@@ -62,6 +64,7 @@ function verdict(links) {
       food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days, averaging ${L.food.week}.`,
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
       water: () => `hydration: a balance score of ${L.water.week} on average this week; the scale wobbles with it.`,
+      plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding on the calendar for the week ahead, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
       lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
@@ -179,6 +182,7 @@ async function report() {
   } catch (e) { nights = []; recs = []; }
   // work: minutes done against minutes planned over the week
   let work = { planned_min: 0, done_min: 0, days: [] }, liftsPlanned = 0;
+  const planAhead = { ride_min: 0, rides: 0, untimed: 0, lifts: 0, days: [] };
   try {
     const { calendar } = require('./workouts');
     const cal = await calendar(dates[0], today);
@@ -211,6 +215,15 @@ async function report() {
     const { calendar } = require('./workouts');
     const ahead = await calendar(today, tz.shiftKey(today, 6));
     for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
+    // the Plan link: the week ahead as it stands on the calendar
+    const isW = x => /weight|lift|strength/i.test(String(x.sport || x.type || ''));
+    for (const day of ahead.days || []) {
+      const rides = (day.planned || []).filter(w => !isW(w)).map(w => ({ name: w.name, time: w.time || null, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), logged: !!w.logged }))
+        .concat((day.intervals || []).filter(e => !isW(e)).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes || 0, logged: false })));
+      const lifts = (day.planned || []).filter(w => isW(w)).map(w => ({ name: w.name, time: w.time || null }));
+      planAhead.days.push({ date: day.date, rides, lifts, ride_min: rides.reduce((a, r) => a + r.minutes, 0) });
+      planAhead.ride_min += rides.reduce((a, r) => a + r.minutes, 0); planAhead.rides += rides.length; planAhead.untimed += rides.filter(r => !r.time).length; planAhead.lifts += lifts.length;
+    }
   } catch (e) { /* none counted */ }
   // the morning after a hard day: a low reading is expected, and says so
   let hardYesterday = null;
@@ -261,6 +274,16 @@ async function report() {
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date === today ? recs[recs.length - 1] : null;
   const workRatio = work.planned_min > 0 ? (work.credit_min != null ? work.credit_min : work.done_min) / work.planned_min : (work.done_min > 0 ? 1 : null);
   const links = {
+    plan: (() => {
+      const rideShare = Math.min(1, planAhead.ride_min / PLAN_RIDE_MIN), liftShare = Math.min(1, planAhead.lifts / 5), timed = planAhead.rides ? (planAhead.rides - planAhead.untimed) / planAhead.rides : 1;
+      const score = 0.5 * rideShare + 0.3 * liftShare + 0.2 * timed;
+      const td = planAhead.days.find(d => d.date === today) || { rides: [], lifts: [] };
+      const firstRide = td.rides.find(r => !r.logged) || td.rides[0], firstLift = td.lifts[0];
+      const todayWord = firstRide ? `${firstRide.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 26)}${firstRide.time ? ` ${tz.hm12(firstRide.time)}` : ', no time'}` : firstLift ? `${firstLift.name.slice(0, 20)}${firstLift.time ? ` ${tz.hm12(firstLift.time)}` : ''}` : 'rest';
+      return { week: Math.round(score * 100), state: stateOf('plan', score), ride_min: planAhead.ride_min, ride_target_min: PLAN_RIDE_MIN, rides: planAhead.rides, untimed: planAhead.untimed, lifts: planAhead.lifts,
+        today: td.rides.length + td.lifts.length, today_word: todayWord, today_state: firstRide ? (firstRide.time ? 'good' : 'warn') : firstLift ? 'good' : 'none', days: planAhead.days, unit: 'ahead',
+        basis: `the seven days ahead as they stand on the calendar: minutes of riding against ${PLAN_RIDE_MIN} (half the mark), five lifts placed (three tenths), and every ride given a start time (two tenths); 80 green, 50 amber` };
+    })(),
     sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
       rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
