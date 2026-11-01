@@ -304,7 +304,7 @@ function scheduleForDate(events, dateStr) {
     const sm = tz.minutesOf(new Date(e.start)), em = tz.minutesOf(new Date(e.end));
     return {
       summary: e.summary, category: e.category, allDay: false,
-      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
+      source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, sport: e.sport || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
       edit: editKey(e),
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)

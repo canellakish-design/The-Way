@@ -1152,7 +1152,7 @@ function dayRows(d, plan, isToday){
     start: e.start_min, end: e.end_min, from: e.from, to: e.to,
     title: e.summary, detail: e.detail || e.location || "",
     lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
-    desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar",
+    desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar", sport: e.sport || null,
     rx: e.rx_key || null, taken: !!e.taken
   }));
   // The hub: today's card carries what the other tabs decided. From Food

@@ -434,7 +434,7 @@ async function plannedDays(from, to) {
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
-      workout_id: w.id, synced: !!(w.sync && w.sync.state === 'synced'),
+      workout_id: w.id, sport: w.sport || null, synced: !!(w.sync && w.sync.state === 'synced'),
       ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
     });
   }
