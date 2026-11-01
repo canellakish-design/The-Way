@@ -1052,7 +1052,7 @@ function todayCellsHTML(){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "h/night", food: "avg", micros: "avg", water: "target", work: "plan", lift: "plan", recovery: "avg", weight: "lb/wk" };
+  const UNIT = { sleep: "night", food: "avg", micros: "avg", water: "score", work: "plan", lift: "plan", recovery: "band", weight: "lb/wk" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
@@ -1080,13 +1080,13 @@ function paintChain(c){
 function todayCell(ck, L){
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
   if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? "" : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
-  if (ck === "water"){ const w = L.today_word || ""; const tone = /topped|fine/.test(w) ? "good" : /behind/.test(w) ? "warn" : /dry/.test(w) ? "bad" : /much/.test(w) ? "warn" : "none"; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
+  if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
   if (ck === "food") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "" : (L.today >= 80 ? "on plan" : L.today >= 60 ? "near" : "off"), tone: band(L.today, 80, 60) };
-  if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""), tone: band(L.today, 80, 60) };
-  if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "") : "none", tone: "none" };
+  if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word === "on target" ? "covered" : (L.today_word || "")), tone: band(L.today, 80, 60) };
+  if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
   if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
   if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : ""), tone: L.today_band || "none" };
-  if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: L.today_word || "", tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
+  if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: (L.today_word || "").replace(/^([+−-]\d+(?:\.\d+)?) since \d+$/, "$1 lb"), tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
   return { num: "—", word: "", tone: "none" };
 }
 function ringsHTML(){
