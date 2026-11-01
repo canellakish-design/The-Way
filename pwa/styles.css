@@ -747,3 +747,31 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .xbn b{color:var(--ink); font-size:13px}
 .xbn i{display:block; font-style:normal; font-size:9.5px; letter-spacing:.3px; text-transform:uppercase; color:var(--amber)}
 .xbn i.ov{color:var(--red)}
+
+/* the chain in two rows of four, the arrow out of the fourth box wrapping round to the fifth */
+.chain{display:block}
+.crow{display:flex; align-items:stretch; gap:0}
+.chaintoday{display:flex; align-items:stretch; gap:0; margin-top:4px}
+.rlab{flex:0 0 14px; font-family:var(--mono); font-size:7px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); writing-mode:vertical-rl; transform:rotate(180deg); text-align:center; margin-right:4px; align-self:center}
+.chain .score.cbox, .chain .score.cbox[data-tone]{padding:12px 3px 10px; gap:3px}
+.chain .cbox .slabel{font-size:10px; letter-spacing:1px}
+.chain .cbox .cnum{font-size:26px; letter-spacing:-.8px}
+.chain .cbox .cnum.long{font-size:21px}
+.chain .cbox .cweek{font-size:8.5px; letter-spacing:.8px}
+.carrow, .chain .carrow{flex:0 0 14px; width:14px}
+.carrow i{width:20px; height:20px; margin:-10px 0 0 -10px}
+.carrow i svg{width:12px; height:12px}
+.carrow.broken i{width:26px; height:26px; margin:-13px 0 0 -13px}
+.chaintoday .tsp{flex:0 0 14px}
+.score.tcell, .score.tcell[data-tone]{padding:7px 2px 6px; border-top-width:5px}
+.score.tcell .snum{font-size:17px}
+.score.tcell .snum.long{font-size:14px}
+.score.tcell .sword{font-size:9px}
+/* the wrap: down from the right end of the first row, across, and down into the second */
+.carrow.cwrap, .chain .carrow.cwrap{display:block; flex:none; width:auto; height:24px; margin:6px 0 2px 18px; position:relative; color:var(--line); font-size:0}
+.carrow.cwrap .wsvg{position:absolute; inset:0; width:100%; height:100%; display:block}
+.carrow.cwrap .whead{position:absolute; left:calc(5% - 7px); bottom:-6px; width:14px; height:14px}
+.carrow.cwrap i{left:50%; top:50%}
+.carrow.cwrap i:empty{display:none}
+.carrow.cwrap.good{color:var(--green)} .carrow.cwrap.warn{color:var(--amber)} .carrow.cwrap.bad{color:var(--red)} .carrow.cwrap.none{color:var(--line)}
+@media (max-width:400px){ .chain .cbox .cnum{font-size:23px} .chain .cbox .cnum.long{font-size:18px} .chain .cbox .slabel{font-size:9px} .chain .cbox .cweek{font-size:8px} .score.tcell .snum{font-size:15px} .score.tcell .snum.long{font-size:12.5px} .score.tcell .sword{font-size:8px} }

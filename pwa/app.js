@@ -1042,14 +1042,18 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
 const CHAIN = [["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
+const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function chainHTML(){
-  // row one is the week: the eight boxes and the arrows belong to the seven-day clock
-  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span></button>`).join("");
+  // two rows of four: the week boxes with arrows between, today as a bar under each box, and the
+  // arrow out of the fourth box wrapping round to the fifth
+  const box = ([ck, k, label]) => `<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span></button>`;
+  const cell = ([ck, k]) => `<button class="score tcell" data-k="${k}" data-ck="${ck}" data-tone="none"><span class="snum">—</span><span class="sword">&nbsp;</span></button>`;
+  const row = (links, first) => `<div class="crow"><span class="rlab">week</span>${links.map((l, i) => `${i ? `<span class="carrow" data-k="${links[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}${box(l)}`).join("")}</div>
+    <div class="chaintoday"><span class="rlab">today</span>${links.map((l, i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}${cell(l)}`).join("")}</div>`;
+  const a = CHAIN.slice(0, 4), b = CHAIN.slice(4);
+  return `${row(a)}<div class="carrow cwrap" data-k="${a[a.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>${row(b)}`;
 }
-function todayCellsHTML(){
-  // row two is today: a thin coloured bar under each box, in the same column, graded on its own
-  return CHAIN.map(([ck, k], i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}<button class="score tcell" data-k="${k}" data-ck="${ck}" data-tone="none"><span class="snum">—</span><span class="sword">&nbsp;</span></button>`).join("");
-}
+function todayCellsHTML(){ return ""; }
 function paintChain(c){
   if (!c || !c.links) return;
   const UNIT = { sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
@@ -1067,14 +1071,15 @@ function paintChain(c){
       const sn = td.querySelector(".snum"); sn.textContent = t.num; sn.classList.toggle("long", String(t.num).length > 4); td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
       td.title = `${CHAIN.find(x => x[0] === ck)[2]} today: ${t.num}${t.word ? ", " + t.word : ""}`;
     }
-    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ const cut = L.state === "bad"; ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : cut ? " cut" : ""}`; ar.innerHTML = `<i>${c.break_at === ck || cut ? CROSS : ARROW}</i>`; }
+    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ const cut = L.state === "bad", wrap = ar.classList.contains("cwrap"); ar.className = `carrow${wrap ? " cwrap" : ""} ${L.state || "none"}${c.break_at === ck ? " broken" : cut ? " cut" : ""}`;
+      if (wrap) ar.querySelector("i").innerHTML = c.break_at === ck || cut ? CROSS : ""; else ar.innerHTML = `<i>${c.break_at === ck || cut ? CROSS : ARROW}</i>`; }
   }
   const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
   // the two row headers: the week's dates, and today with the day's type
   const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
-  const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `${day(-6)} – ${day(0)}`;
+  const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
   const th = document.getElementById("chainTodayHead"); if (th) th.textContent = `Today · ${D.toLocaleDateString("en-US", { weekday: "long" })}`;
-  const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? foodData.fuel_day : "";
+  const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? `· ${foodData.fuel_day}` : "";
 }
 // what today's cell says for each link: the number, a word, and a tone of its own
 function todayCell(ck, L){
@@ -1435,10 +1440,8 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
-    <div class="chainhead"><span>This week</span><span id="chainDates"></span></div>
+    <div class="chainhead"><span>This week <span id="chainDates"></span></span><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="chain" id="scores">${chainHTML()}</div>
-    <div class="chainhead today"><span id="chainTodayHead">Today</span><span id="chainTodayKind"></span></div>
-    <div class="chaintoday" id="chainToday">${todayCellsHTML()}</div>
     <div class="chainword small" id="chainWord">&nbsp;</div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1939,7 +1942,7 @@ V.today = async function(){
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
-      get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = v.fuel_day; }
+      get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = `· ${v.fuel_day}`; }
         if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
