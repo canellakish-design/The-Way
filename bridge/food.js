@@ -96,7 +96,7 @@ async function buildSessions(date, o) {
     const rides = done.map(r => ({ minutes: r.minutes, tss: r.tss }));
     const graded = covered.map(p => Object.assign({}, p, { compliance: gradeOne({ metrics: { duration_s: (p.minutes || 0) * 60, tss: p.tss || 0 } }, rides).compliance }));
     const compliant = graded.length > 0 && graded.every(p => p.compliance.pct >= 85);
-    const pm = planned.reduce((a, p) => a + (p.minutes || 0), 0), dm = done.reduce((a, d) => a + (d.minutes || 0), 0);
+    const pm = planned.filter(F.isRideSession).reduce((a, p) => a + (p.minutes || 0), 0), dm = done.filter(F.isRideSession).reduce((a, d) => a + (d.minutes || 0), 0);
     const pct = graded.length ? Math.round(graded.reduce((a, p) => a + p.compliance.pct, 0) / graded.length) : null;
     if (compliant) {
       sessions = graded.map(p => Object.assign({}, p, { planned: false, done: true, kept: true,
@@ -245,7 +245,7 @@ ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo). Several photos are the same meal from different angles, or its courses and its drink: one entry, the whole of it added together, never counted twice.
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
-Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when there is a real protein serving (roughly 30 g or more); carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
+Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, whey, cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
 
@@ -570,6 +570,7 @@ async function removeEntry(id, date) {
   const gone = doc.entries.find(x => x.id === id);
   if (!gone) return null;
   doc.entries = doc.entries.filter(x => x.id !== id);
+  for (const e of doc.entries) if (e.why_as_of) delete e.why_as_of;   // every sentence is re-read against the day without it
   await setJSON(dayKey(date), doc);
   await removeFromLedger(id);
   return gone;

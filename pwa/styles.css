@@ -848,3 +848,5 @@ table.period{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch}
 .kicon svg{width:17px; height:17px; display:block}
 .kicon.road{color:var(--green)} .kicon.trainer{color:#8FB4E8} .kicon.mtb{color:#B9D27A} .kicon.run{color:var(--amber)} .kicon.walk{color:var(--amber)} .kicon.lift{color:var(--red)}
 .pn .kicon, .pm .kicon{vertical-align:-4px}
+.jplan{margin-top:6px; color:var(--muted)}
+#lPlanForm, #lWeekForm{margin:8px 0}

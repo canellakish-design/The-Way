@@ -34,8 +34,10 @@ function baseBurn(p) { return Math.round(bmr(p) * p.activity); }
 // A higher carb day is a hard session (VO2, threshold, a race) or a long
 // one: two hours and up, or 80 TSS. A 90-minute Zone 1 is a normal day; in
 // a deficit it needs about 30 g an hour on the bike, not a carb breakfast.
+// a lift, a run or a walk is training, but not riding: the day's type and its ride minutes come from rides only
+const isRideSession = x => !!x && !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(x.sport || '')) && !/\blift\b|^push\b|\bpull\b|\bupper\b|\blegs\b|\bpump\b|strength|treadmill|\brun\b/i.test(String(x.name || ''));
 function fuelDay(sessions) {
-  const s = (sessions || []).filter(Boolean);
+  const s = (sessions || []).filter(isRideSession);
   const hard = s.some(x => /vo2|40\s*\/\s*20|threshold|race/i.test(String(x.name || ''))
     || (x.minutes || 0) >= 120 || (x.tss || 0) >= 80);
   if (hard) return 'high';
@@ -509,5 +511,5 @@ function mealMatch(plan, logged, ctx) {
     macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS };

@@ -237,7 +237,8 @@ function placeWeek(days, o) {
   for (const i of free) d[i].why = d[i].ride ? `no lift: one of the two biggest riding days (${d[i].ride.name})` : 'no lift: a rest day';
   // 3. the other four, in the book's order, with pull kept a day clear of legs when it can be
   const slots = d.map((x, i) => i).filter(i => i !== legsIdx && !free.has(i) && !(d[i].locked && d[i].locked !== 'any'));
-  const four = ['push', 'pull', 'upper-1', 'upper-2'];
+  // a session already on the calendar this week is placed where it is, not again somewhere else
+  const four = ['push', 'pull', 'upper-1', 'upper-2'].filter(k => !d.some(x => x.locked === k));
   const perms = permutations(four);
   let bestP = null, bestS = 1e9;
   for (const p of perms) {

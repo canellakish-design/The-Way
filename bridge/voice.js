@@ -138,6 +138,7 @@ Action types:
 - supplement: one of the known supplements (supplement = its key). One action per supplement.
 - weigh_in: lb = his weight in pounds (convert kg if he says kg).
 - workout: a ride, run or session to put on the calendar, or one already done today said after the fact ("I ran 40 minutes on the treadmill": sport Run, minutes 40, time = when it started or ""). date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
+- A session before 7 a.m. is against the rules. If he names a time before 7 (or an ambiguous "6:30" that could be morning), do NOT pick p.m. to get around it and do NOT change anything: return a question action and ask, e.g. "6:30 a.m. breaks the 7 a.m. rule. Keep it at 7:00a, or did you mean 6:30 p.m.?". Only an explicit p.m. ("6:30 pm", "half past six tonight") is an evening time.
 - workout_change: change a planned session: make it longer or shorter (minutes = the NEW total length; "add 30 minutes" to a 90 means 120), move its start (time = new HH:MM), move it to another day (new_date), or swap it for another library session (library_key). date = the day it is on now (today if unsaid), text = what he called it or "".
 - remove_workout: take a planned session off the calendar. date = its day, text = what he called it or "".
 - event: anything else to put on the calendar (a dentist, a meeting, a drive). name = the title, date = YYYY-MM-DD, time = HH:MM or "" for all day, minutes = length (60 if he gave none), text = notes or "".
@@ -242,7 +243,7 @@ async function run(a, x) {
         : { name: a.name || `Ride, ${minutes} min`, sport: a.sport || 'Ride', notes: '', steps: [{ kind: 'step', label: 'Ride', dur_s: minutes * 60, target: { type: 'free' } }] };
       body.date = isDate(a.date) ? a.date : tz.todayKey();
       body.time = isTime(a.time) ? a.time : null;
-      const w = await require('./workouts').create(body);
+      let w; try { w = await require('./workouts').create(body); } catch (e) { return { ok: false, summary: e.message }; }
       return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + tz.hm12(w.time) : ''}.`, workout_id: w.id };
     }
     case 'workout_change': {
@@ -253,7 +254,7 @@ async function run(a, x) {
       const lib = LIBRARY.find(l => l.key === a.library_key);
       if (lib) Object.assign(body, { name: lib.name, sport: lib.sport, notes: lib.notes, steps: lib.steps });
       else if (a.minutes > 0) Object.assign(body, resized(hit, a.minutes));
-      const w = await require('./workouts').update(hit.id, body);
+      let w; try { w = await require('./workouts').update(hit.id, body); } catch (e) { return { ok: false, summary: e.message }; }
       const what = [lib ? `now ${w.name}` : a.minutes > 0 ? `now ${Math.round(w.metrics.duration_s / 60)} min` : null, isTime(a.time) ? `at ${tz.hm12(a.time)}` : null, isDate(a.new_date) ? `on ${a.new_date}` : null].filter(Boolean).join(', ');
       return { ok: true, summary: `Changed: ${hit.name}${what ? ', ' + what : ''}${w.sync && w.sync.state === 'synced' ? ' (re-sent)' : ''}.`, workout_id: w.id };
     }

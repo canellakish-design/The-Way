@@ -266,3 +266,11 @@ ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a 
   assert.strictEqual(F.mealMatch(l2, [{ slot: 'lunch', kcal: 150, carbs_g: 5, protein_g: 25 }]).covered, true);
   assert.strictEqual(F.nextSlot(big.filter(m => !m.covered_by).map(m => Object.assign({}, m, { logged: m.slot === 'after' ? ['x'] : [] })), '12:00').slot, 'dinner');
 });
+
+ok('ride minutes and the day type come from rides only: a lift and a run beside the rides change neither', () => {
+  const rides = [{ name: 'Zone 1, 150 min', sport: 'VirtualRide', minutes: 150, tss: 76 }, { name: 'Zone 1, 60 min · mountain bike', sport: 'Ride', minutes: 60, tss: 30 }];
+  const extras = [{ name: 'Push', sport: 'WeightTraining', minutes: 55, tss: 20 }, { name: 'Indoor run', sport: 'Run', minutes: 30, tss: 30 }];
+  assert.strictEqual(rides.concat(extras).filter(F.isRideSession).reduce((a, s) => a + s.minutes, 0), 210);
+  assert.strictEqual(F.fuelDay(rides.concat(extras)), F.fuelDay(rides));
+  assert.strictEqual(F.fuelDay(extras), 'rest');
+});

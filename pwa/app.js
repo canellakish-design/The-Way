@@ -62,6 +62,7 @@ async function bridge(pathname, opts){
     const o = Object.assign({}, opts);
     o.headers = Object.assign({ "x-the-way-app": "1" }, (opts && opts.headers) || {});
     const r = await fetch(DEFAULT_API + pathname, o);
+    if (r.ok && o.method && o.method.toUpperCase() !== "GET"){ const v = document.getElementById("view"); if (v) v.dataset.rev = String(Date.now()); window.__rev = Date.now(); }
     if (!r.ok) {
       let detail = "";
       try{ const j = await r.clone().json(); detail = j.error ? " — " + j.error : ""; }
@@ -836,19 +837,38 @@ V.lift = async function(){
     try{ await bridge("/lifts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ template: key, exercises, notes: document.getElementById("lNotes").value })}); msg.textContent = "Saved."; location.hash = "#lift"; V.lift(); }
     catch(e){ msg.textContent = e.message; btn.disabled = false; }
   };
-  document.getElementById("lPlan").onclick = async ()=>{
-    const msg = document.getElementById("lMsg");
-    const when = prompt("Which day? (YYYY-MM-DD, blank for today) and time, like 2026-11-02 07:00", localDateKey() + " 07:00");
-    if (when == null) return;
-    const m = /^(\d{4}-\d{2}-\d{2})\s*(\d{2}:\d{2})?/.exec(when.trim()); if (!m){ msg.textContent = "Did not understand the day."; return; }
-    try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date: m[1], time: m[2] || null, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); msg.textContent = `On the calendar: ${T.name}, ${m[1]}${m[2] ? " at " + hm12(m[2]) : ""}.`; }
-    catch(e){ msg.textContent = e.message; }
+  // a day and a time, picked, never typed into a prompt; 12-hour text is read too, and nothing is dropped in silence
+  const parseTime = t => { t = String(t||"").trim().toLowerCase(); const m = /^(\d{1,2})(?::(\d{2}))?\s*(a|p|am|pm)?$/.exec(t); if (!m) return null; let h = +m[1]; const mi = +(m[2]||0), ap = m[3]; if (ap && ap[0] === "p" && h < 12) h += 12; if (ap && ap[0] === "a" && h === 12) h = 0; if (h > 23 || mi > 59) return null; return String(h).padStart(2,"0") + ":" + String(mi).padStart(2,"0"); };
+  const lPlanBtn = document.getElementById("lPlan");
+  lPlanBtn.onclick = ()=>{
+    let f = document.getElementById("lPlanForm");
+    if (f){ f.hidden = !f.hidden; return; }
+    f = document.createElement("div"); f.id = "lPlanForm"; f.className = "placeform";
+    f.innerHTML = `<div class="row2"><span><label>Day</label><input id="lpDate" type="date" value="${localDateKey()}"></span><span><label>Time</label><input id="lpTime" type="time" value="17:30"></span></div>
+      <div class="small">Or type it: <input id="lpText" placeholder="5:30p" style="width:90px;display:inline-block"></div>
+      <button class="primary" id="lpGo">Put it on the calendar</button> <span class="small" id="lpMsg"></span>`;
+    lPlanBtn.after(f);
+    document.getElementById("lpGo").onclick = async ()=>{
+      const m2 = document.getElementById("lpMsg");
+      const date = document.getElementById("lpDate").value, typed = document.getElementById("lpText").value.trim();
+      const time = typed ? parseTime(typed) : (document.getElementById("lpTime").value || null);
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)){ m2.textContent = "Pick a day."; return; }
+      if (typed && !time){ m2.textContent = `Could not read "${typed}" as a time. Try 5:30p.`; return; }
+      if (!time){ m2.textContent = "Pick a time."; return; }
+      m2.textContent = "placing…";
+      try{ await bridge("/workouts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ name: T.name, sport: "WeightTraining", date, time, notes: "Log it on the Lift tab.", steps: [{ kind: "step", label: "Lift", dur_s: T.minutes * 60, target: { type: "free" } }] })}); m2.textContent = `On the calendar: ${T.name}, ${date} at ${hm12(time)}.`; }
+      catch(e){ m2.textContent = e.message; }
+    };
   };
   const wk = document.getElementById("lWeek");
   if (wk) wk.onclick = async ()=>{
     const msg = document.getElementById("lWeekMsg");
-    const t = prompt("What time, most days? (like 07:00 or 17:30)", "07:00"); if (t == null) return;
-    if (!/^\d{2}:\d{2}$/.test(t.trim())) { msg.textContent = "Did not understand the time."; return; }
+    let f = document.getElementById("lWeekForm");
+    if (!f){ f = document.createElement("div"); f.id = "lWeekForm"; f.className = "placeform"; f.innerHTML = `<label>Time, most days</label><input id="lwTime" type="time" value="17:30"> <button class="primary" id="lwGo">Place the week</button>`; wk.after(f);
+      document.getElementById("lwGo").onclick = ()=>{ f.dataset.go = "1"; wk.onclick(); }; return; }
+    if (f.dataset.go !== "1"){ f.hidden = !f.hidden; return; }
+    f.dataset.go = "";
+    const t = document.getElementById("lwTime").value; if (!/^\d{2}:\d{2}$/.test(t)) { msg.textContent = "Pick a time."; return; }
     wk.disabled = true; msg.textContent = "Placing…";
     try{ const r = await bridge("/lifts/schedule",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ time: t.trim() })}); msg.textContent = `${r.added.length} put on the calendar at ${hm12(r.time)}${r.kept.length ? `; ${r.kept.length} day${r.kept.length===1?" already had":"s already had"} a lift` : ""}.`; }
     catch(e){ msg.textContent = e.message; wk.disabled = false; }
@@ -1108,7 +1128,7 @@ function todayCell(ck, L){
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
   if (ck === "food") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "" : (L.today >= 80 ? "on plan" : L.today >= 60 ? "near" : "off"), tone: band(L.today, 80, 60) };
   if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word === "on target" ? "covered" : (L.today_word || "")), tone: band(L.today, 80, 60) };
-  if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
+  if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : L.planned_today ? { num: "1", word: L.planned_today, tone: "warn" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
   if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
   if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "no sync yet" : (L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : "")), tone: L.today == null ? "none" : (L.today_band || "none") };
   if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: (L.today_word || "").replace(/^([+−-]\d+(?:\.\d+)?) since \d+$/, "$1 lb"), tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
@@ -2196,15 +2216,22 @@ V.today = async function(){
 
     /* ---- keeping it current ---- */
     let syncing = false, lastSync = 0;
+    let syncAgain = false;
     const syncAll = async (why)=>{
-      if (syncing) return;                       // never stack fetches
+      if (syncing){ syncAgain = true; return; }   // never stack fetches, never drop one asked for mid-fetch
       syncing = true;
       try{
         await Promise.all([loadDay(), refreshScores(), refreshFood(), refreshBody()]);
         lastSync = Date.now();
+        const v = document.getElementById("view"); if (v) v.dataset.rev = String(Date.now());
       } finally { syncing = false; }
+      if (syncAgain){ syncAgain = false; await syncAll(why + " (again)"); }
     };
+    view.__syncAll = syncAll;
 
+    // the delegated taps are bound once: #view is one element for the life of the page, and a
+    // handler bound on every render would stack (two confirms, two deletes, a 404 on the second)
+    if (!view.__dayClicksBound){ view.__dayClicksBound = true;
     // tap a row: it opens underneath with everything about it
     view.addEventListener("click", async (e)=>{
       if (e.target.closest("button, a, input, select, textarea, label, .evedit")) return;
@@ -2252,7 +2279,7 @@ V.today = async function(){
       b.disabled = true; msg.textContent = "adding…";
       try{ const r = await bridge("/gcal/events", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) });
         msg.textContent = r.pushed_to_google ? "Added, and on Google." : r.google_connected ? "Added here; Google push failed, it will retry." : "Added here. It goes to Google once the site is connected to it.";
-        box.querySelector(".evTitle").value = ""; syncAll("event added"); }
+        box.querySelector(".evTitle").value = ""; view.__syncAll("event added"); }
       catch(err){ msg.textContent = err.message; }
       b.disabled = false;
     });
@@ -2260,7 +2287,7 @@ V.today = async function(){
       const b = e.target.closest("[data-delx]"); if (!b) return;
       e.preventDefault(); e.stopPropagation();
       if (!confirm("Remove this from the calendar?")) return;
-      try{ await bridge("/gcal/event?key="+encodeURIComponent(b.dataset.delx),{method:"DELETE"}); syncAll("deleted"); }
+      try{ await bridge("/gcal/event?key="+encodeURIComponent(b.dataset.delx),{method:"DELETE"}); view.__syncAll("deleted"); }
       catch(err){ alert(err.message); }
     });
     view.addEventListener("click", async (e)=>{
@@ -2269,7 +2296,7 @@ V.today = async function(){
       const box = b.closest(".evedit"), msg = box.querySelector(".evMsg");
       const body = { key: box.dataset.key, title: box.querySelector(".evTitle").value.trim(), date: box.querySelector(".evDate").value, start: box.querySelector(".evStart").value, end: box.querySelector(".evEnd").value, location: box.querySelector(".evLoc").value.trim(), notes: box.querySelector(".evNotes").value.trim() };
       b.disabled = true; msg.textContent = "saving…";
-      try{ const r = await bridge("/gcal/event", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }); msg.textContent = r.where === "google" ? "Saved, on Google." : (r.note || "Saved here."); syncAll("edited"); }
+      try{ const r = await bridge("/gcal/event", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body) }); msg.textContent = r.where === "google" ? "Saved, on Google." : (r.note || "Saved here."); view.__syncAll("edited"); }
       catch(err){ msg.textContent = err.message; }
       b.disabled = false;
     });
@@ -2279,13 +2306,15 @@ V.today = async function(){
       const ml = e.target.closest("[data-meallog]");
       if (ml){ e.stopPropagation(); e.preventDefault(); location.hash = "#food?log=" + encodeURIComponent(ml.dataset.meallog); return; }
       const rx = e.target.closest("[data-supplog]");
-      if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); bridge("/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog })}).then(()=> syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
+      if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); bridge("/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog })}).then(()=> view.__syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
       const b = e.target.closest("[data-delw]"); if (!b) return;
       e.preventDefault();
       if (!confirm("Take this session off the calendar?")) return;
-      try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); syncAll("deleted"); }
-      catch(err){ alert(err.message); }
+      b.disabled = true;
+      try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); view.__syncAll("deleted"); }
+      catch(err){ if (/404|no such workout/i.test(err.message)) view.__syncAll("deleted"); else { b.disabled = false; alert(err.message); } }
     });
+    }
     syncAll("first load");
     __dayTimers.push(setInterval(()=>{
       if (location.hash !== "#today") return clearDayTimers();

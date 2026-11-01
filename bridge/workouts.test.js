@@ -1,6 +1,6 @@
 // node bridge/workouts.test.js
 const assert = require('assert');
-const { pastNow, gradeOne, dayCompliance, hrLoad } = require('./workouts');
+const { pastNow, gradeOne, dayCompliance, hrLoad, clean, nameForLength } = require('./workouts');
 const tz = require('./tz');
 
 let n = 0;
@@ -69,3 +69,18 @@ ok('hrLoad: an hour at threshold is 100; easy hours score far less', () => {
 });
 
 console.log(n + ' passed');
+
+ok('no workouts before 7 a.m.: 06:30 is refused on the server, 07:00 is accepted; a cleared time is fine', () => {
+  assert.throws(() => clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '06:30', steps }), /No workouts before 7 a\.m\./);
+  assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '07:00', steps }).time, '07:00');
+  assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '', steps }).time, null);
+  // an update that keeps an old early time is refused too
+  assert.throws(() => clean({ steps }, { id: 'w_1', date: '2026-11-02', time: '06:30', name: 'x', steps }), /No workouts before 7 a\.m\./);
+});
+ok('a library-shaped name follows the length of its steps; a custom name is left alone', () => {
+  assert.strictEqual(nameForLength('Zone 1, 60 min', [{ kind: 'step', dur_s: 5400 }]), 'Zone 1, 90 min');
+  assert.strictEqual(nameForLength('Zone 1, 60 min · mountain bike', [{ kind: 'step', dur_s: 5400 }]), 'Zone 1, 90 min · mountain bike');
+  assert.strictEqual(nameForLength('Mountain bike handling, 60 min', [{ kind: 'repeat', count: 2, steps: [{ kind: 'step', dur_s: 1800 }] }]), 'Mountain bike handling, 60 min');
+  assert.strictEqual(nameForLength('Saturday club ride', [{ kind: 'step', dur_s: 7200 }]), 'Saturday club ride');
+  assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '15:00', steps: [{ kind: 'step', label: 'Zone 1', dur_s: 5400, target: { type: 'free' } }] }).name, 'Zone 1, 90 min');
+});
