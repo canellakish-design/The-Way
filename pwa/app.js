@@ -1408,7 +1408,8 @@ function placeNowDot(){
   let dot = ul.querySelector(".nowdot");
   if (!dot){ dot = document.createElement("span"); dot.className = "nowdot"; ul.appendChild(dot); }
   const n = new Date(); const now = n.getHours()*60 + n.getMinutes();
-  const rows = [...ul.querySelectorAll("li[data-s]")];
+  // the real rows, in time order: the whole-day free band (a "gap" row) is not a row the dot can sit in
+  const rows = [...ul.querySelectorAll("li[data-s]")].filter(li => !li.classList.contains("gap") && !li.classList.contains("xdetail")).sort((a, b) => (+a.dataset.s) - (+b.dataset.s));
   if (!rows.length){ dot.hidden = true; return; }
   let top = null;
   for (const li of rows){
@@ -1419,7 +1420,12 @@ function placeNowDot(){
     const first = rows[0], last = rows[rows.length - 1];
     if (now < +first.dataset.s) top = first.offsetTop;
     else if (now >= +last.dataset.e) top = last.offsetTop + last.offsetHeight;
-    else { const nxt = rows.find(li => +li.dataset.s > now); top = nxt ? nxt.offsetTop : last.offsetTop + last.offsetHeight; }
+    else {
+      // between two rows: the dot slides from the end of the one before to the start of the one after, with the clock
+      const i = rows.findIndex(li => +li.dataset.s > now); const prev = rows[i - 1], nxt = rows[i];
+      const pe = +prev.dataset.e, ns = +nxt.dataset.s, a = prev.offsetTop + prev.offsetHeight, b = nxt.offsetTop;
+      top = ns > pe ? a + Math.max(0, Math.min(1, (now - pe) / (ns - pe))) * Math.max(0, b - a) : b;
+    }
   }
   dot.hidden = false; dot.style.top = Math.round(top) + "px";
 }
