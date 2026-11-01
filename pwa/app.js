@@ -1877,6 +1877,9 @@ V.today = async function(){
     lift:["lift","Open Lift: the next session"], workouts:["ride","Open Ride: when and where to ride"], training:["ride","Open Ride"] };
   const goBar = k => GO[k] ? `<a class="btn primary gobar" href="#${GO[k][0]}">${GO[k][1]} ›</a>` : "";
   // the numbers and the graph first, then the way to the page, then the explanation
+  // the button sits straight under the first block of numbers or graph, never inside it
+  const placeGo = (box, k) => { if (!GO[k] || box.querySelector(":scope > .gobar")) return; const t = document.createElement("div"); t.innerHTML = goBar(k); const btn = t.firstElementChild;
+    const first = [...box.children].find(c => c.tagName !== "H4"); if (first) first.after(btn); else box.appendChild(btn); };
   const withGo = (html, k) => { const g = goBar(k); if (!g) return html; const marks = ['<div class="rowbtns">', '<a class="btn', '<details class="why">'].map(m => html.indexOf(m)).filter(i => i > 0); if (!marks.length) return html + g; const i = Math.min(...marks); return html.slice(0, i) + g + html.slice(i); };
   const drawScoreDetail = ()=>{
     const box = document.getElementById("scoreDetail");
@@ -1891,7 +1894,7 @@ V.today = async function(){
         ${L && L.days ? `<ul class="agenda totals plandays">${L.days.map(d => `<li><span class="n"><b>${esc(new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}</b>${d.rides.length || d.lifts.length ? `<span class="small plines">${d.rides.map(r => `${r.time ? esc(hm12(r.time)) + " · " : ""}${esc(r.name.replace(/^Zwift - Intervals icu: /i, ""))}${r.time ? "" : " · <i>no time</i>"}`).concat(d.lifts.map(l => `${l.time ? esc(hm12(l.time)) + " · " : ""}${esc(l.name)} · lift`)).join("<br>")}</span>` : `<span class="small plines">rest</span>`}</span><span class="tag">${d.ride_min ? `${d.ride_min} min` : ""}</span></li>`).join("")}</ul>
           <div class="small">${L.ride_min} of ${L.ride_target_min} minutes of riding, ${L.lifts} of 5 lifts${L.untimed ? `, ${L.untimed} ride${L.untimed === 1 ? "" : "s"} without a start time` : ""}. ${esc(L.basis)}.</div>` : `<div class="small">No calendar read yet.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">The chain starts with the plan because nothing downstream can be judged against a week that was never laid out: a ride not on the calendar cannot be short, a lift not placed cannot be missed, and the food plan times itself to sessions that exist.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
     if (openScore === "fuel"){
       const L = chainData && chainData.links && chainData.links.fuel, e = foodData && foodData.energy, B = window.foodBits || {};
@@ -1901,7 +1904,7 @@ V.today = async function(){
         <h4 style="margin-top:14px">The week</h4>
         ${L && L.list && L.list.length ? `<ul class="agenda totals">${L.list.slice().reverse().map(c => row(`${c.time ? esc(hm12(c.time)) + " · " : ""}${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}${c.kind === "bottle" ? " <span class='small'>· on the bike</span>" : ""}`, `<b style="color:${toneC(c.ok ? "good" : c.near ? "warn" : "bad")}">${c.kind === "bottle" ? `${c.got_g} of ${c.plan_g} g` : `${c.pct}% of ${c.need}%`}</b>`)).join("")}</ul>
           <div class="small">${L.ok} of ${L.checks} checks met. ${esc(L.basis)}.</div>` : `<div class="small">No rides this week to check yet.</div>`}`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; if (e && B.wireEnergy) B.wireEnergy(box, e, ()=> refreshFood()); return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; if (e && B.wireEnergy) B.wireEnergy(box, e, ()=> refreshFood()); return;
     }
     if (openScore === "sleep"){
       const L = chainData && chainData.links && chainData.links.sleep;
@@ -1909,7 +1912,7 @@ V.today = async function(){
         ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
           <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
     if (openScore === "lift"){
       const L = chainData && chainData.links && chainData.links.lift;
@@ -1917,13 +1920,13 @@ V.today = async function(){
         ${L ? `<ul class="agenda totals">${(L.week_list || []).slice().reverse().map(x => row(`${esc(x.date.slice(5).replace("-", "/"))} · ${esc(x.name)}`, `${(x.volume_lb / 1000).toFixed(1)}k lb`)).join("") || `<li><span class="n">Nothing logged this week</span><span class="tag">0 of ${L.target}</span></li>`}</ul>
           <div class="small">${L.sessions} of ${L.target} sessions. ${esc(L.basis)}.</div>` : `<div class="small">loading…</div>`}
         <details class="why"><summary>how it is coloured</summary><div class="small">Sessions logged in the last seven days against the plan's five. Green at four or five, amber at three, red at two or fewer. Grey before the first session is saved and through a deload week (every ninth). In the first week the count is judged against the sessions due so far, so two by Wednesday is green, not red. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · this week</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
         <details class="why"><summary>how it's scored</summary><div class="small">Thirteen nutrients against their daily targets, averaged; today owes only the share of the day reached so far. Iron and zinc are suggested only after a week low.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
     }
@@ -1941,14 +1944,14 @@ V.today = async function(){
         </ul>`}
         <a class="btn primary" href="#calendar">The calendar</a> <a class="btn" href="#zones">Training zones</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
       html = `<h4>Hydration · today</h4>
         ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
         <div class="rowbtns"><a class="btn" href="#food">Log a drink</a></div>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
     }
     if (openScore === "bodyfat"){
       const w = bodyData, c = w && w.composition;
@@ -1956,11 +1959,11 @@ V.today = async function(){
       html = `<h4>Body fat</h4>
         ${c ? `<ul class="agenda totals">${rows}</ul><div class="small">From the Withings scale, ${esc(new Date(c.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}. Moves are the 7-day mean against the week before.</div>` : `<div class="small">${w && w.withings_connected ? "The scale has not reported body fat yet." : "Body fat needs the Withings scale."}</div>`}
         <details class="why"><summary>how it's read</summary><div class="small">A bioimpedance reading swings a point or two with water alone, so the tile's word comes from the weekly mean, not the day. Losing fat while the lean rows hold is the program working.</div></details>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
-      box.innerHTML = withGo(html, openScore); box.hidden = false; wireBody(box); return;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; wireBody(box); return;
     }
     if (openScore === "food"){
       const c = complianceData;
@@ -2016,7 +2019,7 @@ V.today = async function(){
         ${w.auth_error && r.score != null && !garmin ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
         <details class="why"><summary>how it's scored</summary><div class="small">${garmin ? "The Garmin's training readiness for the morning when it reports one; otherwise an estimate from HRV against your own 30-day baseline and last night's sleep, said so on the box." : "WHOOP's score for the night."} The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
-    box.innerHTML = withGo(html, openScore); box.hidden = false;
+    box.innerHTML = html; placeGo(box, openScore); box.hidden = false;
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");
