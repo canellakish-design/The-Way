@@ -731,3 +731,19 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .placeform{margin-top:6px}
 .placeform input{width:100%; margin:4px 0}
 .savebar{margin-top:8px}
+
+/* the macro bars: three a meal, three for the day */
+.mbars{margin:10px 0 2px; padding:8px 0 6px; border-top:1px dashed var(--line)}
+.mbars.day{border-top:2px solid var(--ink); margin-top:14px}
+.mbhead{margin:0 0 6px; font-size:15px; text-transform:capitalize}
+.mbhead .small{text-transform:none}
+.mbar{display:grid; grid-template-columns:54px 1fr 96px; gap:8px; align-items:center; margin:5px 0}
+.mbl{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted)}
+.mbtrack{display:block; height:14px; background:#1A1C20; border:1px solid var(--line); position:relative; overflow:hidden}
+.mbars.day .mbtrack{height:18px}
+.mbfill{display:block; height:100%; transition:width .4s ease}
+.mbfill.over{box-shadow:inset 0 0 0 2px var(--amber)}
+.mbn{font-family:var(--mono); font-size:12px; color:var(--muted); text-align:right; white-space:nowrap; line-height:1.15; font-variant-numeric:tabular-nums}
+.mbn b{color:var(--ink); font-size:13px}
+.mbn i{display:block; font-style:normal; font-size:9.5px; letter-spacing:.3px; text-transform:uppercase; color:var(--amber)}
+.mbn i.ov{color:var(--red)}

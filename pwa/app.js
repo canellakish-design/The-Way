@@ -2307,16 +2307,32 @@ function complianceHTML(c){
         <div class="small">${esc(s.what||"")}</div>
         <div class="small">~${s.kcal} kcal · ${s.low_carb?"under ":""}${s.carbs_g}C · ${s.protein_g}P${s.score_after!=null?` — compliance ${s.score_before??"—"} → <b>${s.score_after}</b>`:""}</div>
         <a class="btn" href="#food?snap=${encodeURIComponent(s.snap||"snack")}">Snap it</a></div>`;
-  const B = window.foodBits || {};
+  // three bars a meal, three for the day: the target is the track, what was eaten fills it, the gap is written
+  const entries = (c.entries || []).filter(e => !e.supplement);
+  const sum = (list, k) => list.reduce((a, e) => a + (e[k] || 0), 0);
+  const dayKcal = c.target.kcal || 1;
+  const block = slot => {
+    const m = (c.meals || []).find(x => x.slot === slot); if (!m) return "";
+    const mine = entries.filter(e => e.slot === slot);
+    const want = { carbs_g: m.carbs_g || 0, protein_g: m.protein_g || 0, fat_g: m.fat_g != null ? m.fat_g : Math.round((c.target.fat_g || 0) * (m.kcal || 0) / dayKcal) };
+    const got = { carbs_g: sum(mine, "carbs_g"), protein_g: sum(mine, "protein_g"), fat_g: sum(mine, "fat_g") };
+    const logged = (m.logged || []).length > 0;
+    const sub = logged ? `logged ${hm12(m.time_logged || m.time)}` : m.time < nowHM() ? `${hm12(m.time)} · nothing logged` : `at ${hm12(m.time)}`;
+    return macroBars(slot, got, want, sub, logged);
+  };
   return `<div class="macros"><span class="mfuel">Compliance ${c.compliance.overall ?? "—"}</span>
-      <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}${
-        c.compliance.guideline_overall!=null?` · guidelines ${c.compliance.guideline_overall}`:""}${
-        c.compliance.macro_overall!=null?` · macros ${c.compliance.macro_overall}`:""}</span></div>
-    ${B.checksList ? B.checksList(c.compliance.checks) : ""}
-    <ul class="agenda totals">
-      ${row("carbs","carbs_g")}${row("protein","protein_g")}${row("fat","fat_g")}${row("kcal","kcal")}
-    </ul>
+      <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}</span></div>
+    ${block("breakfast")}${block("lunch")}${block("dinner")}
+    ${macroBars("the day", { carbs_g: sum(entries, "carbs_g"), protein_g: sum(entries, "protein_g"), fat_g: sum(entries, "fat_g") }, c.target, `${sum(entries, "kcal")} of ${c.target.kcal} kcal`, true, true)}
     ${snack}`;
+}
+// three bars: carbs, protein, fat. The track is the target, the fill what was eaten; under writes the gap, over past a fifth turns the fill amber-edged
+function macroBars(title, got, want, sub, logged, isDay){
+  const M = [["carbs","carbs_g","var(--carb)"],["protein","protein_g","var(--red)"],["fat","fat_g","var(--fat)"]];
+  return `<div class="mbars${isDay?" day":""}"><div class="mbhead"><b>${esc(title)}</b>${sub?`<span class="small"> · ${esc(sub)}</span>`:""}</div>
+    ${M.map(([l,k,col]) => { const a = Math.round(got[k]||0), t = Math.round(want[k]||0); const pct = t > 0 ? Math.min(100, a / t * 100) : 0; const over = t > 0 && a > t * 1.2; const short = t > 0 ? Math.max(0, t - a) : 0;
+      return `<div class="mbar"><span class="mbl">${l}</span><span class="mbtrack"><span class="mbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="mbn"><b>${a}</b> / ${t}${logged && short ? `<i>${short} g short</i>` : over ? `<i class="ov">${a - t} g over</i>` : ""}</span></div>`; }).join("")}
+  </div>`;
 }
 
 /* Demo payload: same shape as /schedule, generated from today so the front
