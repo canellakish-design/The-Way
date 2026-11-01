@@ -793,13 +793,13 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 @media (max-width:400px){ .cgrade.huge{font-size:46px; min-width:72px; padding:10px 10px} .gradehero{gap:12px; padding:14px} }
 
 /* a totals row never squeezes its name to a letter a line: the name keeps a floor, the tag wraps on the right */
-ul.agenda.totals li{grid-template-columns:minmax(84px,1fr) minmax(0,58%); gap:10px; align-items:start}
+ul.agenda.totals li{grid-template-columns:minmax(84px,1fr) fit-content(58%); gap:10px; align-items:start}
 ul.agenda.totals li .n{white-space:normal; min-width:0}
 ul.agenda.totals li .tag{text-align:right; white-space:normal; line-height:1.35; justify-self:end; min-width:0}
 
 /* the progress strip */
 .card.progress{margin-top:12px}
-.plist li.prow{grid-template-columns:minmax(120px,1fr) minmax(0,auto); align-items:center}
+.plist li.prow{grid-template-columns:minmax(120px,1fr) fit-content(60%); align-items:center}
 .plist .tag{display:flex; align-items:center; gap:8px; justify-self:end}
 .pspark{width:80px; height:24px; display:block; opacity:.9}
 .pnow{font-family:var(--mono); font-size:17px; font-variant-numeric:tabular-nums}
