@@ -37,6 +37,22 @@ const SODIUM_RE = /tailwind|electrolyte|nuun|lmnt|skratch|precision|salt|broth|s
 const GEL_RE = /gel|chew|block/i;
 const DEFAULT_KG = 98;
 const BOTTLE_ML = 600;
+// Alcohol: the drink's water arrives, and the kidneys pass about 10 ml more for every gram of
+// ethanol (Shirreffs & Maughan 1997; Eggleton 1942). A pint of lager is net positive on the day;
+// a shot is net negative. The reader logs alcohol with 0 ml, so the volume comes from the kind.
+const ETH_ML_PER_G = 10;
+const EVENING_MIN = 20 * 60;          // drinks from here run their diuresis into the night
+const NIGHT_DRINK_ML = 100;           // what each evening drink costs the morning beyond its own water
+const SERVINGS = [
+  [/\bpints?\b/i, { ml: 568, g: 20, word: 'pint' }],
+  [/\b(beer|lager|ale|ipa|stout|porter|pilsner|cider)s?\b/i, { ml: 400, g: 16, word: 'beer' }],
+  [/\b(wine|prosecco|champagne|sangria|mimosa|spritz)\b/i, { ml: 175, g: 18, word: 'glass of wine' }],
+  [/\b(cocktail|margarita|martini|negroni)s?\b/i, { ml: 150, g: 20, word: 'cocktail' }],
+  [/\b(hard seltzer|white claw)\b/i, { ml: 355, g: 14, word: 'seltzer' }],
+  [/\b(whisk(e)?y|bourbon|scotch|vodka|gin|rum|tequila|sake|shot of)\b/i, { ml: 45, g: 14, word: 'shot' }]
+];
+function alcoholServing(name) { for (const [re, v] of SERVINGS) if (re.test(name)) return v; return { ml: 350, g: 15, word: 'drink' }; }
+const drinkWords = (n, word) => `${['one', 'two', 'three', 'four', 'five', 'six'][n - 1] || n} ${word}${n === 1 ? '' : word.endsWith('wine') ? '' : 's'}`.replace('glass of wines', 'glasses of wine');
 
 const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
 const toHM = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
@@ -130,6 +146,7 @@ function model(o) {
   const afterRide = m => sessions.some(s => m >= s.end_min && m <= s.end_min + POST_RIDE_H * 60);
   const duringRide = m => sessions.some(s => m >= s.min && m < s.end_min);
   const drinks = [];
+  const alc = { drinks: 0, net_ml: 0, evening_drinks: 0, evening_net_ml: 0, word: null };
   const pour = (atMin, ml, halfMin) => {
     // first-order emptying from the stomach: the fraction still inside halves every halfMin
     const kk = Math.LN2 / halfMin; let left = ml;
@@ -143,6 +160,19 @@ function model(o) {
     if (e.supplement || !e.time) continue;
     const m = toMin(e.time); if (m == null) continue;
     const name = String(e.drink || e.name || '');
+    const nAlc = e.alcohol > 0 ? e.alcohol : require('./food-math').alcoholOf(e);
+    if (nAlc) {
+      // the water in it less what the ethanol makes the kidneys pass, spread over the hour after
+      const sv = alcoholServing(String(e.name || '') + ' ' + name);
+      const vol = e.fluid_ml > 0 ? e.fluid_ml : sv.ml * nAlc;
+      const net = vol - sv.g * nAlc * ETH_ML_PER_G;
+      if (net > 0) pour(m, net, 15);
+      else for (let j = 0; j < 12; j++) { const i = idx(m) + j; if (i >= 0 && i < n) inflow[i] += net / 12; }
+      drinks.push({ time: e.time, min: m, ml: Math.round(vol), net_ml: Math.round(net), alcohol: nAlc, name: name || sv.word, kept: 1, sodium: false });
+      alc.drinks += nAlc; alc.net_ml += net; alc.word = alc.word || sv.word;
+      if (m >= EVENING_MIN) { alc.evening_drinks += nAlc; alc.evening_net_ml += net; }
+      continue;
+    }
     let fluid = e.fluid_ml > 0 ? e.fluid_ml : 0;
     const foodWater = !e.drink_only && e.kcal > 0 && !fluid ? e.kcal * FOOD_ML_PER_KCAL : (!e.drink_only && e.kcal > 150 ? Math.max(0, e.kcal - 150) * FOOD_ML_PER_KCAL : 0);
     if (fluid) {
@@ -194,10 +224,14 @@ function model(o) {
   else if (!advice && nowB.key === 'red') advice = `${L(-nowPt.ml)} down. ${r50(Math.min(750, -nowPt.ml - kg * 5))} ml now, the rest over the next two hours, with salt if a ride is behind it.`;
   else if (!advice && nowB.key === 'yellow') advice = `${L(-nowPt.ml)} down. A bottle in the next hour.`;
   else if (!advice && o.now_min != null && now >= 20 * 60 && nowPt.ml < -kg * 5) advice = `${r50(-nowPt.ml - kg * 3)} ml before bed.`;
+  // the morning after: the night's drinks named, the start explained, water first
+  if (o.night && o.night.drinks > 0 && now < 11 * 60 && start <= -300 && (!advice || nowB.key !== 'green'))
+    advice = `${drinkWords(o.night.drinks, o.night.word || 'drink')} last night: starting ${L(-start)} down. ${r50(Math.min(750, -start))} ml of water before the coffee, the rest through the morning.`;
   if (o.weigh && o.weigh.lost_ml > 0 && now - (o.weigh.end_min || 0) < 4 * 60) advice = `The scale says ${L(o.weigh.lost_ml)} lost on the ride. ${L(o.weigh.lost_ml * 1.3)} over the next three hours, with salt, not all at once.`;
   return { series, now: { time: toHM(now), ml: nowPt.ml, pct: nowPt.pct, band: nowB }, sessions: upcoming, drinks,
     drunk_ml: drunk, target_ml: target, left_ml: Math.max(0, target - drunk), end_ml: Math.round(balActual), start_ml: Math.round(start), kg, sweat_k: k, step: STEP,
     weather_used: !!(o.weather && o.weather.hours && sessions.some(s => !s.env.indoor)),
+    alcohol: alc.drinks ? { drinks: alc.drinks, net_ml: Math.round(alc.net_ml), evening_drinks: alc.evening_drinks, evening_net_ml: Math.round(alc.evening_net_ml), word: alc.word } : null,
     score: Math.max(0, Math.min(100, Math.round(100 - Math.max(0, -nowPt.ml) / (kg * 20) * 100))),   // 100 at the morning, 0 at 2% down
     advice };
 }
@@ -209,16 +243,22 @@ function model(o) {
 // three-day baseline, the two are averaged: the scale sees the whole body,
 // the model only what was logged.
 const NIGHT_ML = 5 * REST_ASLEEP_ML_H;
-function carryOver(prevEndMl, scale) {
+// Evening alcohol: its own water is passed in the night rather than kept (the diuresis runs on
+// for hours after the last one), and each drink costs about 100 ml more. So the morning after
+// four pints starts further down than the day's end suggests, which is what the body does.
+function carryOver(prevEndMl, scale, prevAlc) {
+  const night = prevAlc && prevAlc.evening_drinks > 0 ? { drinks: prevAlc.evening_drinks, word: prevAlc.word || 'drink', drain_ml: Math.round(Math.max(0, prevAlc.evening_net_ml) + NIGHT_DRINK_ML * prevAlc.evening_drinks) } : null;
+  const base = prevEndMl == null ? null : prevEndMl - (night ? night.drain_ml : 0);
   // capped at 1.5 L: a drink that went unlogged must not compound into a permanent red
-  let carry = prevEndMl == null ? null : Math.max(-1500, Math.min(0, prevEndMl - NIGHT_ML));
-  if (carry == null && !scale) return { start_ml: 0, from: 'none' };
+  let carry = base == null ? null : Math.max(-1500, Math.min(0, base - NIGHT_ML));
+  const out = r => night ? Object.assign(r, { night }) : r;
+  if (carry == null && !scale) return out({ start_ml: 0, from: 'none' });
   if (scale && scale.today_kg > 40 && scale.baseline_kg > 40) {
     const fromScale = Math.min(0, Math.max(-3000, (scale.today_kg - scale.baseline_kg) * 1000));
-    if (carry == null) return { start_ml: Math.round(fromScale), from: 'scale' };
-    return { start_ml: Math.round((carry + fromScale) / 2), from: 'both', carried_ml: Math.round(carry), scale_ml: Math.round(fromScale) };
+    if (carry == null) return out({ start_ml: Math.round(fromScale), from: 'scale' });
+    return out({ start_ml: Math.round((carry + fromScale) / 2), from: 'both', carried_ml: Math.round(carry), scale_ml: Math.round(fromScale) });
   }
-  return { start_ml: Math.round(carry), from: 'yesterday' };
+  return out({ start_ml: Math.round(carry), from: 'yesterday' });
 }
 
 // A post-ride weigh-in against the morning one: measured sweat = weight lost
@@ -240,4 +280,4 @@ function measured(preKg, postKg, drankMl, minutes) {
   return Math.round(lost * (minutes >= 120 ? 0.9 : 0.95));
 }
 
-module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };
+module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, alcoholServing, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };

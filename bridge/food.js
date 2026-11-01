@@ -418,8 +418,9 @@ async function liveHydration(date, entries, g, nowMin) {
       const gy = await guidelinesFor(yday);
       const ey = (await dayDoc(yday)).entries;
       if (ey.length || gy.sessions.some(s => s.done)) {
-        const my = HL.model({ entries: ey, sessions: gy.sessions, now_min: null, kg: gy.kg, ftp: st.ftp, weather: null, sweat_k: k, start_ml: (hdays.days[tz.shiftKey(yday, -1)] || {}).end_ml != null ? HL.carryOver(hdays.days[tz.shiftKey(yday, -1)].end_ml, null).start_ml : 0 });
-        prev = hdays.days[yday] = { end_ml: my.end_ml, at: Date.now() };
+        const before = hdays.days[tz.shiftKey(yday, -1)] || {};
+        const my = HL.model({ entries: ey.map(F.alcoholRule), sessions: gy.sessions, now_min: null, kg: gy.kg, ftp: st.ftp, weather: null, sweat_k: k, start_ml: before.end_ml != null ? HL.carryOver(before.end_ml, null, before.alcohol).start_ml : 0 });
+        prev = hdays.days[yday] = { end_ml: my.end_ml, alcohol: my.alcohol || null, at: Date.now() };
       }
     } catch (e) { /* yesterday unknown: start from zero */ }
   }
@@ -445,12 +446,13 @@ async function liveHydration(date, entries, g, nowMin) {
       break;
     }
   } catch (e) { weigh = null; }
-  const carry = HL.carryOver(prev ? prev.end_ml : null, scale);
-  const live = HL.model({ entries, sessions: g.sessions, now_min: nowMin, kg: g.kg, ftp: st.ftp, weather, sweat_k: k, weigh, start_ml: carry.start_ml });
+  const carry = HL.carryOver(prev ? prev.end_ml : null, scale, prev ? prev.alcohol : null);
+  const live = HL.model({ entries, sessions: g.sessions, now_min: nowMin, kg: g.kg, ftp: st.ftp, weather, sweat_k: k, weigh, start_ml: carry.start_ml, night: carry.night || null });
   live.carried = Object.assign({ from_date: yday }, carry);
   const wasH = hdays.days[date];
-  if (!wasH || wasH.end_ml !== live.end_ml) {
-    hdays.days[date] = { end_ml: live.end_ml, at: Date.now() };
+  const alcKey = a => a ? `${a.evening_drinks}:${a.evening_net_ml}` : '';
+  if (!wasH || wasH.end_ml !== live.end_ml || alcKey(wasH.alcohol) !== alcKey(live.alcohol)) {
+    hdays.days[date] = { end_ml: live.end_ml, alcohol: live.alcohol || null, at: Date.now() };
     for (const kk of Object.keys(hdays.days)) if (kk < tz.shiftKey(date, -45)) delete hdays.days[kk];
     await setJSON('hydration-days', hdays);
   }

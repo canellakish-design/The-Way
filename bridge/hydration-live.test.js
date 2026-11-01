@@ -76,4 +76,22 @@ ok('carry-over: a deficit at bedtime is still there in the morning, a surplus is
   assert.ok(m.series[0].ml <= -1150 && m.series[0].ml > -1160, 'starts from the carried deficit: ' + m.series[0].ml); assert.strictEqual(m.now.band.key, 'yellow');
   assert.ok(/down/.test(m.advice), m.advice);
 });
+ok('alcohol: a pint is net water on the day, a shot is not; four pints after eight cost the morning', () => {
+  const kg = 98;
+  const dry = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [] });
+  const pint = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [{ time: '13:00', name: 'Pint of lager beer', kcal: 200, carbs_g: 17, protein_g: 2, drink: 'pint of lager' }] });
+  const gain = pint.end_ml - dry.end_ml; assert.ok(gain > 300 && gain < 420, 'pint net ' + gain);
+  assert.strictEqual(pint.drinks[0].alcohol, 1); assert.strictEqual(pint.alcohol.evening_drinks, 0);
+  const shot = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [{ time: '13:00', name: 'Shot of bourbon', kcal: 100, drink: 'bourbon' }] });
+  assert.ok(shot.end_ml < dry.end_ml, 'shot ' + (shot.end_ml - dry.end_ml));
+  const four = H.model({ kg, ftp: 175, now_min: null, sessions: [], entries: [{ time: '19:20', name: 'Pint of lager beer', kcal: 200, drink: 'pint of lager' }, { time: '20:52', name: 'Three pints of lager beer', kcal: 600, drink: 'lager beer' }] });
+  assert.strictEqual(four.alcohol.drinks, 4); assert.strictEqual(four.alcohol.evening_drinks, 3);
+  const plain = H.carryOver(four.end_ml, null), after = H.carryOver(four.end_ml, null, four.alcohol);
+  assert.ok(after.start_ml < plain.start_ml - 500, `plain ${plain.start_ml} after ${after.start_ml}`);
+  assert.strictEqual(after.night.drinks, 3);
+  const morning = H.model({ kg, ftp: 175, now_min: 7 * 60, sessions: [], entries: [], start_ml: after.start_ml, night: after.night });
+  assert.ok(/three pints last night: starting \d\.\d L down/.test(morning.advice), morning.advice);
+  const noon = H.model({ kg, ftp: 175, now_min: 12 * 60, sessions: [], entries: [{ time: '07:00', fluid_ml: 1000, drink_only: true }], start_ml: after.start_ml, night: after.night });
+  assert.ok(!/last night/.test(noon.advice || ''), noon.advice);
+});
 console.log(n + ' passed');
