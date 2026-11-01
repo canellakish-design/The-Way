@@ -187,7 +187,7 @@ async function report() {
     const { calendar } = require('./workouts');
     const cal = await calendar(dates[0], today);
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
-    const isWeight = x => /weight|lift|strength/i.test(String(x.sport || x.type || ''));
+    const isWeight = x => /weight|lift|strength|^run$|^virtualrun$|^walk$|^hike$/i.test(String(x.sport || x.type || ''));   // riding only: lifts, runs and walks are not rides
     // a ride counts by its minutes, discounted by how far it strayed from its zone: a Zone 1 day wants 80% of
     // the ride at 116 and under, a hard day wants 15% of it over threshold; a ride with no heart rate counts whole
     const HARD = /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i;
@@ -216,7 +216,7 @@ async function report() {
     const ahead = await calendar(today, tz.shiftKey(today, 6));
     for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
     // the Plan link: the week ahead as it stands on the calendar
-    const isW = x => /weight|lift|strength/i.test(String(x.sport || x.type || ''));
+    const isW = x => /weight|lift|strength|^run$|^virtualrun$|^walk$|^hike$/i.test(String(x.sport || x.type || ''));
     for (const day of ahead.days || []) {
       const rides = (day.planned || []).filter(w => !isW(w)).map(w => ({ name: w.name, time: w.time || null, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), logged: !!w.logged }))
         .concat((day.intervals || []).filter(e => !isW(e)).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes || 0, logged: false })));

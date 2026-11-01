@@ -47,7 +47,9 @@ async function buildSessions(date, o) {
       const start = w.time ? tz.zonedToUTC(...date.split('-').map(Number), +w.time.slice(0, 2), +w.time.slice(3, 5)) : null;
       const { pastNow } = require('./workouts');
       const logged = pastNow(w, tz.todayKey());
-      out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, notes: w.notes || '', planned: !logged, done: logged,
+      // a run has no power behind its TSS: its calories are its minutes, about 11 a minute at his weight at an easy pace
+      const runKcal = w.sport === 'Run' ? Math.round(m.duration_s / 60 * 11) : null;
+      out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, kcal: runKcal, notes: w.notes || '', planned: !logged, done: logged,
         time: w.time || null, start_at: start ? start.toISOString() : null,
         end_time: w.time ? F.toHM(F.toMin(w.time) + Math.round(m.duration_s / 60)) : null,
         end_at: logged && start ? new Date(start.getTime() + m.duration_s * 1000).toISOString() : null });

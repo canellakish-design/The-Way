@@ -27,7 +27,7 @@ const ATHLETE = envStr('INTERVALS_ICU_ATHLETE_ID');
 const BASE = envStr('INTERVALS_ICU_BASE') || 'https://intervals.icu/api/v1';
 const TTL_MS = 10 * 60 * 1000;
 const EXT = 'the-way:';
-const SPORTS = ['Ride', 'VirtualRide', 'WeightTraining'];
+const SPORTS = ['Ride', 'VirtualRide', 'WeightTraining', 'Run'];
 
 const icuConfigured = () => !!(KEY && ATHLETE);
 const icuHeaders = () => ({ Authorization: 'Basic ' + Buffer.from('API_KEY:' + KEY).toString('base64'), 'Content-Type': 'application/json' });

@@ -43,7 +43,7 @@ const SCHEMA = () => ({
         date: { type: 'string' }, time: { type: 'string' }, new_date: { type: 'string' },
         library_key: { type: 'string', enum: [''].concat(LIBRARY.map(l => l.key)) },
         name: { type: 'string' }, minutes: { type: 'integer' },
-        sport: { type: 'string', enum: ['', 'Ride', 'VirtualRide', 'WeightTraining'] },
+        sport: { type: 'string', enum: ['', 'Ride', 'VirtualRide', 'WeightTraining', 'Run'] },
         sleep_h: { type: 'number' }, sleep_score: { type: 'integer' }, recovery: { type: 'integer' }, hrv: { type: 'integer' }, rhr: { type: 'integer' }
       } } }
   }
@@ -137,7 +137,7 @@ Action types:
 - drink: something drunk on its own (water, coffee, a bottle, a shake with nothing else). text = what and roughly how much.
 - supplement: one of the known supplements (supplement = its key). One action per supplement.
 - weigh_in: lb = his weight in pounds (convert kg if he says kg).
-- workout: a ride or session to put on the calendar. date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
+- workout: a ride, run or session to put on the calendar, or one already done today said after the fact ("I ran 40 minutes on the treadmill": sport Run, minutes 40, time = when it started or ""). date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
 - workout_change: change a planned session: make it longer or shorter (minutes = the NEW total length; "add 30 minutes" to a 90 means 120), move its start (time = new HH:MM), move it to another day (new_date), or swap it for another library session (library_key). date = the day it is on now (today if unsaid), text = what he called it or "".
 - remove_workout: take a planned session off the calendar. date = its day, text = what he called it or "".
 - event: anything else to put on the calendar (a dentist, a meeting, a drive). name = the title, date = YYYY-MM-DD, time = HH:MM or "" for all day, minutes = length (60 if he gave none), text = notes or "".
