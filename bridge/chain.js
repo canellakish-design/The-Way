@@ -39,7 +39,7 @@ function stateOf(key, v) {
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
     case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
     case 'recovery': return v >= 67 ? 'good' : v >= 50 ? 'warn' : 'bad';
-    case 'weight': return v <= -0.3 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
+    case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';     // a pound a week down is the pace; 0.8 allows for the scale
   }
   return 'none';
 }
@@ -48,7 +48,7 @@ function stateOf(key, v) {
 function verdict(links) {
   const first = ORDER.slice(0, -1).find(k => links[k] && (links[k].state === 'bad' || links[k].state === 'warn'));
   const w = links.weight || {};
-  const wWord = w.week == null ? null : w.week <= -0.3 ? `down ${Math.abs(w.week)} lb this week` : w.week <= 0.3 ? 'flat this week' : `up ${w.week} lb this week`;
+  const wWord = w.week == null ? null : w.week <= -0.8 ? `down ${Math.abs(w.week)} lb a week, on pace` : w.week < -0.2 ? `down ${Math.abs(w.week)} lb a week, under the pound` : w.week <= 0.3 ? 'flat' : `up ${w.week} lb a week`;
   const L = links;
   let text;
   if (!first) {
@@ -270,14 +270,16 @@ async function report() {
         hard_yesterday: hardYesterday, days: recs.slice(-7), unit: 'vs band', basis: 'the week\'s HRV against your own 60-day band (a step is half its night-to-night spread); the morning line is the day\'s readiness' };
     })(),
     weight: (() => {
-      const wk = weight ? weight.week_change_lb : null;
+      // the trend line through three weeks of readings when there is one; the week-on-week means until then
+      const wk = weight ? (weight.trend_lb_wk != null ? weight.trend_lb_wk : weight.week_change_lb) : null;
       // creatine's first two weeks put a pound or two of water on the scale: not the week going wrong
       const creatineWater = creatineDays != null && creatineDays <= 14;
       let state = stateOf('weight', wk);
       if (creatineWater && (state === 'bad' || state === 'warn') && wk != null && wk <= 2.5) state = 'warn';
       return { week: wk, state, today: weight && weight.latest ? Math.round(weight.latest.lb) : null, today_word: creatineWater ? `creatine day ${creatineDays}: water` : (weight && weight.latest ? (wk == null && weight.change_since_start_lb != null ? `${weight.change_since_start_lb > 0 ? '+' : ''}${weight.change_since_start_lb} since ${weight.start_lb || 'the start'}` : weight.latest.logged_today ? 'today' : 'last reading') : null),
         unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, creatine_water: creatineWater, creatine_days: creatineDays,
-        basis: `the seven-day mean weight against the seven days before it${creatineWater ? '; creatine started ' + creatineDays + ' days ago, so a pound or two of this is water and the week is not called up until day 14' : ''}` };
+        trend_days: weight ? weight.trend_days : 0, pace_lb_wk: -1,
+        basis: `${weight && weight.trend_lb_wk != null ? `the trend line through the last ${weight.trend_days} days of readings, in lb a week; green at a pound a week down` : 'the seven-day mean weight against the seven days before it, until three weeks of readings draw a trend line; green at a pound a week down'}${creatineWater ? '; creatine started ' + creatineDays + ' days ago, so a pound or two of this is water and the week is not called up until day 14' : ''}` };
     })()
   };
   const v = verdict(links);

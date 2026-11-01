@@ -7,7 +7,7 @@ function ok(name, fn) { fn(); n++; console.log('ok ' + name); }
 ok('states: one rule a link', () => {
   assert.strictEqual(C.stateOf('sleep', 7.2), 'good'); assert.strictEqual(C.stateOf('sleep', 6.5), 'warn'); assert.strictEqual(C.stateOf('sleep', 5.9), 'bad');
   assert.strictEqual(C.stateOf('food', 84), 'good'); assert.strictEqual(C.stateOf('water', 55), 'good'); assert.strictEqual(C.stateOf('water', 30), 'warn'); assert.strictEqual(C.stateOf('water', 10), 'bad'); assert.strictEqual(C.stateOf('work', 0.9), 'good'); assert.strictEqual(C.stateOf('work', 0.5), 'bad');
-  assert.strictEqual(C.stateOf('weight', -0.8), 'good'); assert.strictEqual(C.stateOf('weight', 0.1), 'warn'); assert.strictEqual(C.stateOf('weight', 1.2), 'bad');
+  assert.strictEqual(C.stateOf('weight', -0.8), 'good'); assert.strictEqual(C.stateOf('weight', -1.2), 'good'); assert.strictEqual(C.stateOf('weight', -0.5), 'warn'); assert.strictEqual(C.stateOf('weight', 0.1), 'warn'); assert.strictEqual(C.stateOf('weight', 1.2), 'bad');
   assert.strictEqual(C.stateOf('weight', null), 'none');
 });
 
@@ -19,7 +19,9 @@ ok('verdict: the first link from the left that is off is the break; all good and
   const v2 = C.verdict(all);
   assert.strictEqual(v2.break_at, null); assert.ok(/calorie target is the suspect/.test(v2.text), v2.text);
   const down = Object.assign({}, all, { weight: { week: -0.9, state: 'good' } });
-  assert.ok(/chain holds: weight down 0.9 lb/.test(C.verdict(down).text));
+  assert.ok(/chain holds: weight down 0.9 lb a week, on pace/.test(C.verdict(down).text), C.verdict(down).text);
+  const slow = Object.assign({}, all, { weight: { week: -0.4, state: 'warn' } });
+  assert.ok(/under the pound.*calorie target is the suspect/.test(C.verdict(slow).text), C.verdict(slow).text);
   const sleepy = Object.assign({}, all, { sleep: { week: 6.0, state: 'bad' } });
   assert.strictEqual(C.verdict(sleepy).break_at, 'sleep');
   const lowMicro = Object.assign({}, all, { micros: { week: 55, state: 'bad', gaps: ['iron', 'calcium'] } });

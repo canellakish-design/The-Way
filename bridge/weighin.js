@@ -145,7 +145,19 @@ function trend(entries) {
     const age = Date.now() - e.ts;
     return age >= 7 * 864e5 && age < 14 * 864e5;
   }));
+  // the trend: a straight line through the last 21 days of readings, in lb a week. Daily
+  // readings swing a pound or two with water; the line through three weeks does not.
+  const recent = since(21 * 864e5);
+  let slope = null;
+  if (recent.length >= 5 && (recent[recent.length - 1].ts - recent[0].ts) >= 10 * 864e5) {
+    const xs = recent.map(e => e.ts / 6048e5), ys = recent.map(e => e.lb);   // weeks
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const sxx = xs.reduce((a, x) => a + (x - mx) * (x - mx), 0), sxy = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
+    if (sxx > 0) slope = Math.round(sxy / sxx * 10) / 10;
+  }
   return {
+    trend_lb_wk: slope,
+    trend_days: recent.length >= 2 ? Math.round((recent[recent.length - 1].ts - recent[0].ts) / 864e5) : 0,
     latest: latest ? {
       lb: Math.round(latest.lb * 10) / 10,
       at: new Date(latest.ts).toISOString(),

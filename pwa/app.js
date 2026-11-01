@@ -1635,9 +1635,10 @@ V.today = async function(){
     const w = bodyData;
     if (!w || !w.latest){ paintTile("weight", null, "", "", w ? (w.withings_connected ? "no reading yet" : "scale not connected") : "bridge unreachable"); return; }
     // Down is the direction this program wants: the band is −600 to −300 a day.
-    const wk = w.week_change_lb, since = w.change_since_start_lb;
+    const wk = w.trend_lb_wk != null ? w.trend_lb_wk : w.week_change_lb, since = w.change_since_start_lb;
     let word = "", tone = "neutral", sub = "";
-    if (wk != null){ word = wk < -0.2 ? "down" : wk > 0.2 ? "up" : "flat"; tone = wk < -0.2 ? "good" : wk > 0.2 ? "bad" : "neutral"; sub = `${sgn(wk)} lb/wk`; }
+    // a pound a week down is the pace: green at that, amber slower or flat, red up
+    if (wk != null){ word = wk <= -0.8 ? "on pace" : wk < -0.2 ? "down, slow" : wk > 0.3 ? "up" : "flat"; tone = wk <= -0.8 ? "good" : wk > 0.3 ? "bad" : "warn"; sub = `${sgn(wk)} lb/wk${w.trend_lb_wk != null ? ` · ${w.trend_days}-day trend` : ""}`; }
     else if (since != null){ word = since < 0 ? "down" : since > 0 ? "up" : "at start"; tone = since < 0 ? "good" : since > 0 ? "warn" : "neutral"; sub = `${sgn(since)} lb since ${w.start_lb}`; }
     if (w.latest && !w.latest.logged_today) sub = sub || "not today";
     // the ring fills as the week goes the way the program wants: a pound down in the week is full
