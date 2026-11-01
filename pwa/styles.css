@@ -727,3 +727,7 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .snapmore{margin:2px 0 6px}
 .snapmore .linkish{margin-right:10px}
 .snappreview{display:none}
+.herecard{margin:8px 0}
+.placeform{margin-top:6px}
+.placeform input{width:100%; margin:4px 0}
+.savebar{margin-top:8px}

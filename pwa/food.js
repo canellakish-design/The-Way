@@ -244,7 +244,8 @@ V.food = async function(){
       <div class="advisor">
         <div class="snaprow"><button class="big snapbtn" id="adviseBtn">What's in front of me</button><button class="big snapbtn" id="nearBtn">Find food near me</button></div>
         <input id="adviseFile" type="file" accept="image/*" capture="environment" hidden>
-        <div class="small adhint">A shelf, a cooler, a menu or a counter: it says what to pick for what the plan wants next. Near me finds places within a short walk and names the order.</div>
+        <div class="small adhint">A shelf, a cooler, a menu or a counter: it says what to pick for what the plan wants next. Near me finds places within a short walk and names the order; save a place and it comes up on its own whenever you are there.</div>
+        <div id="hereOut"></div>
         <div id="adviseOut"></div>
       </div>
       <div id="writeForm" hidden>
@@ -453,7 +454,7 @@ V.food = async function(){
       ${items.length && !pickedMenu ? `<ul class="agenda totals aditems">${items.map(i => `<li class="${i.name===pickName?"pick":""}"><span class="n"><b style="color:${fitTone(i.fits)}">${esc(i.name)}</b>${i.how_much?` <span class="small">${esc(i.how_much)}</span>`:""}<span class="small"> ${i.kcal} kcal · ${i.carbs_g}C · ${i.protein_g}P · ${i.fat_g}F${r.places?" · estimate":""}</span><span class="small adwhy">${esc(i.why||"")}</span></span>
           <span class="tag">${i.name===pickName?`<button class="linkish" data-adlog="${esc((i.how_much?i.how_much+" ":"")+i.name)}">log it</button>`:""}</span></li>`).join("")}</ul>` : (!pickedMenu && !items.length ? `<div class="small">Nothing here that it could name.</div>` : "")}
       ${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).length ? `<details class="why"><summary>other places with a known menu</summary>${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).slice(0, 6).map(p => `<div class="small adplace"><b>${esc(p.name)}</b> · ${p.dist_m} m · <a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></div><ul class="agenda totals aditems">${p.orders.slice(0, 2).map(o => orderRow(o, p)).join("")}</ul>`).join("")}</details>` : ""}
-      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m${p.menu?" · menu known":""}</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
+      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}${p.saved?` <span class="small">· yours</span>`:` <button class="linkish" data-saveplace="${esc(p.name)}">save</button>`}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m${p.menu?" · menu known":""}</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
     if (r.reply && typeof speak === "function") speak(r.reply);
     adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
       b.disabled = true; b.textContent = "logging…";
@@ -479,6 +480,58 @@ V.food = async function(){
     }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't read it — ${esc(e.message)}</div>`; }
     adviseFile.value = "";
   };
+  // one of his saved places, close by: the card that says so and names the order
+  const hereCard = (h, lat, lon)=>{
+    const orders = (h.orders||[]);
+    return `<div class="verdict herecard" style="border-color:var(--green)">
+      <div class="jname">You're at ${esc(h.name)} <span class="small">· ${h.dist_m} m · your place</span></div>
+      ${orders.length ? `<ul class="agenda totals aditems">${orders.map(o => `<li class="${o.fits==="yes"?"pick":""}"><span class="n"><b style="color:${fitTone(o.fits||"yes")}">${esc(o.name)}</b>${o.kcal!=null?`<span class="small"> ${o.kcal} kcal · ${o.carbs_g||0}C · ${o.protein_g||0}P</span>`:""}${o.why?`<span class="small"> · ${esc(o.why)}</span>`:""}</span>
+          <span class="tag"><button class="linkish" data-adlog="${esc(o.name + " at " + h.name)}">log it</button></span></li>`).join("")}</ul>` : `<div class="small">${h.notes ? esc(h.notes) : "No order saved here yet."}</div>`}
+      <div class="small"><button class="linkish" data-addorder="${esc(h.id)}">+ add what you order here</button> · <button class="linkish" data-forget="${esc(h.id)}">forget this place</button></div>
+      <div class="small placeform" id="orderForm-${esc(h.id)}" hidden><input class="pfName" placeholder="the order, e.g. Sunrise burrito, no cheese"> <button class="linkish pfSave" data-pid="${esc(h.id)}">save</button></div>
+    </div>`;
+  };
+  const savePlaceForm = (lat, lon, suggest)=> `<div class="small placeform" id="savePlace"><b>Save this place</b> · it will come up whenever you are within 350 m
+      <input id="spName" placeholder="name" value="${esc(suggest||"")}"><input id="spOrder" placeholder="what you order here (optional)">
+      <button class="linkish" id="spSave">save</button> <button class="linkish" id="spCancel">cancel</button></div>`;
+  const wireHere = (lat, lon)=>{
+    const root = document.getElementById("hereOut");
+    root.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{ b.disabled = true; b.textContent = "logging…"; if (window.primeSound) primeSound();
+      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }catch(e){ b.textContent = "failed"; } });
+    root.querySelectorAll("[data-addorder]").forEach(b => b.onclick = ()=>{ const f = document.getElementById("orderForm-" + b.dataset.addorder); if (f){ f.hidden = !f.hidden; if (!f.hidden) f.querySelector(".pfName").focus(); } });
+    root.querySelectorAll(".pfSave").forEach(b => b.onclick = async ()=>{ const f = b.closest(".placeform"), name = f.querySelector(".pfName").value.trim(); if (!name) return; b.disabled = true;
+      try{ await bridge("/food/places/" + encodeURIComponent(b.dataset.pid) + "/order",{method:"POST",headers:J,body:JSON.stringify({ name })}); await showHere(lat, lon); }catch(e){ b.textContent = "failed"; } });
+    root.querySelectorAll("[data-forget]").forEach(b => b.onclick = async ()=>{ if (!confirm("Forget this place?")) return; try{ await bridge("/food/places/" + encodeURIComponent(b.dataset.forget),{method:"DELETE"}); root.innerHTML = ""; }catch{} });
+  };
+  const showHere = async (lat, lon)=>{
+    try{ const r = await bridge(`/food/places?lat=${lat}&lon=${lon}`); const root = document.getElementById("hereOut"); if (!root) return null;
+      root.innerHTML = r.here ? hereCard(r.here, lat, lon) : ""; wireHere(lat, lon); return r.here || null; }catch{ return null; }
+  };
+  // on arrival: when the site already has location, a saved place close by says so without a tap
+  (async ()=>{
+    try{
+      if (!navigator.geolocation || !navigator.permissions) return;
+      const st = await navigator.permissions.query({ name: "geolocation" }); if (st.state !== "granted") return;
+      navigator.geolocation.getCurrentPosition(pos => showHere(pos.coords.latitude, pos.coords.longitude), ()=>{}, { maximumAge: 300000, timeout: 5000 });
+    }catch{}
+  })();
+  const wireSave = (lat, lon, places)=>{
+    adviseOut.querySelectorAll("[data-saveplace]").forEach(b => b.onclick = ()=>{
+      const p = places && places.find(x => x.name === b.dataset.saveplace);
+      const holder = document.getElementById("savePlaceHolder"); if (!holder) return;
+      holder.innerHTML = savePlaceForm(lat, lon, b.dataset.saveplace === "__here" ? "" : b.dataset.saveplace);
+      holder.dataset.plat = p ? p.lat : lat; holder.dataset.plon = p ? p.lon : lon; holder.dataset.kind = p ? p.kind || "place" : "place";
+      document.getElementById("spName").focus();
+      document.getElementById("spCancel").onclick = ()=>{ holder.innerHTML = ""; };
+      document.getElementById("spSave").onclick = async ()=>{
+        const name = document.getElementById("spName").value.trim(), order = document.getElementById("spOrder").value.trim(); if (!name) return;
+        const btn = document.getElementById("spSave"); btn.disabled = true;
+        try{ await bridge("/food/places",{method:"POST",headers:J,body:JSON.stringify({ name, lat: Number(holder.dataset.plat), lon: Number(holder.dataset.plon), kind: holder.dataset.kind, orders: order ? [{ name: order }] : [] })});
+          holder.innerHTML = `<div class="small">Saved ${esc(name)}. It will come up when you are within 350 m.</div>`; await showHere(lat, lon); }
+        catch(e){ holder.innerHTML = `<div class="small">Couldn't save — ${esc(e.message)}</div>`; }
+      };
+    });
+  };
   document.getElementById("nearBtn").onclick = ()=>{
     if (!navigator.geolocation){ adviseOut.innerHTML = `<div class="small">This browser gives no location.</div>`; return; }
     adviseOut.innerHTML = `<div class="small">Finding where you are…</div>`;
@@ -487,11 +540,14 @@ V.food = async function(){
       let near = null;
       try{ near = await bridge("/food/nearby",{method:"POST",headers:J,body:JSON.stringify({ lat, lon })}); }
       catch(e){ adviseOut.innerHTML = `<div class="small">The map service did not answer. <a href="https://www.google.com/maps/search/food/@${lat},${lon},15z" target="_blank" rel="noopener">Open the map</a> instead.</div>`; return; }
-      if (!near.places || !near.places.length){ adviseOut.innerHTML = `<div class="small">Nothing with a name within 1.5 km on the map. <a href="${esc(near.search)}" target="_blank" rel="noopener">Open the map</a>.</div>`; return; }
-      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you${near.with_menus ? `, ${near.with_menus} with a known menu` : ""}. Choosing…</div>`;
+      if (near.here){ document.getElementById("hereOut").innerHTML = hereCard(near.here, lat, lon); wireHere(lat, lon); }
+      const saveBar = `<div class="small savebar"><button class="linkish" data-saveplace="__here">+ save where I am</button><span id="savePlaceHolder"></span></div>`;
+      if (!near.places || !near.places.length){ adviseOut.innerHTML = `<div class="small">Nothing with a name within 1.5 km on the map. <a href="${esc(near.search)}" target="_blank" rel="noopener">Open the map</a>.</div>${saveBar}`; wireSave(lat, lon, []); return; }
+      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you${near.saved ? `, ${near.saved} of them yours` : ""}${near.with_menus ? `, ${near.with_menus} with a known menu` : ""}. Choosing…</div>`;
       try{
         const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ places: near.places })});
         renderAdvice(r, near.places);
+        adviseOut.insertAdjacentHTML("beforeend", saveBar); wireSave(lat, lon, near.places);
       }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't choose — ${esc(e.message)}</div><ul class="agenda totals">${near.places.slice(0,10).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul>`; }
     }, err => { adviseOut.innerHTML = `<div class="small">Location was refused (${esc(err.message)}). Allow it for this site in Settings, or snap what is in front of you.</div>`; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
   };

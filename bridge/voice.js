@@ -35,7 +35,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -143,6 +143,7 @@ Action types:
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - note: anything about how he feels or slept, text = his words.
+- save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
 Fill every field: "" or 0 where it does not apply.
@@ -158,7 +159,7 @@ He said: "${text}"`;
 // A conversation: the earlier turns come back from the page (what he said,
 // what was answered), so "yes, do that" or "the second one" has something to
 // point at. The prompt with the day's context rides on the latest turn only.
-async function understand(text, history) {
+async function understand(text, history, extra) {
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
   const prior = (Array.isArray(history) ? history : []).slice(-10)
@@ -172,7 +173,7 @@ async function understand(text, history) {
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
     body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-      messages: turns.concat([{ role: 'user', content: promptFor(text, await context(), turns.length > 0) }]) })
+      messages: turns.concat([{ role: 'user', content: promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0) }]) })
   });
   const j = await r.json();
   if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
@@ -210,7 +211,7 @@ function resized(w, minutes) {
   return { steps: items, name: (w.name || '').replace(/\b(\d+) min\b/, minutes + ' min') };
 }
 
-async function run(a) {
+async function run(a, x) {
   const food = require('./food');
   switch (a.type) {
     case 'meal': case 'drink': {
@@ -300,6 +301,14 @@ async function run(a) {
       await setJSON('voice-notes', d);
       return { ok: true, summary: 'Noted.' };
     }
+    case 'save_place': {
+      const P = require('./places');
+      const c = x && x.coords;
+      if (!c || !(Math.abs(Number(c.lat)) <= 90)) return { ok: false, summary: 'No location came with that. Allow location for the site, or save it from the Food page with Find food near me.' };
+      const orders = String(a.text || '').trim() ? [{ name: String(a.text).trim().slice(0, 80), why: 'what you order here' }] : [];
+      const p = await P.add({ name: a.name || a.text || 'this place', lat: c.lat, lon: c.lon, notes: a.text || '', orders });
+      return { ok: true, summary: `${p.updated_existing ? 'Updated' : 'Saved'}: ${p.name}${orders.length ? `, order ${orders[0].name}` : ''}. It will come up when you are within ${P.NEAR_M} m.` };
+    }
     case 'question': return { ok: true, summary: 'Advice below.' };
     default: return { ok: false, summary: 'Did not understand that part.' };
   }
@@ -311,10 +320,12 @@ function attach(app) {
     try {
       const text = String((req.body || {}).text || '').trim().slice(0, 1000);
       if (!text) return res.status(400).json({ error: 'nothing heard' });
-      const u = await understand(text, (req.body || {}).history);
+      const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
+      let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
+      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : ''));
       const actions = [];
       for (const a of (u.actions || []).slice(0, 6)) {
-        try { actions.push(Object.assign({ type: a.type }, await run(a))); }
+        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
       }
       res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, 600) });

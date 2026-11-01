@@ -134,6 +134,15 @@ function wireHold(el, onTap){
   el.addEventListener("contextmenu", e => e.preventDefault());
 }
 
+// where he is, when the site already has permission: no prompt, three seconds at most, else nothing
+async function whereAmI(){
+  try{
+    if (!navigator.geolocation) return null;
+    if (navigator.permissions && navigator.permissions.query){ const st = await navigator.permissions.query({ name: "geolocation" }); if (st.state !== "granted") return null; }
+    return await new Promise(res => { const t = setTimeout(() => res(null), 3000); navigator.geolocation.getCurrentPosition(p => { clearTimeout(t); res({ lat: p.coords.latitude, lon: p.coords.longitude }); }, () => { clearTimeout(t); res(null); }, { maximumAge: 300000, timeout: 2800 }); });
+  }catch{ return null; }
+}
+window.whereAmI = whereAmI;
 async function send(text){
   if (!text) { status("Nothing to send."); return; }
   if (sending) return;
@@ -144,7 +153,8 @@ async function send(text){
   history.push({ role: "user", text }); keep(); drawThread();
   status("Thinking…");
   try{
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    const coords = await whereAmI();
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);

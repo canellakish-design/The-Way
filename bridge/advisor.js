@@ -54,8 +54,8 @@ async function ask(content) {
 }
 
 function prompt(ctx, o) {
-  const places = (o.places || []).slice(0, 25).map(p => `- ${p.name}${p.brand && p.brand !== p.name ? ` (${p.brand})` : ''}, ${p.kind}, ${p.dist_m} m` +
-    ((p.orders || []).length ? `. KNOWN MENU, published macros, best orders for what he needs next: ${p.orders.map(x => `"${x.name}" ${x.kcal} kcal, ${x.carbs_g} C, ${x.protein_g} P, ${x.fat_g} F (${x.why})`).join('; ')}` : '')).join('\n');
+  const places = (o.places || []).slice(0, 25).map(p => `- ${p.name}${p.brand && p.brand !== p.name ? ` (${p.brand})` : ''}, ${p.kind}, ${p.dist_m} m${p.saved ? '. HIS OWN SAVED PLACE: he has been here and chose it; prefer it when it is close and an order fits' : ''}` +
+    ((p.orders || []).length ? `. ${p.saved ? 'WHAT HE ORDERS HERE' : 'KNOWN MENU, published macros, best orders for what he needs next'}: ${p.orders.map(x => `"${x.name}"${x.kcal != null ? ` ${x.kcal} kcal, ${x.carbs_g} C, ${x.protein_g} P, ${x.fat_g} F` : ''} (${x.why})`).join('; ')}` : '')).join('\n');
   return `You advise one cyclist on what to eat right now, from what is in front of him. He is 55, 98 kg, losing weight slowly while training; the plan times his meals to the riding.
 
 Where the day stands:
@@ -139,6 +139,8 @@ async function ordersFor(places) {
   try { const d = await require('./food').dayReport(require('./tz').todayKey()); const sg = d.suggestion; if (sg && !sg.none) need = { kcal: sg.kcal, carbs_g: sg.carbs_g, protein_g: sg.protein_g, low_carb: !!sg.low_carb, slot: sg.slot }; } catch (e) { need = null; }
   const out = [];
   for (const p of places || []) {
+    // one of his saved places: its orders are his own, graded against what the plan wants next
+    if (p.saved) { const P = require('./places'); out.push(Object.assign({}, p, { menu: p.menu || null, orders: (p.orders || []).map(o => Object.assign({}, o, { fits: P.fitOf(o, need), yours: true, why: o.why || 'what you order here' })) })); continue; }
     const brand = M.brandFor(p);
     if (!brand) { out.push(Object.assign({}, p, { menu: null, orders: [] })); continue; }
     const rem = await M.remembered(brand.key).catch(() => []);
@@ -169,10 +171,18 @@ function attach(app) {
     try {
       const lat = Number((req.body || {}).lat), lon = Number((req.body || {}).lon);
       if (!(Math.abs(lat) <= 90 && Math.abs(lon) <= 180)) return res.status(400).json({ error: 'lat and lon needed' });
-      const places = await nearby(lat, lon, Number((req.body || {}).radius) || 1500);
+      const P = require('./places');
+      const radius = Number((req.body || {}).radius) || 1500;
+      // his saved places first, whatever the map says; the map's copy of the same place is dropped
+      const saved = await P.near(lat, lon, radius).catch(() => []);
+      let places = [];
+      try { places = await nearby(lat, lon, radius); } catch (e) { if (!saved.length) throw e; }
       const M = require('./menus');
       for (const p of places) { const br = M.brandFor(p); p.menu = br ? { brand: br.key, items: br.items.length } : null; }
-      res.json({ lat, lon, places, with_menus: places.filter(p => p.menu).length, search: `https://www.google.com/maps/search/food/@${lat},${lon},15z` });
+      places = saved.concat(places.filter(p => !saved.some(sv => sv.name.toLowerCase() === p.name.toLowerCase() && P.dist(sv.lat, sv.lon, p.lat, p.lon) <= 150)));
+      const here = saved.find(p => p.dist_m <= P.NEAR_M) || null;
+      if (here) P.seen(here.id);
+      res.json({ lat, lon, places, here, with_menus: places.filter(p => p.menu).length, saved: saved.length, search: `https://www.google.com/maps/search/food/@${lat},${lon},15z` });
     } catch (e) { res.status(502).json({ error: /abort/i.test(e.message) ? 'the map service took too long' : e.message, places: [], search: `https://www.google.com/maps/search/food/@${Number((req.body || {}).lat)},${Number((req.body || {}).lon)},15z` }); } });
 }
 
