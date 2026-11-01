@@ -143,6 +143,21 @@ ok('overall and band', () => {
 });
 
 
+ok('alcohol: counted, never on plan; one drink partly, three no; the slot it sits in says so', () => {
+  assert.strictEqual(F.alcoholOf({ name: 'Three pints of lager beer', kcal: 600, assessment: { fits: 'yes' } }), 3);
+  assert.strictEqual(F.alcoholOf({ name: 'Pint of lager beer', kcal: 200 }), 1);
+  assert.strictEqual(F.alcoholOf({ name: 'Glass of water', drink: 'glass of water' }), 0);
+  assert.strictEqual(F.alcoholOf({ name: 'Greek wrap with grilled chicken', drink: 'bottled water' }), 0);
+  assert.strictEqual(F.alcoholOf({ name: 'Two glasses of red wine', kcal: 250 }), 2);
+  assert.strictEqual(F.alcoholRule({ name: 'Three pints of lager beer', kcal: 600, assessment: { fits: 'yes' } }).assessment.fits, 'no');
+  assert.strictEqual(F.alcoholRule({ name: 'Pint of lager beer', kcal: 200, assessment: { fits: 'yes' } }).assessment.fits, 'partly');
+  const dinner = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
+  const withPint = F.mealMatch(dinner, [F.alcoholRule({ name: 'Pint of lager beer', kcal: 200, carbs_g: 17, protein_g: 2, drink: 'pint of lager', assessment: { fits: 'yes' } }), { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }], { day_kcal: 2400, target_kcal: 2020 });
+  assert.strictEqual(withPint.key, 'yellow', JSON.stringify(withPint)); assert.strictEqual(withPint.rules.word, 'one drink');
+  const withThree = F.mealMatch(dinner, [F.alcoholRule({ name: 'Three pints of lager beer', kcal: 600, carbs_g: 51, protein_g: 6, assessment: { fits: 'yes' } }), { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }]);
+  assert.strictEqual(withThree.key, 'red'); assert.strictEqual(withThree.rules.word, '3 drinks');
+});
+
 ok('mealMatch: a light plate with its protein is never red; green when the day is already at its calories', () => {
   const dinner = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
   const shrimp = [{ kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }];

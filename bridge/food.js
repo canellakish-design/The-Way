@@ -242,7 +242,7 @@ ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
-Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink, kcal as drunk, meal_guess snack, fits yes.
+Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
 Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when there is a real protein serving (roughly 30 g or more); carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
@@ -279,7 +279,7 @@ async function dayReport(date) {
   const g = await guidelinesFor(date);
   const doc = await dayDoc(date);
   // an entry saved without a slot (eaten far from the plan's time, before the wider rule) is slotted on the way out
-  const entries = doc.entries.map(e => Object.assign({}, e, { photo: undefined }, !e.slot && !e.supplement && !e.drink_only ? { slot: F.slotFor(g.meals, e.time, e.meal) } : {}));
+  const entries = doc.entries.map(e => F.alcoholRule(Object.assign({}, e, { photo: undefined }, !e.slot && !e.supplement && !e.drink_only ? { slot: F.slotFor(g.meals, e.time, e.meal) } : {})));
   const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
@@ -288,7 +288,7 @@ async function dayReport(date) {
   // hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
   // A plate that mentions its drink ("a wrap and two bottles of water") is still a plate: the drink
   // flag alone does not make it one; little protein and few calories do.
-  const isDrink = e => (!!e.drink_only || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300)) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+  const isDrink = e => (!!e.drink_only || !!e.alcohol || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300)) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
   // The snack's words follow the day: how short protein is, not "if".
   const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
   const planMeals = g.meals.map(m => m.slot !== 'snack' ? m : Object.assign({}, m, { what: (() => {
@@ -564,7 +564,7 @@ async function addPhoto(body) {
   // The full photo in its own key, so the day document stays small enough to read on every page load.
   if (images.length) await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64 }).catch(() => {});
   const doc = await dayDoc(date);
-  doc.entries.push(entry);
+  doc.entries.push(F.alcoholRule(entry));
   await setJSON(dayKey(date), doc);
   await pruneOld(date).catch(() => {});
   // The ledger sees the same meal, tagged so a delete here removes it there.
@@ -600,7 +600,7 @@ async function addKnown(body) {
   };
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
   const doc = await dayDoc(date);
-  doc.entries.push(entry);
+  doc.entries.push(F.alcoholRule(entry));
   await setJSON(dayKey(date), doc);
   await logMeal({ name: entry.name, meal: entry.meal === 'on the bike' ? 'snack' : entry.meal, kcal: entry.kcal, carbs_g: entry.carbs_g, protein_g: entry.protein_g, fat_g: entry.fat_g, food_id: id }).catch(() => {});
   if (b.brand) await require('./menus').remember(b.brand, { name, kcal: entry.kcal, carbs_g: entry.carbs_g, protein_g: entry.protein_g, fat_g: entry.fat_g }).catch(() => {});

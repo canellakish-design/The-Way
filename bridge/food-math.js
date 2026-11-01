@@ -422,6 +422,26 @@ function rollForward(meals, entries) {
   return out;
 }
 
+// Alcohol: counted in the calories, never on plan. One drink on a rest day is "partly";
+// two or more is "no". The reader's own "fits" is overruled either way, and so is an old
+// entry's when it is read back, so the journal never shows a pint in green.
+const ALC = /\b(beer|lager|ale|ipa|stout|porter|pilsner|wine|prosecco|champagne|pint|cocktail|margarita|martini|whisk(e)?y|bourbon|scotch|vodka|gin|rum|tequila|cider|sake|mead|hard seltzer|white claw|negroni|spritz|mimosa|sangria|shot of)\b/i;
+const NUMS = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, couple: 2, few: 3 };
+function alcoholOf(e) {
+  if (!e || e.supplement) return 0;
+  const text = [e.name, e.drink, e.written].filter(Boolean).join(' ');
+  if (!ALC.test(text)) return 0;
+  const m = /\b(\d+|a|one|two|three|four|five|six|couple|few)\b\s+(?:of\s+)?(?:\w+\s+){0,2}?(pints?|beers?|lagers?|ales?|glass(?:es)?|bottles?|cans?|drinks?|cocktails?|shots?|margaritas?|martinis?|ipas?)/i.exec(text);
+  if (m) return Math.max(1, parseInt(m[1], 10) || NUMS[m[1].toLowerCase()] || 1);
+  return Math.max(1, Math.round((e.kcal || 0) / 150));
+}
+function alcoholRule(e) {
+  const n = alcoholOf(e);
+  if (!n) return e;
+  const a = Object.assign({}, e.assessment || {}, { fits: n >= 2 ? 'no' : 'partly' });
+  return Object.assign({}, e, { alcohol: n, assessment: a });
+}
+
 function mealMatch(plan, logged, ctx) {
   // ctx: { day_kcal, target_kcal } — the day so far, so a light plate reads against the day it lands in
   // a bottle of water logged into a slot is not the meal; a bottle with carbs on the bike is
@@ -469,7 +489,7 @@ function mealMatch(plan, logged, ctx) {
       keyR = k;
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
-      wordR = k === 'green' ? 'rules met' : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
+      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = a.why || null;
     }
   }
@@ -479,5 +499,5 @@ function mealMatch(plan, logged, ctx) {
     macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward,
+module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS };
