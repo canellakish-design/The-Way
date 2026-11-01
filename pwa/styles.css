@@ -716,3 +716,14 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .chain .cbox .slabel, .chain .cbox .cweek{overflow:visible; text-overflow:clip; max-width:none}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:17px} .chain .cbox .cnum.long{font-size:13.5px} .chain .cbox .slabel{font-size:7.5px; letter-spacing:.3px} .chain .cbox .cweek{font-size:7px; letter-spacing:.4px} .chaintoday .tsp{flex-basis:12px} }
 .chaintoday .tsp{flex:0 0 12px}
+
+/* every broken link wears a cross; the first break is the filled one */
+.carrow.cut i{color:var(--red); border-color:var(--red); border-width:2px}
+.carrow.cut i svg{width:10px; height:10px}
+.snapstrip{display:flex; gap:8px; flex-wrap:wrap; margin:8px 0 4px}
+.snapthumb{position:relative; width:72px; height:72px}
+.snapthumb img{width:72px; height:72px; object-fit:cover; border:1px solid var(--line); border-radius:var(--radius); display:block}
+.snapx{position:absolute; top:-6px; right:-6px; width:22px; height:22px; padding:0; margin:0; border-radius:50%; font-size:14px; line-height:1; display:flex; align-items:center; justify-content:center; box-shadow:none; background:var(--ink); color:var(--paper); border-color:var(--ink)}
+.snapmore{margin:2px 0 6px}
+.snapmore .linkish{margin-right:10px}
+.snappreview{display:none}

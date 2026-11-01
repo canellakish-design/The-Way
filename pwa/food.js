@@ -232,9 +232,10 @@ V.food = async function(){
     ${isToday ? `<div class="card day snapcard" id="snap">
       <div class="snaprow"><button class="primary big snapbtn" id="snapBtn">Snap a meal</button><button class="big snapbtn" id="rollBtn">From camera roll</button></div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
-      <input id="rollFile" type="file" accept="image/*" hidden>
+      <input id="rollFile" type="file" accept="image/*" multiple hidden>
       <div id="snapForm" hidden>
-        <img id="snapPreview" class="snappreview" alt="">
+        <div class="snapstrip" id="snapStrip"></div>
+        <div class="small snapmore"><button class="linkish" id="snapAdd">+ another photo</button> <button class="linkish" id="rollAdd">+ from camera roll</button> <span id="snapCount"></span></div>
         <div class="row2"><span><label>Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
           <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
@@ -346,7 +347,7 @@ V.food = async function(){
       <div class="jrow">${img}
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${e.drink_only?"drink":esc(e.meal)}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":" · photo only, ±35%"}`}</div></div>
+          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}</div></div>
         <div class="jfit">${fitBadge(a)}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div>
       <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
       <div class="jmore">
@@ -383,7 +384,17 @@ V.food = async function(){
   // Two ways in: the camera (capture forces it on a phone) and the camera
   // roll (no capture, so the phone offers the library). Same form after.
   const fileEl = document.getElementById("snapFile"), rollEl = document.getElementById("rollFile"), form = document.getElementById("snapForm");
-  let file = null;
+  let files = [];                         // up to four photos of one meal
+  const MAXP = 4;
+  const strip = ()=>{
+    const el = document.getElementById("snapStrip"); if (!el) return;
+    el.innerHTML = files.map((f, i) => `<span class="snapthumb"><img src="${URL.createObjectURL(f)}" alt=""><button class="snapx" data-i="${i}" aria-label="Remove photo">×</button></span>`).join("");
+    const c = document.getElementById("snapCount"); if (c) c.textContent = files.length ? `${files.length} of ${MAXP}` : "";
+    const add = document.getElementById("snapAdd"), roll = document.getElementById("rollAdd"); if (add) add.hidden = files.length >= MAXP; if (roll) roll.hidden = files.length >= MAXP;
+  };
+  document.getElementById("snapStrip").addEventListener("click", (e)=>{ const b = e.target.closest(".snapx"); if (!b) return; files.splice(+b.dataset.i, 1); strip(); if (!files.length){ form.hidden = true; } });
+  document.getElementById("snapAdd").onclick = ()=> fileEl.click();
+  document.getElementById("rollAdd").onclick = ()=> rollEl.click();
   document.getElementById("snapBtn").onclick = ()=> fileEl.click();
   // the camera buttons beside each meal and on the suggestion are drawn after
   // the day loads, so the click is caught on the page, not wired per button
@@ -403,15 +414,15 @@ V.food = async function(){
   }
   document.getElementById("rollBtn").onclick = ()=> rollEl.click();
   const picked = (el)=>{
-    file = el.files && el.files[0];
-    if (!file) return;
-    document.getElementById("snapPreview").src = URL.createObjectURL(file);
+    const add = Array.from(el.files || []); el.value = "";
+    if (!add.length) return;
+    files = files.concat(add).slice(0, MAXP);
     document.getElementById("snapResult").innerHTML = "";
-    form.hidden = false;
+    strip(); form.hidden = false;
   };
   fileEl.onchange = ()=> picked(fileEl);
   rollEl.onchange = ()=> picked(rollEl);
-  document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; };
+  document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; files = []; strip(); fileEl.value = ""; rollEl.value = ""; };
   // the verdict at logging time is the slot's grade, the same word the card shows, with the plate's reading under it
   const showVerdict = (e, dayNow)=>{
     const a = e.assessment;
@@ -512,18 +523,18 @@ V.food = async function(){
     finally{ btn.disabled = false; }
   };
   document.getElementById("snapLog").onclick = async ()=>{
-    if (!file) return;
+    if (!files.length) return;
     if (window.primeSound) primeSound();
     const msg = document.getElementById("snapMsg"), btn = document.getElementById("snapLog");
-    btn.disabled = true; msg.textContent = "Reading the plate…";
+    btn.disabled = true; msg.textContent = files.length > 1 ? `Reading the ${files.length} photos as one meal…` : "Reading the plate…";
     try{
-      const [image_base64, thumb_base64] = await Promise.all([fileToBase64(file, 1280, 0.75), fileToBase64(file, 240, 0.6)]);
+      const [imgs, thumb_base64] = await Promise.all([Promise.all(files.map(f => fileToBase64(f, 1280, 0.75))), fileToBase64(files[0], 240, 0.6)]);
       const r = await bridge("/food/photo",{method:"POST",headers:J,body:JSON.stringify({
-        images:[{image_base64, media_type:"image/jpeg"}], thumb_base64,
+        images: imgs.map(image_base64 => ({ image_base64, media_type:"image/jpeg" })), thumb_base64,
         meal: document.getElementById("snapMeal").value || undefined,
         notes: document.getElementById("snapNote").value || undefined })});
       showVerdict(r.entry, r.day);
-      form.hidden = true; file = null; fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
+      form.hidden = true; files = []; strip(); fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
       day = r.day; draw(); cheerIf(r);
     }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }

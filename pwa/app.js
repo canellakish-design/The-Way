@@ -1067,7 +1067,7 @@ function paintChain(c){
       const sn = td.querySelector(".snum"); sn.textContent = t.num; sn.classList.toggle("long", String(t.num).length > 4); td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
       td.title = `${CHAIN.find(x => x[0] === ck)[2]} today: ${t.num}${t.word ? ", " + t.word : ""}`;
     }
-    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
+    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ const cut = L.state === "bad"; ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : cut ? " cut" : ""}`; ar.innerHTML = `<i>${c.break_at === ck || cut ? CROSS : ARROW}</i>`; }
   }
   const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
   // the two row headers: the week's dates, and today with the day's type
@@ -1079,13 +1079,13 @@ function paintChain(c){
 // what today's cell says for each link: the number, a word, and a tone of its own
 function todayCell(ck, L){
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
-  if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? "" : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
+  if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? (L.today_word || "") : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
   if (ck === "food") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "" : (L.today >= 80 ? "on plan" : L.today >= 60 ? "near" : "off"), tone: band(L.today, 80, 60) };
   if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word === "on target" ? "covered" : (L.today_word || "")), tone: band(L.today, 80, 60) };
   if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
   if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
-  if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : ""), tone: L.today_band || "none" };
+  if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "not synced yet" : (L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : "")), tone: L.today == null ? "none" : (L.today_band || "none") };
   if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: (L.today_word || "").replace(/^([+−-]\d+(?:\.\d+)?) since \d+$/, "$1 lb"), tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
   return { num: "—", word: "", tone: "none" };
 }

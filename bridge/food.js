@@ -240,7 +240,7 @@ ${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan,
 ${(g.meals || []).map(m => `- ${tz.hm12(m.time)} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
 ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g.logged.length ? `Already in the journal today (do not ask for a meal he has already eaten): ${g.logged.map(e => `${e.time} ${e.meal}: ${e.name} (${e.kcal} kcal, ${e.carbs_g} C / ${e.protein_g} P / ${e.fat_g} F${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''})`).join('; ')}. Eaten so far: ${g.logged.reduce((a, e) => a + (e.kcal || 0), 0)} kcal, ${g.logged.reduce((a, e) => a + (e.carbs_g || 0), 0)} C / ${g.logged.reduce((a, e) => a + (e.protein_g || 0), 0)} P / ${g.logged.reduce((a, e) => a + (e.fat_g || 0), 0)} F.\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
-Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo).
+Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo). Several photos are the same meal from different angles, or its courses and its drink: one entry, the whole of it added together, never counted twice.
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
 Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when there is a real protein serving (roughly 30 g or more); carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
@@ -250,7 +250,7 @@ fits is "yes" when the plate does what today's rules ask, "partly" when it does 
 async function analyze(images, g, meal, notes, written) {
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
-  const content = (images || []).slice(0, 3).map(img => ({ type: 'image',
+  const content = (images || []).slice(0, 4).map(img => ({ type: 'image',
     source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
   content.push({ type: 'text', text: promptFor(g, meal, notes, written) });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
@@ -621,7 +621,9 @@ async function addPhoto(body) {
   const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
   entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.
-  if (images.length) await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64 }).catch(() => {});
+  if (images.length) await setJSON(photoKey(id), { media_type: images[0].media_type || 'image/jpeg', data: images[0].image_base64,
+    more: images.slice(1, 4).map(i => ({ media_type: i.media_type || 'image/jpeg', data: i.image_base64 })) }).catch(() => {});
+  entry.photos = Math.min(4, images.length);
   const doc = await dayDoc(date);
   doc.entries.push(F.alcoholRule(entry));
   await setJSON(dayKey(date), doc);
