@@ -119,7 +119,9 @@ V.ride = async function(){
       ${courses && courses.zwift && courses.zwift.length ? `<details class="why"${grade === "bad" ? " open" : ""}><summary>indoors: Zwift routes</summary><ul class="agenda courses">${courses.zwift.map(zRow).join("")}</ul></details>` : ""}
       <details class="why"><summary>how the courses are ranked</summary><div class="small">Each route is read as two halves, the heading of each the distance-weighted mean of its segments. The forecast wind over each half, from the start chosen above, reads as headwind, crosswind or tailwind against that heading. A tailwind home scores three, a crosswind home one and a half, a headwind out one more (the legs are fresh for it); a route far from the time planned loses points. Routes come from RideWithGPS when it is connected, otherwise from the roads Strava has seen you ride, grouped by name.</div></details>
     </div>
-    <div class="card"><h4>Zones and the signature</h4><div class="small">Power and heart-rate zones, the three numbers of the signature, the best efforts and the breakthroughs.</div><div class="rowbtns"><a class="btn" href="#zones">Open</a></div></div>`;
+    <div class="card"><h4>Zones and the signature</h4><div class="small">Power and heart-rate zones, the three numbers of the signature, the best efforts and the breakthroughs.</div><div class="rowbtns"><a class="btn" href="#zones">Open</a></div></div>
+    <div class="card"><h4>Planning numbers</h4><div class="small">The FTP every zone and target follows. Yours to set; the signature on the Zones page is the evidence, never the hand that writes it.</div><div id="pSettings" class="small">loading…</div></div>`;
+  bridge("/workouts/settings").then(st => { if (location.hash.startsWith("#ride") && window.drawPlanningNumbers) window.drawPlanningNumbers(st); }).catch(()=>{ const el = document.getElementById("pSettings"); if (el) el.textContent = "bridge unreachable"; });
 
   const msg = t => { const el = document.getElementById("rMsg"); if (el) el.textContent = t || ""; };
   // a course onto the ride: the plan's own ride takes it in place; otherwise a new ride is made at the start

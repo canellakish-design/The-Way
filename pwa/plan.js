@@ -102,7 +102,7 @@ V.calendar = async function(){
       ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
   }
-  html += `<div class="card"><h4>Planning numbers</h4><div id="pSettings" class="small">loading…</div></div>`;
+  html += `<div class="small" style="margin:8px 2px">The planning numbers (FTP, threshold HR, resting HR) are set on the <a href="#ride">Ride</a> tab, under the zones.</div>`;
   document.getElementById("pWeek").innerHTML = html;
   document.querySelectorAll("[data-delw]").forEach(b => b.onclick = async (ev)=>{
     ev.preventDefault(); ev.stopPropagation();
@@ -110,9 +110,9 @@ V.calendar = async function(){
     try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); V.calendar(); }
     catch(e){ alert(e.message); }
   });
-  drawSettings(cal.settings);
 };
 
+window.drawPlanningNumbers = (st) => drawSettings(st);
 async function drawSettings(st){
   const el = document.getElementById("pSettings"); if (!el) return;
   el.innerHTML = `<div class="small">Must match intervals.icu.</div>
