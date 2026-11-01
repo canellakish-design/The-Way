@@ -1057,7 +1057,7 @@ function paintChain(c){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
-    const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = TC[L.state] || "var(--muted)";
+    const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 3); n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
     // today's cell under the box: its own number, word and colour
