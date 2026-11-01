@@ -200,19 +200,38 @@ function epoch(dateKey, endOfDay) {
 // o.max_age_ms: accept a cached copy only this fresh (the food page asks for
 // a two-minute copy while a planned ride is overdue, so a Zwift ride that
 // has just reached Strava is seen without waiting out the ten minutes).
+// One ride, two files: the Zwift upload and the Garmin's own recording of the same trainer session both
+// reach Strava. Two activities on the same day that start within fifteen minutes of each other and
+// overlap for more than half of the shorter one are the same ride. The copy with power is kept (the
+// signature and the progress strip need it), else the longer; the other rides along as its twin.
+function dedupeRides(rides) {
+  const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  const out = [];
+  for (const r of rides.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.time).localeCompare(String(b.time)))) {
+    const s = toMin(r.time);
+    const twin = s == null ? null : out.find(k => k.date === r.date && toMin(k.time) != null && Math.abs(toMin(k.time) - s) <= 15
+      && Math.min(toMin(k.time) + (k.minutes || 0), s + (r.minutes || 0)) - Math.max(toMin(k.time), s) > 0.5 * Math.min(k.minutes || 0, r.minutes || 0));
+    if (!twin) { out.push(r); continue; }
+    const keepNew = (r.avg_w && !twin.avg_w) || (!!r.avg_w === !!twin.avg_w && (r.minutes || 0) > (twin.minutes || 0));
+    const keep = keepNew ? r : twin, drop = keepNew ? r === twin ? twin : twin : r;
+    const merged = Object.assign({}, keep, { avg_hr: keep.avg_hr || drop.avg_hr || null, twin: { id: drop.id, name: drop.name, type: drop.type, minutes: drop.minutes } });
+    out[out.indexOf(twin)] = merged;
+  }
+  return out;
+}
 async function stravaDone(from, to, st, o) {
   const key = 'calendar-strava-cache';
   const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
   const maxAge = o && o.max_age_ms > 0 ? Math.min(TTL_MS, o.max_age_ms) : TTL_MS;
   if (c && c.from <= from && c.to >= to && Date.now() - c.at < maxAge)
-    return { connected: true, rides: c.rides.filter(r => r.date >= from && r.date <= to), cached: true };
+    return { connected: true, rides: dedupeRides(c.rides).filter(r => r.date >= from && r.date <= to), cached: true };
   let list;
   try {
     list = await require('./strava').apiFetch(`/athlete/activities?after=${epoch(wfrom)}&before=${epoch(wto, true)}&per_page=200`);
   } catch (e) {
     // Rate-limited or down: the last good copy beats an empty day that reads as "nothing ridden".
-    if (c && c.from <= from && c.to >= to) return { connected: true, stale: true, reason: e.message, rides: c.rides.filter(r => r.date >= from && r.date <= to) };
+    if (c && c.from <= from && c.to >= to) return { connected: true, stale: true, reason: e.message, rides: dedupeRides(c.rides).filter(r => r.date >= from && r.date <= to) };
     return { connected: false, reason: e.message, rides: [] };
   }
   const rides = (Array.isArray(list) ? list : []).map(a => {
@@ -240,7 +259,7 @@ async function stravaDone(from, to, st, o) {
       tss, tss_basis: basis };
   }).filter(r => r.date >= wfrom && r.date <= wto);
   await setJSON(key, { from: wfrom, to: wto, at: Date.now(), rides }).catch(() => {});
-  return { connected: true, rides: rides.filter(r => r.date >= from && r.date <= to) };
+  return { connected: true, rides: dedupeRides(rides).filter(r => r.date >= from && r.date <= to) };
 }
 
 // A workout saved after its own date has passed is the rider logging what he
@@ -570,4 +589,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { dedupeRides, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
