@@ -481,6 +481,11 @@ function mealMatch(plan, logged, ctx) {
   // two, so the word on the card and the word at logging time agree.
   const RANK = { green: 0, yellow: 1, red: 2 };
   let keyR = 'green', wordR = 'rules met', whyR = null;
+  // The sentence on the card is the plate's own reading, never a drink's: a pint logged before
+  // dinner was read before dinner existed. A drink still sets the word and the colour.
+  const plates = l.filter(e => !e.alcohol && e.assessment && e.assessment.why);
+  const worstPlate = plates.reduce((a, e) => !a || RANK[e.assessment.fits === 'no' ? 'red' : e.assessment.fits === 'partly' ? 'yellow' : 'green'] > RANK[a.assessment.fits === 'no' ? 'red' : a.assessment.fits === 'partly' ? 'yellow' : 'green'] ? e : a, null);
+  const plateWhy = worstPlate ? worstPlate.assessment.why : null;
   for (const e of l) {
     const a = e.assessment; if (!a || !a.fits) continue;
     const k = a.fits === 'no' ? 'red' : a.fits === 'partly' ? 'yellow' : 'green';
@@ -490,9 +495,10 @@ function mealMatch(plan, logged, ctx) {
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
       wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
-      whyR = a.why || null;
+      whyR = plateWhy || a.why || null;
     }
   }
+  if (plateWhy) whyR = plateWhy;
   const key = RANK[keyR] > RANK[keyM] ? keyR : keyM;
   const word = key === 'green' ? 'as planned' : RANK[keyR] > RANK[keyM] ? wordR : (RANK[keyM] > RANK[keyR] ? wordM : `${wordM} · ${wordR}`);
   return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k,

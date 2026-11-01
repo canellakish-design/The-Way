@@ -154,6 +154,8 @@ ok('alcohol: counted, never on plan; one drink partly, three no; the slot it sit
   const dinner = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
   const withPint = F.mealMatch(dinner, [F.alcoholRule({ name: 'Pint of lager beer', kcal: 200, carbs_g: 17, protein_g: 2, drink: 'pint of lager', assessment: { fits: 'yes' } }), { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }], { day_kcal: 2400, target_kcal: 2020 });
   assert.strictEqual(withPint.key, 'yellow', JSON.stringify(withPint)); assert.strictEqual(withPint.rules.word, 'one drink');
+  const pintFirst = F.mealMatch(dinner, [F.alcoholRule({ name: 'Pint of lager beer', kcal: 200, carbs_g: 17, protein_g: 2, drink: 'pint of lager', assessment: { fits: 'yes', why: 'One pint is fine, but you still need 45 g of protein at dinner.' } }), { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes', why: 'This is exactly the right dinner.' } }]);
+  assert.strictEqual(pintFirst.rules.why, 'This is exactly the right dinner.'); assert.strictEqual(pintFirst.rules.word, 'one drink');
   const withThree = F.mealMatch(dinner, [F.alcoholRule({ name: 'Three pints of lager beer', kcal: 600, carbs_g: 51, protein_g: 6, assessment: { fits: 'yes' } }), { kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }]);
   assert.strictEqual(withThree.key, 'red'); assert.strictEqual(withThree.rules.word, '3 drinks');
 });
