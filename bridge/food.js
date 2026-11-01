@@ -232,7 +232,7 @@ const SCHEMA = {
 function promptFor(g, meal, notes, written) {
   const rules = g.guidelines.map(x => '- ' + x.text).join('\n');
   return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.${written ? `
-This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume his usual portions for a ${g.kg || 98} kg cyclist and say so in the portion field.` : ''}
+This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume the usual portions for a ${g.kg || 98} kg cyclist and say so in the portion field, written to him ("your usual", never "his").` : ''}
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's guidelines:
 ${rules}
