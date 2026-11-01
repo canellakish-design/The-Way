@@ -819,3 +819,11 @@ ul.agenda.totals li .tag{text-align:right; white-space:normal; line-height:1.35;
 .chaintoday .tsp{flex:0 0 18px}
 .carrow.cwrap, .chain .carrow.cwrap{height:26px; margin:8px 0 2px 18px}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:26px} .chain .cbox .cnum.long{font-size:20px} .chain .cbox .slabel{font-size:10px} .score.tcell .snum{font-size:17px} .score.tcell .snum.long{font-size:13.5px} .score.tcell .sword{font-size:8.5px} .chaintoday .tsp{flex-basis:18px} }
+
+/* the advisor's list reads left; the progress rows keep their unit on screen */
+ul.agenda.totals.aditems li, ul.agenda.totals.aditems li .n, .herecard .aditems li .n{text-align:left}
+.plist li.prow{grid-template-columns:minmax(110px,1fr) fit-content(55%); column-gap:8px}
+.plist .tag{flex-wrap:nowrap; min-width:0}
+.pspark{flex:0 0 64px; width:64px}
+.pnow{white-space:nowrap}
+.punit{white-space:nowrap}
