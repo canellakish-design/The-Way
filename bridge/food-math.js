@@ -425,7 +425,7 @@ function rollForward(meals, entries) {
 // Alcohol: counted in the calories, never on plan. One drink on a rest day is "partly";
 // two or more is "no". The reader's own "fits" is overruled either way, and so is an old
 // entry's when it is read back, so the journal never shows a pint in green.
-const ALC = /\b(beer|lager|ale|ipa|stout|porter|pilsner|wine|prosecco|champagne|pint|cocktail|margarita|martini|whisk(e)?y|bourbon|scotch|vodka|gin|rum|tequila|cider|sake|mead|hard seltzer|white claw|negroni|spritz|mimosa|sangria|shot of)\b/i;
+const ALC = /\b(beers?|lagers?|ales?|ipas?|stouts?|porters?|pilsners?|wines?|prosecco|champagne|pints?|cocktails?|margaritas?|martinis?|whisk(e)?ys?|bourbon|scotch|vodka|gin|rum|tequila|ciders?|sake|mead|hard seltzers?|white claws?|negronis?|spritz|mimosas?|sangria|shots? of)\b/i;
 const NUMS = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, couple: 2, few: 3 };
 function alcoholOf(e) {
   if (!e || e.supplement) return 0;
@@ -494,7 +494,7 @@ function mealMatch(plan, logged, ctx) {
       keyR = k;
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
-      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
+      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!a.protein_source && (plan.protein_g || 0) >= 30 && !e.drink && !e.drink_only) ? 'no protein source' : (!a.vegetables && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = plateWhy || a.why || null;
     }
   }
