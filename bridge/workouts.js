@@ -328,11 +328,22 @@ function gradeOne(w, rides) {
   }
   return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis } });
 }
-// Every planned session on the day is graded against the day's rides: with
-// one ride and one plan that is exact; with two plans the ride counts for
-// both, which is generous but never hides a miss on a one-session day.
-function gradeDay(planned, rides) {
-  return planned.map(w => gradeOne(w, rides));
+// Every planned session on the day is graded against the day's rides, each
+// ride going to the planned session whose start time is nearest, and only
+// that one: a morning ride never also counts for the afternoon's. A session
+// still ahead of now with no ride on it is not graded yet.
+function gradeDay(planned, rides, dayOver, nowMin) {
+  const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  const mine = planned.map(() => []);
+  for (const r of rides) {
+    let best = -1, bd = Infinity;
+    planned.forEach((w, i) => { const a = toMin(w.time), b = toMin(r.time); const d = a == null || b == null ? 600 : Math.abs(a - b); if (d < bd) { bd = d; best = i; } });
+    if (best >= 0) mine[best].push(r);
+  }
+  return planned.map((w, i) => {
+    if (!mine[i].length && !dayOver && w.time && nowMin != null && toMin(w.time) > nowMin) return w;   // still ahead
+    return gradeOne(w, mine[i]);
+  });
 }
 function dayCompliance(planned, totals, dayOver, rideCount) {
   const graded = planned.filter(w => w.compliance);
@@ -389,7 +400,7 @@ async function calendar(from, to, o) {
       done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0) };
     // Once the day has a ride (or the day is over), each planned session is
     // graded against what Strava recorded.
-    const graded = (k < today || done.length) ? gradeDay(p, done, k < today) : p;
+    const graded = (k < today || done.length) ? gradeDay(p, done, k < today, (() => { const t = tz.parts(new Date()); return t.h * 60 + t.mi; })()) : p;
     days.push({ date: k, planned: graded, intervals: i, done,
       totals, compliance: dayCompliance(graded, totals, k < today, done.length) });
     if (days.length > 62) break;
@@ -589,4 +600,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { dedupeRides, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { dedupeRides, gradeDay, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
