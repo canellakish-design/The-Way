@@ -274,3 +274,17 @@ ok('ride minutes and the day type come from rides only: a lift and a run beside 
   assert.strictEqual(F.fuelDay(rides.concat(extras)), F.fuelDay(rides));
   assert.strictEqual(F.fuelDay(extras), 'rest');
 });
+
+ok('a second session later in the day moves the meals around it: dinner after an evening ride, lunch clear of an afternoon one', () => {
+  const morning = { name: 'Morning Ride', sport: 'Ride', time: '09:49', end_time: '11:12', minutes: 83, done: true };
+  const evening = { name: 'Zone 1, 60 min · mountain bike', sport: 'Ride', time: '18:00', minutes: 60 };
+  const plan = F.mealPlan('normal', [morning, evening]);
+  const dinner = plan.find(m => m.slot === 'dinner');
+  assert.ok(F.toMin(dinner.time) >= 19 * 60 + 30, 'dinner ' + dinner.time);
+  assert.ok(plan.some(m => m.slot === 'on the bike' && m.time === '18:00'), 'a bottle for the evening ride');
+  const afternoon = { name: 'Zone 1, 60 min · mountain bike', sport: 'Ride', time: '15:00', minutes: 60 };
+  const plan2 = F.mealPlan('normal', [morning, afternoon]);
+  const lunch = plan2.find(m => m.slot === 'lunch');
+  assert.ok(lunch && F.toMin(lunch.time) <= 14 * 60, 'lunch clear of the ride: ' + (lunch && lunch.time));
+  assert.ok(plan2.every((m, i) => i === 0 || F.toMin(m.time) >= F.toMin(plan2[i - 1].time)), 'in time order');
+});
