@@ -708,3 +708,11 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .carrow i{width:18px; height:18px; margin:-9px 0 0 -9px}
 .carrow i svg{width:11px; height:11px}
 @media (max-width:400px){ .chain .cbox .cnum{font-size:18px} .chain .cbox .cnum.long{font-size:14px} .chain .cbox .slabel{font-size:8px; letter-spacing:.4px} .chain .cbox .cweek{font-size:7.5px} }
+
+/* the arrows take a little real width so the badges do not sit on the numbers; labels never clip */
+.carrow, .chain .carrow{flex:0 0 12px; width:12px}
+.carrow i{width:17px; height:17px; margin:-8.5px 0 0 -8.5px}
+.chain .cbox .cnum{font-size:19px}
+.chain .cbox .slabel, .chain .cbox .cweek{overflow:visible; text-overflow:clip; max-width:none}
+@media (max-width:400px){ .chain .cbox .cnum{font-size:17px} .chain .cbox .cnum.long{font-size:13.5px} .chain .cbox .slabel{font-size:7.5px; letter-spacing:.3px} .chain .cbox .cweek{font-size:7px; letter-spacing:.4px} .chaintoday .tsp{flex-basis:12px} }
+.chaintoday .tsp{flex:0 0 12px}
