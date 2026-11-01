@@ -2332,7 +2332,7 @@ function macroBars(title, got, want, sub, logged, isDay){
   const M = [["carbs","carbs_g","var(--carb)"],["protein","protein_g","var(--red)"],["fat","fat_g","var(--fat)"]];
   return `<div class="mbars${isDay?" day":""}"><div class="mbhead"><b>${esc(title)}</b>${sub?`<span class="small"> · ${esc(sub)}</span>`:""}</div>
     ${M.map(([l,k,col]) => { const a = Math.round(got[k]||0), t = Math.round(want[k]||0); const pct = t > 0 ? Math.min(100, a / t * 100) : 0; const over = t > 0 && a > t * 1.2; const short = t > 0 ? Math.max(0, t - a) : 0;
-      return `<div class="mbar"><span class="mbl">${l}</span><span class="mbtrack"><span class="mbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="mbn"><b>${a}</b> / ${t}${logged && short ? `<i>${short} g short</i>` : over ? `<i class="ov">${a - t} g over</i>` : ""}</span></div>`; }).join("")}
+      return `<div class="xbar"><span class="xbl">${l}</span><span class="xbtrack"><span class="xbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="xbn"><b>${a}</b> / ${t}${logged && short ? `<i>${short} g short</i>` : over ? `<i class="ov">${a - t} g over</i>` : ""}</span></div>`; }).join("")}
   </div>`;
 }
 
