@@ -171,25 +171,7 @@ function mealPlan(day, sessions, target) {
     const b = restDay || day === 'high' ? 0.25 : 0.15, bC = restDay ? 0.15 : day === 'high' ? 0.30 : 0.08;
     const left = 1 - b - 0.10, leftC = 1 - bC - 0.08;
     out.push(bfast(9 * 60), lunch(13 * 60, Math.round(left * 0.45 * 100) / 100, Math.round(leftC * 0.4 * 100) / 100), dinner(18 * 60 + 30, Math.round(left * 0.55 * 100) / 100, Math.round(leftC * 0.6 * 100) / 100), snack(20 * 60 + 30));
-    // A second timed session later in the day: the meals already laid out step around it. Nothing
-  // lands inside it or in the hour before it; dinner never comes before an evening session ends;
-  // the second session gets its own bottle when its length calls for one.
-  const others = (sessions || []).filter(x => toMin(x.time) != null)
-    .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
-    .sort((a, b) => a.start - b.start).slice(1);
-  for (const s2 of others) {
-    const ob = onBike(Math.max(0, s2.end - s2.start), /vo2|40\s*\/\s*20|threshold|race/i.test(s2.x.name || ''));
-    if (ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
-    for (const m of out) {
-      if (m.extra || m.slot === 'on the bike') continue;
-      const tm = toMin(m.time);
-      if (tm >= s2.start - 60 && tm <= s2.end + 20) m.time = toHM(Math.round((tm < s2.start ? Math.max(11 * 60, s2.start - 120) : s2.end + 30) / 5) * 5);
-    }
-    const dn = out.find(m => m.slot === 'dinner');
-    if (dn && s2.end >= 17 * 60 && toMin(dn.time) < s2.end + 30) dn.time = toHM(Math.round((s2.end + 30) / 5) * 5);
-  }
-  out.sort((a, b) => toMin(a.time) - toMin(b.time));
-  return out;
+    return out;
   }
   const { start, end, x } = timed;
   const name = x.name || 'the ride';
@@ -254,6 +236,23 @@ function mealPlan(day, sessions, target) {
     out.push(after('dinner', Math.round((1 - (day === 'high' ? 0.25 : 0.15) - 0.27 - 0.10 - (lateSnack ? 0.10 : 0)) * 100) / 100,
       Math.round((1 - (day === 'high' ? 0.30 : 0.08) - (day === 'high' ? 0.25 : 0.30) - (day === 'high' ? 0.15 : 0.05) - (lateSnack ? 0.08 : 0)) * 100) / 100));   // carries what the low-carb breakfast did not
     if (lateSnack) out.push(snack(21 * 60));
+  }
+  // A second timed session later in the day: the meals already laid out step around it. Nothing
+  // lands inside it or in the hour before it; dinner never comes before an evening session ends;
+  // the second session gets its own bottle when its length calls for one.
+  const others = (sessions || []).filter(x => toMin(x.time) != null)
+    .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
+    .sort((a, b) => a.start - b.start).slice(1);
+  for (const s2 of others) {
+    const ob = onBike(Math.max(0, s2.end - s2.start), /vo2|40\s*\/\s*20|threshold|race/i.test(s2.x.name || ''));
+    if (ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
+    for (const m of out) {
+      if (m.extra || m.slot === 'on the bike') continue;
+      const tm = toMin(m.time);
+      if (tm >= s2.start - 60 && tm <= s2.end + 20) m.time = toHM(Math.round((tm < s2.start ? Math.max(11 * 60, s2.start - 120) : s2.end + 30) / 5) * 5);
+    }
+    const dn = out.find(m => m.slot === 'dinner');
+    if (dn && s2.end >= 17 * 60 && toMin(dn.time) < s2.end + 30) dn.time = toHM(Math.round((s2.end + 30) / 5) * 5);
   }
   return out.sort((a, b) => toMin(a.time) - toMin(b.time));
 }
