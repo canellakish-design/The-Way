@@ -831,3 +831,11 @@ ul.agenda.totals.aditems li, ul.agenda.totals.aditems li .n, .herecard .aditems 
 .psparkwrap{display:block; margin-top:4px}
 .plist .tag{flex-wrap:wrap; justify-content:flex-end; max-width:100%}
 .pspark{flex:none}
+
+/* the site's own check, one line under the chain; the lift table scrolls inside its card */
+.auditnote{margin:8px 2px 0; color:var(--muted)}
+.auditnote.flag{color:var(--amber)}
+.auditnote:empty{display:none}
+.jdouble{color:var(--amber); margin-top:6px}
+.periodwrap, table.period{max-width:100%}
+table.period{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch}

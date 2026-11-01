@@ -42,9 +42,11 @@ V.ride = async function(){
   const calDay = cal && cal.days && cal.days[0] || { planned: [], intervals: [], done: [] };
   // the planned ride for the day: the plan's own copy first (it can hold a course), else intervals.icu's
   const planned = (calDay.planned||[]).filter(x => !isLift(x.name) && !/weight/i.test(x.sport||""))
-    .map(x => ({ id: x.id, name: x.name, time: x.time || null, minutes: x.metrics ? Math.round(x.metrics.duration_s/60) : 60, course: x.course || null, hard: HARD.test(x.name||""), source: "plan", done: !!x.logged || !!(x.compliance && x.compliance.band !== "red") }))
+    .map(x => ({ id: x.id, name: x.name, time: x.time || null, minutes: x.metrics ? Math.round(x.metrics.duration_s/60) : 60, course: x.course || null, hard: HARD.test(x.name||""), source: "plan", compliance: x.compliance || null, done: !!x.logged || !!(x.compliance && x.compliance.band !== "red") }))
     .concat((calDay.intervals||[]).filter(x => !/weight/i.test(x.type||"")).map(x => ({ id: null, name: x.name, time: x.time || null, minutes: x.minutes || 60, course: null, hard: HARD.test(x.name||""), source: "intervals.icu", done: false })));
-  const ride = planned[0] || null;
+  for (const x of planned) x.ridden = !!x.compliance;
+  // the ride the page is about: the next one not yet ridden, else the last one of the day
+  const ride = planned.find(x => !x.ridden && !x.done) || planned[planned.length - 1] || null;
   const rec = scores && scores.recovery && scores.recovery.band ? scores.recovery.band : null;
   const energy = food && food.energy || null;
 
@@ -94,7 +96,7 @@ V.ride = async function(){
       <div class="gh"><div class="ghl">${hNow ? `Right now · ${esc(hlbl(nowH))}` : `Best of ${esc(dayName.toLowerCase())} · ${esc(hlbl(top.a))}–${esc(hlbl(top.a + 2))}`}</div>
         <div class="ghw">${hNow ? hDesc(hNow) : hDesc(w.hours.find(h => h.hour === top.a))}</div>
         ${gNow.why.length ? `<div class="small">${esc(gNow.why.join(" · "))}</div>` : `<div class="small">nothing against it</div>`}
-        ${ride && ride.time ? `<div class="ghr">${ride.done ? "Ridden" : "Your ride"} at ${esc(hm12(ride.time))}: ${rideG ? gradeBadge(rideG) : "—"}<span class="small">${esc(ride.name)}, ${ride.minutes} min</span></div>` : ""}
+        ${ride && ride.time ? `<div class="ghr">${ride.ridden || ride.done ? "Ridden" : "Your ride"} at ${esc(hm12(ride.time))}: ${rideG ? gradeBadge(rideG) : "—"}<span class="small">${esc(ride.name)}, ${ride.minutes} min${ride.ridden && ride.compliance ? `, ${esc(String(ride.compliance.basis || "").split(";")[0])}` : ""}</span></div>` : ""}
       </div></div>` : "";
 
   document.getElementById("ridePage").innerHTML = `
@@ -104,7 +106,7 @@ V.ride = async function(){
       ${w ? "" : `<div class="small">No forecast for this day yet.</div>`}
     </div>
     <div class="card"><h4>Best time to ride</h4>
-      ${ride ? `<div class="cue"><b>Planned:</b> ${esc(ride.name)}${ride.time ? ` at ${esc(hm12(ride.time))}` : ", no time yet"} · ${ride.minutes} min${ride.course ? ` · ${esc(ride.course.name)}` : ""}${ride.done ? " · ridden" : ""}${ride.time && !ride.done ? (() => { const g = gradeAt(hm2mm(ride.time)/60|0); const pct = pctAt(ride.time); const rg = w ? condGrade(w.hours.filter(h => h.hour >= (hm2mm(ride.time)/60|0) && h.hour < Math.max((hm2mm(ride.time)/60|0) + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60)))) : null; return `<div class="small">${gradeBadge(rg)}${g === "good" ? "Green outside at that hour" : g === "ok" ? "Marginal outside at that hour" : g === "bad" ? "Red outside at that hour: indoors, or move it" : "No forecast for that hour"}${pct != null ? ` · fuel ${pct}% at the start${pct >= need ? ", enough" : `, short of the ${need}% it wants`}` : ""}${(() => { const es = energy && (energy.sessions||[]).find(s => s.time === ride.time); return es && es.ready_at && !es.ready_now ? ` · ready at ${esc(hm12(es.ready_at))}` : ""; })()}</div>`; })() : ""}</div>` : `<div class="small">Nothing planned for this day.</div>`}
+      ${ride ? `<div class="cue"><b>${ride.ridden ? "Ridden" : "Planned"}:</b> ${esc(ride.name)}${ride.time ? ` at ${esc(hm12(ride.time))}` : ", no time yet"} · ${ride.minutes} min${ride.course ? ` · ${esc(ride.course.name)}` : ""}${ride.ridden && ride.compliance ? ` · ${esc(String(ride.compliance.basis || "").split(";")[0])}` : ride.done ? " · ridden" : ""}${ride.time && !ride.done ? (() => { const g = gradeAt(hm2mm(ride.time)/60|0); const pct = pctAt(ride.time); const rg = w ? condGrade(w.hours.filter(h => h.hour >= (hm2mm(ride.time)/60|0) && h.hour < Math.max((hm2mm(ride.time)/60|0) + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60)))) : null; return `<div class="small">${gradeBadge(rg)}${g === "good" ? "Green outside at that hour" : g === "ok" ? "Marginal outside at that hour" : g === "bad" ? "Red outside at that hour: indoors, or move it" : "No forecast for that hour"}${pct != null ? ` · fuel ${pct}% at the start${pct >= need ? ", enough" : `, short of the ${need}% it wants`}` : ""}${(() => { const es = energy && (energy.sessions||[]).find(s => s.time === ride.time); return es && es.ready_at && !es.ready_now ? ` · ready at ${esc(hm12(es.ready_at))}` : ""; })()}</div>`; })() : ""}</div>` : `<div class="small">Nothing planned for this day.</div>`}
       ${rec ? `<div class="small">Recovery ${esc(rec.word || "")}${rec.tone === "bad" ? ": keep it easy or move the hard day" : ""}.</div>` : ""}
       ${wins.length ? `<ul class="agenda wins">${wins.map(winRow).join("")}</ul>` : `<div class="small">No free window between ${hlbl(H0)} and ${hlbl(H1)}.</div>`}
       <div class="small glegend">Conditions grade, A+ a perfect day to F unridable: feels-like temperature (a point a degree under 55°, three a degree under 40°), wind on your bands (under 12 green, 12 to 15 amber, over 15 red), gusts, rain and daylight over the hours of the ride, leaning on the worst hour.</div>

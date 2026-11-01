@@ -837,4 +837,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, recheckDay, guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };
+module.exports = { attach, dayReport, recheckDay, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };
