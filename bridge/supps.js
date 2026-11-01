@@ -18,7 +18,7 @@ const hardName = s => HARD.test(String(s.name || '').replace(/intervals\.?\s*icu
 
 const RX = {
   creatine: { name: 'Creatine, 5 g', link: 'lift', every: 'day', why: 'every day, any time; it is the one for strength and the hard efforts' },
-  beetroot: { name: 'Beetroot shot', link: 'work', every: 'ride', before_min: 150, why: '2 to 3 hours before the ride' },
+  beetroot: { name: 'Beetroot (nitrate)', link: 'work', every: 'ride', before_min: 150, why: '2 to 3 hours before the ride; capsules count by their nitrate, 400 mg is the dose' },
   sodium_bicarb: { name: 'Sodium bicarbonate', link: 'work', every: 'hard', before_min: 75, why: '60 to 90 minutes before a hard session, with food; not on an easy day' },
   magnesium: { name: 'Magnesium glycinate, 200 mg', link: 'sleep', every: 'night', at_min: 21 * 60, why: 'an hour before bed' }
 };
