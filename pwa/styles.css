@@ -857,3 +857,8 @@ nav a.navback{font-family:var(--mono); font-size:12px; font-weight:700; letter-s
 nav a.navback.day{border-color:var(--ink)}
 header h1{user-select:none}
 .gobar{display:block; text-align:center; margin:0 0 12px; padding:12px 14px}
+
+/* ten links: rows of three at one width, the last row holding what is left */
+.crow .score.cbox, .crow .score.cbox[data-tone]{flex:0 0 calc((100% - 54px) / 3); max-width:calc((100% - 54px) / 3)}
+.chaintoday .score.tcell, .chaintoday .score.tcell[data-tone]{flex:0 0 calc((100% - 54px) / 3); max-width:calc((100% - 54px) / 3)}
+.mbars.day{border-top:none; margin-top:4px}

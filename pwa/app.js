@@ -1063,7 +1063,7 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    target is where the chain breaks; the line under the row says so. The
    boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
    still open. */
-const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
+const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -1075,7 +1075,7 @@ function chainHTML(){
   const row = (links, first) => `<div class="crow"><span class="rlab">week</span>${links.map((l, i) => `${i ? `<span class="carrow" data-k="${links[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}${box(l)}`).join("")}</div>
     <div class="chaintoday"><span class="rlab">today</span>${links.map((l, i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}${cell(l)}`).join("")}</div>`;
   // three rows of three, an arrow wrapping round after the first two
-  const rows = [CHAIN.slice(0, 3), CHAIN.slice(3, 6), CHAIN.slice(6)];
+  const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));   // threes; the last row holds what is left
   return rows.map((r, i) => `${row(r)}${i < rows.length - 1 ? `<div class="carrow cwrap" data-k="${r[r.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>` : ""}`).join("");
 }
 function todayCellsHTML(){ return ""; }
@@ -1099,10 +1099,10 @@ function drawProgress(v){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { plan: "ahead", sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
+  const UNIT = { plan: "ahead", fuel: "fed", sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 3); n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
@@ -1127,6 +1127,7 @@ function paintChain(c){
 // what today's cell says for each link: the number, a word, and a tone of its own
 function todayCell(ck, L){
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
+  if (ck === "fuel") return { num: L.today == null ? "—" : `${L.today}%`, word: L.today == null ? "" : `${L.today_word || ""}${L.legs_today != null ? " · legs " + L.legs_today : ""}`, tone: L.today_tone || "none" };
   if (ck === "plan") return { num: L.today ? `${L.today}` : "—", word: L.today_word || "rest", tone: L.today_state || "none" };
   if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? (L.today_word || "") : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
@@ -1872,14 +1873,16 @@ V.today = async function(){
 
   const row = (n, v)=> `<li><span class="n">${n}</span><span class="tag">${v}</span></li>`;
   // the button at the top of a box's detail: the page where that link of the chain is worked on
-  const GO = { plan:["calendar","Open the calendar"], hydration:["live","Open Live: hydration and fuel"], food:["food","Open Food: log a meal, the plan, the journal"], micros:["food","Open Food: log a meal, the plan, the journal"],
+  const GO = { fuel:["live","Open Live: fuel through the day"], plan:["calendar","Open the calendar"], hydration:["live","Open Live: hydration and fuel"], food:["food","Open Food: log a meal, the plan, the journal"], micros:["food","Open Food: log a meal, the plan, the journal"],
     lift:["lift","Open Lift: the next session"], workouts:["ride","Open Ride: when and where to ride"], training:["ride","Open Ride"] };
   const goBar = k => GO[k] ? `<a class="btn primary gobar" href="#${GO[k][0]}">${GO[k][1]} ›</a>` : "";
+  // the numbers and the graph first, then the way to the page, then the explanation
+  const withGo = (html, k) => { const g = goBar(k); if (!g) return html; const marks = ['<div class="rowbtns">', '<a class="btn', '<details class="why">'].map(m => html.indexOf(m)).filter(i => i > 0); if (!marks.length) return html + g; const i = Math.min(...marks); return html.slice(0, i) + g + html.slice(i); };
   const drawScoreDetail = ()=>{
     const box = document.getElementById("scoreDetail");
     if (!box) return;
     view.querySelectorAll(".score").forEach(b => b.classList.toggle("on", b.dataset.k === openScore));
-    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep" && openScore !== "lift")){ box.hidden = true; box.innerHTML = ""; return; }
+    if (!openScore || (!scoresData && openScore !== "food" && openScore !== "weight" && openScore !== "bodyfat" && openScore !== "micros" && openScore !== "hydration" && openScore !== "workouts" && openScore !== "sleep" && openScore !== "lift" && openScore !== "fuel" && openScore !== "plan")){ box.hidden = true; box.innerHTML = ""; return; }
     const d = scoresData, strava = d && d.sources && d.sources.strava && d.sources.strava.connected;
     let html = "";
     if (openScore === "plan"){
@@ -1887,9 +1890,18 @@ V.today = async function(){
       html = `<h4>Plan · the week ahead</h4>
         ${L && L.days ? `<ul class="agenda totals plandays">${L.days.map(d => `<li><span class="n"><b>${esc(new Date(d.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}</b>${d.rides.length || d.lifts.length ? `<span class="small plines">${d.rides.map(r => `${r.time ? esc(hm12(r.time)) + " · " : ""}${esc(r.name.replace(/^Zwift - Intervals icu: /i, ""))}${r.time ? "" : " · <i>no time</i>"}`).concat(d.lifts.map(l => `${l.time ? esc(hm12(l.time)) + " · " : ""}${esc(l.name)} · lift`)).join("<br>")}</span>` : `<span class="small plines">rest</span>`}</span><span class="tag">${d.ride_min ? `${d.ride_min} min` : ""}</span></li>`).join("")}</ul>
           <div class="small">${L.ride_min} of ${L.ride_target_min} minutes of riding, ${L.lifts} of 5 lifts${L.untimed ? `, ${L.untimed} ride${L.untimed === 1 ? "" : "s"} without a start time` : ""}. ${esc(L.basis)}.</div>` : `<div class="small">No calendar read yet.</div>`}
-        <a class="btn" href="#calendar">Open the calendar</a>
         <details class="why"><summary>why it is first</summary><div class="small">The chain starts with the plan because nothing downstream can be judged against a week that was never laid out: a ride not on the calendar cannot be short, a lift not placed cannot be missed, and the food plan times itself to sessions that exist.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
+    }
+    if (openScore === "fuel"){
+      const L = chainData && chainData.links && chainData.links.fuel, e = foodData && foodData.energy, B = window.foodBits || {};
+      html = `<h4>Fuel · today</h4>
+        ${e && B.energyHTML ? B.energyHTML(e) : `<div class="small">loading…</div>`}
+        ${L && L.rx ? `<div class="small"><b>Pre-ride supplements:</b> ${L.rx.today ? esc(L.rx.today) : "none due today"} · this week beetroot ${L.rx.beetroot ? `${L.rx.beetroot.taken} of ${L.rx.beetroot.due}` : "—"}${L.rx.sodium_bicarb && L.rx.sodium_bicarb.due ? `, bicarbonate ${L.rx.sodium_bicarb.taken} of ${L.rx.sodium_bicarb.due}` : ""}</div>` : ""}
+        <h4 style="margin-top:14px">The week</h4>
+        ${L && L.list && L.list.length ? `<ul class="agenda totals">${L.list.slice().reverse().map(c => row(`${c.time ? esc(hm12(c.time)) + " · " : ""}${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}${c.kind === "bottle" ? " <span class='small'>· on the bike</span>" : ""}`, `<b style="color:${toneC(c.ok ? "good" : c.near ? "warn" : "bad")}">${c.kind === "bottle" ? `${c.got_g} of ${c.plan_g} g` : `${c.pct}% of ${c.need}%`}</b>`)).join("")}</ul>
+          <div class="small">${L.ok} of ${L.checks} checks met. ${esc(L.basis)}.</div>` : `<div class="small">No rides this week to check yet.</div>`}`;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; if (e && B.wireEnergy) B.wireEnergy(box, e, ()=> refreshFood()); return;
     }
     if (openScore === "sleep"){
       const L = chainData && chainData.links && chainData.links.sleep;
@@ -1897,22 +1909,21 @@ V.today = async function(){
         ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
           <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
     }
     if (openScore === "lift"){
       const L = chainData && chainData.links && chainData.links.lift;
       html = `<h4>Lifting · the week</h4>
         ${L ? `<ul class="agenda totals">${(L.week_list || []).slice().reverse().map(x => row(`${esc(x.date.slice(5).replace("-", "/"))} · ${esc(x.name)}`, `${(x.volume_lb / 1000).toFixed(1)}k lb`)).join("") || `<li><span class="n">Nothing logged this week</span><span class="tag">0 of ${L.target}</span></li>`}</ul>
           <div class="small">${L.sessions} of ${L.target} sessions. ${esc(L.basis)}.</div>` : `<div class="small">loading…</div>`}
-        <div class="rowbtns"><a class="btn primary" href="#lift">The Lift tab</a></div>
         <details class="why"><summary>how it is coloured</summary><div class="small">Sessions logged in the last seven days against the plan's five. Green at four or five, amber at three, red at two or fewer. Grey before the first session is saved and through a deload week (every ninth). In the first week the count is judged against the sessions due so far, so two by Wednesday is green, not red. It does not add to fitness (CTL), which is a riding number; it shows up as strength on the Lift tab and, over months, as power on the bike.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
     }
     if (openScore === "micros"){
       const B = window.foodBits || {};
       html = `<h4>Micronutrients · this week</h4>${B.microHTML ? B.microHTML(foodData && foodData.micros, foodData) : `<div class="small">loading…</div>`}
         <details class="why"><summary>how it's scored</summary><div class="small">Thirteen nutrients against their daily targets, averaged; today owes only the share of the day reached so far. Iron and zinc are suggested only after a week low.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false;
+      box.innerHTML = withGo(html, openScore); box.hidden = false;
       if (B.wireMicro) B.wireMicro(box, async ()=>{ await refreshScores(); refreshFood(); });
       return;
     }
@@ -1930,14 +1941,14 @@ V.today = async function(){
         </ul>`}
         <a class="btn primary" href="#calendar">The calendar</a> <a class="btn" href="#zones">Training zones</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
     }
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
       html = `<h4>Hydration · today</h4>
         ${h && h.series && window.foodBits ? foodBits.hydrationHTML(h) : h ? `<ul class="agenda totals">${(h.drinks||[]).map(d => row(d.time ? hm12(d.time) : "drink", `${esc(d.name)} · ${d.ml} ml`)).join("")}</ul><div class="small">${esc(h.note || "")}</div>` : `<div class="small">bridge unreachable</div>`}
-        <div class="rowbtns"><a class="btn primary" href="#live">Live fuel and hydration</a> <a class="btn" href="#food">Snap a drink</a></div>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
+        <div class="rowbtns"><a class="btn" href="#food">Log a drink</a></div>`;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; if (h && h.series && window.foodBits) foodBits.wireHydration(box, h); return;
     }
     if (openScore === "bodyfat"){
       const w = bodyData, c = w && w.composition;
@@ -1945,17 +1956,16 @@ V.today = async function(){
       html = `<h4>Body fat</h4>
         ${c ? `<ul class="agenda totals">${rows}</ul><div class="small">From the Withings scale, ${esc(new Date(c.at).toLocaleDateString("en-US", { month: "short", day: "numeric" }))}. Moves are the 7-day mean against the week before.</div>` : `<div class="small">${w && w.withings_connected ? "The scale has not reported body fat yet." : "Body fat needs the Withings scale."}</div>`}
         <details class="why"><summary>how it's read</summary><div class="small">A bioimpedance reading swings a point or two with water alone, so the tile's word comes from the weekly mean, not the day. Losing fat while the lean rows hold is the program working.</div></details>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; return;
     }
     if (openScore === "weight"){
       html = bodyHTML(bodyData) + `<div class="small">Latest reading; the word is the week-over-week move of the 7-day average.</div>`;
-      box.innerHTML = goBar(openScore) + html; box.hidden = false; wireBody(box); return;
+      box.innerHTML = withGo(html, openScore); box.hidden = false; wireBody(box); return;
     }
     if (openScore === "food"){
       const c = complianceData;
       html = `<h4>Food · compliance</h4>
         ${c ? complianceHTML(c, foodData) : `<div class="small">bridge unreachable</div>`}
-        <a class="btn primary" href="#food">Snap a meal</a>
         <details class="why"><summary>how it's scored</summary><div class="small">Half is the macros against what the plan says should be in by now, half is the journal against today's rules. 80 on target, 60 close.</div></details>`;
     } else if (openScore === "training"){
       const t = d.training;
@@ -2006,7 +2016,7 @@ V.today = async function(){
         ${w.auth_error && r.score != null && !garmin ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}
         <details class="why"><summary>how it's scored</summary><div class="small">${garmin ? "The Garmin's training readiness for the morning when it reports one; otherwise an estimate from HRV against your own 30-day baseline and last night's sleep, said so on the box." : "WHOOP's score for the night."} The verdict above the boxes follows your 7-day HRV against your own 28-day band: below it, easy; below it two days running, rest.</div></details>`;
     }
-    box.innerHTML = goBar(openScore) + html; box.hidden = false;
+    box.innerHTML = withGo(html, openScore); box.hidden = false;
     // A forced pull, for when the webhook didn't arrive. The passive read is
     // cached for ten minutes, so without this the only cure was waiting.
     const sync = document.getElementById("whoopSync");
@@ -2424,10 +2434,10 @@ function complianceHTML(c, food){
     const sub = logged ? `logged ${hm12(m.time_logged || m.time)}` : m.time < nowHM() ? `${hm12(m.time)} · nothing logged` : `at ${hm12(m.time)}`;
     return macroBars(slot, got, want, sub, logged);
   };
-  return `<div class="macros"><span class="mfuel">Compliance ${F.compliance && F.compliance.overall != null ? F.compliance.overall : (c.compliance.overall ?? "—")}</span>
-      <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}</span></div>
+  return `${macroBars("the day", { carbs_g: sum(entries, "carbs_g"), protein_g: sum(entries, "protein_g"), fat_g: sum(entries, "fat_g") }, c.target, `${sum(entries, "kcal")} of ${c.target.kcal} kcal`, true, true)}
     ${block("breakfast")}${block("lunch")}${block("dinner")}
-    ${macroBars("the day", { carbs_g: sum(entries, "carbs_g"), protein_g: sum(entries, "protein_g"), fat_g: sum(entries, "fat_g") }, c.target, `${sum(entries, "kcal")} of ${c.target.kcal} kcal`, true, true)}
+    <div class="macros"><span class="mfuel">Compliance ${F.compliance && F.compliance.overall != null ? F.compliance.overall : (c.compliance.overall ?? "—")}</span>
+      <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}</span></div>
     ${snack}`;
 }
 // three bars: carbs, protein, fat. The track is the target, the fill what was eaten; under writes the gap, over past a fifth turns the fill amber-edged

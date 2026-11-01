@@ -22,7 +22,7 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'work', 'recovery', 'weight'];
+const ORDER = ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight'];
 const PLAN_RIDE_MIN = 360;      // a planned week: six hours of riding on the calendar, five lifts, every ride with a start time
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
@@ -38,6 +38,7 @@ function stateOf(key, v) {
     // bands map to it as: under 1% down (50 and up) fine, 1 to 1.5% behind, past that dry
     case 'water': return v >= 50 ? 'good' : v >= 25 ? 'warn' : 'bad';
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
+    case 'fuel': return v >= 0.8 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
     case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
     case 'recovery': return v >= 67 ? 'good' : v >= 50 ? 'warn' : 'bad';
     case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
@@ -65,6 +66,7 @@ function verdict(links) {
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
       water: () => `hydration: a balance score of ${L.water.week} on average this week; the scale wobbles with it.`,
       plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding on the calendar for the week ahead, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
+      fuel: () => `fuelling: ${L.fuel.ok} of ${L.fuel.checks} checks met (rides started with enough in the tank, bottles on the longer rides, and the pre-ride supplements).`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
       lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
@@ -102,7 +104,24 @@ function recoveryState(o) {
 }
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 4;   // bump when what a row holds changes; older rows are re-read
+const ROW_V = 5;   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
+// Fuel for a day: each ride started with what it needs in the tank, and on a ride of 75 minutes or more
+// the bottles carried at least 60% of the planned carbs. A lift asks little of the tank and is not checked.
+function fuelChecks(r) {
+  const out = [];
+  const e = r.energy || {};
+  for (const s of (e.starts || [])) {
+    if (/lift|weight|strength|push|pull|upper|legs|pump|\brun\b|treadmill/i.test(s.name || '')) continue;
+    out.push({ kind: 'start', name: s.name, time: s.time, ok: !!s.ok, near: !!s.near, pct: s.pct, need: s.need, legs_pct: s.legs_pct, need_legs: s.need_legs });
+  }
+  for (const m of (r.meals || []).filter(m => m.slot === 'on the bike')) {
+    const ride = (e.starts || []).find(s => s.time === m.time) || (e.starts || [])[0];
+    if (!ride || (ride.minutes || 0) < 75 || !(m.carbs_g > 0)) continue;
+    const got = m.match ? m.match.carbs_g || 0 : 0;
+    out.push({ kind: 'bottle', name: ride.name, time: m.time, ok: got >= 0.6 * m.carbs_g, near: got >= 0.4 * m.carbs_g, got_g: got, plan_g: m.carbs_g });
+  }
+  return out;
+}
 async function pastDay(date, store) {
   if (store.days[date] && store.days[date].v === ROW_V) return store.days[date];
   const food = require('./food');
@@ -115,7 +134,7 @@ async function pastDay(date, store) {
   const supps = (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key);
   const rideDay = (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || ''));
   const hardDay = (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, '')));
-  const row = { v: ROW_V, food: logged && r.compliance ? r.compliance.overall : null, logged, water: (h.drunk_ml || 0) > 0 && h.score != null ? h.score : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+  const row = { v: ROW_V, fuel: fuelChecks(r), food: logged && r.compliance ? r.compliance.overall : null, logged, water: (h.drunk_ml || 0) > 0 && h.score != null ? h.score : null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
     supps, ride: rideDay, hard: hardDay };
   store.days[date] = row; store.dirty = true;
   return row;
@@ -141,7 +160,7 @@ async function report() {
     const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
     const h = r.hydration || {};
     // today: the balance now, the same number the tile shows
-    todayRow = { food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+    todayRow = { fuel: fuelChecks(r).filter(c => c.kind === 'bottle' || (r.energy && (r.energy.starts || []).some(s => s.time === c.time && s.min <= (r.energy.now ? require('./food-math').toMin(r.energy.now.time) : 0)))), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
       ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
       hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))), micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
@@ -290,9 +309,21 @@ async function report() {
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
+    fuel: (() => {
+      const all = past.flatMap(d => (rows[d] && rows[d].fuel) || []).concat(todayRow ? (todayRow.fuel || []) : []);
+      // the pre-ride supplements are part of fuelling: each one due and taken is a check met
+      const rxDue = ['beetroot', 'sodium_bicarb'].reduce((a, k) => a + ((rxWeek[k] && rxWeek[k].due) || 0), 0);
+      const rxTaken = ['beetroot', 'sodium_bicarb'].reduce((a, k) => a + Math.min((rxWeek[k] && rxWeek[k].taken) || 0, (rxWeek[k] && rxWeek[k].due) || 0), 0);
+      const ok = all.filter(c => c.ok).length + rxTaken, checks = all.length + rxDue, score = checks ? ok / checks : null;
+      const fn = todayRow && todayRow.fuel_now;
+      return { week: score == null ? null : Math.round(score * 100), state: stateOf('fuel', score), ok, checks, list: all.slice(-12),
+        rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb, today: rxLine('fuel') || null },
+        today: fn ? fn.pct : null, today_word: fn ? (fn.band && fn.band.word) : null, today_tone: fn && fn.band ? fn.band.tone : null, legs_today: fn ? fn.legs_pct : null, unit: 'fed',
+        basis: 'each ride in the last seven days started with what it needs in the tank (the live fuel model), every ride of 75 minutes or more carried at least 60% of its planned carbs on the bike, and each pre-ride supplement due (beetroot before a ride, bicarbonate before a hard one) was taken; 80% of checks green, 60% amber' };
+    })(),
     work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, credit_min: work.credit_min,
       in_zone_pct: work.hr_min ? Math.round(work.hr_credit_min / work.hr_min * 100) : null, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
-      today_word: rxLine('work') || null, rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb }, basis: 'minutes ridden against minutes of riding planned this week, each ride discounted by how far it strayed from its zone (a Zone 1 day wants 80% at 116 and under, a hard day 15% over threshold); the lifting is its own link' },
+      today_word: null, basis: 'minutes ridden against minutes of riding planned this week, each ride discounted by how far it strayed from its zone (a Zone 1 day wants 80% at 116 and under, a hard day 15% over threshold); the lifting is its own link' },
     // five a week on the seven-day clock, no grace week: none lifted is a broken link. A deload week stays grey.
     lift: { week: Math.round(lift.sessions / lift.target * 100),
       state: lift.deload ? 'none' : stateOf('lift', lift.sessions / lift.target),

@@ -424,6 +424,8 @@ async function liveFuel(date, entries, g, nowMin) {
   const taps = await getJSON('fuel-legs', { rides: [] });
   const cal = EM.calibrate(taps.rides);
   const energy = EM.model(Object.assign({ entries, meals: planMeals, sessions: g.sessions, now_min: nowMin, ftp: st.ftp, cal }, EM.carryOver(prev)));
+  // the supplements taken today sit on the curve where they were taken: no carbs, but part of the fuelling
+  energy.supps = entries.filter(e => e.supplement && e.time).map(e => ({ time: e.time, min: F.toMin(e.time), name: e.name, key: e.key || null }));
   const end = { quick_end_g: energy.quick_end_g, legs_end_g: energy.legs_end_g, at: Date.now() };
   const was = days.days[date];
   if (!was || was.quick_end_g !== end.quick_end_g || was.legs_end_g !== end.legs_end_g) {

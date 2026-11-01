@@ -106,7 +106,7 @@ function energyHTML(e){
   const c = curveSVG({ series: e.series, val: p=>p.pct, lo: 0, hi: 100, col: p=>fuelCol(p.pct),
     band: e.series[0].lo != null ? (p=>[p.lo, p.hi]) : null, extra: e.series[0].legs_pct != null ? (p=>p.legs_pct) : null,
     sessions: (e.sessions||[]).map(s => ({ min: s.min, end_min: s.end_min, name: s.name, col: s.band ? fuelCol(s.band.key==="green"?100:s.band.key==="yellow"?50:0) : null })),
-    dots: (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return { min: m.min, val: p.pct, filled: m.logged && (m.carbs_g > 0 || !m.protein_only), title: `${hm12(m.time)} ${m.name||""} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}` }; }),
+    dots: (e.meals||[]).map(m => { const p = e.series.find(x => x.m >= m.min) || e.series[e.series.length-1]; return { min: m.min, val: p.pct, filled: m.logged && (m.carbs_g > 0 || !m.protein_only), title: `${hm12(m.time)} ${m.name||""} ${m.carbs_g} g carbs${m.protein_g?`, ${m.protein_g} g protein`:""}` }; }).concat((e.supps||[]).filter(x => x.min != null).map(x => { const p = e.series.find(q => q.m >= x.min) || e.series[e.series.length-1]; return { min: x.min, val: p.pct, filled: false, title: `${hm12(x.time)} ${x.name}` }; })),
     nowMin, guides: [35,60] });
   const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
@@ -116,6 +116,7 @@ function energyHTML(e){
     ${c.svg}
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}
+    ${(e.supps||[]).length ? `<div class="small">Supplements: ${(e.supps||[]).map(x => `${esc(hm12(x.time))} ${esc(String(x.name).replace(/,.*$/, ""))}`).join(" · ")}</div>` : ""}
     ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
     ${e.legs_tap?legsTapHTML(e.legs_tap):""}
     <details class="why"><summary>what it counts</summary><div class="small">Two stores. The line is the quick store, liver and blood, what a hard effort runs on and what bonking empties: about 110 g full, half that after a night's sleep. The thin line is the legs, muscle glycogen, which only a ride drains and only a day refills; it carries over from yesterday. Each meal's carbs arrive as the stomach empties, slower with fat and protein; protein adds about a sixth of its weight as glucose over the afternoon, so a salmon dinner is a hollow dot and a small slow rise. On the bike a quarter of the carbohydrate burned comes from the quick store, the rest from the legs; carbs eaten on the bike count up to 60 g an hour, 90 with Tailwind. The faint band is the model's own uncertainty. Fat is not drawn: it is the fuel Zone 1 burns, which is why Zone 1 needs only a quarter of a tank.</div></details>

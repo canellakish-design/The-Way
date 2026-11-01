@@ -212,13 +212,15 @@ function model(o) {
     return { name: s.name, time: s.time, slid_from: s.slid_from, min: s.min, end_min: s.end_min, minutes: s.minutes, g_per_h: s.g_per_h, pct: p.pct, g: p.g, legs_pct: p.legs_pct,
       need: need.quick, need_legs: need.legs, band: b, advice, feed, ready_at: readyPt ? readyPt.t : null, ready_now: quickOk };
   });
+  // every session's start, past ones included: what the Fuel link reads for a day already gone
+  const starts = sessions.map(s => { const p = at(s.min), need = s.need; return { name: s.name, time: s.time, min: s.min, minutes: s.minutes, hard: s.hard, pct: p.pct, legs_pct: p.legs_pct, need: need.quick, need_legs: need.legs, ok: p.pct >= need.quick && p.legs_pct >= need.legs, near: p.pct >= need.quick - 12 && p.legs_pct >= need.legs - 12 }; });
   const lows = []; let runLow = null;
   for (const p of series) { if (p.m < now) continue; if (p.pct < 35) { if (!runLow) runLow = { from: p.t, to: p.t }; else runLow.to = p.t; } else { if (runLow) lows.push(runLow); runLow = null; } }
   if (runLow) lows.push(runLow);
   const first = upcoming.find(s => s.advice);
   return { series, now: { time: toHM(now), pct: nowPt.pct, g: nowPt.g, legs_pct: nowPt.legs_pct, legs_g: nowPt.legs_g, band: band(nowPt.pct), legs_band: band(nowPt.legs_pct), arriving_g: arriving },
     peak: peak ? { time: peak.t, pct: peak.pct } : null,
-    sessions: upcoming, lows, meals, full_g: FULL_G, legs_full_g: LEGS_FULL_G, step: STEP,
+    sessions: upcoming, starts, lows, meals, full_g: FULL_G, legs_full_g: LEGS_FULL_G, step: STEP,
     quick_end_g: endPt.g, legs_end_g: endPt.legs_g, share, rest_g_h: restH,
     // a low stretch only matters when something hard is ahead of it; a rest day or a Zone 1 day is allowed to run low
     advice: first ? first.advice : (lows.length && lows[0].from !== toHM(now) && upcoming.some(s => s.need >= 40 && s.min > toMin(lows[0].from)) ? `Fuel runs low around ${say(toMin(lows[0].from))}; a carb snack an hour before.` : null) };

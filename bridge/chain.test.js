@@ -26,8 +26,8 @@ ok('verdict: the first link from the left that is off is the break; all good and
   assert.strictEqual(C.verdict(sleepy).break_at, 'sleep');
   const lowMicro = Object.assign({}, all, { micros: { week: 55, state: 'bad', gaps: ['iron', 'calcium'] } });
   const v3 = C.verdict(lowMicro); assert.strictEqual(v3.break_at, 'micros'); assert.ok(/low on iron, calcium/.test(v3.text), v3.text);
-  assert.deepStrictEqual(C.ORDER, ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'work', 'recovery', 'weight']);
-  assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
+  assert.deepStrictEqual(C.ORDER, ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight']);
+  assert.strictEqual(C.stateOf('fuel', 0.85), 'good'); assert.strictEqual(C.stateOf('fuel', 0.5), 'bad'); assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
   const unplanned = Object.assign({}, all, { plan: { week: 20, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 1 } });
   assert.ok(/breaks at planning: 60 of 360 minutes of riding on the calendar for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
