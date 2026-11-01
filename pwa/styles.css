@@ -839,3 +839,6 @@ ul.agenda.totals.aditems li, ul.agenda.totals.aditems li .n, .herecard .aditems 
 .jdouble{color:var(--amber); margin-top:6px}
 .periodwrap, table.period{max-width:100%}
 table.period{display:block; overflow-x:auto; -webkit-overflow-scrolling:touch}
+.plandays li{grid-template-columns:minmax(0,1fr) fit-content(30%)}
+.plandays .plines{display:block; margin-top:3px; line-height:1.45}
+.plandays .tag{font-family:var(--mono); color:var(--muted); white-space:nowrap}
