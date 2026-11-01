@@ -281,7 +281,8 @@ ok('a second session later in the day moves the meals around it: dinner after an
   const plan = F.mealPlan('normal', [morning, evening]);
   const dinner = plan.find(m => m.slot === 'dinner');
   assert.ok(F.toMin(dinner.time) >= 19 * 60 + 30, 'dinner ' + dinner.time);
-  assert.ok(plan.some(m => m.slot === 'on the bike' && m.time === '18:00'), 'a bottle for the evening ride');
+  const long = F.mealPlan('normal', [morning, Object.assign({}, evening, { minutes: 120 })]);
+  assert.ok(long.some(m => m.slot === 'on the bike' && m.time === '18:00'), 'a bottle for a two-hour evening ride');
   const afternoon = { name: 'Zone 1, 60 min · mountain bike', sport: 'Ride', time: '15:00', minutes: 60 };
   const plan2 = F.mealPlan('normal', [morning, afternoon]);
   const lunch = plan2.find(m => m.slot === 'lunch');
