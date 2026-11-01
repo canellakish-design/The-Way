@@ -92,4 +92,17 @@ ok('a run or a lift is never graded against a Strava ride: logged once past, els
   assert.strictEqual(out[1].compliance.pct, 100); assert.ok(/logged by hand/.test(out[1].compliance.basis));
   assert.ok(!out[2].compliance, 'the lift ahead is not graded');
 });
+
+ok('a Zone 1 ride is graded on time and discipline: low load is the point; a trail gets room on heart rate', () => {
+  const z1 = { name: 'Zone 1, 60 min · mountain bike', sport: 'Ride', time: '15:00', metrics: { duration_s: 3600, tss: 30 } };
+  const hr = pct => ({ hr: { seconds: 3240, zones: { z1_min: 1, z2_min: 1, z3_min: 1 }, zone_pct: { z1: 100 - pct, z2: pct, z3: 0 } } });
+  const ride = (z, type) => ({ id: 9, time: '15:47', minutes: 54, tss: 17, type, analysis: hr(z) });
+  const a = gradeOne(z1, [ride(29, 'MountainBikeRide')]);
+  assert.strictEqual(a.compliance.pct, 90, JSON.stringify(a.compliance));
+  assert.strictEqual(a.compliance.band, 'yellow'); assert.strictEqual(a.compliance.zone_over, 29);
+  const b = gradeOne(z1, [ride(15, 'MountainBikeRide')]);
+  assert.strictEqual(b.compliance.band, 'green'); assert.strictEqual(b.compliance.zone_over, null);
+  const road = gradeOne({ name: 'Zone 1, 60 min', sport: 'Ride', time: '07:00', metrics: { duration_s: 3600, tss: 30 } }, [ride(15, 'Ride')]);
+  assert.strictEqual(road.compliance.band, 'yellow', 'a road Zone 1 ride keeps the tighter line');
+});
 console.log(n + ' passed');

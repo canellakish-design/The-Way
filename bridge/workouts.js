@@ -230,7 +230,7 @@ function dedupeRides(rides) {
   return out;
 }
 async function stravaDone(from, to, st, o) {
-  const key = 'calendar-strava-cache';
+  const key = 'calendar-strava-cache-v2';   // v2: estimated power no longer read as power
   const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
   const maxAge = o && o.max_age_ms > 0 ? Math.min(TTL_MS, o.max_age_ms) : TTL_MS;
@@ -250,11 +250,14 @@ async function stravaDone(from, to, st, o) {
     // TSS estimate: NP from Strava's weighted average power if there is one,
     // otherwise the heart-rate method against threshold. Labelled as such.
     let tss = null, basis = null;
-    if (a.weighted_average_watts) { const IF = a.weighted_average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'power'; }
+    // a ride with no power meter gets an estimate from Strava (device_watts false): speed and weight guessing at watts,
+    // badly off on a trail. Only measured power is power; otherwise heart rate tells the load.
+    const measured = a.device_watts === true;
+    if (measured && a.weighted_average_watts) { const IF = a.weighted_average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'power'; }
     // Strava only reports a weighted average on some rides; a plain average
     // still beats scoring the ride as nothing (it reads a little low on a
     // variable ride, which is the honest direction to be wrong in).
-    else if (a.average_watts) { const IF = a.average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'average power'; }
+    else if (measured && a.average_watts) { const IF = a.average_watts / st.ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = 'average power'; }
     // No power: Banister's TRIMP from the average heart rate, scaled so an
     // hour at threshold scores 100 (the HRSS recipe; r ≈ 0.88 against power
     // TSS in Hayes & Quinn). The old linear heart-rate-reserve square
@@ -263,8 +266,8 @@ async function stravaDone(from, to, st, o) {
     return { id: a.id, date, time: String(a.start_date_local || '').slice(11, 16), name: a.name || 'Activity',
       type: a.sport_type || a.type || null, minutes: Math.round(secs / 60),
       miles: a.distance ? Math.round(a.distance / 1609.34 * 10) / 10 : null,
-      avg_w: a.average_watts ? Math.round(a.average_watts) : null,
-      np_w: a.weighted_average_watts ? Math.round(a.weighted_average_watts) : null,
+      avg_w: measured && a.average_watts ? Math.round(a.average_watts) : null,
+      np_w: measured && a.weighted_average_watts ? Math.round(a.weighted_average_watts) : null,
       avg_hr: a.average_heartrate ? Math.round(a.average_heartrate) : null,
       tss, tss_basis: basis };
   }).filter(r => r.date >= wfrom && r.date <= wto);
@@ -318,7 +321,9 @@ function gradeOne(w, rides) {
   const tPct = plannedMin ? doneMin / plannedMin : 1;
   const hasLoad = rides.some(r => r.tss != null);
   const lPct = hasLoad && plannedTss ? doneTss / plannedTss : null;
-  const both = lPct == null ? [tPct] : [tPct, lPct];
+  const z1 = /zone\s*1|z1/i.test(String(w.name || ''));
+  // a Zone 1 ride under its planned load is the point, not a miss: time is the measure, and the zone check below is the discipline
+  const both = lPct == null || (z1 && lPct < tPct) ? [tPct] : [tPct, lPct];
   const frac = both.every(x => x > 1) ? Math.max(...both) : Math.min(...both);
   const pct = Math.round(100 * frac);
   let band = bandOf(pct);
@@ -326,17 +331,20 @@ function gradeOne(w, rides) {
   // A Zone 1 ride is also judged on discipline: the share of it under VT1.
   // Elite logs put a Zone 1 session at 0 to 2% above the ceiling; up to 10%
   // passes here, 10 to 20% is a warning, more is a different ride.
-  if (/zone\s*1|z1/i.test(String(w.name || '')) && withHr.length && band !== 'red') {
+  let zone = null;
+  if (z1 && withHr.length && band !== 'red') {
     const secs = withHr.reduce((s, r) => s + (r.analysis.hr.seconds || 0), 0);
     const under = withHr.reduce((s, r) => s + (r.analysis.hr.zone_pct.z1 / 100) * (r.analysis.hr.seconds || 0), 0);
     const over = secs ? Math.round(100 - under / secs * 100) : null;
     if (over != null) {
-      const zb = over <= 10 ? 'green' : over <= 20 ? 'yellow' : 'red';
-      if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) band = zb;
-      basis += `; ${over}% at ${R.HR.vt1} bpm or above`;
+      // on a trail the climbs lift heart rate whatever the legs do: a mountain bike gets more room
+      const trail = /mountain|\bmtb\b|trail/i.test(String(w.name || '')) || rides.some(r => /mountainbike|gravel/i.test(String(r.type || '')));
+      const zb = over <= (trail ? 20 : 10) ? 'green' : over <= (trail ? 35 : 20) ? 'yellow' : 'red';
+      if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) { band = zb; zone = over; }
+      basis += `; ${over}% at ${R.HR.vt1} bpm or above${trail ? ' (trail: 20% passes)' : ''}`;
     }
   }
-  return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis } });
+  return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis, zone_over: zone } });
 }
 // Every planned session on the day is graded against the day's rides, each
 // ride going to the planned session whose start time is nearest, and only

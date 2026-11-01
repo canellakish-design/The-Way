@@ -1458,7 +1458,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     // read as an appointment, and an empty day looked packed.
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     const g = r.wid && WGRADE[r.wid];
-    const gradeWord = g ? (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "") : null;
+    const gradeWord = g ? (g.zone ? `above Z1 ${g.zone}%` : (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "")) : null;
     // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
     const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength|\brun\b|treadmill|zwift|trainer/i.test(r.title) && !/virtualride|^run$|walk|hike/i.test(r.sport||"");
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
@@ -1913,7 +1913,7 @@ V.today = async function(){
       const t = workoutsToday();
       const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
       // the same words the calendar uses: done, over, partly, short (a ride, but not enough), missed
-      const gradeWordOf = (p, rides) => p.band === "green" ? (p.pct > 120 ? "over" : "done") : p.band === "yellow" ? "partly" : p.band === "red" ? (rides ? "short" : "missed") : "done";
+      const gradeWordOf = (p, rides) => p.zone_over ? "above Z1" : p.band === "green" ? (p.pct > 120 ? "over" : "done") : p.band === "yellow" ? "partly" : p.band === "red" ? (rides ? "short" : "missed") : "done";
       html = `<h4>Workouts · today</h4>
         ${!t ? `<div class="small">bridge unreachable</div>` : `<ul class="agenda totals">
           ${t.planned.map(p => row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${p.minutes ? ` <span class="small">${p.minutes} min</span>` : ""}`,
@@ -2029,7 +2029,7 @@ V.today = async function(){
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
     drawScores();

@@ -69,7 +69,7 @@ V.calendar = async function(){
       return `<span class="pm">${window.kindIcon ? kindIcon(r.name, r.type) : ""}${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
         ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}`;
     };
-    const word = (c)=> c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
+    const word = (c)=> c.zone_over?"Above Z1":c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
     let ridesShown = false;
     for (const w of d.planned){
       const c = w.compliance;
