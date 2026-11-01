@@ -26,7 +26,7 @@ function sheet(){
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">Training and nutrition advisor</span><span><button class="linkish" id="vNew">new conversation</button> · <button class="linkish" id="vClose">close</button></span></div>
+    <div class="vhead"><span class="eyebrow">Training and nutrition advisor</span><span class="vlinks"><button class="linkish" id="vNew">new conversation</button><button class="vx" id="vClose" aria-label="Close">×</button></span></div>
     <div class="vthread" id="vThread"></div>
     <div class="vheard" id="vHeard"></div>
     <div class="vrow">${SR ? `<button class="primary big vhold" id="vHold">Hold to talk</button>` : ""}<button class="big" id="vType">Type</button></div>
@@ -43,6 +43,7 @@ function sheet(){
   const hold = document.getElementById("vHold");
   if (hold) wireHold(hold);
   s.addEventListener("click", e => { if (e.target === s) close(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !s.hidden) close(); });
   drawThread();
   return s;
 }
