@@ -679,3 +679,17 @@ ul.agenda li{grid-template-columns:64px minmax(0,1fr) minmax(84px,max-content)}
 ul.agenda li .tag{max-width:40%; white-space:normal; overflow-wrap:normal; word-break:normal; text-align:right; line-height:1.25}
 ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 @media (max-width:420px){ ul.agenda li{grid-template-columns:56px minmax(0,1fr) minmax(76px,max-content); gap:8px} }
+
+/* the chain in two rows: the week (boxes and arrows), then today as a bar under each box */
+.chainhead{display:flex; justify-content:space-between; align-items:baseline; font-family:var(--mono); font-size:8px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:10px 2px 4px}
+.chainhead.today{margin-top:8px}
+.chain .cbox .ctoday{display:none}
+.chaintoday{display:flex; align-items:stretch; gap:0}
+.chaintoday .tsp{flex:0 0 6px}
+.score.tcell, .score.tcell[data-tone]{flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; text-align:center; gap:2px; padding:5px 1px 3px; margin:0; background:transparent; border:0; border-top:3px solid var(--line); border-radius:0; box-shadow:none; color:var(--ink); font:inherit}
+.score.tcell[data-tone="good"]{border-top-color:var(--green)} .score.tcell[data-tone="warn"]{border-top-color:var(--amber)} .score.tcell[data-tone="bad"]{border-top-color:var(--red)}
+.score.tcell .snum{font-family:var(--mono); font-size:11px; font-weight:700; line-height:1.1; letter-spacing:0; margin:0; color:var(--ink); white-space:nowrap}
+.score.tcell[data-tone="good"] .snum{color:var(--green)} .score.tcell[data-tone="warn"] .snum{color:var(--amber)} .score.tcell[data-tone="bad"] .snum{color:var(--red)} .score.tcell[data-tone="none"] .snum{color:var(--muted)}
+.score.tcell .sword{font-size:6.5px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.score.tcell.on{outline:2px solid var(--ink); outline-offset:1px}
+.score.tcell:active{transform:none}

@@ -1043,7 +1043,12 @@ const CHAIN = [["sleep","sleep","Sleep"],["water","hydration","Hydration"],["foo
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 function chainHTML(){
-  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctoday"><span class="snum">—</span><span class="sword"></span><span class="ssub"></span></span></button>`).join("");
+  // row one is the week: the eight boxes and the arrows belong to the seven-day clock
+  return CHAIN.map(([ck, k, label], i) => `${i ? `<span class="carrow" data-k="${CHAIN[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span></button>`).join("");
+}
+function todayCellsHTML(){
+  // row two is today: a thin coloured bar under each box, in the same column, graded on its own
+  return CHAIN.map(([ck, k], i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}<button class="score tcell" data-k="${k}" data-ck="${ck}" data-tone="none"><span class="snum">—</span><span class="sword">&nbsp;</span></button>`).join("");
 }
 function paintChain(c){
   if (!c || !c.links) return;
@@ -1055,13 +1060,34 @@ function paintChain(c){
     const n = el.querySelector(".cnum"); n.textContent = num; n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
-    if (ck === "sleep"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : `${L.today} h`; sn.style.color = ""; sw.textContent = L.today_word || ""; }
-    if (ck === "recovery"){ const sw = el.querySelector(".sword"); if (L.today_word && sw) sw.textContent = L.today_word; }
-    if (ck === "lift"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today ? "✓" : L.started ? `${L.sessions}/${L.target}${L.pumps ? ` +${L.pumps}` : ""}` : "—"; sn.style.color = L.today ? "var(--green)" : ""; sw.textContent = L.today ? (L.today_word || "done") : (L.today_word || (L.pumps ? `+${L.pumps} pump` : "this week")); }
-    if (ck === "micros"){ const sn = el.querySelector(".snum"), sw = el.querySelector(".sword"); sn.textContent = L.today == null ? "—" : L.today; sw.textContent = L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""); }
+    // today's cell under the box: its own number, word and colour
+    const td = document.querySelector(`.tcell[data-ck="${ck}"]`);
+    if (td){
+      const t = todayCell(ck, L);
+      td.querySelector(".snum").textContent = t.num; td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
+      td.title = `${CHAIN.find(x => x[0] === ck)[2]} today: ${t.num}${t.word ? ", " + t.word : ""}`;
+    }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
   }
   const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
+  // the two row headers: the week's dates, and today with the day's type
+  const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+  const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `${day(-6)} – ${day(0)}`;
+  const th = document.getElementById("chainTodayHead"); if (th) th.textContent = `Today · ${D.toLocaleDateString("en-US", { weekday: "long" })}`;
+  const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? foodData.fuel_day : "";
+}
+// what today's cell says for each link: the number, a word, and a tone of its own
+function todayCell(ck, L){
+  const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
+  if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? "" : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
+  if (ck === "water"){ const w = L.today_word || ""; const tone = /topped|fine/.test(w) ? "good" : /behind/.test(w) ? "warn" : /dry/.test(w) ? "bad" : /much/.test(w) ? "warn" : "none"; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
+  if (ck === "food") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "" : (L.today >= 80 ? "on plan" : L.today >= 60 ? "near" : "off"), tone: band(L.today, 80, 60) };
+  if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word || ""), tone: band(L.today, 80, 60) };
+  if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "") : "none", tone: "none" };
+  if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
+  if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : ""), tone: L.today_band || "none" };
+  if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: L.today_word || "", tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
+  return { num: "—", word: "", tone: "none" };
 }
 function ringsHTML(){
   return RING_KEYS.map(k => `<button class="score ringtile" data-k="${k}">
@@ -1409,7 +1435,10 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
+    <div class="chainhead"><span>This week</span><span id="chainDates"></span></div>
     <div class="chain" id="scores">${chainHTML()}</div>
+    <div class="chainhead today"><span id="chainTodayHead">Today</span><span id="chainTodayKind"></span></div>
+    <div class="chaintoday" id="chainToday">${todayCellsHTML()}</div>
     <div class="chainword small" id="chainWord">&nbsp;</div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -1909,7 +1938,7 @@ V.today = async function(){
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
-      get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} }
+      get("/food/today", v => { foodData = v; HUB.food = v; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = v.fuel_day; }
         if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),

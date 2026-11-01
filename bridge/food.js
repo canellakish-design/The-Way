@@ -310,7 +310,7 @@ For each: one plain sentence, under 220 characters, spoken to him as "you" (neve
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-    body: JSON.stringify({ model: RECHECK_MODEL, max_tokens: 1500, fallbacks: 'default', output_config: { format: { type: 'json_schema', schema } }, messages: [{ role: 'user', content: prompt }] })
+    body: JSON.stringify({ model: RECHECK_MODEL, max_tokens: 6000, fallbacks: 'default', output_config: { effort: 'low', format: { type: 'json_schema', schema } }, messages: [{ role: 'user', content: prompt }] })
   });
   const j = await r.json();
   if (!r.ok) throw new Error('recheck ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
