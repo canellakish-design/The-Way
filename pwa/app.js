@@ -1164,8 +1164,9 @@ function dayRows(d, plan, isToday){
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
     // drinks with calories (a pint, a latte) never stand in for a meal, but they are in the day: their own row, graded
+    const inSlot = new Set((f.meals || []).flatMap(m => m.logged || []));   // a bottle on the bike is in its slot's row already
     for (const e of (f.entries || [])){
-      if (e.supplement || !e.time) continue;
+      if (e.supplement || !e.time || inSlot.has(e.id)) continue;
       const n = e.alcohol || 0;
       const drink = n > 0 || e.drink_only || (e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300);
       if (!drink || ((e.kcal || 0) < 100 && !n)) continue;
