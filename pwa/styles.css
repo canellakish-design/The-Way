@@ -694,6 +694,7 @@ ul.agenda li .n{min-width:0; overflow-wrap:break-word}
 .score.tcell .snum{font-family:var(--mono); font-size:15px; font-weight:700; line-height:1.1; letter-spacing:-.3px; margin:0; color:var(--ink); white-space:nowrap; font-variant-numeric:tabular-nums}
 .score.tcell[data-tone="good"] .snum{color:var(--green)} .score.tcell[data-tone="warn"] .snum{color:var(--amber)} .score.tcell[data-tone="bad"] .snum{color:var(--red)} .score.tcell[data-tone="none"] .snum{color:var(--muted)}
 .score.tcell .sword{font-size:8px; letter-spacing:.4px; text-transform:uppercase; color:var(--muted); max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-@media (max-width:400px){ .score.tcell .snum{font-size:13.5px} .score.tcell .sword{font-size:7.5px} }
+.score.tcell .snum.long{font-size:12.5px; letter-spacing:-.5px}
+@media (max-width:400px){ .score.tcell .snum{font-size:13.5px} .score.tcell .snum.long{font-size:11px} .score.tcell .sword{font-size:7.5px} }
 .score.tcell.on{outline:2px solid var(--ink); outline-offset:1px}
 .score.tcell:active{transform:none}

@@ -1052,7 +1052,7 @@ function todayCellsHTML(){
 }
 function paintChain(c){
   if (!c || !c.links) return;
-  const UNIT = { sleep: "night", food: "avg", micros: "avg", water: "score", work: "plan", lift: "plan", recovery: "band", weight: "lb/wk" };
+  const UNIT = { sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
   for (const [ck, k] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
@@ -1064,7 +1064,7 @@ function paintChain(c){
     const td = document.querySelector(`.tcell[data-ck="${ck}"]`);
     if (td){
       const t = todayCell(ck, L);
-      td.querySelector(".snum").textContent = t.num; td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
+      const sn = td.querySelector(".snum"); sn.textContent = t.num; sn.classList.toggle("long", String(t.num).length > 4); td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
       td.title = `${CHAIN.find(x => x[0] === ck)[2]} today: ${t.num}${t.word ? ", " + t.word : ""}`;
     }
     const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ ar.className = `carrow ${L.state || "none"}${c.break_at === ck ? " broken" : ""}`; ar.innerHTML = `<i>${c.break_at === ck ? CROSS : ARROW}</i>`; }
