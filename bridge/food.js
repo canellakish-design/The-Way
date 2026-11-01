@@ -388,7 +388,10 @@ async function dayReport(date) {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
-    meals: F.rollForward(planMeals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && !isDrink(e));
+    meals: F.rollForward(planMeals, entries).map(m0 => { const mine = entries.filter(e => e.slot === m0.slot); const food = mine.filter(e => !e.supplement && !isDrink(e));
+      // the slot's plan as it stood when its first plate was logged, if that plate carries one
+      const fro = food.map(e => e.plan).find(p => p && p.slot === m0.slot && p.kcal != null);
+      const m = fro ? Object.assign({}, m0, { kcal: fro.kcal, carbs_g: fro.carbs_g, protein_g: fro.protein_g, low_carb: !!fro.low_carb, what: fro.what || m0.what, frozen_at: fro.at || null }) : m0;
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
       return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
@@ -620,6 +623,8 @@ async function addPhoto(body) {
   };
   // A bottle or a glass on its own is a drink: it counts for hydration, not as a meal the rules judge.
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
+  // the plan as it stood when this was eaten: a meal is graded against that, never against a plan redrawn later in the day
+  entry.plan = (() => { const m = (g.meals || []).find(x => x.slot === entry.slot); return m && !entry.drink_only ? { slot: entry.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: entry.time } : null; })();
   const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
   entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.
@@ -662,6 +667,8 @@ async function addKnown(body) {
     place: b.place ? { name: String(b.place).slice(0, 80), brand: b.brand || null } : null, source: 'menu'
   };
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
+  // the plan as it stood when this was eaten: a meal is graded against that, never against a plan redrawn later in the day
+  entry.plan = (() => { const m = (g.meals || []).find(x => x.slot === entry.slot); return m && !entry.drink_only ? { slot: entry.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: entry.time } : null; })();
   const doc = await dayDoc(date);
   doc.entries.push(F.alcoholRule(entry));
   await setJSON(dayKey(date), doc);
@@ -752,6 +759,7 @@ function attach(app) {
       const doc = await dayDoc(date);
       const e = doc.entries.find(x => x.id === req.params.id);
       if (!e) return res.status(404).json({ error: 'no such entry' });
+      if (b.plan && typeof b.plan === 'object' && b.plan.kcal != null) e.plan = { slot: String(b.plan.slot || e.slot || ''), kcal: Math.round(+b.plan.kcal), carbs_g: Math.round(+b.plan.carbs_g || 0), protein_g: Math.round(+b.plan.protein_g || 0), low_carb: !!b.plan.low_carb, what: String(b.plan.what || '').slice(0, 200), at: String(b.plan.at || e.time || '') };
       for (const k of ['kcal', 'carbs_g', 'protein_g', 'fat_g']) if (b[k] != null && Number.isFinite(Number(b[k]))) e[k] = Math.max(0, Math.round(Number(b[k])));
       if (b.name) e.name = String(b.name).slice(0, 80);
       if (['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal)) e.meal = b.meal;
