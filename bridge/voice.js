@@ -74,8 +74,8 @@ async function context() {
     const t = day.target, a = day.actual;
     lines.push(`He weighs ${t.kg || 98} kg; planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}.`);
     lines.push(`Food day: ${day.fuel_day}. Whole-day target ${t.kcal} kcal, ${t.carbs_g} g carbs, ${t.protein_g} g protein, ${t.fat_g} g fat (${t.deficit ? `a ${Math.abs(t.deficit)} kcal deficit for weight loss` : 'no deficit today: recovery is low, eat to maintenance'}). Eaten so far: ${a.kcal} kcal, ${a.carbs_g} C / ${a.protein_g} P / ${a.fat_g} F in ${a.meals} meal(s). Still to eat today: ${Math.max(0, t.kcal - a.kcal)} kcal, ${Math.max(0, t.carbs_g - a.carbs_g)} C / ${Math.max(0, t.protein_g - a.protein_g)} P / ${Math.max(0, t.fat_g - a.fat_g)} F.`);
-    if (day.sessions.length) lines.push('Training today: ' + day.sessions.map(s => `${s.name}${s.time ? ' at ' + tz.hm12(s.time) : ''}${s.done ? ' (done)' : ' (planned)'}`).join('; ') + '.');
-    else lines.push('No training today.');
+    if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${s.done ? ' (done)' : ' (planned)'}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
+    else lines.push('No training today: no ride, no run, no lift. Do not name one.');
     if (day.cue) lines.push('Where the day stands: ' + day.cue.text);
     if (day.guidelines && day.guidelines.length) lines.push("Today's eating rules: " + day.guidelines.map(g => g.text).join(' ').slice(0, 400));
     if (day.meals && day.meals.length) lines.push('The meal plan: ' + day.meals.map(m => `${tz.hm12(m.time)} ${m.slot} (${m.carbs_g} C, ${m.protein_g || 0} P${(m.logged || []).length ? ', logged' + (m.match ? ', ' + m.match.word : '') : ''})`).join('; ') + '.');

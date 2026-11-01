@@ -66,7 +66,7 @@ ${o.text ? `He says: "${o.text}"` : ''}
 
 Judge every item against what he needs NEXT: the next slot of the plan (its calories, its carbs, which may be a cap on a low-carb slot, its protein), today's eating rules, and what is still due today. fits is yes when it serves the next slot, partly when it is acceptable, no when it works against the plan. why is one plain sentence. how_much is the portion to buy or order ("one", "the small", "half the bag").
 pick is the name of the single best item (a combination is allowed, written as one name), or "" if nothing here fits; place is the place it is at, or "".
-reply is spoken aloud: under 40 words, plain, one choice and the one reason that decides it, the way a coach would say it standing next to him, to him as "you" (never "he" or "his"). Times in 12-hour form.`;
+reply is spoken aloud: under 40 words, plain, one choice and the one reason that decides it, the way a coach would say it standing next to him, to him as "you" (never "he" or "his"). Times in 12-hour form. When you mention training, use only the sessions in TRAINING TODAY above, by their kind and time: a ride is a ride, never a run; no session that is not listed.`;
 }
 
 // Overpass: eating and shopping within 1.5 km, nearest first.
