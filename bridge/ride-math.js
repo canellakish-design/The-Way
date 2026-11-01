@@ -143,4 +143,23 @@ function powerSummary(watts, ftp) {
     seven_min: seven.map(c => r1(c / 60)) };
 }
 
-module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, veSummary, vo2Grade, zone1Grade, powerSummary };
+// Decoupling (Friel's Pw:HR): the ride after a five-minute warm-up split in two; power over heart
+// rate in each half; how far the second half's ratio fell. Under 5% is a built aerobic base.
+// Only a steady ride says anything (variability index under 1.15) and only one of an hour or more.
+function decoupling(watts, hr) {
+  const n = Math.min((watts || []).length, (hr || []).length);
+  if (n < 3600) return null;
+  const skip = 300, a = skip, mid = Math.floor((n + skip) / 2);
+  const seg = (from, to) => { let pw = 0, ph = 0, c = 0; for (let i = from; i < to; i++) { const w = Number(watts[i]), h = Number(hr[i]); if (!(w >= 0) || !(h > 30)) continue; pw += w; ph += h; c++; } return c ? { p: pw / c, h: ph / c, n: c } : null; };
+  const first = seg(a, mid), second = seg(mid, n);
+  if (!first || !second || first.n < 900 || second.n < 900) return null;
+  const ef1 = first.p / first.h, ef2 = second.p / second.h;
+  const all = seg(a, n);
+  let roll = 0; const q = []; let acc = 0, cnt = 0;
+  for (let i = a; i < n; i++) { const w = Math.max(0, Number(watts[i]) || 0); roll += w; q.push(w); if (q.length > 30) roll -= q.shift(); if (q.length === 30) { acc += Math.pow(roll / 30, 4); cnt++; } }
+  const np = cnt ? Math.pow(acc / cnt, 0.25) : all.p;
+  const vi = all.p > 0 ? np / all.p : null;
+  return { pct: Math.round((1 - ef2 / ef1) * 1000) / 10, ef: Math.round(all.p / all.h * 100) / 100, ef_first: Math.round(ef1 * 100) / 100, ef_second: Math.round(ef2 * 100) / 100,
+    vi: vi != null ? Math.round(vi * 100) / 100 : null, steady: vi != null && vi <= 1.15, minutes: Math.round(n / 60) };
+}
+module.exports = { HR, VO2_TARGET, hrSummary, hrSummaryFromZones, respSummary, veSummary, vo2Grade, zone1Grade, powerSummary, decoupling };

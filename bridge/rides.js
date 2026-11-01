@@ -109,6 +109,9 @@ async function analyze(ride, opts) {
     const watts = s && s.watts && s.watts.data;
     if (watts && watts.length) { out.power = R.powerSummary(Z.resample1Hz(time, watts), o.ftp); out.sources.power = 'Strava power stream'; }
     else out.sources.power = 'no power stream on Strava';
+    // power and heart rate on the same file: watts a beat, and the drift across the ride
+    if (watts && watts.length && hr && hr.length) { out.couple = R.decoupling(Z.resample1Hz(time, watts), Z.resample1Hz(time, hr)); }
+    else out.couple = null;
   } catch (e) { out.sources.hr = 'Strava: ' + e.message; out.error = e.message; }
   // 2. intervals.icu's copy of the Garmin file, for breathing and, failing Strava, heart rate
   let icuAct = null;
@@ -184,4 +187,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, analyze, forWindow };
+module.exports = { attach, analyze, forWindow, key };

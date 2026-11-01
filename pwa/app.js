@@ -1054,6 +1054,24 @@ function chainHTML(){
   return `${row(a)}<div class="carrow cwrap" data-k="${a[a.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>${row(b)}`;
 }
 function todayCellsHTML(){ return ""; }
+// the progress strip: four outcomes on a four-week clock, each with its eight-week line
+function drawProgress(v){
+  const el = document.getElementById("progress"); if (!el) return;
+  if (!v || !v.metrics){ el.hidden = true; return; }
+  const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)", none: "var(--muted)" };
+  const spark = (series, better) => { const pts = (series || []).map(p => p.v); const have = pts.filter(x => x != null); if (have.length < 2) return `<svg class="pspark" viewBox="0 0 80 24" aria-hidden="true"></svg>`;
+    const lo = Math.min(...have), hi = Math.max(...have), span = hi - lo || 1;
+    const xy = pts.map((y, i) => y == null ? null : [i / (pts.length - 1) * 76 + 2, 21 - (y - lo) / span * 18]).filter(Boolean);
+    return `<svg class="pspark" viewBox="0 0 80 24" aria-hidden="true"><path d="M${xy.map(p => p.join(" ")).join(" L")}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${xy[xy.length-1][0]}" cy="${xy[xy.length-1][1]}" r="2.4" fill="currentColor"/></svg>`; };
+  const fmt = (m, x) => x == null ? "—" : m.key === "ef" ? x.toFixed(2) : m.key === "decoup" ? `${x}%` : `${Math.round(x)}`;
+  const dword = m => m.delta == null ? (m.n && (m.n.now < 1 || m.n.before < 1) ? "not enough rides" : "no change") : m.delta === 0 ? "flat" : `${m.delta > 0 ? "+" : "−"}${fmt(m, Math.abs(m.delta))}${m.key === "tp" || m.key === "p5" ? " W" : ""} vs the 4 weeks before`;
+  el.innerHTML = `<h4>Progress · four weeks</h4>
+    <ul class="agenda totals plist">${v.metrics.map(m => `<li class="prow" style="color:${TC[m.state] || TC.none}"><span class="n"><b style="color:var(--ink)">${esc(m.label)}</b><span class="small"> ${esc(dword(m))}</span></span>
+      <span class="tag">${spark(m.series, m.better)}<b class="pnow" style="color:${TC[m.state] || TC.none}">${fmt(m, m.now)}</b><span class="small punit">${esc(m.unit)}</span></span></li>`).join("")}</ul>
+    <div class="small">${esc(v.word || "")}</div>
+    <details class="why"><summary>what it counts</summary><div class="small">${v.metrics.map(m => `<b>${esc(m.label)}:</b> ${esc(m.why)}.`).join(" ")} The line is the last eight weeks. Fitness (CTL) is not here: it is how much you did, not how the engine answered.</div></details>`;
+  el.hidden = false;
+}
 function paintChain(c){
   if (!c || !c.links) return;
   const UNIT = { sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
@@ -1444,6 +1462,7 @@ V.today = async function(){
     <div class="chain" id="scores">${chainHTML()}</div>
     <div class="chainword small" id="chainWord">&nbsp;</div>
     <div class="scoreverdict small" id="scoreVerdict"></div>
+    <div class="card progress" id="progress" hidden></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
@@ -1947,6 +1966,7 @@ V.today = async function(){
         if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
+      get("/progress", v => { drawProgress(v); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;

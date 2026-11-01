@@ -62,7 +62,7 @@ function verdict(links) {
       food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days, averaging ${L.food.week}.`,
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
       water: () => `hydration: a balance score of ${L.water.week} on average this week; the scale wobbles with it.`,
-      work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden.`,
+      work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
       lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
     }[first]();
@@ -184,14 +184,28 @@ async function report() {
     const cal = await calendar(dates[0], today);
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
     const isWeight = x => /weight|lift|strength/i.test(String(x.sport || x.type || ''));
+    // a ride counts by its minutes, discounted by how far it strayed from its zone: a Zone 1 day wants 80% of
+    // the ride at 116 and under, a hard day wants 15% of it over threshold; a ride with no heart rate counts whole
+    const HARD = /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i;
+    const Rd = require('./rides');
+    work.credit_min = 0; work.hr_min = 0; work.hr_credit_min = 0;
     for (const day of cal.days || []) {
       const planned = (day.planned || []).filter(w => !isWeight(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
         + (day.intervals || []).filter(e => !isWeight(e)).reduce((a, e) => a + (e.minutes || 0), 0);
-      const done = (day.done || []).filter(r => !isWeight(r)).reduce((a, r) => a + (r.minutes || 0), 0)
-        + (day.planned || []).filter(w => !isWeight(w) && w.logged).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0);
-      work.planned_min += planned; work.done_min += done; work.days.push({ date: day.date, planned_min: planned, done_min: done });
+      const hardDay = (day.planned || []).concat(day.intervals || []).some(w => HARD.test(String(w.name || '')));
+      let done = 0, credit = 0;
+      for (const r of (day.done || []).filter(r => !isWeight(r))) {
+        const mins = r.minutes || 0; done += mins;
+        let f = 1;
+        try { const a = r.id ? await getJSON(Rd.key(r.id), null) : null; const z = a && a.hr && a.hr.zone_pct;
+          if (z) { f = hardDay ? Math.min(1, z.z3 / 15) : Math.min(1, z.z1 / 80); work.hr_min += mins; work.hr_credit_min += mins * f; } } catch (e) { f = 1; }
+        credit += mins * f;
+      }
+      const logged = (day.planned || []).filter(w => !isWeight(w) && w.logged).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0);
+      done += logged; credit += logged;
+      work.planned_min += planned; work.done_min += done; work.credit_min += Math.round(credit); work.days.push({ date: day.date, planned_min: planned, done_min: done, credit_min: Math.round(credit) });
     }
-  } catch (e) { work = { planned_min: 0, done_min: 0, days: [] }; }
+  } catch (e) { work = { planned_min: 0, done_min: 0, credit_min: 0, days: [] }; }
   // lifts already on the calendar for the week ahead (the first week's word, before a session is logged)
   try {
     const { calendar } = require('./workouts');
@@ -245,15 +259,16 @@ async function report() {
   const notSynced = nights.length && nights[nights.length - 1].date !== today;
   const foodWeek = r0(avg(foodDays)), waterWeek = r0(avg(waterDays));
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date === today ? recs[recs.length - 1] : null;
-  const workRatio = work.planned_min > 0 ? work.done_min / work.planned_min : (work.done_min > 0 ? 1 : null);
+  const workRatio = work.planned_min > 0 ? (work.credit_min != null ? work.credit_min : work.done_min) / work.planned_min : (work.done_min > 0 ? 1 : null);
   const links = {
     sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
       rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
     food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
-    work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
-      today_word: rxLine('work') || null, rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb }, basis: 'minutes ridden against minutes of riding planned, this week; the lifting is its own link' },
+    work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, credit_min: work.credit_min,
+      in_zone_pct: work.hr_min ? Math.round(work.hr_credit_min / work.hr_min * 100) : null, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
+      today_word: rxLine('work') || null, rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb }, basis: 'minutes ridden against minutes of riding planned this week, each ride discounted by how far it strayed from its zone (a Zone 1 day wants 80% at 116 and under, a hard day 15% over threshold); the lifting is its own link' },
     // five a week on the seven-day clock, no grace week: none lifted is a broken link. A deload week stays grey.
     lift: { week: Math.round(lift.sessions / lift.target * 100),
       state: lift.deload ? 'none' : stateOf('lift', lift.sessions / lift.target),
