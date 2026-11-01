@@ -105,4 +105,10 @@ ok('a Zone 1 ride is graded on time and discipline: low load is the point; a tra
   const road = gradeOne({ name: 'Zone 1, 60 min', sport: 'Ride', time: '07:00', metrics: { duration_s: 3600, tss: 30 } }, [ride(15, 'Ride')]);
   assert.strictEqual(road.compliance.band, 'yellow', 'a road Zone 1 ride keeps the tighter line');
 });
+
+ok('a short ride above its zone is called short, not above Z1', () => {
+  const z1 = { name: 'Zone 1, 150 min', sport: 'VirtualRide', time: '09:45', metrics: { duration_s: 9000, tss: 76 } };
+  const r = gradeOne(z1, [{ id: 1, time: '09:49', minutes: 83, tss: 59, type: 'VirtualRide', analysis: { hr: { seconds: 4980, zones: { z1_min: 1, z2_min: 1, z3_min: 1 }, zone_pct: { z1: 76, z2: 21, z3: 3 } } } }]);
+  assert.strictEqual(r.compliance.band, 'red'); assert.strictEqual(r.compliance.zone_over, null); assert.ok(/24% at 117/.test(r.compliance.basis), r.compliance.basis);
+});
 console.log(n + ' passed');

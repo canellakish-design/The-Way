@@ -340,7 +340,8 @@ function gradeOne(w, rides) {
       // on a trail the climbs lift heart rate whatever the legs do: a mountain bike gets more room
       const trail = /mountain|\bmtb\b|trail/i.test(String(w.name || '')) || rides.some(r => /mountainbike|gravel/i.test(String(r.type || '')));
       const zb = over <= (trail ? 20 : 10) ? 'green' : over <= (trail ? 35 : 20) ? 'yellow' : 'red';
-      if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) { band = zb; zone = over; }
+      // the zone names the grade only when the time was there; a short ride is called short, its zone noted in the basis
+      if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) { if (band === 'green') zone = over; band = zb; }
       basis += `; ${over}% at ${R.HR.vt1} bpm or above${trail ? ' (trail: 20% passes)' : ''}`;
     }
   }
