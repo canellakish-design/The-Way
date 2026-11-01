@@ -143,6 +143,19 @@ ok('overall and band', () => {
 });
 
 
+ok('mealMatch: a light plate with its protein is never red; green when the day is already at its calories', () => {
+  const dinner = { slot: 'dinner', kcal: 725, carbs_g: 75, protein_g: 55 };
+  const shrimp = [{ kcal: 520, carbs_g: 15, protein_g: 112, assessment: { fits: 'yes' } }];
+  const alone = F.mealMatch(dinner, shrimp);
+  assert.strictEqual(alone.key, 'yellow', JSON.stringify(alone)); assert.ok(/carbs \d+% under/.test(alone.word), alone.word);
+  const full = F.mealMatch(dinner, shrimp, { day_kcal: 2400, target_kcal: 2020 });
+  assert.strictEqual(full.key, 'green', JSON.stringify(full)); assert.strictEqual(full.word, 'as planned'); assert.strictEqual(full.macros.word, 'light plate, day covered');
+  const noProtein = F.mealMatch(dinner, [{ kcal: 300, carbs_g: 10, protein_g: 12, assessment: { fits: 'yes' } }], { day_kcal: 2400, target_kcal: 2020 });
+  assert.notStrictEqual(noProtein.key, 'green');
+  const over = F.mealMatch(dinner, [{ kcal: 1400, carbs_g: 160, protein_g: 60 }], { day_kcal: 2400, target_kcal: 2020 });
+  assert.strictEqual(over.key, 'red');
+});
+
 ok('mealMatch: a plate within 20% is green, 40% yellow, further is red either way; protein only when short', () => {
   const plan = { kcal: 500, carbs_g: 60, protein_g: 30 };
   assert.strictEqual(F.mealMatch(plan, []), null);

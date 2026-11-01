@@ -422,7 +422,8 @@ function rollForward(meals, entries) {
   return out;
 }
 
-function mealMatch(plan, logged) {
+function mealMatch(plan, logged, ctx) {
+  // ctx: { day_kcal, target_kcal } — the day so far, so a light plate reads against the day it lands in
   // a bottle of water logged into a slot is not the meal; a bottle with carbs on the bike is
   const l = (logged || []).filter(e => e && !e.supplement && (!e.drink_only || (plan.slot === 'on the bike' && e.carbs_g >= 10)));
   if (!l.length) return null;
@@ -444,9 +445,17 @@ function mealMatch(plan, logged) {
   const miss = p => p.both ? (plan.rolled_out && p.off > 0 ? 0 : Math.abs(p.off)) : Math.max(0, -p.off);
   const worst = parts.reduce((a, p) => miss(p) > miss(a) ? p : a, parts[0] || { k: 'kcal', off: 0, both: true });
   const w = miss(worst);
-  const keyM = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
+  let keyM = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
   const dir = worst.off > 0 ? 'over' : 'under';
-  const wordM = keyM === 'green' ? 'macros on' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
+  let wordM = keyM === 'green' ? 'macros on' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
+  // A light plate that still brings its protein is never a red: under is a deficit, not a miss.
+  // When the day is already at its calories, the light plate is the right call and reads green.
+  const proteinIn = !(plan.protein_g > 0) || got.protein_g >= 0.8 * plan.protein_g;
+  if (worst.both && worst.off < 0 && !plan.low_carb && proteinIn && keyM !== 'green') {
+    const dayFull = ctx && ctx.target_kcal > 0 && ctx.day_kcal >= 0.95 * ctx.target_kcal;
+    if (dayFull) { keyM = 'green'; wordM = 'light plate, day covered'; }
+    else if (keyM === 'red') keyM = 'yellow';
+  }
   // The rules are the other half of the grade: the plate's assessment against
   // the day's guidelines (fits yes, partly, no). One grade, the worse of the
   // two, so the word on the card and the word at logging time agree.

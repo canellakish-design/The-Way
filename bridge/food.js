@@ -332,7 +332,7 @@ async function dayReport(date) {
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
     meals: F.rollForward(planMeals, entries).map(m => { const mine = entries.filter(e => e.slot === m.slot); const food = mine.filter(e => !e.supplement && !isDrink(e));
       const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
-      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine), time_logged: first ? first.time : null }); }),
+      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }),
     actual: Object.assign(actual, { meals: meals.length }), entries,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
