@@ -234,7 +234,9 @@
         <div class="hu-fields two">
           <div class="hu-field"><span class="k">Bed tonight</span><span class="n">9:45p</span><span class="u">pays down the week</span></div>
           ${mg ? `<div class="hu-field"><span class="k">Magnesium</span><span class="n hu-go">✓${mgAt ? " " + esc(hm12(mgAt)) : ""}</span><span class="u">taken · 200 mg</span></div>`
-            : `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n hu-hold">Due</span><span class="u">200 mg · tap to log</span></button>`}
+            : (() => { const d = new Date(), nowM = d.getHours() * 60 + d.getMinutes(), dueM = 20 * 60 + 45;   // an hour before the 9:45p bedtime
+                const due = nowM >= dueM - 30;
+                return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : "8:45p"}</span><span class="u">200 mg · ${due ? "tap to log" : "tonight · tap if taken"}</span></button>`; })()}
         </div>
         <div class="small">Magnesium an hour before bed.</div>
         <details class="ln-fold"><summary>Watch missed a night? Add it</summary>
