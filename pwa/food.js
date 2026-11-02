@@ -270,12 +270,14 @@ V.food = async function(){
     const bars = `<div class="mbars day">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0); const pct = g > 0 ? Math.min(100, a / g * 100) : 0; const over = g > 0 && a > g * 1.2; const left = Math.max(0, g - a);
         return `<div class="xbar"><span class="xbl">${l}</span><span class="xbtrack"><span class="xbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="xbn"><b>${a}</b> / ${g} g${over ? `<i class="ov">${a - g} g over</i>` : left ? `<i>${left} g to go</i>` : ""}</span></div>`; }).join("")}
       <div class="small fkline">${sum("kcal")} of ${t.kcal || "—"} kcal</div></div>`;
-    const nMeals = ents.filter(e => !e.drink_only).length, nDrinks = ents.filter(e => e.drink_only).length;
+    // food only here: drinks (water, coffee, beer, bottles) are listed and logged on the Hydration page; the bars above still count their calories
+    const foods = day.entries.filter(e => !e.drink_only), nMeals = foods.filter(e => !e.supplement).length, nDrinks = ents.filter(e => e.drink_only).length;
     const mEl = document.getElementById("fMacros");
     if (mEl) mEl.innerHTML = `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${bars}</div>`;
     el.innerHTML = `
-      <span class="eyebrow">Logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}${nDrinks?` · ${nDrinks} drink${nDrinks===1?"":"s"}`:""}</span>
-      <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet.":"Nothing logged that day."}</div></div>`}</div>`;
+      <span class="eyebrow">Food logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}</span>
+      ${nDrinks && isToday ? `<div class="small drinksnote">${nDrinks} drink${nDrinks===1?"":"s"} today, on the <a href="#hydration">Hydration page</a>.</div>` : ""}
+      <div class="journal">${foods.length ? foods.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet.":"Nothing logged that day."}</div></div>`}</div>`;
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
@@ -393,7 +395,7 @@ V.food = async function(){
       <div class="jname">${esc(e.name)} ${mt ? `<span class="fit" style="color:${toneC(tone)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a)}</div>
       <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}${m ? ` · the slot wanted ${m.kcal} kcal · ${m.carbs_g}C · ${m.protein_g}P` : ""}</div>
       ${mt && mt.macros && mt.rules ? `<div class="small">macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
-      <div>${esc(a.why)}</div></div>`;
+      <div>${esc(a.why)}</div>${e.drink_only ? `<div class="small">A drink: it is listed on the <a href="#hydration">Hydration page</a>.</div>` : ""}</div>`;
   };
   const wform = document.getElementById("writeForm");
   document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };

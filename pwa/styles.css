@@ -887,3 +887,4 @@ svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
 .fitcard .fitnum{font-family:var(--mono); font-size:30px; font-weight:700; line-height:1.1}
 .ctlspark{width:150px; height:52px; color:var(--ink); flex:none}
 .auditnote{margin-top:10px}
+.drinksnote{margin:-4px 0 10px}
