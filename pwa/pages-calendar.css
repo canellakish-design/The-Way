@@ -1,1 +1,82 @@
 /* pages-calendar: page styles for the head-unit redesign (docs/redesign-head-unit.html). */
+
+/* ---------- #calendar: the week head ---------- */
+.pweekhead:has(#pPrev) .ptitle,#pB .ptitle{font-family:var(--num); font-weight:700; font-size:30px; line-height:1; text-transform:uppercase; letter-spacing:.2px}
+.pweeksum{margin-top:12px}
+.pweeksum .hu-field .n{font-size:34px}
+
+/* seven columns: dashed outline planned, fill done, the percent on top, the letter under */
+.pwk{display:grid; grid-template-columns:repeat(7, minmax(0,1fr)); gap:5px; margin-top:12px; align-items:end}
+.pwk button.pwd{margin:0; padding:0; min-height:0; min-width:0; border:0; background:none; box-shadow:none; color:var(--ink);
+  display:flex; flex-direction:column; align-items:center; gap:4px; font-family:var(--mono); letter-spacing:0; text-transform:none; transform:none}
+.pwd .pc{font-family:var(--num); font-size:15px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; white-space:nowrap}
+.pwd .col{display:block; width:100%; height:92px; position:relative; background:var(--card)}
+.pwd .col .p{position:absolute; left:0; right:0; bottom:0; border:1px dashed var(--muted)}
+.pwd .col .d{position:absolute; left:3px; right:3px; bottom:0}
+.pwd .k{font-family:var(--mono); font-size:10px; color:var(--muted); line-height:1}
+.pwd.today .k{color:var(--ink); font-weight:700}
+.pwd.today .col{box-shadow:0 0 0 1px var(--ink)}
+.pwd:focus-visible{outline:2px solid var(--green); outline-offset:2px}
+
+/* ---------- day cards: the card colour, a 3 px stripe by compliance ---------- */
+.card.pday{padding:12px 12px 12px 12px; scroll-margin-top:64px; border-color:var(--line); box-shadow:none; opacity:1}
+.card.pday.hu-stripe{border-left-width:3px}
+.pday.graded.green,.pday.graded.yellow,.pday.graded.red{border-color:var(--line)}
+.pday.graded.green{border-left-color:var(--green)} .pday.graded.yellow{border-left-color:var(--amber)} .pday.graded.red{border-left-color:var(--red)}
+.card.pday.hu-stripe.water{border-left-color:var(--water)}
+.card.pday.today.hu-stripe{border-top-color:var(--ink); border-right-color:var(--ink); border-bottom-color:var(--ink)}
+.pdayhead{display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; margin-bottom:2px}
+.pdayhead h4{margin:0; color:var(--ink); font-size:11.5px}
+.pdayhead .ptoday{color:var(--green); margin-left:4px}
+.pdaysub{font-family:var(--mono); font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+
+/* ---------- session cards: black, a stripe, a fixed right-hand chip ---------- */
+.pday .pitem,.pday .pitem.planned,.pday .pitem.done,.pday .pitem.icu,
+.pday .pitem.graded.green,.pday .pitem.graded.yellow,.pday .pitem.graded.red{
+  position:relative; display:flex; flex-direction:column; gap:6px; padding:10px; margin-top:8px;
+  background:var(--paper); border:1px solid var(--line); border-left:3px solid var(--line); color:var(--ink)}
+.pday .pitem.graded.green{border-left-color:var(--green)} .pday .pitem.graded.yellow{border-left-color:var(--amber)} .pday .pitem.graded.red{border-left-color:var(--red)}
+.pday .pitem.done{border-left-color:var(--water)}
+.pday .pitem.planned:hover{border-top-color:var(--ink); border-right-color:var(--ink); border-bottom-color:var(--ink)}
+.pday .pitem.graded .pk,.pday .pitem.graded .pm{color:var(--muted); opacity:1}
+.ptop{display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:8px; align-items:center}
+.ptop .pn{display:flex; align-items:flex-start; min-width:0; font-weight:600; font-size:15px; line-height:1.3; color:var(--ink); text-decoration:none}
+.ptop .pn .kicon{margin-top:1px}
+.ptop .pn > span:last-child{min-width:0; overflow-wrap:anywhere}
+/* the whole card opens the editor; the chip, the trash and the fold sit above that link */
+.pitem.planned .ptop a.pn::after{content:""; position:absolute; inset:0}
+.pitem.planned .pdel,.pitem.planned details,.pitem.planned .hu-chip{position:relative; z-index:1}
+.ptop .pdel{position:relative; top:auto; right:auto; width:30px; height:30px}
+.pday .pitem .pk{font-family:var(--mono); font-size:10.5px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted); line-height:1.35}
+.pday .pitem .pk b{font-weight:700}
+
+/* two thin bars: label, track (target as a tick, hatched past it), numbers right-aligned */
+.pcbars{display:flex; flex-direction:column; gap:7px; padding-top:2px}
+.pcb{display:grid; grid-template-columns:34px minmax(0,1fr) 62px; gap:8px; align-items:center; font-family:var(--mono); font-size:10.5px; color:var(--muted)}
+.pctr{position:relative; height:8px; background:#1b1d1a}
+.pctr .f{position:absolute; left:0; top:0; bottom:0}
+.pctr .over{position:absolute; top:0; bottom:0; background:repeating-linear-gradient(135deg, var(--red) 0 3px, transparent 3px 6px)}
+.pctr .tick{position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink)}
+.pcv{text-align:right; color:var(--ink); font-family:var(--num); font-size:15px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1}
+.pline{font-size:12.5px; color:var(--ink); line-height:1.4; overflow-wrap:anywhere}
+.pdet{margin-top:0}
+.pdet .pm{display:block; font-family:var(--mono); font-size:11.5px; line-height:1.45; color:var(--muted); margin-top:5px; overflow-wrap:anywhere}
+.pday .pempty{font-size:13px; padding:6px 0 0}
+.pday .padd{margin-top:10px; font-size:11px}
+.pwarn.hu-stripe{border-left-width:3px; background:var(--card); border-color:var(--line); border-left-color:var(--amber)}
+
+/* ---------- #workout: the shared look, light touch ---------- */
+.psum .hu-fields{background:var(--line); border:0; border-bottom:1px solid var(--line)}
+.psum.card.day{box-shadow:none; border-color:var(--line); padding:0; background:var(--paper)}
+.psum .hu-field .n{font-size:30px}
+.psum .pprof{margin:10px 10px 0; width:calc(100% - 20px)}
+.psum .pleg{padding:0 10px 10px; font-size:11px}
+.psum > .small{padding:10px}
+.plibitem{border-color:var(--line); border-left:3px solid var(--line); box-shadow:none; background:var(--card); min-height:0}
+.plibitem:hover{border-color:var(--ink)}
+.plibitem .pn{font-weight:600}
+.plibitem .pm{font-size:11.5px}
+.pstep,.prep{border-left:3px solid var(--line)}
+.prep{border-left-style:solid; border-left-color:var(--muted)}
+#pB > .eyebrow + .card{margin-top:8px}
+#wSync{font-size:13px}
