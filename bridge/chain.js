@@ -339,10 +339,16 @@ async function report() {
       const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';
       const dip = dayBand && dayBand !== 'good' && hardYesterday;
       // the border is the week against the band; a red morning takes it red for the day
-      const state = band.state === 'none' ? 'none' : dayBand === 'bad' ? 'bad' : band.state;
-      return { week: band.pct, state, week_state: band.state, steps: band.steps, why: band.why, hrv_week_ms: hrvWeekMs, hrv_base_ms: hrvBaseMs, rhr_week: rhrWeek, rhr_up: band.rhr_up,
+      // until the watch has its fourteen nights there is no HRV band: the week is then the mornings' own recovery
+      // scores averaged (67 and up green, 34 amber), so the box is never blank while the band builds
+      const interim = band.state === 'none' && recWeek != null;
+      const interimState = interim ? (recWeek >= 67 ? 'good' : recWeek >= 34 ? 'warn' : 'bad') : null;
+      const state = interim ? (dayBand === 'bad' ? 'bad' : interimState) : band.state === 'none' ? 'none' : dayBand === 'bad' ? 'bad' : band.state;
+      return { week: interim ? recWeek : band.pct, week_kind: interim ? 'score' : 'band', state, week_state: band.state, steps: band.steps, why: band.why, hrv_week_ms: hrvWeekMs, hrv_base_ms: hrvBaseMs, rhr_week: rhrWeek, rhr_up: band.rhr_up,
         score_week: recWeek, today: todayScore, today_band: dayBand, today_word: dip ? `dip after ${hardYesterday} · normal` : dayBand === 'bad' ? 'red morning: easy day' : (recToday && recToday.estimated ? 'estimated' : null),
-        hard_yesterday: hardYesterday, days: recs.slice(-7), unit: 'vs band', basis: 'the week\'s HRV against your own 60-day band (a step is half its night-to-night spread); the morning line is the day\'s readiness' };
+        hard_yesterday: hardYesterday, days: recs.slice(-7), unit: interim ? 'avg' : 'vs band',
+        basis: interim ? `the week's morning recovery scores averaged (67 and up green, 34 to 66 amber) while the new watch builds its HRV band (${band.why || 'fourteen nights needed'}); the morning line is the day's readiness`
+          : 'the week\'s HRV against your own 60-day band (a step is half its night-to-night spread); the morning line is the day\'s readiness' };
     })(),
     weight: (() => {
       // the trend line through three weeks of readings when there is one; the week-on-week means until then

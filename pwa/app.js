@@ -1150,9 +1150,9 @@ function paintChain(c){
   const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
   for (const [ck, k, label] of CHAIN){
     const L = c.links[ck], el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
-    const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
+    const num = L.week == null ? "—" : ck === "recovery" && L.week_kind === "score" ? `${L.week}` : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[L.state] || "var(--muted)";
-    el.querySelector(".cweek").textContent = UNIT[ck];
+    el.querySelector(".cweek").textContent = ck === "recovery" && L.week_kind === "score" ? "avg" : UNIT[ck];
     el.dataset.week = L.state || "none";
     const brk = c.break_at === ck; el.classList.toggle("brk", brk);
     el.querySelector(".cmark").textContent = brk ? "✕" : "";

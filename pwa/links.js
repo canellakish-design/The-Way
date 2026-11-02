@@ -9,7 +9,7 @@
   const J = { "Content-Type": "application/json" };
   const get = p => bridge(p).catch(() => null);
   const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)", none: "var(--muted)" };
-  const WEEKNUM = (ck, L) => L.week == null ? "—" : ["work","water","lift","plan","fuel"].includes(ck) ? `${L.week}%`
+  const WEEKNUM = (ck, L) => L.week == null ? "—" : ck === "recovery" && L.week_kind === "score" ? `${L.week}` : ["work","water","lift","plan","fuel"].includes(ck) ? `${L.week}%`
     : ck === "recovery" ? `${L.week > 0 ? "+" : ""}${L.week}%` : ck === "weight" ? `${L.week > 0 ? "+" : ""}${L.week} lb/wk` : ck === "sleep" ? `${L.week} h` : `${L.week}`;
 
   // the head-unit pieces: a title line with the week's chip, two big fields (the week, today), a number split from its unit
