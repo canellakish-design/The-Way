@@ -4,7 +4,17 @@
 /* the header over the chain: the week's dates left, today and its fuel day right */
 .chainhead{margin:4px 0 6px; font-size:9.5px; letter-spacing:1.4px}
 /* the chain: ten data fields, three across, the verdict in a wide field beside Weight */
-.hchain .cgrid{display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:1px; background:var(--line); border:1px solid var(--line)}
+.hchain .cgrid{display:grid; grid-template-columns:minmax(0,1fr) 14px minmax(0,1fr) 14px minmax(0,1fr); row-gap:0; align-items:stretch}
+.hchain .cgrid .score.clink{border:1px solid var(--line)}
+.hchain .cgrid .score.clink[data-week="good"]{border-color:var(--green)} .hchain .cgrid .score.clink[data-week="warn"]{border-color:var(--amber)} .hchain .cgrid .score.clink[data-week="bad"]{border-color:var(--red)}
+/* the arrows: a circle on the gap between two fields, level with the big number; the wrap an elbow under the row */
+.hchain .cgrid .carrow{display:block; width:14px; flex:none; position:relative; overflow:visible; font-size:0; color:var(--line)}
+.hchain .cgrid .carrow i{top:46px}
+.hchain .cgrid .carrow.good{color:var(--green)} .hchain .cgrid .carrow.warn{color:var(--amber)} .hchain .cgrid .carrow.bad{color:var(--red)} .hchain .cgrid .carrow.none{color:var(--line)}
+.hchain .cgrid .carrow.cwrap{grid-column:1 / -1; width:auto; height:22px; margin:4px 0 4px 0}
+.hchain .cgrid .carrow.cwrap .wsvg{left:12.5%; right:auto; width:75%}
+.hchain .cgrid .carrow.cwrap .whead{left:calc(16.25% - 7px); bottom:-7px}
+.hchain .cgrid .carrow.cwrap i{top:50%; left:50%}
 .hchain .score.clink, .hchain .score.clink:active{display:flex; flex-direction:column; align-items:stretch; gap:3px; margin:0; padding:8px 9px 8px; min-width:0; width:auto; min-height:0;
   background:var(--paper); border:0; border-radius:0; box-shadow:none; transform:none; text-align:left; color:var(--ink); font:inherit; text-transform:none; letter-spacing:0; position:relative}
 .hchain .score.clink.on{outline:2px solid var(--ink); outline-offset:-2px; transform:none; box-shadow:none}
@@ -19,7 +29,7 @@
 .hchain .ctw{font-family:var(--mono); font-size:10px; line-height:1.25; color:var(--muted); min-width:0; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow-wrap:anywhere}
 .hchain .ctn{font-family:var(--num); font-weight:700; font-size:17px; line-height:1; white-space:nowrap; flex:none; font-variant-numeric:tabular-nums}
 .hchain .ctn.long{font-size:15px}
-.hchain .cverdict{grid-column:span 2; background:var(--paper); padding:8px 10px 9px; display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0}
+.hchain .cverdict{grid-column:span 3; border:1px solid var(--line); background:var(--paper); padding:8px 10px 9px; display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0}
 .hchain .cvw{font-family:var(--num); font-weight:700; font-size:19px; line-height:1.1; text-transform:uppercase; letter-spacing:.2px; color:var(--ink); overflow-wrap:anywhere}
 .hchain .cvw[data-tone="bad"]{color:var(--red)} .hchain .cvw[data-tone="good"]{color:var(--green)}
 /* the ribbon: one segment a link, in the link's colour; the broken link dashed red */

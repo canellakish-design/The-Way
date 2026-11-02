@@ -1120,10 +1120,22 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    Weight. Every field is the button it was: data-ck opens that link's page,
    data-k keeps the old keys (hydration, workouts). */
 const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Water"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
+const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
+const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function chainHTML(){
+  // three fields a row with an arrow between each, the arrow out of a row's last field wrapping round to the next
+  // row; each arrow wears the colour of the link it leaves, a cross where the chain breaks. Weight sits beside the verdict.
   const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
-  return `<div class="cgrid">${CHAIN.map(field).join("")}<div class="cverdict"><span class="ck">The chain</span><span class="cvw" id="chainWord">&nbsp;</span></div></div>
-    <div class="chainline" aria-hidden="true">${CHAIN.map(([ck]) => `<i data-ck="${ck}"></i>`).join("")}</div>`;
+  const arrow = ck => `<span class="carrow" data-k="${ck}" aria-hidden="true"><i>${ARROW}</i></span>`;
+  const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));
+  const out = rows.map((r, ri) => {
+    const cells = r.map((l, i) => `${i ? arrow(r[i - 1][0]) : ""}${field(l)}`).join("");
+    const verdict = r.length < 3 ? `${arrow(r[r.length - 1][0])}<div class="cverdict"><span class="ck">The chain</span><span class="cvw" id="chainWord">&nbsp;</span></div>` : "";
+    const wrap = ri < rows.length - 1 ? `<div class="carrow cwrap" data-k="${r[r.length - 1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>` : "";
+    return cells + verdict + wrap;
+  }).join("");
+  return `<div class="cgrid">${out}</div>`;
 }
 function todayCellsHTML(){ return ""; }
 // the progress strip: four outcomes on a four-week clock, each with its eight-week line
@@ -1161,8 +1173,12 @@ function paintChain(c){
     const tn = el.querySelector(".ctn"); tn.textContent = t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || (t.num === "—" ? "var(--muted)" : "var(--ink)");
     el.querySelector(".ctw").textContent = t.word || "today";
     el.title = `${label}: ${num} ${UNIT[ck]} this week · today ${t.num}${t.word ? ", " + t.word : ""}`;
-    // its segment of the ribbon: the link's colour, the broken one dashed
-    const seg = document.querySelector(`.chainline i[data-ck="${ck}"]`); if (seg) seg.className = brk ? "x" : (L.state || "none");
+    // the arrow out of this link: its colour, a cross where the chain breaks or the link is red
+    for (const ar of document.querySelectorAll(`.carrow[data-k="${ck}"]`)){
+      const wrap = ar.classList.contains("cwrap"), cut = L.state === "bad";
+      ar.className = `carrow${wrap ? " cwrap" : ""} ${L.state || "none"}${brk ? " broken" : cut ? " cut" : ""}`;
+      const i = ar.querySelector("i"); if (i) i.innerHTML = brk || cut ? CROSS : (wrap ? "" : ARROW);
+    }
   }
   const w = document.getElementById("chainWord"); if (w){ w.textContent = c.verdict || ""; w.dataset.tone = c.break_at ? "bad" : c.verdict ? "good" : "none"; }
   // the header: the week's dates, and today with the day's type
