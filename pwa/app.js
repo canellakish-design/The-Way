@@ -663,23 +663,24 @@ V.zones = async function(){
       <div class="small">Dots are the best average power you have held for each length of time in the last ${sg.lookback_days || 90} days; the line is the curve the three numbers draw. A green dot sits above the curve: a breakthrough.</div>`;
   };
   const bests = sg.bests || {};
-  const bestsHTML = [20,30,40,50,60].map(m => { const b = bests[m]; return `<li><span class="n"><b>${m} min</b>${b ? `<span class="small"> ${esc(b.name||"")} · ${esc(b.date||"")}</span>` : `<span class="small"> no ride that long with power yet</span>`}</span><span class="tag">${b ? `<b>${b.watts} W</b>${b.curve ? `<span class="small"> curve ${b.curve}</span>` : ""}` : "—"}</span></li>`; }).join("");
+  const bestsHTML = [20,30,40,50,60].map(m => { const b = bests[m]; return `<li><span class="n"><b>${m} min</b>${b ? `<span class="small"> ${esc(b.name||"")} · ${esc(b.date||"")}</span>` : `<span class="small"> no ride that long with power yet</span>`}</span><span class="tag">${b ? `<b class="zw">${b.watts}<span> W</span></b>${b.curve ? `<span class="small zc">curve ${b.curve}</span>` : ""}` : "—"}</span></li>`; }).join("");
   const sigHTML = `
-    <div class="sigrow">
-      <div class="sigbox"><span class="slabel">Threshold</span><span class="signum">${sig ? sig.tp : "—"}</span><span class="small">W · TP${sig && sig.tp_floor != null && sig.tp_floor !== sig.tp ? ` · floor ${sig.tp_floor}` : ""}</span></div>
-      <div class="sigbox"><span class="slabel">Tank above it</span><span class="signum">${sig ? sig.hie_kj : "—"}</span><span class="small">kJ · HIE</span></div>
-      <div class="sigbox"><span class="slabel">Peak</span><span class="signum">${sig ? sig.pp : "—"}</span><span class="small">W · 5 s · PP</span></div>
+    <div class="hu-fields zsig">
+      <div class="hu-field"><span class="k">Threshold</span><span class="n">${sig ? sig.tp : "—"}</span><span class="u">W · TP${sig && sig.tp_floor != null && sig.tp_floor !== sig.tp ? ` · floor ${sig.tp_floor}` : ""}</span></div>
+      <div class="hu-field"><span class="k">Tank above</span><span class="n">${sig ? sig.hie_kj : "—"}</span><span class="u">kJ · HIE</span></div>
+      <div class="hu-field"><span class="k">Peak</span><span class="n">${sig ? sig.pp : "—"}</span><span class="u">W · 5 s · PP</span></div>
     </div>
-    <div class="small"><b style="color:${confC(sg.confidence)}">${esc(sg.confidence || "none")} confidence</b> · ${esc(sg.why || "")}${sg.newest_long_effort ? ` Newest long effort: ${esc(sg.newest_long_effort.name||"")}, ${sg.newest_long_effort.age_days} day${sg.newest_long_effort.age_days===1?"":"s"} ago.` : ""}</div>
+    <div class="small zconf"><span class="hu-chip" style="color:${confC(sg.confidence)}">${esc(sg.confidence || "none")} confidence</span>${sg.newest_long_effort ? ` Newest long effort: ${esc(sg.newest_long_effort.name||"")}, ${sg.newest_long_effort.age_days} day${sg.newest_long_effort.age_days===1?"":"s"} ago.` : ""}</div>
+    ${sg.why ? `<details class="why"><summary>why this confidence</summary><div class="small">${esc(sg.why)}</div></details>` : ""}
     ${sig ? `<div class="small">Planning FTP is <b>${a.planning_ftp} W</b>${sig.tp !== a.planning_ftp ? `; the signature says <b>${sig.tp} W</b> (${sig.tp > a.planning_ftp ? "+" : ""}${sig.tp - a.planning_ftp}).` : ", the same as the signature."}</div>` : ""}
     ${sg.ramp ? `<div class="small"><b>Ramp test</b> ${esc(sg.ramp.date)}: best minute ${sg.ramp.one_min_w} W, which the ramp protocol reads as an FTP of about <b>${sg.ramp.ftp_est} W</b> (75% of the best minute). A ramp test is maximal by design, so this is a measurement; the signature's TP is a curve through everything since.</div>` : ""}
     ${pdHTML()}
-    <ul class="agenda totals">${bestsHTML}</ul>
+    <ul class="agenda totals zbests">${bestsHTML}</ul>
     ${(() => { const nb = (sg.new_bests || []).filter(b => [300,600,900,1200,1800,2400,3600].includes(b.dur_s)); if (!nb.length) return "";
       const byRide = {}; for (const b of nb) (byRide[b.id] = byRide[b.id] || []).push(b);
-      return `<div class="small"><b>New bests</b> (harder than any ride before it in ${sg.lookback_days||90} days):</div><ul class="agenda totals">${Object.values(byRide).reverse().slice(0, 3).map(list => { const top = list.slice().sort((a, b) => b.dur_s - a.dur_s)[0];
+      return `<div class="small"><b>New bests</b> (harder than any ride before it in ${sg.lookback_days||90} days):</div><ul class="agenda totals znew">${Object.values(byRide).reverse().slice(0, 3).map(list => { const top = list.slice().sort((a, b) => b.dur_s - a.dur_s)[0];
         return `<li><span class="t">${esc(top.date.slice(5).replace("-","/"))}</span><span class="n">★ ${esc(top.name)}<span class="small"> ${list.map(b => `${b.dur_s >= 60 ? b.dur_s / 60 + " min" : b.dur_s + " s"} at <b>${b.watts} W</b>${b.prev_watts ? ` (was ${b.prev_watts})` : ""}`).join(" · ")}${top.curve_before ? `. The curve already allowed ${top.curve_before} W for ${top.dur_s / 60} min, so it is a best, not a breakthrough.` : ""}</span></span></li>`; }).join("")}</ul>`; })()}
-    ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride that beat the signature of the day before; the gold medal on the calendar):</div><ul class="agenda totals">${sg.breakthroughs.slice(-5).reverse().map(b => `<li><span class="t">${esc(b.date.slice(5).replace("-","/"))}</span><span class="n">${MEDAL}${esc(b.name)}<span class="small"> ${esc(b.text||"")}</span></span></li>`).join("")}</ul>` : `<div class="small">No breakthrough yet in the last ${sg.lookback_days||90} days: no ride has beaten the curve the rides before it drew. One all-out 5-minute effort and one 20-second effort would do it, and set TP.</div>`}
+    ${(sg.breakthroughs||[]).length ? `<div class="small"><b>Breakthroughs</b> (a ride that beat the signature of the day before; the gold medal on the calendar):</div><ul class="agenda totals zbt">${sg.breakthroughs.slice(-5).reverse().map(b => `<li><span class="t">${esc(b.date.slice(5).replace("-","/"))}</span><span class="n">${MEDAL}${esc(b.name)}<span class="small"> ${esc(b.text||"")}</span></span></li>`).join("")}</ul>` : `<div class="small">No breakthrough yet in the last ${sg.lookback_days||90} days: no ride has beaten the curve the rides before it drew. One all-out 5-minute effort and one 20-second effort would do it, and set TP.</div>`}
     <div class="rowbtns">
       <button id="sigScan" class="btn">${sg.left == null ? "Read rides" : sg.left > 0 ? `Read rides (${sg.left} unread of ${sg.total})` : `All ${sg.total||0} rides read · read again`}</button>
       ${sig && sig.tp !== a.planning_ftp && (sg.confidence === "high" || sg.confidence === "medium") ? `<button id="sigUse" class="btn">Set planning FTP to ${sig.tp} W</button>` : ""}
@@ -782,7 +783,9 @@ V.zones = async function(){
    The weight training: two sessions that alternate, each exercise with the
    target the last time worked out (double progression), logged set by set;
    strength over time as an estimated one-rep max; the history. */
+let __liftRest = null;
 V.lift = async function(){
+  clearInterval(__liftRest);
   view.innerHTML = `<span class="eyebrow">Lift</span><div id="liftPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   let L = null;
   try{ L = await bridge("/lifts"); }catch(e){ document.getElementById("liftPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
@@ -791,12 +794,20 @@ V.lift = async function(){
   const others = L.templates.filter(t => t.key !== key);
   const today = localDateKey();
   const unit = e => e.kind === "time" ? "s" : e.kind === "reps" ? "reps" : "lb";
-  const exHTML = (e, i) => `<li class="lex" data-i="${i}">
-      <div class="lexhead"><span class="n"><b>${esc(e.name)}</b> <span class="small">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${e.rest_min} min</span>${e.note?`<span class="small lnote">${esc(e.note)}</span>`:""}</span>
-        <span class="tag"><b style="color:${e.target.progress?"var(--green)":e.target.back?"var(--amber)":"var(--ink)"}">${e.kind==="time"||e.kind==="reps" ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</b></span></div>
-      <div class="small">${esc(e.target.why)}${e.last ? ` · last: ${esc(e.last.date)}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
-      <div class="lsets">${Array.from({ length: e.sets }, (_, k) => `<span class="lset"><label>set ${k+1}</label>${e.kind==="time"||e.kind==="reps" ? "" : `<input type="number" class="llb" inputmode="numeric" value="${e.target.lb}" aria-label="pounds"><span class="small">lb ×</span>`}<input type="number" class="lreps" inputmode="numeric" value="${e.target.reps}" aria-label="${unit(e)}"><span class="small">${e.kind==="time"?"s":"reps"}</span></span>`).join("")}</div>
-    </li>`;
+  const restLabel = m => { const sec = Math.round((m || 0) * 60); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`; };
+  // a stepper: minus and plus around the input the save reads, so typing still works
+  const stepper = (cls, val, step, label, u) => `<span class="lstep"><button type="button" class="lsb" data-step="-${step}" aria-label="${step} ${label} less">−</button><input type="number" class="${cls}" inputmode="numeric" value="${val}" aria-label="${label}"><em>${u}</em><button type="button" class="lsb" data-step="${step}" aria-label="${step} ${label} more">+</button></span>`;
+  const exHTML = (e, i) => { const timed = e.kind === "time" || e.kind === "reps";
+    return `<li class="lex${i === 0 ? " open" : ""}" data-i="${i}" data-rest="${Math.round((e.rest_min || 0) * 60)}">
+      <button type="button" class="lexhead" aria-expanded="${i === 0}"><span class="n"><b>${esc(e.name)}</b><span class="hu-lab lsum">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${restLabel(e.rest_min)}<span class="ldone"></span></span></span>
+        <span class="tag"><span class="hu-chip ${e.target.progress ? "hu-go" : e.target.back ? "hu-hold" : ""}">${timed ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</span></span></button>
+      <div class="lbody">
+        <div class="small">${esc(e.target.why)}${e.last ? ` · last: ${esc(e.last.date)}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
+        <div class="lsets">${Array.from({ length: e.sets }, (_, k) => `<div class="lset${timed ? " timed" : ""}"><label>Set ${k+1}</label>${timed ? "" : stepper("llb", e.target.lb, 5, "pounds", "lb")}${stepper("lreps", e.target.reps, e.kind === "time" ? 5 : 1, unit(e), e.kind === "time" ? "s" : "reps")}<button type="button" class="ltick" aria-pressed="false" aria-label="Set ${k+1} done">✓</button></div>`).join("")}</div>
+        <div class="lrest" aria-live="polite" hidden></div>
+        ${e.note?`<details class="why lcues"><summary>cues</summary><span class="small lnote">${esc(e.note)}</span></details>`:""}
+      </div>
+    </li>`; };
   const spark = (rows)=>{
     if (!rows || rows.length < 2) return "";
     const W = 120, H = 28, xs = rows.map((_, i) => i / (rows.length - 1) * (W - 6) + 3), lo = Math.min(...rows.map(r => r.e1rm)), hi = Math.max(...rows.map(r => r.e1rm)), span = Math.max(5, hi - lo);
@@ -805,25 +816,38 @@ V.lift = async function(){
   };
   const hist = Object.entries(L.history || {});
   const shortOf = k => (L.templates.find(t => t.key === k) || {}).short || "";
-  const dayLine = x => x.ride ? esc(x.ride.name.replace(/^Zwift - Intervals icu: /i, "").replace(/^VO2 max: Zwift /i, "VO2 ").slice(0, 18)) : x.long_coaching ? `coaching ${Math.round(x.coaching_min/60)} h` : "off the bike";
   const legsDay = (L.week||[]).find(x => x.lift === "legs");
-  const weekHTML = (L.week||[]).length ? `<div class="card"><h4>This week · ${esc(L.plan||"")}</h4>
-      <div class="lweek">${L.week.map(x => `<a class="lday${x.lift?"":" off"}${x.done?" done":""}${x.date===today?" today":""}" href="#lift?t=${esc(x.lift||L.next)}" title="${esc(x.why||"")}">
-        <span class="ld">${esc(String(x.label||x.date).split(" ").slice(0,1).join(""))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
-        <b>${x.lift ? esc(shortOf(x.lift)) : "—"}</b>
-        <span class="small">${dayLine(x)}</span>${x.pumped ? `<span class="small pumptag on">+pump</span>` : x.pump_ok ? `<span class="small pumptag">pump ok</span>` : ""}</a>`).join("")}</div>
-      <div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.</div>
-      <div class="small">${L.this_week} of ${L.target_per_week} this week${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""} · week ${L.week_no}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""}</div>
+  const weekHTML = (L.week||[]).length ? `<div class="card"><div class="lttl"><h4>This week · ${esc(L.plan||"")}</h4><span class="hu-chip ${L.this_week >= L.target_per_week ? "hu-go" : "hu-dim"}">${L.this_week} of ${L.target_per_week} this week</span></div>
+      <div class="lweek">${L.week.map(x => `<a class="lday${x.lift?"":" off"}${x.done?" done":""}${x.date===today?" today":""}${x.lift===key?" on":""}" href="#lift?t=${esc(x.lift||L.next)}" title="${attr(`${x.label||x.date}: ${x.lift ? shortOf(x.lift) + ", " : ""}${x.why||""} · ${x.ride ? x.ride.name.replace(/^Zwift - Intervals icu: /i, "") + `, ${x.ride.minutes} min` : x.long_coaching ? `coaching ${Math.round(x.coaching_min/60)} h` : "off the bike"}${x.pumped ? " · +pump" : x.pump_ok ? " · pump ok" : ""}`)}">
+        <span class="ld">${esc(String(x.label||x.date).slice(0,3))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
+        <b>${x.lift ? esc(shortOf(x.lift).replace(/^Upper /, "Up ")) : "—"}</b>
+      </a>`).join("")}</div>
+      <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(L.last.date)}` : ""}</div>
+      <details class="why"><summary>why these days</summary><div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
     </div>` : "";
   // the plan ahead: 26 weeks for the session on screen, projected from where the weights are now
   const P = L.periodization, PT = P && P.templates.find(t => t.key === key);
+  const heatHTML = PT => {
+    const v = r => { const t = r.targets[0]; return t.kind === "time" || t.kind === "reps" ? t.reps_lo : t.lb; };
+    const vals = PT.rows.map(v), lo = Math.min(...vals), hi = Math.max(...vals);
+    const col = x => { const f = hi > lo ? (x - lo) / (hi - lo) : 1, a = [0x26, 0x40, 0x2F], b = [0x7B, 0xC4, 0x8E]; return `rgb(${a.map((c, i) => Math.round(c + (b[i] - c) * f)).join(",")})`; };
+    const t0 = PT.rows[0].targets[0], say = r => { const t = r.targets[0]; return t.kind === "time" ? `${t.reps_lo} s` : t.kind === "reps" ? `${t.reps_lo} reps` : `${t.lb} × ${t.reps_lo}–${t.reps_hi}`; };
+    const now = PT.rows.find(r => r.now) || PT.rows[0], last = PT.rows[PT.rows.length - 1];
+    return `<div class="hu-lab lheatlab">${esc(t0.name.replace(/^(Kettlebell|Bowflex|Barbell) /, ""))} · ${P.weeks} weeks</div>
+      <div class="lheat" role="img" aria-label="${attr(`Planned ${t0.name} each week, darker is lighter weight, deload weeks hatched`)}">${PT.rows.map(r => `<i class="${r.deload ? "dl" : ""}${r.now ? " now" : ""}" style="--c:${col(v(r))}" title="${attr(`week ${r.week}, ${r.from.slice(5).replace("-", "/")}: ${say(r)}${r.deload ? " (deload)" : ""}`)}"></i>`).join("")}</div>
+      <div class="lheatcap"><span>${esc(say(now))} now</span><span>${esc(say(last))} by ${esc(new Date(last.from + "T12:00:00").toLocaleDateString("en-US", { month: "short" }))}</span></div>`;
+  };
   const periodHTML = PT ? `<div class="card"><h4>The plan ahead · ${esc(T.short)} · ${P.weeks} weeks</h4>
-      <div class="small">Three blocks: strength (4 to 6), strength-endurance (6 to 8, lighter), strength again from above where the first block ended. A deload week closes each. Targets are a forecast from your last session and move with every one you save.</div>
+      <div class="small">Targets are a forecast from your last session and move with every one you save.</div>
+      ${heatHTML(PT)}
+      <details class="why ptfold"><summary>the full table</summary>
+      <div class="small">Three blocks: strength (4 to 6), strength-endurance (6 to 8, lighter), strength again from above where the first block ended. A deload week closes each.</div>
       <div class="ptable"><table class="period"><thead><tr><th>wk</th><th>from</th>${PT.rows[0].targets.map(t => `<th>${esc(t.name.replace(/^(Kettlebell|Bowflex|Barbell) /, ""))}</th>`).join("")}</tr></thead>
         <tbody>${PT.rows.map(r => `<tr class="${r.block}${r.deload ? " deload" : ""}${r.now ? " now" : ""}"><td>${r.week}</td><td>${esc(r.from.slice(5).replace("-", "/"))}</td>${r.targets.map(t => `<td>${t.kind === "time" ? `${t.reps_lo} s` : t.kind === "reps" ? `${t.reps_lo}` : `<b>${t.lb}</b> × ${t.reps_lo}–${t.reps_hi}`}${r.deload ? `<span class="small"> ½</span>` : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
       <div class="small">Pounds × reps. ½ marks a deload week: half the hard sets at the same weight. Week ${P.week_now} is where you are.</div>
+      </details>
     </div>` : "";
   document.getElementById("liftPage").innerHTML = `
     ${weekHTML}
@@ -839,6 +863,31 @@ V.lift = async function(){
     ${periodHTML}
     ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session. This is where lifting shows up: not in the ride CTL.</div></div>` : ""}
     ${L.sessions && L.sessions.length ? `<div class="card"><h4>Sessions</h4><ul class="agenda">${L.sessions.map(s => `<li><span class="t">${esc(s.date.slice(5).replace("-","/"))}</span><span class="n">${esc(s.name)}<span class="small"> ${s.exercises.map(e => `${e.name.replace(/^(Kettlebell|Bowflex|Barbell|Dumbbell|Incline barbell|One-arm dumbbell|Alternating dumbbell|Seated dumbbell) /, "")} ${e.sets.map(x => (x.lb ? x.lb + "×" : "") + x.reps).join(",")}`).join(" · ")}${s.notes ? " · " + esc(s.notes) : ""}</span></span><span class="tag">${(s.volume_lb/1000).toFixed(1)}k lb <button class="tdel" data-dell="${esc(s.id)}" aria-label="Remove">${TRASH}</button></span></li>`).join("")}</ul></div>` : ""}`;
+  const page = document.getElementById("liftPage");
+  page.querySelectorAll(".lsb").forEach(b => b.onclick = ()=>{ const inp = b.parentNode.querySelector("input"); inp.value = Math.max(0, (+inp.value || 0) + (+b.dataset.step)); });
+  const openEx = li => { page.querySelectorAll(".lex").forEach(x => { const on = x === li; x.classList.toggle("open", on); x.querySelector(".lexhead").setAttribute("aria-expanded", on); }); };
+  page.querySelectorAll(".lexhead").forEach(h => h.onclick = ()=>{ const li = h.closest(".lex"), on = !li.classList.contains("open"); li.classList.toggle("open", on); h.setAttribute("aria-expanded", on); });
+  const mmss = n => `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+  const startRest = (li, secs, nextWord)=>{
+    clearInterval(__liftRest); page.querySelectorAll(".lrest").forEach(r => { r.hidden = true; r.classList.remove("over"); });
+    const el = li.querySelector(".lrest"); if (!el || !secs) return;
+    const end = Date.now() + secs * 1000;
+    const paint = ()=>{ if (!document.body.contains(el)){ clearInterval(__liftRest); return; } const left = Math.max(0, Math.round((end - Date.now()) / 1000));
+      el.hidden = false; el.classList.toggle("over", !left); el.innerHTML = left ? `<span class="hu-lab">Rest</span><b>${mmss(left)}</b><span>${esc(nextWord)}</span>` : `<span class="hu-lab">Rest over</span><b>Go</b><span>${esc(nextWord)}</span>`;
+      if (!left){ clearInterval(__liftRest); try{ navigator.vibrate && navigator.vibrate(200); }catch{} } };
+    paint(); __liftRest = setInterval(paint, 1000);
+  };
+  page.querySelectorAll(".ltick").forEach(t => t.onclick = ()=>{
+    const on = t.getAttribute("aria-pressed") !== "true"; t.setAttribute("aria-pressed", on); t.classList.toggle("on", on);
+    const li = t.closest(".lex"), ticks = [...li.querySelectorAll(".ltick")], done = ticks.filter(x => x.classList.contains("on")).length, all = done === ticks.length;
+    li.classList.toggle("complete", all); li.querySelector(".ldone").textContent = done ? ` · ${done}/${ticks.length}` : "";
+    if (!on){ return; }
+    if (!all){ startRest(li, +li.dataset.rest, `set ${ticks.findIndex(x => !x.classList.contains("on")) + 1} next`); return; }
+    // the last set of this one: it folds, the next unfinished exercise opens and carries the rest
+    const nxt = [...page.querySelectorAll(".lex")].find(x => !x.classList.contains("complete"));
+    if (nxt){ openEx(nxt); startRest(nxt, +li.dataset.rest, "then set 1 of this one"); }
+    else { li.classList.remove("open"); li.querySelector(".lexhead").setAttribute("aria-expanded", false); startRest(li, 0, ""); }
+  });
   document.getElementById("lSave").onclick = async ()=>{
     const btn = document.getElementById("lSave"), msg = document.getElementById("lMsg"); btn.disabled = true;
     const exercises = [...document.querySelectorAll("#liftPage .lex")].map(li => { const e = T.exercises[+li.dataset.i]; return { name: e.name, sets: [...li.querySelectorAll(".lset")].map(sp => ({ reps: +(sp.querySelector(".lreps")||{}).value || 0, lb: +((sp.querySelector(".llb")||{}).value) || 0 })) }; });
@@ -1061,26 +1110,20 @@ function fmtMinLocal(m){
 const RING_KEYS = ["recovery", "fatigue", "weight", "bodyfat", "workouts", "food", "hydration", "micros"];
 const RING_LABELS = { recovery: "Recovery", fatigue: "Fatigue", weight: "Weight", bodyfat: "Body fat", workouts: "Workouts", food: "Food", hydration: "Hydration", micros: "Micros" };
 const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
-/* The chain: Sleep → Food → Micros → Water → Work → Recovery → Weight, each
-   box its seven-day value (bridge/chain.js) with today small under it, the
-   arrows coloured by the link before them. The first link that is not on
-   target is where the chain breaks; the line under the row says so. The
-   boxes keep the old keys (hydration, workouts) so the tap-to-explain cards
-   still open. */
-const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Hydration"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
-const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
-const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+/* The chain: Plan → Sleep → Water → Food → Micros → Lift → Fuel → Ride →
+   Recovery → Weight, each a data field (the head unit's grid, three across):
+   its label, the seven-day value big in the condensed face coloured by its
+   state (bridge/chain.js), and today on a small line under it. One ribbon
+   under the grid has a segment per link in the same colours; the first link
+   that is not on target is where the chain breaks, dashed red on the ribbon
+   and outlined on its field, and the verdict sits in the wide field beside
+   Weight. Every field is the button it was: data-ck opens that link's page,
+   data-k keeps the old keys (hydration, workouts). */
+const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Water"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
 function chainHTML(){
-  // two rows of four: the week boxes with arrows between, today as a bar under each box, and the
-  // arrow out of the fourth box wrapping round to the fifth
-  const box = ([ck, k, label]) => `<button class="score cbox" data-k="${k}" data-ck="${ck}"><span class="slabel">${label}</span><span class="cnum">—</span><span class="cweek">7 days</span></button>`;
-  const cell = ([ck, k]) => `<button class="score tcell" data-k="${k}" data-ck="${ck}" data-tone="none"><span class="snum">—</span><span class="sword">&nbsp;</span></button>`;
-  const row = (links, first) => `<div class="crow"><span class="rlab">week</span>${links.map((l, i) => `${i ? `<span class="carrow" data-k="${links[i-1][0]}" aria-hidden="true"><i>${ARROW}</i></span>` : ""}${box(l)}`).join("")}</div>
-    <div class="chaintoday"><span class="rlab">today</span>${links.map((l, i) => `${i ? `<span class="tsp" aria-hidden="true"></span>` : ""}${cell(l)}`).join("")}</div>`;
-  // three rows of three, an arrow wrapping round after the first two
-  const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));   // threes; the last row holds what is left
-  return rows.map((r, i) => `${row(r)}${i < rows.length - 1 ? `<div class="carrow cwrap" data-k="${r[r.length-1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>` : ""}`).join("");
+  const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
+  return `<div class="cgrid">${CHAIN.map(field).join("")}<div class="cverdict"><span class="ck">The chain</span><span class="cvw" id="chainWord">&nbsp;</span></div></div>
+    <div class="chainline" aria-hidden="true">${CHAIN.map(([ck]) => `<i data-ck="${ck}"></i>`).join("")}</div>`;
 }
 function todayCellsHTML(){ return ""; }
 // the progress strip: four outcomes on a four-week clock, each with its eight-week line
@@ -1104,25 +1147,25 @@ function drawProgress(v){
 function paintChain(c){
   if (!c || !c.links) return;
   const UNIT = { plan: "ahead", fuel: "fed", sleep: "h", food: "avg", micros: "avg", water: "bal", work: "plan", lift: "plan", recovery: "band", weight: "lb" };
-  for (const [ck, k] of CHAIN){
-    const L = c.links[ck], el = document.querySelector(`.cbox[data-ck="${ck}"]`); if (!L || !el) continue;
+  const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
+  for (const [ck, k, label] of CHAIN){
+    const L = c.links[ck], el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
     const num = L.week == null ? "—" : ck === "work" || ck === "water" || ck === "lift" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
-    const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
-    const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 3); n.style.color = TC[L.state] || "var(--muted)";
+    const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[L.state] || "var(--muted)";
     el.querySelector(".cweek").textContent = UNIT[ck];
     el.dataset.week = L.state || "none";
-    // today's cell under the box: its own number, word and colour
-    const td = document.querySelector(`.tcell[data-ck="${ck}"]`);
-    if (td){
-      const t = todayCell(ck, L);
-      const sn = td.querySelector(".snum"); sn.textContent = t.num; sn.classList.toggle("long", String(t.num).length > 4); td.querySelector(".sword").textContent = t.word || "\u00a0"; td.dataset.tone = t.tone || "none";
-      td.title = `${CHAIN.find(x => x[0] === ck)[2]} today: ${t.num}${t.word ? ", " + t.word : ""}`;
-    }
-    const ar = document.querySelector(`.carrow[data-k="${ck}"]`); if (ar){ const cut = L.state === "bad", wrap = ar.classList.contains("cwrap"); ar.className = `carrow${wrap ? " cwrap" : ""} ${L.state || "none"}${c.break_at === ck ? " broken" : cut ? " cut" : ""}`;
-      if (wrap) ar.querySelector("i").innerHTML = c.break_at === ck || cut ? CROSS : ""; else ar.innerHTML = `<i>${c.break_at === ck || cut ? CROSS : ARROW}</i>`; }
+    const brk = c.break_at === ck; el.classList.toggle("brk", brk);
+    el.querySelector(".cmark").textContent = brk ? "✕" : "";
+    // today, small under the week: its own number, word and colour
+    const t = todayCell(ck, L);
+    const tn = el.querySelector(".ctn"); tn.textContent = t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || (t.num === "—" ? "var(--muted)" : "var(--ink)");
+    el.querySelector(".ctw").textContent = t.word || "today";
+    el.title = `${label}: ${num} ${UNIT[ck]} this week · today ${t.num}${t.word ? ", " + t.word : ""}`;
+    // its segment of the ribbon: the link's colour, the broken one dashed
+    const seg = document.querySelector(`.chainline i[data-ck="${ck}"]`); if (seg) seg.className = brk ? "x" : (L.state || "none");
   }
-  const w = document.getElementById("chainWord"); if (w) w.textContent = c.verdict || "";
-  // the two row headers: the week's dates, and today with the day's type
+  const w = document.getElementById("chainWord"); if (w){ w.textContent = c.verdict || ""; w.dataset.tone = c.break_at ? "bad" : c.verdict ? "good" : "none"; }
+  // the header: the week's dates, and today with the day's type
   const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
   const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
   const th = document.getElementById("chainTodayHead"); if (th) th.textContent = `Today · ${D.toLocaleDateString("en-US", { weekday: "long" })}`;
@@ -1260,6 +1303,24 @@ function dayRows(d, plan, isToday){
     }
   }
   return rows.sort((a,b)=> (a.start-b.start) || (a.end-b.end));
+}
+
+// A ride row's zone split, from what the calendar answer already holds: each
+// ride on the day goes to the planned ride whose start is nearest (the rule
+// bridge/workouts.js grades by), its heart-rate zone minutes summed onto that
+// session's WGRADE entry. No fetch of its own; a ride with no zones adds none.
+function zoneMinutes(day){
+  const toMin = t => { const m = /^(\d{2}):(\d{2})/.exec(t || ""); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+  const rides = (day.planned || []).filter(w => WGRADE[w.id] && !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(w.sport || "")));
+  if (!rides.length) return;
+  for (const x of (day.done || [])){
+    const zs = x.analysis && x.analysis.hr && x.analysis.hr.zones; if (!zs) continue;
+    let best = null, bd = Infinity;
+    for (const w of rides){ const a = toMin(w.time), b = toMin(x.time), d = a == null || b == null ? 600 : Math.abs(a - b); if (d < bd){ bd = d; best = w; } }
+    if (!best) continue;
+    const g = WGRADE[best.id], z = g.zmin || (g.zmin = { z1: 0, z2: 0, z3: 0, plan: best.metrics && best.metrics.duration_s ? best.metrics.duration_s / 60 : 0 });
+    z.z1 += zs.z1_min || 0; z.z2 += zs.z2_min || 0; z.z3 += zs.z3_min || 0;
+  }
 }
 
 /* ---- a row, opened: an event's details, or the whole of a workout ---- */
@@ -1435,7 +1496,7 @@ function placeNowDot(){
       top = ns > pe ? a + Math.max(0, Math.min(1, (now - pe) / (ns - pe))) * Math.max(0, b - a) : b;
     }
   }
-  dot.hidden = false; dot.style.top = Math.round(top) + "px";
+  dot.hidden = false; dot.style.top = Math.round(top) + "px"; dot.dataset.t = fmtMinLocal(now).toUpperCase();
 }
 // One line of conditions on the day card; the strips themselves live on the Ride tab.
 function conditionsLine(d){
@@ -1467,17 +1528,23 @@ function dayCard(d, plan, nowMin, rec, solo){
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     const g = r.wid && WGRADE[r.wid];
     const gradeWord = g ? (g.zone ? `above Z1 ${g.zone}%` : (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "")) : null;
+    // the row's status, as a stripe on the left and the colour of its chip on the right (never a filled row)
+    const TONE = { green: "good", yellow: "warn", red: "bad" }, CHIPC = { good: "hu-go", warn: "hu-hold", bad: "hu-stop" };
+    const st = g ? TONE[g.band] : r.meal && r.meal.match ? TONE[r.meal.match.key] : r.rx && r.taken ? "good" : "";
+    const chip = (word, tone, title) => `<span class="hu-chip ${CHIPC[tone] || "hu-dim"}"${title ? ` title="${attr(title)}"` : ""}>${esc(word)}</span>`;
+    // a ride's minutes by heart-rate zone, when the calendar already carried them: a thin bar, the unridden minutes grey
+    const zb = g && g.zmin ? (z => { const rest = Math.max(0, (z.plan || 0) - z.z1 - z.z2 - z.z3); return `<span class="zonebar" title="${attr(`Z1 ${Math.round(z.z1)} · Z2 ${Math.round(z.z2)} · Z3 ${Math.round(z.z3)} min${z.plan ? ` of ${Math.round(z.plan)} planned` : ""}`)}">${[["z1", z.z1], ["z2", z.z2], ["z3", z.z3]].filter(x => x[1] > 0).map(([k, v]) => `<i class="${k}" style="flex:${v.toFixed(1)}"></i>`).join("")}${rest > 0 ? `<i class="zrest" style="flex:${rest.toFixed(1)}"></i>` : ""}</span>`; })(g.zmin) : "";
     // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
     const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength|\brun\b|treadmill|zwift|trainer/i.test(r.title) && !/virtualride|^run$|walk|hike/i.test(r.sport||"");
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
     const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
     // the tag stays short; the long reason lives in the detail that opens on tap
     const shortWord = mt => { const w = mt.word || ""; if (w.length <= 18) return w; const rk = mt.rules && mt.rules.key, mk = mt.macros && mt.macros.key; const RANK = { green: 0, yellow: 1, red: 2 }; if (rk && mk && RANK[rk] > RANK[mk]) return rk === "red" ? "rules broken" : "rules partly"; return mt.macros && mt.macros.word && mt.macros.word.length <= 18 ? mt.macros.word : (mt.key === "red" ? "off plan" : "a bit off"); };
-    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? `<span class="mword ${r.meal.match.key}">${r.meal.match.key === "green" ? "✓ on plan" : esc(shortWord(r.meal.match))}</span>` : "logged") : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : state === "past" ? "nothing logged" : "plan")) : null;
-    return `<li class="${r.lane.cls} ${state} xrow${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
+    const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? chip(r.meal.match.key === "green" ? "✓ on plan" : shortWord(r.meal.match), TONE[r.meal.match.key], r.meal.match.word) : chip("logged", "")) : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : chip(state === "past" ? "nothing logged" : "plan", ""))) : null;
+    return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}</span>
-      <span class="tag">${r.rx ? (r.taken ? `<span class="mword green">✓ taken</span>` : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : "rx")) : mealTag ? mealTag : gradeWord ? esc(gradeWord) : state==="now"?"now":state==="next"?"next":r.lane.tag}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}</span>
+      <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? `Z1 +${g.zone}%` : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -1489,7 +1556,7 @@ function dayCard(d, plan, nowMin, rec, solo){
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <div class="dayhead"><h4>${isToday?"Today · ":""}${esc(d.label)}</h4></div>
     ${chips?`<div class="chips">${chips}</div>`:""}
-    <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
+    <ul class="agenda hsched${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
     <details class="addev"><summary>+ add to the calendar</summary>
       <div class="row2"><span><label>What</label><input class="evTitle" placeholder="Dentist"></span><span><label>Date</label><input class="evDate" type="date" value="${esc(d.date)}"></span></div>
@@ -1515,9 +1582,9 @@ const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
+    <a class="hufit" id="fitField" href="#ride" aria-label="Fitness, open the Ride page"><span class="fl"><span class="fk">Fitness · CTL</span><span class="fv"><b class="fn">—</b><span class="fr"><span class="fd">reaching the bridge…</span><span class="fw"></span></span></span></span><svg class="fspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></a>
     <div class="chainhead"><span>This week <span id="chainDates"></span></span><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
-    <div class="chain" id="scores">${chainHTML()}</div>
-    <div class="chainword small" id="chainWord">&nbsp;</div>
+    <div class="hchain" id="scores">${chainHTML()}</div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
@@ -1646,7 +1713,7 @@ V.today = async function(){
   // The six-week line of fitness inside the hero box: one path, the last
   // point marked. The box's own tone colours it, so the line is ink.
   const drawSpark = (series)=>{
-    const svg = view.querySelector(".score.hero .spark"); if (!svg) return;
+    const svg = view.querySelector(".score.hero .spark") || view.querySelector("#fitField .fspark"); if (!svg) return;
     const pts = (series||[]).map(r => r.ctl).filter(v => v != null);
     if (pts.length < 2){ svg.innerHTML = ""; return; }
     const W = 160, H = 56, lo = Math.min(...pts), hi = Math.max(...pts), span = Math.max(4, hi - lo);
@@ -1659,6 +1726,16 @@ V.today = async function(){
   // What the fitness number means for a masters amateur: CTL in TSS a day.
   const fitLevel = c => c == null ? "" : c < 25 ? "base" : c < 45 ? "recreational" : c < 65 ? "solid" : c < 85 ? "strong" : "racer";
   let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null, chainData = null;
+  // the fitness field at the top: CTL big, its weekly change and word, the six-week line; the field is the link to Ride
+  const paintFit = (t, why)=>{
+    const el = document.getElementById("fitField"); if (!el) return;
+    const n = el.querySelector(".fn"), d = el.querySelector(".fd"), w = el.querySelector(".fw");
+    if (!t){ n.textContent = "—"; n.style.color = "var(--muted)"; d.textContent = why || ""; d.style.color = "var(--muted)"; w.textContent = ""; return; }
+    n.textContent = t.ctl; n.style.color = "var(--ink)";
+    d.textContent = t.ramp ? `${sgn(t.ramp_7d)}/wk` : `${t.tss_7d} TSS/wk`; d.style.color = t.ramp ? toneC(t.ramp.tone) : "var(--muted)";
+    w.textContent = [t.ramp && t.ramp.word, fitLevel(t.ctl)].filter(Boolean).join(" · ");
+    el.querySelector(".fspark").style.color = t.ramp && (t.ramp.tone === "good" || t.ramp.tone === "warn" || t.ramp.tone === "bad") ? toneC(t.ramp.tone) : "var(--ink)";
+  };
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
@@ -1827,6 +1904,7 @@ V.today = async function(){
     const vd = document.getElementById("scoreVerdict");
     if (!d){
       paintTile("training", null, "", "", scoresLoading ? "reaching the bridge…" : "bridge unreachable");
+      paintFit(null, scoresLoading ? "reaching the bridge…" : "bridge unreachable");
       paintTile("recovery", null, "", "", "");
       paintTile("fatigue", null, "", "", "");
       if (vd) vd.textContent = "";
@@ -1838,11 +1916,12 @@ V.today = async function(){
     if (strava && t){
       paintTile("training", t.ctl, fitLevel(t.ctl), t.ramp ? t.ramp.tone : "",
         t.ramp ? `${sgn(t.ramp_7d)}/wk · ${t.ramp.word}` : `${t.tss_7d} TSS/wk`);
-      drawSpark(d.series);
+      paintFit(t); drawSpark(d.series);
       paintTile("fatigue", f.atl, f.form ? f.form.word : "", f.form ? f.form.tone : "",
         `form ${sgn(f.tsb)}`, t.ctl ? f.atl / (2 * t.ctl) : 0.5);   // fatigue against fitness: twice the fitness is a full ring
     } else {
       paintTile("training", null, "", "", "Strava not connected");
+      paintFit(null, "Strava not connected");
       paintTile("fatigue", null, "", "", "");
     }
     const src = (d.sources && d.sources.recovery) || { source: "whoop" };
@@ -2052,7 +2131,7 @@ V.today = async function(){
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
     drawScores();
@@ -2518,24 +2597,34 @@ V.settings = function(){
       return;
     }
     const mark = s => s.error ? "!" : (s.connected && s.has_data) ? "✓" : s.connected ? "◐" : s.configured ? "○" : "×";
-    const rows = (st.integrations||[]).map(s=>`
-      <li class="${(s.connected&&s.has_data)?"done":""}">
-        <span class="n"><b>${mark(s)} ${esc(s.name)}</b>
-          <span class="small">${esc(s.role||"")}</span>
-          <span class="small">${esc(s.error||s.detail||"")}</span>
-          ${s.fix?`<span class="small"><b>→ ${esc(s.fix)}</b></span>`:""}</span>
-        <span class="tag">${(s.auth_url && s.configured && s.fix)
-          ? `<a href="${esc(s.auth_url)}">connect</a>` : ""}</span></li>`).join("");
-    el.innerHTML = `<h4>Connections · ${st.ready} of ${st.total} live</h4>
-      ${st.base_url_note?`<div class="small"><b>${esc(st.base_url_note)}</b></div>`:""}
-      <ul class="agenda totals">${rows}</ul>
-      <div class="small">✓ live and receiving · ◐ authorized, no data yet · ○ credentials set, not authorized · × not configured</div>
-      <button id="recheck">Re-check</button>
-      <div class="card" id="gcfg" style="margin-top:12px"><h4>Google Calendar · the connection</h4>
+    // a status board: a dot, the name, one short line; the steps open when the tile is tapped
+    const state = s => s.error || /\berror\b/i.test(s.detail || "") ? "no" : (s.connected && s.has_data) ? "ok" : (s.connected || s.configured) ? "half" : "no";
+    const RANK = { ok: 0, half: 1, no: 2 };
+    const short = s => String(s.error || s.detail || "").split(/ — |: /)[0];
+    const list = (st.integrations||[]).map((s, i) => ({ s, i })).sort((a, b) => RANK[state(a.s)] - RANK[state(b.s)] || a.i - b.i).map(x => x.s);
+    const isGoogle = s => s.key === "google" || /google calendar/i.test(s.name || "");
+    const hasGoogle = list.some(isGoogle);
+    const gcfgHTML = `<div id="gcfg" class="gcfg"><h4>Google Calendar · the connection</h4>
         <div class="small">The site reads your calendars and writes events you add here once it has a Google OAuth client. Make one in Google Cloud Console (APIs &amp; Services → Credentials → Create credentials → OAuth client ID → Web application), add this redirect address, enable the Google Calendar API, and paste the client id and secret here. Then tap Connect and approve.</div>
         <div class="small">Redirect address: <code id="gRedirect">${esc(DEFAULT_API)}/gcal/callback</code></div>
         <div class="row2"><span><label>Client id</label><input id="gId" placeholder="…apps.googleusercontent.com" autocomplete="off"></span><span><label>Client secret</label><input id="gSecret" type="password" autocomplete="off"></span></div>
-        <button class="primary" id="gSave">Save</button> <a class="btn" id="gConnect" href="${esc(DEFAULT_API)}/gcal/auth">Connect Google</a> <span class="small" id="gMsg"></span></div>`;
+        <div class="gbtns"><button class="primary" id="gSave">Save</button><a class="btn" id="gConnect" href="${esc(DEFAULT_API)}/gcal/auth">Connect Google</a></div><div class="small" id="gMsg"></div></div>`;
+    const tiles = list.map(s => { const k = state(s), wide = isGoogle(s);
+      return `<details class="ctile ${k}${wide ? " gtile" : ""}"${s.key ? ` data-key="${attr(s.key)}"` : ""}><summary><b><i class="cdot" aria-hidden="true"></i>${esc(s.name)}<span class="cmk" aria-label="${k === "ok" ? "live" : k === "half" ? "half done" : "off"}">${mark(s)}</span></b><span class="cline">${esc(short(s))}</span></summary>
+        <div class="cbody">
+          <span class="small">${esc(s.role||"")}</span>
+          <span class="small">${esc(s.error||s.detail||"")}</span>
+          ${s.fix?`<span class="small"><b>→ ${esc(s.fix)}</b></span>`:""}
+          ${s.hint?`<span class="small">${esc(s.hint)}</span>`:""}
+          ${(s.auth_url && s.configured && s.fix) ? `<a class="btn cconnect" href="${esc(s.auth_url)}">connect</a>` : ""}
+          ${wide ? gcfgHTML : ""}
+        </div></details>`; }).join("");
+    el.innerHTML = `<div class="sttl"><h4>Connections</h4><span class="hu-chip ${st.ready >= st.total ? "hu-go" : st.ready ? "hu-hold" : "hu-stop"}">${st.ready} of ${st.total} live</span></div>
+      ${st.base_url_note?`<div class="small"><b>${esc(st.base_url_note)}</b></div>`:""}
+      <div class="cboard">${tiles}</div>
+      <div class="small clegend"><span class="ok"><i class="cdot"></i>live and receiving</span> <span class="half"><i class="cdot"></i>authorized or set, no data yet</span> <span class="no"><i class="cdot"></i>not configured</span> · tap a tile for its steps</div>
+      <button id="recheck">Re-check</button>
+      ${hasGoogle ? "" : `<details class="why gfold"><summary>Google Calendar · the connection</summary>${gcfgHTML}</details>`}`;
     try{
       const g = await bridge("/gcal/config");
       const r = document.getElementById("gRedirect"); if (r && g.redirect_uri) r.textContent = g.redirect_uri;
