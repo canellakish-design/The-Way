@@ -157,6 +157,27 @@ function breakthroughsOf(rides) {
   }
   return out;
 }
+// New bests: a ride in the last two weeks that rode a length (5 minutes and up) harder than any ride before it
+// in the window. Not the same as a breakthrough: a best beats what you have ridden, a breakthrough beats what
+// the curve already said you could ride. Each comes with the curve's own number from before the ride.
+function newBestsOf(rides, since) {
+  const sorted = rides.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
+  const out = [];
+  for (let i = 0; i < sorted.length; i++) {
+    const r = sorted[i]; if (r.date < since || !r.mmp) continue;
+    const prior = sorted.slice(0, i).filter(x => x.date < r.date);
+    if (prior.length < 3) continue;
+    const pts = pointsOf(prior); const sig = pts.filter(p => p.dur_s >= 120).length >= 8 ? fit(pts, { floor: false }) : null;
+    for (const dur of DURS) {
+      if (dur < 300 || !r.mmp[dur]) continue;
+      let prev = null; for (const x of prior) { const v = x.mmp && x.mmp[dur]; if (v && (!prev || v > prev.watts)) prev = { watts: v, date: x.date, name: x.name }; }
+      if (prev && r.mmp[dur] < prev.watts + 2) continue;
+      const curve = sig ? Math.round(pd(dur, sig.tp, sig.hie_kj * 1000, sig.pp)) : null;
+      out.push({ id: r.id, date: r.date, name: r.name, dur_s: dur, watts: r.mmp[dur], prev_watts: prev ? prev.watts : null, prev_date: prev ? prev.date : null, curve_before: curve });
+    }
+  }
+  return out;
+}
 function sayDur(s) { return s < 60 ? `${s} seconds` : s % 60 === 0 ? `${s / 60} minute${s === 60 ? '' : 's'}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
 async function breakthroughs() {
   const d = await db();
@@ -246,6 +267,7 @@ async function report() {
     bests[m] = p ? { watts: p.watts, date: p.date, name: p.name, curve: sig ? Math.round(pd(m * 60, sig.tp, sig.hie_kj * 1000, sig.pp)) : null } : null;
   }
   const bts = await breakthroughs().catch(() => []);
+  const nbs = newBestsOf(rides, tz.shiftKey(today, -13));
   const newest = points.filter(p => p.dur_s >= 1200).sort((a, b) => b.date.localeCompare(a.date))[0];
   const ageDays = newest ? Math.round((new Date(today) - new Date(newest.date)) / 864e5) : null;
   // What sets the curve. The short end (20 s to 1 min) pins PP and HIE; a
@@ -275,7 +297,7 @@ async function report() {
     signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, rmse_pct: sig.rmse_pct, points: sig.points, tp_floor: sig.tp_floor, hie_floor_kj: sig.hie_floor_kj } : null,
     ramp,
     confidence, why, rides: rides.length, lookback_days: LOOKBACK_DAYS, newest_long_effort: newest ? { date: newest.date, name: newest.name, age_days: ageDays } : null,
-    planning_ftp: st.ftp, bests, points, breakthroughs: bts.slice(-10),
+    planning_ftp: st.ftp, bests, points, breakthroughs: bts.slice(-10), new_bests: nbs,
     curve: sig ? DURS.map(t => ({ dur_s: t, watts: Math.round(pd(t, sig.tp, sig.hie_kj * 1000, sig.pp)) })) : [],
     left: null
   };
@@ -307,4 +329,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, pointsOf };
+module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, newBestsOf, pointsOf };

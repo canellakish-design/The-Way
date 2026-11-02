@@ -38,8 +38,9 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 1 Nov | Three beers logged twice, at 7:23p and 7:25p | The advisor did not see the beers already logged in an earlier turn, and the audit only compared neighbouring entries, so the shrimp logged between them hid the double | voice context lists the last three hours of the journal; the same words within twenty minutes are refused unless he says another; the audit compares every pair within ten minutes | advisor |
 | 1 Nov | Journal cards squeezed the meal name to a word a line | The grade badge carried the whole sentence and sat in its own column | badge under the name, first clause only | new case |
 | 1 Nov | Asked whether the calories follow the rides; they followed the plan when the plan was kept | A kept plan carried the planned ride's estimate, and a ride nobody planned was left out | the target carries every ride done plus what is still ahead | disagreement |
+| 1 Nov | Today's 20 minutes at 164 W, his best in 90 days, got "no breakthrough yet" and nothing else | The page only knew breakthroughs (beating the curve, which already allowed 174 W); a best against his own rides had no line | new bests listed beside breakthroughs, with the curve's number | new case |
 
-**1 Nov: 20 corrections.** 10 new case, 6 disagreement, 2 my mistake, 2 advisor.
+**1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 
 ## Found by the Chrome tests (before Harry saw them)
 

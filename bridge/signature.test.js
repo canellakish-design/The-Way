@@ -56,3 +56,15 @@ ok('breakthroughs: a ride that beats the curve the rides before it drew is one, 
   assert.ok(bt[0].hits.every(h => h.over_pct >= 2));
 });
 console.log(n + ' passed');
+
+// a new best is a length ridden harder than any ride before it; it is not a breakthrough unless it beats the curve
+{
+  const S = require('./signature');
+  const base = { 120: 250, 180: 240, 240: 230, 300: 220, 360: 210, 480: 195, 600: 180, 720: 170, 900: 160, 1200: 150 };
+  const mk = (id, date, m) => ({ id, date, name: id, mmp: m });
+  const rides = [mk('a', '2026-08-25', base), mk('b', '2026-08-29', Object.assign({}, base, { 1200: 155 })), mk('c', '2026-09-04', base), mk('d', '2026-11-01', Object.assign({}, base, { 900: 165, 1200: 164 }))];
+  const nb = S.newBestsOf(rides, '2026-10-19');
+  require('assert').deepStrictEqual(nb.map(b => [b.dur_s, b.watts, b.prev_watts]), [[900, 165, 160], [1200, 164, 155]]);
+  require('assert').strictEqual(S.newBestsOf(rides, '2026-11-02').length, 0);
+  console.log('ok newBestsOf: 15 and 20 min bests found, nothing outside the window');
+}
