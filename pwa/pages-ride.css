@@ -1,1 +1,94 @@
 /* pages-ride: page styles for the head-unit redesign (docs/redesign-head-unit.html). */
+
+/* grade colours, shared by the big letter, the ride's small letter and the ribbon */
+#ridePage{--g-a:var(--green); --g-b:#B9D27A; --g-c:var(--amber); --g-d:#E39A5A; --g-f:var(--red)}
+#ridePage .g-a{color:var(--g-a)} #ridePage .g-b{color:var(--g-b)} #ridePage .g-c{color:var(--g-c)} #ridePage .g-d{color:var(--g-d)} #ridePage .g-f{color:var(--g-f)}
+
+/* sections: flat on the black, a rule above, a mono label */
+.rd-sec{margin-top:22px; padding-top:12px; border-top:1px solid var(--line); display:flex; flex-direction:column; gap:10px; min-width:0}
+.rd-sec > .small{font-size:13.5px}
+
+/* the hero: a 120 px letter, the facts beside it, what to wear under */
+.rd-hero{display:grid; grid-template-columns:auto minmax(0,1fr); gap:6px 14px; align-items:center; margin-top:12px}
+.rd-hero.none{grid-template-columns:1fr}
+.rd-letter{font-family:var(--num); font-weight:800; font-size:120px; line-height:.8; letter-spacing:-3px; padding:6px 2px 0 0; font-variant-numeric:tabular-nums}
+.rd-facts{display:flex; flex-direction:column; gap:4px; min-width:0}
+.rd-big{font-size:30px; color:var(--ink)}
+.rd-line{font-size:13.5px; line-height:1.35; color:var(--ink)}
+.rd-why{font-size:12.5px; line-height:1.35; color:var(--muted)}
+.rd-wear{grid-column:1 / -1; font-size:13.5px; line-height:1.4; color:var(--ink); border-left:3px solid var(--line); padding:4px 0 4px 10px; margin-top:6px}
+.rd-wear .hu-lab{display:block; margin-bottom:2px}
+
+/* the day's rides: one row each, time | name | chip */
+.rd-rides{margin-top:14px; display:flex; flex-direction:column; gap:6px}
+.rd-rides ul{margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.rd-ride{list-style:none; display:grid; grid-template-columns:48px minmax(0,1fr) auto; gap:2px 10px; align-items:start; background:var(--card); padding:8px 10px}
+.rd-ride.graded{box-shadow:inset 0 0 0 1px var(--line)}
+.rd-rt{font-family:var(--mono); font-size:12px; color:var(--muted); padding-top:2px}
+.rd-rb{display:flex; flex-direction:column; gap:2px; min-width:0}
+.rd-rname{font-size:14.5px; line-height:1.3; font-weight:500; overflow-wrap:anywhere}
+.rd-rname svg{vertical-align:-2px; margin-right:4px}
+.rd-rsub{font-size:12.5px; line-height:1.35; color:var(--muted)}
+.rd-rg{font-family:var(--num); font-weight:700; font-size:16px; margin-right:6px}
+.rd-rc{padding-top:1px}
+
+/* the ribbon: wind over, cells, hour labels under */
+.rd-ribbon{display:flex; flex-direction:column; gap:3px; min-width:0}
+.rd-wind,.rd-cells,.rd-hl{display:grid; grid-template-columns:repeat(var(--n), minmax(0,1fr)); gap:2px}
+.rd-wind span{display:flex; flex-direction:column; align-items:center; gap:0; min-width:0}
+.rd-wind svg{width:15px; height:15px; display:block}
+.rd-wind i{font-style:normal; font-family:var(--mono); font-size:10px; line-height:1.1; color:var(--muted)}
+.rd-cells{position:relative; margin:3px 0}
+.rd-h{display:block; height:32px; background:var(--line); position:relative; text-decoration:none}
+.rd-h.g-good{background:var(--green)} .rd-h.g-ok{background:var(--amber)} .rd-h.g-bad{background:var(--red)} .rd-h.g-none{background:var(--line)}
+.rd-h.dark{background:repeating-linear-gradient(135deg, #2a2d33 0 3px, #15171a 3px 6px)}
+.rd-h.past{opacity:.5}
+.rd-h.busy::after{content:""; position:absolute; left:0; right:0; bottom:-6px; height:3px; background:var(--muted)}
+.rd-h:focus-visible{outline:2px solid var(--ink); outline-offset:1px}
+.rd-rbox{position:absolute; top:-4px; bottom:-4px; border:2px solid var(--ink); pointer-events:none; z-index:1}
+.rd-hl{margin-top:4px}
+.rd-hl span{font-family:var(--mono); font-size:10px; color:var(--muted); text-align:center; white-space:nowrap; overflow:visible; min-width:0}
+
+/* the one line under the ribbon, with its action on the right */
+.rd-best{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; font-size:14px; line-height:1.35}
+.rd-best b{font-family:var(--num); font-size:18px; font-weight:700; letter-spacing:.2px}
+.rd-best button{margin:0; padding:8px 10px; font-size:11px; letter-spacing:.8px; max-width:130px; white-space:normal; line-height:1.2}
+#rMsg:empty{display:none}
+.rd-key{font-size:12.5px; margin-top:8px}
+.rd-hours{margin:8px 0 0; padding:0}
+.rd-hours li{list-style:none; display:grid; grid-template-columns:34px minmax(0,1fr); gap:8px; padding:5px 0; border-bottom:1px solid var(--line-soft, var(--line)); font-size:12.5px; line-height:1.35; color:var(--ink)}
+.rd-hours li:empty{display:none}
+.rd-hours .t{font-family:var(--mono); font-size:11px; color:var(--muted); padding-top:1px}
+.rd-hours .cgrade{font-size:10px; padding:2px 4px; margin-right:6px}
+
+/* fitness and progress: three fields; the line and the list in the fold */
+.rd-fields .hu-field .n{font-size:32px}
+.rd-fields .hu-field .u{font-size:10px; overflow-wrap:anywhere}
+.rd-fit{display:flex; align-items:center; gap:12px; margin-top:8px}
+.rd-fit .ctlspark{width:120px; height:44px}
+.rd-fit .small{font-size:12.5px; margin:0}
+.rd-sec details .progress h4{font-family:var(--mono); font-size:11px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted); margin:12px 0 4px}
+
+/* courses: a drawing, the name in the condensed face, two lines, the action on the right */
+.rd-cwind{font-size:13px}
+.rd-courses{margin:0; padding:0}
+.rd-course{list-style:none; display:grid; grid-template-columns:64px minmax(0,1fr); gap:10px; padding:10px 0 10px 8px; border-bottom:1px solid var(--line); border-left:3px solid transparent}
+.rd-course.picked{border-left-color:var(--green)}
+.rd-course:last-child{border-bottom:none}
+.rd-shape{width:64px; height:64px; background:var(--card); display:block}
+.rd-cbody{display:flex; flex-direction:column; gap:3px; min-width:0}
+.rd-chead{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; align-items:center}
+.rd-cname{font-family:var(--num); font-size:22px; font-weight:700; line-height:1; letter-spacing:.2px; overflow-wrap:anywhere}
+.rd-rank{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--muted); margin-right:6px; vertical-align:3px}
+.rd-chead button{margin:0; padding:8px 10px; font-size:11px; min-height:40px; letter-spacing:.8px}
+.rd-csum{font-size:12.5px; line-height:1.45; color:var(--muted)}
+.rd-csum b{color:var(--ink); font-weight:600}
+.rd-cwhy{font-family:var(--mono); font-size:10.5px; line-height:1.4; color:var(--muted)}
+
+/* zones link and the planning numbers fold at the foot */
+.rd-link{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center; margin-top:22px; padding:10px 0 10px 12px; background:var(--card); border-left-color:var(--z1); text-decoration:none; color:var(--ink)}
+.rd-link b{display:block; font-family:var(--num); font-size:20px; font-weight:700; text-transform:uppercase; letter-spacing:.3px; line-height:1.1}
+.rd-link .small{display:block; font-size:12.5px; margin-top:2px}
+.rd-go{font-family:var(--num); font-size:30px; color:var(--muted); padding-right:14px}
+.rd-plan{margin-top:16px; padding-top:12px; border-top:1px solid var(--line)}
+.rd-plan > .small:first-of-type{margin-top:8px}
