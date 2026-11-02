@@ -56,6 +56,10 @@ function workoutKcal(sessions, ftp) {
   return Math.round(k);
 }
 
+// The sessions whose energy the day's target carries: once anything is ridden, the rides done (each
+// one, planned or not) and whatever is still ahead; before that, the plan.
+function burnList(done, ahead) { return (done || []).concat(ahead || []); }
+
 // opts: { kg, cm, age, deficit } override the profile (the scale sets kg;
 // deficit 0 on a day the body says rest).
 function targets(day, kcalFromRiding, opts) {
@@ -530,5 +534,5 @@ function mealMatch(plan, logged, ctx) {
     macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
 
-module.exports = { PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS };

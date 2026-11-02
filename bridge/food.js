@@ -86,7 +86,7 @@ async function buildSessions(date, o) {
   // written and simply marked done, so the food plan does not move. Short
   // of that, the rest of the day is rebuilt from the work actually done.
   const done = out.filter(s => s.done), planned = out.filter(s => !s.done);
-  let sessions = out, work = null;
+  let sessions = out, work = null, burn = out;
   if (done.length) {
     const { gradeOne } = require('./workouts');
     const lastEnd = Math.max(...done.map(d => F.toMin(d.end_time) ?? 0));
@@ -97,6 +97,9 @@ async function buildSessions(date, o) {
     const rides = done.map(r => ({ minutes: r.minutes, tss: r.tss }));
     const graded = covered.map(p => Object.assign({}, p, { compliance: gradeOne({ metrics: { duration_s: (p.minutes || 0) * 60, tss: p.tss || 0 } }, rides).compliance }));
     const compliant = graded.length > 0 && graded.every(p => p.compliance.pct >= 85);
+    // the calories follow the work: every ride actually done (a third one nobody planned included) plus what is still ahead,
+    // even when the plan stands for the meals
+    burn = F.burnList(done, ahead);
     const pm = planned.filter(F.isRideSession).reduce((a, p) => a + (p.minutes || 0), 0), dm = done.filter(F.isRideSession).reduce((a, d) => a + (d.minutes || 0), 0);
     const pct = graded.length ? Math.round(graded.reduce((a, p) => a + p.compliance.pct, 0) / graded.length) : null;
     if (compliant) {
@@ -114,7 +117,7 @@ async function buildSessions(date, o) {
           : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min (${pct}%), so the rest of today is a ${F.LABEL[actualDay]}.` };
     }
   }
-  return { sessions, ftp: st.ftp, work };
+  return { sessions, ftp: st.ftp, work, burn };
 }
 
 // A planned session whose start has passed with no ride against it. Three
@@ -188,10 +191,10 @@ async function bodyKg() {
 }
 
 async function guidelinesFor(date) {
-  const { sessions, ftp, work } = await sessionsFor(date);
+  const { sessions, ftp, work, burn } = await sessionsFor(date);
   const day = F.fuelDay(sessions);
   const [{ deficit, why }, kg] = await Promise.all([deficitFor(date), bodyKg()]);
-  const t = F.targets(day, F.workoutKcal(sessions, ftp), { kg, deficit });
+  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, deficit });
   if (why) t.deficit_note = why;
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
@@ -350,7 +353,10 @@ async function dayReport(date) {
   // hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
   // A plate that mentions its drink ("a wrap and two bottles of water") is still a plate: the drink
   // flag alone does not make it one; little protein and few calories do.
-  const isDrink = e => (!!e.drink_only || !!e.alcohol || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300)) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+  const drinkish = e => !e.supplement && (!!e.drink_only || !!e.alcohol || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300));
+  const isDrink = e => drinkish(e) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+  // the pages list by the same rule: a drink (water, coffee, beer, a bottle on the bike) is on Hydration, the rest on Food
+  for (const e of entries) e.is_drink = drinkish(e);
   // The snack's words follow the day: how short protein is, not "if".
   const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
   const planMeals = g.meals.map(m => m.slot !== 'snack' ? m : Object.assign({}, m, { what: (() => {

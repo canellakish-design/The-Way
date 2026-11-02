@@ -271,7 +271,7 @@ V.food = async function(){
         return `<div class="xbar"><span class="xbl">${l}</span><span class="xbtrack"><span class="xbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="xbn"><b>${a}</b> / ${g} g${over ? `<i class="ov">${a - g} g over</i>` : left ? `<i>${left} g to go</i>` : ""}</span></div>`; }).join("")}
       <div class="small fkline">${sum("kcal")} of ${t.kcal || "—"} kcal</div></div>`;
     // food only here: drinks (water, coffee, beer, bottles) are listed and logged on the Hydration page; the bars above still count their calories
-    const foods = day.entries.filter(e => !e.drink_only), nMeals = foods.filter(e => !e.supplement).length, nDrinks = ents.filter(e => e.drink_only).length;
+    const isDr = e => e.is_drink || e.drink_only, foods = day.entries.filter(e => !isDr(e)), nMeals = foods.filter(e => !e.supplement).length, nDrinks = ents.filter(isDr).length;
     const mEl = document.getElementById("fMacros");
     if (mEl) mEl.innerHTML = `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${bars}</div>`;
     el.innerHTML = `
@@ -316,7 +316,7 @@ V.food = async function(){
         <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${e.drink_only?"drink":esc(e.meal)}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
           <div class="jname">${esc(e.name)}</div>
           <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}</div></div>
-        <div class="jfit">${(() => { const m = day && (day.meals||[]).find(x => (x.logged||[]).includes(e.id)); const mt = m && m.match; const tn = mt ? (mt.key === "green" ? "good" : mt.key === "yellow" ? "warn" : "bad") : null; return mt ? `<span class="fit" style="color:${toneC(tn)};border-color:${toneC(tn)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a); })()}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div>
+        <div class="jfit">${(() => { const m = day && (day.meals||[]).find(x => (x.logged||[]).includes(e.id)); const mt = m && m.match; const tn = mt ? (mt.key === "green" ? "good" : mt.key === "yellow" ? "warn" : "bad") : null; return mt ? `<span class="fit" style="color:${toneC(tn)};border-color:${toneC(tn)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(String(mt.word || "").split(" · ")[0])}</span>` : fitBadge(a); })()}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div>
       ${e.plan && e.plan.kcal != null ? `<div class="small jplan">Graded against the plan as it stood at ${esc(hm12(e.plan.at||e.time))}: ${e.plan.kcal} kcal · ${e.plan.carbs_g}C · ${e.plan.protein_g}P${e.plan.low_carb ? " · low carb" : ""}${e.plan.backfilled ? " (filled in later)" : ""}</div>` : ""}
       ${e.maybe_double_of ? `<div class="small jdouble">Looks like the entry just before it, logged again. If it was one bottle, remove this one.</div>` : ""}
       <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
@@ -395,7 +395,7 @@ V.food = async function(){
       <div class="jname">${esc(e.name)} ${mt ? `<span class="fit" style="color:${toneC(tone)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a)}</div>
       <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}${m ? ` · the slot wanted ${m.kcal} kcal · ${m.carbs_g}C · ${m.protein_g}P` : ""}</div>
       ${mt && mt.macros && mt.rules ? `<div class="small">macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
-      <div>${esc(a.why)}</div>${e.drink_only ? `<div class="small">A drink: it is listed on the <a href="#hydration">Hydration page</a>.</div>` : ""}</div>`;
+      <div>${esc(a.why)}</div>${e.drink_only || e.is_drink ? `<div class="small">A drink: it is listed on the <a href="#hydration">Hydration page</a>.</div>` : ""}</div>`;
   };
   const wform = document.getElementById("writeForm");
   document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };

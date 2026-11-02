@@ -34,6 +34,12 @@ ok('targets: Mifflin energy, the deficit, protein per kg, carb floors by day', (
   assert.strictEqual(F.targets('rest', 0, { deficit: 0, kg: 104 }).kcal, 2540);
 });
 
+ok('burnList: a third ride nobody planned adds its calories; the plan still ahead counts too', () => {
+  const done = [{ name: 'Zwift', kcal: 450, done: true }, { name: 'MTB', kcal: 380, done: true }, { name: 'third ride', kcal: 300, done: true }];
+  const ahead = [{ name: 'Zone 1, 60 min', tss: 30 }];
+  assert.strictEqual(F.workoutKcal(F.burnList(done, ahead), 175), 450 + 380 + 300 + Math.round(30 * 175 * 0.036));
+  assert.strictEqual(F.workoutKcal(F.burnList(done.slice(0, 2), []), 175), 830);
+});
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
 });

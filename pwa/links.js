@@ -78,7 +78,7 @@
       const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
       if (!alive("hydration") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.water, h = food && food.hydration, B = window.foodBits || {};
-      const drinks = (food && food.entries || []).filter(e => !e.supplement && (e.fluid_ml > 0 || e.drink_only));
+      const drinks = (food && food.entries || []).filter(e => !e.supplement && (e.is_drink || e.drink_only || e.fluid_ml > 0));
       el.innerHTML = headHTML("water", "Hydration", L) + `
         <div class="card">${h && B.hydrationHTML ? B.hydrationHTML(h) : `<div class="small">No drinks yet today.</div>`}</div>
         <div class="card"><h4>Log a drink</h4>
@@ -90,7 +90,7 @@
           <button class="primary" id="hyGo">Log it</button> <span class="small" id="hyMsg"></span>
           ${sayWriteHTML("hySw", "a large iced coffee with milk, or two glasses of water")}
           <div class="small">Anything with calories, coffee or a shake, is read for its calories too.</div></div>
-        <div class="card"><h4>Today's drinks</h4>${drinks.length ? `<ul class="agenda totals">${drinks.slice().reverse().map(e => `<li><span class="n">${esc(hm12(e.time))} · ${esc(e.name)}</span><span class="tag">${e.fluid_ml || 0} ml <button class="tdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH || "×"}</button></span></li>`).join("")}</ul>` : `<div class="small">None logged yet.</div>`}
+        <div class="card"><h4>Today's drinks</h4>${drinks.length ? `<ul class="agenda totals">${drinks.slice().reverse().map(e => `<li><span class="n">${esc(hm12(e.time))} · ${esc(e.name)}</span><span class="tag">${e.fluid_ml ? e.fluid_ml + " ml" : e.kcal ? e.kcal + " kcal" : "0 ml"} <button class="tdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH || "×"}</button></span></li>`).join("")}</ul>` : `<div class="small">None logged yet.</div>`}
           ${whyHTML(L)}</div>`;
       if (h && B.wireHydration) B.wireHydration(el, h);
       const log = async (ml, salt)=>{
