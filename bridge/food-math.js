@@ -149,7 +149,8 @@ function cue(day, sessions, nowIso) {
 // fuelling is on top of the day, not inside it.
 function mealPlan(day, sessions, target) {
   const t = target || targets(day, 0);
-  const timed = (sessions || []).filter(x => toMin(x.time) != null)
+  // the day is laid out around the first ride; a lift or a run never gets a "before" meal or an on-the-bike slot
+  const timed = (sessions || []).filter(x => isRideSession(x) && toMin(x.time) != null)
     .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
     .sort((a, b) => a.start - b.start)[0];
   const meal = (time, slot, what, share, carbShare, protein) => ({
@@ -248,10 +249,10 @@ function mealPlan(day, sessions, target) {
   // the second session gets its own bottle when its length calls for one.
   const others = (sessions || []).filter(x => toMin(x.time) != null)
     .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
-    .sort((a, b) => a.start - b.start).slice(1);
+    .filter(o => o.x !== timed.x).sort((a, b) => a.start - b.start);
   for (const s2 of others) {
     const ob = onBike(Math.max(0, s2.end - s2.start), /vo2|40\s*\/\s*20|threshold|race/i.test(s2.x.name || ''));
-    if (ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
+    if (isRideSession(s2.x) && ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
     for (const m of out) {
       if (m.extra || m.slot === 'on the bike') continue;
       const tm = toMin(m.time);

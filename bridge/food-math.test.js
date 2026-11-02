@@ -40,6 +40,14 @@ ok('burnList: a third ride nobody planned adds its calories; the plan still ahea
   assert.strictEqual(F.workoutKcal(F.burnList(done, ahead), 175), 450 + 380 + 300 + Math.round(30 * 175 * 0.036));
   assert.strictEqual(F.workoutKcal(F.burnList(done.slice(0, 2), []), 175), 830);
 });
+ok('mealPlan: a lift is not a ride: no before meal, no on-the-bike slot, lunch at its usual hour', () => {
+  const day = F.mealPlan('rest', [{ name: 'Push', sport: 'WeightTraining', time: '13:30', minutes: 55 }], F.targets('rest', 0));
+  assert.ok(!day.some(m => m.slot === 'on the bike' || m.slot === 'before'), JSON.stringify(day.map(m => m.slot)));
+  assert.strictEqual(day.find(m => m.slot === 'lunch').time, '13:00');
+  const both = F.mealPlan('normal', [{ name: 'Push', sport: 'WeightTraining', time: '08:00', minutes: 55 }, { name: 'Zone 1, 60 min', sport: 'Ride', time: '16:00', minutes: 60 }], F.targets('normal', 300));
+  assert.strictEqual(both.filter(m => m.slot === 'on the bike').length, 1);
+  assert.strictEqual(both.find(m => m.slot === 'on the bike').time, '16:00');
+});
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
 });
