@@ -862,7 +862,8 @@ header h1{user-select:none}
 .crow .score.cbox, .crow .score.cbox[data-tone]{flex:0 0 calc((100% - 54px) / 3); max-width:calc((100% - 54px) / 3)}
 .chaintoday .score.tcell, .chaintoday .score.tcell[data-tone]{flex:0 0 calc((100% - 54px) / 3); max-width:calc((100% - 54px) / 3)}
 .mbars.day{border-top:none; margin-top:4px}
-.fuelnum{white-space:nowrap; font-family:var(--mono)}
+.fuelnum{font-family:var(--mono)}
+.fuelnum b{white-space:nowrap}
 
 /* a page for each link of the chain */
 .linkhead .lhrow{display:flex; gap:10px}

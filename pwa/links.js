@@ -45,7 +45,7 @@
     const el = page("Hydration");
     const draw = async ()=>{
       const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("hydration")) return;
+      if (!alive("hydration") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.water, h = food && food.hydration, B = window.foodBits || {};
       const drinks = (food && food.entries || []).filter(e => !e.supplement && (e.fluid_ml > 0 || e.drink_only));
       el.innerHTML = headHTML("water", "Hydration", L) + `
@@ -78,7 +78,7 @@
     const el = page("Fuel");
     const draw = async ()=>{
       const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("fuel")) return;
+      if (!alive("fuel") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.fuel, e = food && food.energy, B = window.foodBits || {};
       const due = (food && food.supps && (food.supps.due || food.supps)) || [];
       const rx = (Array.isArray(due) ? due : []).filter(x => x.link === "fuel");
@@ -113,7 +113,7 @@
     const el = page("Sleep");
     const draw = async ()=>{
       const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("sleep")) return;
+      if (!alive("sleep") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.sleep;
       const nights = (L && L.nights) || [];
       const mg = (food && food.entries || []).some(e => e.supplement && e.key === "magnesium");
@@ -143,7 +143,7 @@
     const el = page("Recovery");
     const draw = async ()=>{
       const [chain, scores] = await Promise.all([get("/chain"), get("/scores")]);
-      if (!alive("recovery")) return;
+      if (!alive("recovery") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.recovery;
       const days = (L && L.days) || [], r = scores && scores.recovery;
       el.innerHTML = headHTML("recovery", "Recovery", L) + `
@@ -169,7 +169,7 @@
     const el = page("Weight");
     const draw = async ()=>{
       const [chain, w] = await Promise.all([get("/chain"), get("/weigh-in")]);
-      if (!alive("weight")) return;
+      if (!alive("weight") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.weight;
       const trend = w && w.trend_lb_wk != null ? `${w.trend_lb_wk > 0 ? "+" : ""}${w.trend_lb_wk} lb a week over ${w.trend_days} days` : w && w.week_change_lb != null ? `${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb} lb on the week` : "not enough readings for a trend yet";
       el.innerHTML = headHTML("weight", "Weight", L) + `
@@ -197,7 +197,7 @@
     const el = page("Micronutrients");
     const draw = async ()=>{
       const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("micros")) return;
+      if (!alive("micros") || !el.isConnected) return;   // a newer draw of this page has taken over
       const L = chain && chain.links && chain.links.micros, B = window.foodBits || {};
       el.innerHTML = headHTML("micros", "Micros", L) + `
         <div class="card">${B.microHTML && food ? B.microHTML(food.micros, food) : `<div class="small">loading…</div>`}</div>
