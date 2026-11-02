@@ -276,6 +276,7 @@ V.food = async function(){
         <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
     const sessions = (day.sessions||[]).map(s=>`${window.kindIcon ? kindIcon(s.name, s.sport) : ""}${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
     el.innerHTML = `
+      ${typeof complianceHTML === "function" ? `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${complianceHTML({ target: day.target, meals: (day.actual && day.actual.meals) || 0, compliance: day.compliance, suggestion: null }, day)}</div>` : ""}
       <a class="btn" href="${isToday?"#live":"#live?date="+date}">Live fuel and hydration</a>
       <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
         ${targetsRow(day.target)}

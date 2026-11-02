@@ -863,3 +863,15 @@ header h1{user-select:none}
 .chaintoday .score.tcell, .chaintoday .score.tcell[data-tone]{flex:0 0 calc((100% - 54px) / 3); max-width:calc((100% - 54px) / 3)}
 .mbars.day{border-top:none; margin-top:4px}
 .fuelnum{white-space:nowrap; font-family:var(--mono)}
+
+/* a page for each link of the chain */
+.linkhead .lhrow{display:flex; gap:10px}
+.linkhead .lh{flex:1 1 0; min-width:0; border:2px solid var(--line); padding:12px 10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px}
+.linkhead .lhnum{font-family:var(--mono); font-size:30px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums}
+.quicklog{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 10px}
+.quicklog button{margin:0}
+svg.bars{width:100%; height:auto; display:block; margin:6px 0 10px}
+svg.bars .barlab{font-family:var(--mono); font-size:9px; fill:var(--muted)}
+svg.bars .barval{font-family:var(--mono); font-size:9px; fill:var(--ink)}
+svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
+.macrocard .mbars.day{margin-top:0}

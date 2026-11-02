@@ -192,7 +192,7 @@ const V = {};
 const view = document.getElementById("view");
 view.dataset.booted = "1";   // the placeholder/error banner stands down
 /* Legacy hashes (old tabs, saved links, kiosk bookmarks) land on their new homes. */
-const REDIRECTS = { day:"today", agent:"ride", plan:"ride", activate:"settings", train:"calendar", sleep:"today", analyze:"ride", hexis:"food", fuel:"food", recover:"today", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
+const REDIRECTS = { day:"today", agent:"ride", plan:"ride", activate:"settings", train:"calendar", analyze:"ride", hexis:"food", recover:"recovery", water:"hydration", macros:"food", morning:"today", night:"today", bedroom:"today", "routine-am":"today", "routine-pm":"today" };
 function nav(){
   { const vv = document.getElementById("view"); if (vv) vv.dataset.rev = String(Date.now()); }
   // Views may carry parameters after a "?" (#workout?id=…, #calendar?week=…).
@@ -206,8 +206,8 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", flags:"Flags", plan:"The plan", analyze:"Ride" };
-  const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"] };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", flags:"Flags", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
+  const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   if (navEl) navEl.innerHTML = h === "today" ? "" : `${PARENT[h] ? `<a class="navback" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : ""}<a class="navback day" href="#today">‹ Day</a>`;
   { const t = document.querySelector("header h1"); if (t && !t.dataset.home){ t.dataset.home = "1"; t.style.cursor = "pointer"; t.onclick = ()=>{ location.hash = "#today"; }; } }
   (V[h] || V.settings)();
@@ -2029,7 +2029,10 @@ V.today = async function(){
       catch(e){ sync.disabled = false; sync.textContent = "sync failed — " + e.message; }
     };
   };
+  // a box of the chain, or its today bar, opens the page for that link; the fitness line still opens its detail here
+  const LINK_PAGE = { plan:"#calendar", sleep:"#sleep", water:"#hydration", food:"#food", micros:"#micros", lift:"#lift", fuel:"#fuel", work:"#ride", recovery:"#recovery", weight:"#weight" };
   view.querySelectorAll(".score").forEach(b => b.onclick = ()=>{
+    if (b.dataset.ck && LINK_PAGE[b.dataset.ck]){ location.hash = LINK_PAGE[b.dataset.ck]; return; }
     openScore = openScore === b.dataset.k ? null : b.dataset.k;
     drawScoreDetail();
   });
