@@ -100,7 +100,8 @@ function wireCurve(box, series, read){
 const fuelCol = pct => pct >= 60 ? "#2E7D4A" : pct >= 35 ? "#8A6A14" : "#7A2E26";
 const fuelColL = pct => pct >= 60 ? "var(--green)" : pct >= 35 ? "var(--amber)" : "var(--red)";
 const verdictCol = key => key === "green" ? "var(--green)" : key === "yellow" ? "var(--amber)" : key === "blue" ? "#5B8DEF" : "var(--red)";
-function energyHTML(e){
+function energyHTML(e, opt){
+  opt = opt || {};   // opt.noHead: the page shows the number itself; opt.noLegs: the page draws the legs rating itself
   if (!e || !e.series || !e.series.length) return `<div class="small">Starts with the first meal.</div>`;
   const nowMin = e.now ? (e.series.find(p=>p.t===e.now.time)||{}).m : null;
   const c = curveSVG({ series: e.series, val: p=>p.pct, lo: 0, hi: 100, col: p=>fuelCol(p.pct),
@@ -110,7 +111,7 @@ function energyHTML(e){
     nowMin, guides: [35,60] });
   const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
-    <div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.arriving_g >= 10 ? ` <span class="small">· ${e.now.arriving_g} g landing</span>` : ""}${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>
+    ${opt.noHead ? "" : `<div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.arriving_g >= 10 ? ` <span class="small">· ${e.now.arriving_g} g landing</span>` : ""}${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>`}
     ${e.now.arriving_g >= 10 ? `<div class="small">The ${e.now.pct}% is what is in the blood and liver this minute; ${e.now.arriving_g} g of carbs from what you just ate are still in the stomach and land over the next two to three hours, which is the rise ahead of the line.</div>` : ""}
     ${(e.awaiting||[]).map(a => `<div class="small">${esc(a.name)} planned at ${esc(hm12(a.time))}: taken as ridden on the strength of ${esc(a.evidence)}; Strava's copy of the ride has not landed yet.</div>`).join("")}
     ${c.svg}
@@ -118,7 +119,7 @@ function energyHTML(e){
     ${ses?`<div class="small">${ses}</div>`:""}
     ${(e.supps||[]).length ? `<div class="small">Supplements: ${(e.supps||[]).map(x => `${esc(hm12(x.time))} ${esc(String(x.name).replace(/,.*$/, ""))}`).join(" · ")}</div>` : ""}
     ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
-    ${e.legs_tap?legsTapHTML(e.legs_tap):""}
+    ${e.legs_tap && !opt.noLegs?legsTapHTML(e.legs_tap):""}
     <details class="why"><summary>what it counts</summary><div class="small">Two stores. The line is the quick store, liver and blood, what a hard effort runs on and what bonking empties: about 110 g full, half that after a night's sleep. The thin line is the legs, muscle glycogen, which only a ride drains and only a day refills; it carries over from yesterday. Each meal's carbs arrive as the stomach empties, slower with fat and protein; protein adds about a sixth of its weight as glucose over the afternoon, so a salmon dinner is a hollow dot and a small slow rise. On the bike a quarter of the carbohydrate burned comes from the quick store, the rest from the legs; carbs eaten on the bike count up to 60 g an hour, 90 with Tailwind. The faint band is the model's own uncertainty. Fat is not drawn: it is the fuel Zone 1 burns, which is why Zone 1 needs only a quarter of a tank.</div></details>
   </div>`;
 }
@@ -130,13 +131,15 @@ function legsTapHTML(t){
 function wireEnergy(root, e, onChange){
   const box = root.querySelector(".energy"); if (!box || !e) return;
   wireCurve(box, e.series, p => `${hm12(p.t)} · ${p.pct}% · about ${p.g} g on board${p.legs_pct!=null?` · legs ${p.legs_pct}%`:""}${p.projected ? " (projected)" : ""}`);
-  box.querySelectorAll("[data-legs]").forEach(b => b.onclick = async ()=>{
+  // the legs rating may sit outside the curve's box (the Fuel page puts it in its Legs field)
+  root.querySelectorAll("[data-legs]").forEach(b => b.onclick = async ()=>{
     b.disabled = true;
     try{ await bridge("/fuel/legs",{method:"POST",headers:J,body:JSON.stringify({ key: b.dataset.ride, legs: +b.dataset.legs })}); if (onChange) await onChange(); }
     catch(err){ b.textContent = "✗"; }
   });
 }
-function hydrationHTML(h){
+function hydrationHTML(h, opt){
+  opt = opt || {};   // opt.noHead: the page shows the balance itself
   if (!h || !h.series || !h.series.length) return `<div class="small">Starts with the first drink.</div>`;
   const kg = h.kg || 98, lo = -kg * 25, hi = kg * 10;   // 2.5% down to 1% up
   const nowMin = h.now ? (h.series.find(p=>p.t===h.now.time)||{}).m : null;
@@ -148,7 +151,7 @@ function hydrationHTML(h){
   const nb = h.now.band, nowTxt = h.now.ml > 300 ? `+${(h.now.ml/1000).toFixed(1)} L` : `${h.now.ml < 0 ? "−" : ""}${(Math.abs(h.now.ml)/1000).toFixed(1)} L`;
   const ses = (h.sessions||[]).map(s => `<span class="egs"><b>${(s.sweat_ml_h/1000).toFixed(1)} L/h</b> ${esc(s.name.replace(/,.*$/,""))}${s.indoor?"":s.temp_f?` · ${s.temp_f}°F`:""}</span>`).join(" · ");
   return `<div class="energy hyd" data-m0="${c.m0}" data-m1="${c.m1}">
-    <div class="egline"><span class="egnow"><b style="color:${verdictCol(nb.key)}">${nowTxt}</b> <span class="small">${esc(nb.word)}</span></span><span class="small">${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk</span></div>
+    ${opt.noHead ? "" : `<div class="egline"><span class="egnow"><b style="color:${verdictCol(nb.key)}">${nowTxt}</b> <span class="small">${esc(nb.word)}</span></span><span class="small">${(h.drunk_ml/1000).toFixed(1)} of ${(h.target_ml/1000).toFixed(1)} L drunk</span></div>`}
     ${h.start_ml <= -300 ? `<div class="small">Woke ${(Math.abs(h.start_ml)/1000).toFixed(1)} L down${h.carried && h.carried.from === "scale" ? ", by the scale" : h.carried && h.carried.from === "both" ? ", by yesterday and the scale" : ", carried from yesterday"}${h.carried && h.carried.night ? `; ${h.carried.night.drinks} ${h.carried.night.word}${h.carried.night.drinks === 1 ? "" : "s"} after 8 p.m. cost about ${(h.carried.night.drain_ml/1000).toFixed(1)} L of it` : ""}.</div>` : ""}
     ${c.svg}
     <div class="small egread"></div>
@@ -187,7 +190,14 @@ function wireMicro(root, onChange){
     catch(e){ b.textContent = "failed — " + e.message; }
   });
 }
-window.foodBits = { fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy, hydrationHTML, wireHydration, curveSVG, wireCurve };
+// the tile pictures, shared with the link pages (links.js)
+const ICON = {
+  cam: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10z"/></svg>`,
+  roll: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M3 5h18v14H3zM3 15l5-5 4 4 3-3 6 6"/></svg>`,
+  pen: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 20h4L19 9l-4-4L4 16zM14 6l4 4"/></svg>`,
+  mic: `<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-2.1A7 7 0 0 0 19 12z"/></svg>`
+};
+window.foodBits = { ICON, fitBadge, targetsRow, checksList, thumbStrip, toneC, FIT, microHTML, wireMicro, energyHTML, wireEnergy, legsTapHTML, verdictCol, fuelColL, hydrationHTML, wireHydration, curveSVG, wireCurve };
 
 /* ---- the page ---- */
 /* ---- Live: fuel and hydration, their own tab ----
@@ -199,8 +209,8 @@ V.live = async function(){
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
   const isToday = date === today;
   const go = k => { location.hash = k === today ? "#live" : "#live?date="+k; };
-  view.innerHTML = `<span class="eyebrow">Live</span>
-    <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
+  view.innerHTML = `<div class="fd-ttl"><h2 class="fd-h">Live</h2><span class="hu-lab">fuel · hydration</span></div>
+    <div class="pweekhead fd-day"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
       <div class="pweeknav"><button id="lPrev" aria-label="Previous day">‹</button><button id="lToday">Today</button><button id="lNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     <div id="lDay"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   document.getElementById("lPrev").onclick = ()=> go(keyAdd(date,-1));
@@ -215,7 +225,7 @@ V.live = async function(){
     el.innerHTML = `
       <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
       <div class="card" id="fHydration"><h4>Live hydration${isToday?"":" · that day"}</h4>${hydrationHTML(day.hydration)}</div>
-      <div class="rowbtns"><a class="btn" href="${isToday?"#food":"#food?date="+date}">The food log</a>${isToday?`<a class="btn" href="#food?snap=snack">Snap a meal or a drink</a>`:""}</div>`;
+      <div class="hu-tiles fd-livego"><a class="hu-tile" href="${isToday?"#food":"#food?date="+date}">${ICON.pen}<b>The food log</b><span>meals and grades</span></a>${isToday?`<a class="hu-tile primary" href="#food?snap=snack">${ICON.cam}<b>Snap</b><span>a meal or a drink</span></a>`:""}</div>`;
     wireEnergy(el, day.energy, async ()=>{ await load(); });
     wireHydration(el, day.hydration);
   };
@@ -227,12 +237,17 @@ V.food = async function(){
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
   const isToday = date === today;
   const go = k => { location.hash = k === today ? "#food" : "#food?date="+k; };
-  view.innerHTML = `<span class="eyebrow">Food</span>
-    <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
+  // the title line carries the day's calories against the target; the day stepper sits under it
+  view.innerHTML = `<div class="fd-ttl"><h2 class="fd-h">Food</h2><span class="fd-kcal" id="fKcal"></span></div>
+    <div class="pweekhead fd-day"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     <div id="fMacros"></div>
-    ${isToday ? `<div class="card day snapcard" id="snap">
-      <div class="snaprow"><button class="primary big snapbtn" id="snapBtn">Snap a meal</button><button class="big snapbtn" id="rollBtn">From camera roll</button></div>
+    ${isToday ? `<div class="fd-log" id="snap">
+      <div class="hu-tiles fd-tiles">
+        <button class="hu-tile primary snapbtn" id="snapBtn">${ICON.cam}<b>Snap a meal</b><span>up to 4 photos</span></button>
+        <button class="hu-tile snapbtn" id="rollBtn">${ICON.roll}<b>From camera roll</b><span>a photo you took</span></button>
+        <button class="hu-tile" id="writeBtn">${ICON.pen}<b>Write</b><span>"rice 200 g, salmon"</span></button>
+        <button class="hu-tile talkbtn" id="talkBtn">${ICON.mic}<b>Say</b><span>tap and talk</span></button></div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
       <input id="rollFile" type="file" accept="image/*" multiple hidden>
       <div id="snapForm" hidden>
@@ -242,7 +257,6 @@ V.food = async function(){
           <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
-      <div class="quicklog"><button id="writeBtn" class="writebtn">Write it instead</button><button id="talkBtn" class="writebtn talkbtn">Say it</button></div>
       <div id="writeForm" hidden>
         <label for="writeText">What is on the plate, in your words</label>
         <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
@@ -267,18 +281,30 @@ V.food = async function(){
     const sum = k => Math.round(ents.reduce((x, e) => x + (e[k] || 0), 0));
     const t = day.target || {};
     const BARS = [["protein","protein_g","var(--red)"],["carbs","carbs_g","var(--carb)"],["fat","fat_g","var(--fat)"]];
-    const bars = `<div class="mbars day">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0); const pct = g > 0 ? Math.min(100, a / g * 100) : 0; const over = g > 0 && a > g * 1.2; const left = Math.max(0, g - a);
-        return `<div class="xbar"><span class="xbl">${l}</span><span class="xbtrack"><span class="xbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="xbn"><b>${a}</b> / ${g} g${over ? `<i class="ov">${a - g} g over</i>` : left ? `<i>${left} g to go</i>` : ""}</span></div>`; }).join("")}
-      <div class="small fkline">${sum("kcal")} of ${t.kcal || "—"} kcal</div></div>`;
+    // head-unit bars: the number big on the label side, the target a white tick with its number above;
+    // past the tick the bar runs on hatched (faint inside 20%, full past it); a ✓, a +N or what is left at the end
+    const bars = `<div class="fd-mac">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0);
+        const scale = Math.max(g / 0.78, a / 0.84, 1), tk = g / scale * 100, fp = Math.min(a, g) / scale * 100, op = a > g ? (a - g) / scale * 100 : 0;
+        const over = g > 0 && a > g * 1.2, left = Math.max(0, g - a);
+        const note = !g ? "" : over ? `<span class="fd-note hu-stop">+${a - g}</span>` : a >= g * 0.9 ? `<span class="fd-note hu-go">✓</span>` : `<span class="fd-note hu-dim">${left} g to go</span>`;
+        return `<div class="fd-mrow"><span class="fd-mk">${l}<span class="hu-n">${a}</span></span>
+          <div class="hu-track fd-track"><i class="f" style="width:${fp.toFixed(1)}%;background:${col}"></i>${op ? `<i class="over" style="left:${tk.toFixed(1)}%;width:${op.toFixed(1)}%;opacity:${over ? 1 : .5}"></i>` : ""}${g ? `<i class="tick" style="left:${tk.toFixed(1)}%"></i><span class="tl" style="left:${tk.toFixed(1)}%">${g}</span>` : ""}${note}</div></div>`; }).join("")}</div>`;
+    const kEl = document.getElementById("fKcal"), kc = sum("kcal"), fmt = n => Number(n).toLocaleString("en-US");
+    if (kEl) kEl.innerHTML = `<span class="hu-n">${fmt(kc)}</span> <span class="fd-kt">/ ${t.kcal ? fmt(t.kcal) : "—"} kcal</span>`;
     // food only here: drinks (water, coffee, beer, bottles) are listed and logged on the Hydration page; the bars above still count their calories
     const isDr = e => e.is_drink || e.drink_only, foods = day.entries.filter(e => !isDr(e)), nMeals = foods.filter(e => !e.supplement).length, nDrinks = ents.filter(isDr).length;
     const mEl = document.getElementById("fMacros");
-    if (mEl) mEl.innerHTML = `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${bars}</div>`;
+    if (mEl) mEl.innerHTML = bars;
     el.innerHTML = `
-      <span class="eyebrow">Food logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}</span>
-      ${nDrinks && isToday ? `<div class="small drinksnote">${nDrinks} drink${nDrinks===1?"":"s"} today, on the <a href="#hydration">Hydration page</a>.</div>` : ""}
-      <div class="journal">${foods.length ? foods.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet.":"Nothing logged that day."}</div></div>`}</div>`;
-    el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
+      <div class="fd-jhead"><span class="hu-lab">Logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}</span>
+      ${nDrinks && isToday ? `<span class="small drinksnote">${nDrinks} drink${nDrinks===1?"":"s"} today, on the <a href="#hydration">Hydration page</a>.</span>` : ""}</div>
+      <div class="journal fd-journal">${foods.length ? foods.slice().reverse().map(entryHTML).join("") : `<div class="small fd-none">${isToday?"Nothing yet.":"Nothing logged that day."}</div>`}</div>`;
+    el.querySelectorAll(".jentry").forEach(n => {
+      const top = n.querySelector(".fd-jrow");
+      const flip = ()=>{ n.classList.toggle("open"); if (top) top.setAttribute("aria-expanded", n.classList.contains("open") ? "true" : "false"); };
+      n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,textarea,form,a,label")) return; flip(); };
+      if (top) top.onkeydown = (ev)=>{ if (ev.key === "Enter" || ev.key === " "){ ev.preventDefault(); flip(); } };
+    });
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
       const meals = day.entries.filter(x => !x.supplement).slice().sort((a,b)=>String(a.time).localeCompare(String(b.time)));
@@ -305,22 +331,46 @@ V.food = async function(){
       catch(e){ btn.textContent = "failed — " + e.message; }
     });
   };
-  const entryHTML = (e)=>{
-    if (e.supplement) return `<div class="card jentry supp"><div class="jrow"><span class="jthumb nothumb">Rx</span>
-      <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · supplement</div><div class="jname">${esc(e.name)}</div><div class="small">${esc(e.notes||"")}</div></div>
-      <div class="jfit"><button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div></div>`;
+  // the grade chip in two words: what is wrong ("Protein low"), not the slot name and a percentage; the full grade sits in the opened row
+  const cap = s => { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const gradeOf = (e)=>{
     const a = e.assessment || {};
-    const img = e.thumb ? `<img class="jthumb" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="jthumb nothumb">${e.written ? "✎" : esc((e.name||"?").slice(0,2))}</span>`;
-    return `<div class="card jentry">
-      <div class="jrow">${img}
-        <div class="jbody"><div class="small">${esc(e.time?hm12(e.time):clock(e.at))} · ${e.drink_only?"drink":esc(e.meal)}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
-          <div class="jname">${esc(e.name)}</div>
-          <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}</div></div>
-        <div class="jfit">${(() => { const m = day && (day.meals||[]).find(x => (x.logged||[]).includes(e.id)); const mt = m && m.match; const tn = mt ? (mt.key === "green" ? "good" : mt.key === "yellow" ? "warn" : "bad") : null; return mt ? `<span class="fit" style="color:${toneC(tn)};border-color:${toneC(tn)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(String(mt.word || "").split(" · ")[0])}</span>` : fitBadge(a); })()}<button class="jdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div></div>
+    const m = day && (day.meals||[]).find(x => (x.logged||[]).includes(e.id)), mt = m && m.match;
+    if (mt){
+      const tone = mt.key === "green" ? "go" : mt.key === "yellow" ? "hold" : "stop";
+      let word = "On plan";
+      if (mt.key !== "green"){
+        const mm = /^(\w+)\s+\d+%\s+(over|under)/.exec(mt.macros && mt.macros.key !== "green" ? String(mt.macros.word || "") : "");
+        const rw = String((mt.rules && mt.rules.key !== "green" && mt.rules.word) || "").trim();
+        word = mm ? `${cap(mm[1])} ${mm[2] === "over" ? "high" : "low"}` : rw && rw.length <= 14 ? cap(rw) : mt.key === "yellow" ? "Partly" : "Off plan";
+      }
+      return { tone, word, full: `${m.slot} slot · ${mt.key === "green" ? "on plan" : String(mt.word || "")}` };
+    }
+    const f = FIT[a.fits] || FIT.partly;
+    return { tone: f.tone === "good" ? "go" : f.tone === "warn" ? "hold" : "stop", word: cap(f.word), full: null };
+  };
+  const thumbOf = (e, txt)=> e.thumb ? `<img class="fd-th" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="fd-th nothumb">${txt}</span>`;
+  const entryHTML = (e)=>{
+    const when = esc(e.time?hm12(e.time):clock(e.at)), del = `<button class="pdanger" data-del="${esc(e.id)}">Remove</button>`;
+    if (e.supplement) return `<div class="jentry fd-jr supp">
+      <div class="fd-jrow" role="button" tabindex="0" aria-expanded="false">${thumbOf({}, "Rx")}
+        <div class="fd-jb"><div class="fd-top"><b class="jname">${esc(e.name)}</b><span class="hu-chip hu-dim">Rx</span></div><div class="fd-meta">${when} · supplement</div></div></div>
+      <div class="fd-more"><div class="small">${esc(e.notes||"")}</div><div class="fd-acts">${del}</div></div></div>`;
+    const a = e.assessment || {}, gr = gradeOf(e);
+    const stack = [["carbs_g","var(--carb)"],["protein_g","var(--red)"],["fat_g","var(--fat)"]].filter(([k]) => (e[k] || 0) > 0)
+      .map(([k, c]) => `<i style="flex:${e[k]};background:${c}"></i>`).join("");
+    return `<div class="jentry fd-jr">
+      <div class="fd-jrow" role="button" tabindex="0" aria-expanded="false">${thumbOf(e, e.written ? "✎" : esc((e.name||"?").slice(0,2)))}
+        <div class="fd-jb"><div class="fd-top"><b class="jname">${esc(e.name)}</b><span class="hu-chip hu-${gr.tone}">${esc(gr.word)}</span></div>
+          <div class="fd-meta">${when} · ${e.drink_only?"drink":esc(e.meal)} · ${e.kcal} kcal · ${e.protein_g} P${e.maybe_double_of ? ` · <span class="hu-hold">double?</span>` : ""}</div>
+          ${stack ? `<div class="fd-stack" aria-label="${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat">${stack}</div>` : ""}</div></div>
+      <div class="fd-more">
+      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
+      ${gr.full ? `<div class="small fd-grade">Graded: <span class="hu-${gr.tone}">${esc(gr.full)}</span></div>` : ""}
       ${e.plan && e.plan.kcal != null ? `<div class="small jplan">Graded against the plan as it stood at ${esc(hm12(e.plan.at||e.time))}: ${e.plan.kcal} kcal · ${e.plan.carbs_g}C · ${e.plan.protein_g}P${e.plan.low_carb ? " · low carb" : ""}${e.plan.backfilled ? " (filled in later)" : ""}</div>` : ""}
       ${e.maybe_double_of ? `<div class="small jdouble">Looks like the entry just before it, logged again. If it was one bottle, remove this one.</div>` : ""}
       <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
-      <div class="jmore">
+      <div class="jmore fd-jmore">
         ${e.written?`<div class="small">You wrote: “${esc(e.written)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
         <div class="small">${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
@@ -330,8 +380,8 @@ V.food = async function(){
           <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
           <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
           <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
-          <button data-fix="${esc(e.id)}">Save correction</button> <button data-merge="${esc(e.id)}">Combine with previous</button> <button class="pdanger" data-del="${esc(e.id)}">Remove</button></div>`:""}
-      </div></div>`;
+          <div class="fd-acts"><button data-fix="${esc(e.id)}">Save correction</button> <button data-merge="${esc(e.id)}">Combine with previous</button> ${del}</div></div>`:`<div class="fd-acts">${del}</div>`}
+      </div></div></div>`;
   };
 
   const load = async ()=>{
