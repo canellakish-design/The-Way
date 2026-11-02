@@ -328,12 +328,14 @@ async function report() {
       in_zone_pct: work.hr_min ? Math.round(work.hr_credit_min / work.hr_min * 100) : null, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
       today_word: null, basis: 'minutes ridden against minutes of riding planned this week, each ride discounted by how far it strayed from its zone (a Zone 1 day wants 80% at 116 and under, a hard day 15% over threshold); the lifting is its own link' },
     // five a week on the seven-day clock, no grace week: none lifted is a broken link. A deload week stays grey.
-    lift: { week: Math.round(lift.sessions / lift.target * 100),
-      state: lift.deload ? 'none' : stateOf('lift', lift.sessions / lift.target),
+    // the plan's first week is judged against the sessions due since it started, not a full five
+    lift: { week: Math.round(Math.min(1, lift.sessions / (lift.started && lift.expected > 0 && lift.expected < lift.target ? lift.expected : lift.target)) * 100),
+      state: lift.deload ? 'none' : stateOf('lift', lift.sessions / (lift.started && lift.expected > 0 && lift.expected < lift.target ? lift.expected : lift.target)),
+      first_week: !!(lift.started && lift.expected > 0 && lift.expected < lift.target),
       sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: 'of plan',
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
-      basis: 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
+      basis: lift.started && lift.expected > 0 && lift.expected < lift.target ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions due since it started (five a week from day seven); 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
     recovery: (() => {
       const todayScore = recToday ? recToday.score : null;
       const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';
