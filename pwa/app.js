@@ -1856,7 +1856,7 @@ V.today = async function(){
       }
     } else {
       const w = d.sources && d.sources.whoop;
-      paintTile("recovery", null, "", "", src.garmin_configured ? "no morning from the Garmin yet" : w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "no watch connected");
+      paintTile("recovery", null, "", "", src.garmin_configured ? "no morning from the watch yet" : w && w.auth_error ? "WHOOP needs reconnecting" : w && w.connected ? "no reading yet" : "no watch connected");
     }
     if (vd) vd.textContent = todayLine(d);
     drawFood();
@@ -1906,7 +1906,7 @@ V.today = async function(){
       const L = chainData && chainData.links && chainData.links.sleep;
       html = `<h4>Sleep · the week</h4>
         ${L && L.nights && L.nights.length ? `<ul class="agenda totals">${L.nights.slice().reverse().map(x => row(esc(new Date(x.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })), `<b style="color:${toneC(x.hours >= 7 ? "good" : x.hours >= 6.25 ? "warn" : "bad")}">${x.hours} h</b>${x.score != null ? ` <span class="small">· score ${x.score}</span>` : ""}`)).join("")}</ul>
-          <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the Garmin yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
+          <div class="small">${L.week} h a night on average. ${esc(L.basis)}.</div>` : `<div class="small">No nights from the watch yet. Sleep comes through intervals.icu once the watch is syncing there.</div>`}
         <details class="why"><summary>why it is first</summary><div class="small">Sleep sits at the head of the chain because it moves what follows: short nights raise appetite and lower restraint the next day, blunt HRV and recovery, and make the planned work feel harder than it is. Seven hours is the line; under six and a quarter the week is being spent.</div></details>`;
       box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
     }
@@ -1996,7 +1996,7 @@ V.today = async function(){
       const rs = (d.sources && d.sources.recovery) || { source: "whoop" }, garmin = rs.source === "garmin";
       const CB = chainData && chainData.links && chainData.links.recovery;
       const byHand = garmin && /entered by hand/.test(rs.basis || "");
-      html = `<h4>Recovery · last night${byHand ? ` · ${esc((rs.basis.match(/\(([^)]+)\)/) || [])[1] || "by hand")}` : garmin ? " · Garmin" : ""}</h4>
+      html = `<h4>Recovery · last night${byHand ? ` · ${esc((rs.basis.match(/\(([^)]+)\)/) || [])[1] || "by hand")}` : garmin ? " · the watch" : ""}</h4>
         ${CB && CB.week_state && CB.week_state !== "none" ? `<div class="cue" style="border-color:${toneC(CB.week_state)}"><b>The week:</b> ${esc(CB.why || "")}. HRV ${CB.hrv_week_ms ?? "—"} ms this week against ${CB.hrv_base_ms ?? "—"} ms over 60 days${CB.rhr_week ? `; resting HR ${CB.rhr_week}${CB.rhr_up ? ", up" : ""}` : ""}.${CB.today_word ? ` This morning: ${esc(CB.today_word)}.` : ""}</div>` : CB && CB.why ? `<div class="small">No band yet: ${esc(CB.why)}.</div>` : ""}
         ${r.score != null ? `<ul class="agenda totals">
           ${row(garmin ? (/estimated/.test(rs.basis||"") ? "readiness, estimated" : "Garmin readiness") : "WHOOP recovery", `<b style="color:${toneC(r.band.tone)}">${r.score}</b> · ${r.band.word}`)}
@@ -2008,8 +2008,8 @@ V.today = async function(){
           ${r.spo2 != null ? row("blood oxygen", `${r.spo2}%`) : ""}
           ${row("slept", `${r.sleep_h ?? "—"} h${r.sleep_performance != null ? ` · ${r.sleep_performance}% of need` : ""}`)}
         </ul>
-        <div class="small">${garmin ? (byHand ? `${esc(rs.date||"")}: ${esc(rs.basis||"")}, laid over the Garmin feed.` : `From the Garmin through intervals.icu, ${esc(rs.date||"")}: ${esc(rs.basis||"")}.`) : `${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}`}</div>`
-        : `<div class="small">${rs.garmin_configured ? "intervals.icu is connected but has no morning from the Garmin yet. Wear the watch overnight and let Garmin Connect sync to intervals.icu." : !w.connected ? `WHOOP not connected — ${reconnectLink()}`
+        <div class="small">${garmin ? (byHand ? `${esc(rs.date||"")}: ${esc(rs.basis||"")}, laid over the watch's feed.` : `From the watch through intervals.icu, ${esc(rs.date||"")}: ${esc(rs.basis||"")}.`) : `${esc(when)}${age != null && age >= 2 ? ` · <button class="linkish" id="whoopSync">sync now</button>` : ""}`}</div>`
+        : `<div class="small">${rs.garmin_configured ? "intervals.icu is connected but has no morning from the watch yet. Wear the watch overnight and let Garmin Connect sync to intervals.icu." : !w.connected ? `WHOOP not connected — ${reconnectLink()}`
             : w.auth_error ? `WHOOP needs reconnecting — ${reconnectLink()} (${esc(w.auth_error.detail || "")})`
             : `connected, but no sleep record yet — <button class="linkish" id="whoopSync">sync now</button>`}</div>`}
         ${w.auth_error && r.score != null && !garmin ? `<div class="small"><b>WHOOP needs reconnecting</b> — ${reconnectLink()}</div>` : ""}

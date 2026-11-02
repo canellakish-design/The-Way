@@ -178,11 +178,14 @@ async function report() {
       const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
       const all = await require('./wellness').overlay(w.days || []);   // a morning entered by hand wins for its date
       const weekFrom = dates[0], baseFrom = tz.shiftKey(today, -60);
-      const hrvWeek = all.filter(d => d.date >= weekFrom && d.hrv > 0).map(d => d.hrv);
-      const hrvBase = all.filter(d => d.date >= baseFrom && d.date < weekFrom && d.hrv > 0).map(d => d.hrv);
-      const rhrW = all.filter(d => d.date >= weekFrom && d.rhr > 0).map(d => d.rhr), rhrB = all.filter(d => d.date >= baseFrom && d.date < weekFrom && d.rhr > 0).map(d => d.rhr);
+      // HRV and resting HR from the current watch only: a new device starts its own band
+      const DV = require('./devices'), since = DV.WEARABLE_SINCE, mine = d => d.date >= since;
+      const hrvWeek = all.filter(d => mine(d) && d.date >= weekFrom && d.hrv > 0).map(d => d.hrv);
+      const hrvBase = all.filter(d => mine(d) && d.date >= baseFrom && d.date < weekFrom && d.hrv > 0).map(d => d.hrv);
+      const rhrW = all.filter(d => mine(d) && d.date >= weekFrom && d.rhr > 0).map(d => d.rhr), rhrB = all.filter(d => mine(d) && d.date >= baseFrom && d.date < weekFrom && d.rhr > 0).map(d => d.rhr);
       const sleepW = all.filter(d => d.date >= weekFrom && d.sleep_h >= 2.5).map(d => d.sleep_h);
       band = recoveryState({ hrv_week: hrvWeek, hrv_base: hrvBase, rhr_week: mean(rhrW), rhr_base: mean(rhrB), rhr_sd: sd(rhrB), sleep_week: mean(sleepW) });
+      if (band.state === 'none' && since > baseFrom) band.why = `a new watch (${DV.WEARABLE}) since ${tz.labelOf ? tz.labelOf(since) : since}: ${hrvWeek.length + hrvBase.length} of 14 nights before its own band is set; until then each morning reads on its own`;
       hrvWeekMs = hrvWeek.length ? Math.round(mean(hrvWeek)) : null; hrvBaseMs = hrvBase.length ? Math.round(mean(hrvBase)) : null; rhrWeek = rhrW.length ? Math.round(mean(rhrW)) : null;
       const M = require('./scores-math');
       for (const d of all) {
@@ -191,7 +194,7 @@ async function report() {
         if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5, manual: d.manual || null });
         let score = d.readiness;
         if (score == null && (d.hrv != null || d.sleep_h != null)) {
-          const hist = all.filter(x => x.date < d.date && x.hrv != null).slice(-30).map(x => x.hrv);
+          const hist = all.filter(x => x.date < d.date && x.hrv != null && x.date >= require('./devices').WEARABLE_SINCE).slice(-30).map(x => x.hrv);
           const b = M.vsBaseline ? M.vsBaseline(d.hrv, hist) : { delta_pct: 0 };
           score = Math.max(10, Math.min(100, Math.round(60 + ((b && b.delta_pct) || 0) * 1.2 + ((d.sleep_h || 7) - 7) * 8)));
         }
