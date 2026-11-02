@@ -23,6 +23,61 @@ function syncBadge(w){
 }
 const SPORT = { Ride:"Road", VirtualRide:"Zwift", WeightTraining:"Lift" };
 
+/* head-unit pieces: a band's stripe, chip and colour; a thin bar with its
+   target as a white tick, hatched past it (rule 6). */
+const STRIPE = { green:"good", yellow:"warn", red:"bad", extra:"water" };
+const TONE = { green:"hu-go", yellow:"hu-hold", red:"hu-stop", extra:"hu-water" };
+const BCOL = { green:"var(--green)", yellow:"var(--amber)", red:"var(--red)", extra:"var(--water)" };
+const bandOfPct = p => p==null ? null : (p>=80 && p<=120) ? "green" : ((p>=50 && p<80) || (p>120 && p<=150)) ? "yellow" : "red";
+function pbar(label, done, plan, text, color){
+  const max = Math.max(done, plan) || 1, t = plan/max*100, f = Math.min(done, plan)/max*100, o = done > plan ? (done-plan)/max*100 : 0;
+  return `<div class="pcb"><span class="pck">${label}</span><span class="pctr" role="img" aria-label="${esc(label+" "+text)}"><i class="f" style="width:${f.toFixed(1)}%;background:${color}"></i>${o?`<i class="over" style="left:${t.toFixed(1)}%;width:${o.toFixed(1)}%"></i>`:""}<i class="tick" style="left:calc(${t.toFixed(1)}% - 1px)"></i></span><span class="pcv">${text}</span></div>`;
+}
+// a share where more is better (time under VT1): a fixed 0-100 scale, the pass mark as the tick, nothing hatched
+function pshare(label, pct, pass, color){
+  return `<div class="pcb"><span class="pck">${label}</span><span class="pctr" role="img" aria-label="${esc(label+" "+pct+"%, "+pass+"% passes")}"><i class="f" style="width:${Math.max(0,Math.min(100,pct))}%;background:${color}"></i><i class="tick" style="left:calc(${pass}% - 1px)"></i></span><span class="pcv">${pct}%</span></div>`;
+}
+// the two bars of a planned session: minutes, then Zone 1 time, hard minutes or TSS, as the grade's own numbers allow
+function sessBars(w, c, rides){
+  if (!c) return "";
+  const b = String(c.basis||""), planMin = Math.round(w.metrics.duration_s/60), planTss = w.metrics.tss;
+  const m = /(\d+) of (\d+) min/.exec(b), t = /(\d+) of (\d+) TSS/.exec(b), z = /(\d+)% at (\d+) bpm or above/.exec(b), hard = /([\d.]+) min above (\d+) bpm/.exec(b);
+  const byHand = w.logged || /logged by hand/.test(b), none = /no ride/.test(b);
+  let dm = null, pm = planMin;
+  if (m){ dm = +m[1]; pm = +m[2]; }
+  else if (byHand) dm = planMin;
+  else if (none) dm = 0;
+  else if (rides.length) dm = Math.round(rides.reduce((s,r)=>s+(r.minutes||0),0));
+  const out = [];
+  if (dm != null) out.push(pbar("min", dm, pm, `${dm}/${pm}`, BCOL[bandOfPct(pm ? dm/pm*100 : 100)]));
+  if (z){
+    const under = 100 - (+z[1]), pass = /trail/.test(b) ? 80 : 90;
+    out.push(pshare("Z1", under, pass, under >= pass ? BCOL.green : under >= pass-10 ? BCOL.yellow : BCOL.red));
+  } else if (hard){
+    const tg = /target (\d+) to (\d+)/.exec(b) || /short of (\d+)/.exec(b) || /past (\d+)/.exec(b);
+    const lo = tg ? +tg[1] : 0;
+    out.push(pbar("hard", +hard[1], lo || +hard[1], `${hard[1]} min`, BCOL[c.band]||"var(--muted)"));
+  } else if (t) out.push(pbar("TSS", +t[1], +t[2], `${t[1]}/${t[2]}`, BCOL[bandOfPct(+t[2] ? +t[1]/+t[2]*100 : 100)]));
+  else if ((byHand || none) && planTss) out.push(pbar("TSS", byHand ? planTss : 0, planTss, `${byHand?planTss:0}/${planTss}`, BCOL[byHand?"green":"red"]));
+  return out.length ? `<div class="pcbars">${out.join("")}</div>` : "";
+}
+// one line about a ride; everything else Strava said goes under "+ details"
+function rideOne(r){
+  const a = r.analysis, h = a && a.hr, br = a && a.resp;
+  const bits = [r.time ? hm12(r.time) : "", r.name, hm(r.minutes)].filter(Boolean);
+  if (h && h.zone_pct) bits.push(h.zone_pct.z1+"% under VT1");
+  else if (r.np_w) bits.push("NP "+r.np_w+" W");
+  else if (r.miles) bits.push(r.miles+" mi");
+  if (br && br.avg) bits.push("breathing "+br.avg+"/min");
+  return `<div class="pline">${esc(bits.join(" · "))}</div>`;
+}
+function syncChip(w){
+  const s=(w.sync&&w.sync.state)||"off";
+  if (s==="synced") return `<span class="hu-chip hu-go" title="Sent ${esc(w.sync.at ? new Date(w.sync.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "")}">On Garmin</span>`;
+  if (s==="error") return `<span class="hu-chip hu-stop" title="${esc(w.sync.error||"")}">Not sent: error</span>`;
+  return `<span class="hu-chip hu-dim">Not sent</span>`;
+}
+
 /* ---------------- the week ---------------- */
 V.calendar = async function(){
   const p = params(), today = localToday();
@@ -49,55 +104,73 @@ V.calendar = async function(){
   else if (cal.sources.intervals.error) warn.push("intervals.icu: "+cal.sources.intervals.error);
   if (!cal.sources.strava.connected) warn.push("Strava isn't answering ("+(cal.sources.strava.reason||"not connected")+"), so completed rides won't show.");
 
-  let html = `<div class="card day pweeksum">
-      <div class="pcols">
-        <div><label>Planned</label><div class="pbig">${hm(T.pm)}</div><div class="small">${T.pt} TSS</div></div>
-        <div><label>Done</label><div class="pbig">${hm(T.dm)}</div><div class="small">${T.dt} TSS</div></div>
-        <div><label>Done of planned</label><div class="pbig">${T.pm?pct+"%":"—"}</div><div class="small">by time</div></div>
-      </div>
-      <div class="pbar" role="img" aria-label="${pct}% of planned time done"><i style="width:${pct}%"></i></div>
+  // the head: planned, done, and done of planned (with what is left while the week runs)
+  const left = Math.max(0, T.pm - T.dm), running = sun >= today;
+  let html = `<div class="hu-fields pweeksum">
+      <div class="hu-field"><span class="k">Planned</span><span class="n">${hm(T.pm)}</span><span class="u">${T.pt} TSS</span></div>
+      <div class="hu-field"><span class="k">Done</span><span class="n">${hm(T.dm)}</span><span class="u">${T.dt} TSS</span></div>
+      <div class="hu-field"><span class="k">Done of plan</span><span class="n ${!T.pm?"hu-dim":running?"":TONE[bandOfPct(pct)]||""}">${T.pm?pct+"%":"—"}</span><span class="u">${T.pm ? (running ? (left ? hm(left)+" left" : "plan met") : "week over") : "nothing planned"}</span></div>
     </div>`;
-  if (warn.length) html += `<div class="card pwarn">${warn.map(w=>`<div class="small">${esc(w)}</div>`).join("")}</div>`;
+
+  // the week as seven columns: dashed outline planned, fill done, the percent on top
+  const maxMin = Math.max(1, ...cal.days.map(d=>Math.max(d.totals.planned_min, d.totals.done_min)));
+  html += `<div class="pwk" role="group" aria-label="Planned outline, done filled, each day">${cal.days.map((d,i)=>{
+    const dc = d.compliance, band = dc && dc.band, P = d.totals.planned_min, D = d.totals.done_min;
+    const top = dc && dc.pct != null ? `<span class="pc ${TONE[band]||""}">${dc.pct}</span>`
+      : band === "extra" ? `<span class="pc hu-water">+${hm(D)}</span>` : `<span class="pc hu-dim">—</span>`;
+    return `<button class="pwd${d.date===today?" today":""}" data-day="${d.date}" aria-label="${esc(dayLabel(d.date))}: ${hm(D)} done of ${hm(P)} planned">${top}
+      <span class="col">${P?`<i class="p" style="height:${(P/maxMin*100).toFixed(1)}%"></i>`:""}${D?`<i class="d" style="height:${(D/maxMin*100).toFixed(1)}%;background:${BCOL[band]||"var(--muted)"}"></i>`:""}</span>
+      <span class="k">${"MTWTFSS"[i]||""}</span></button>`;
+  }).join("")}</div>`;
+  if (warn.length) html += `<div class="card pwarn hu-stripe warn">${warn.map(w=>`<div class="small">${esc(w)}</div>`).join("")}</div>`;
 
   for (const d of cal.days){
     const isToday = d.date === today, past = d.date < today;
     const rows = [];
-    // A ride is drawn once: inside the planned session it was graded against
-    // when there is one, on its own when nothing was planned.
+    // Everything Strava said about a ride, folded under "+ details".
     const rideLines = (r)=>{
       const a = r.analysis, h = a && a.hr, b = a && a.resp, v = a && a.ve;
-      return `<span class="pm">${window.kindIcon ? kindIcon(r.name, r.type) : ""}${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</span>
-        ${h?`<span class="pm small">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</span>`:a&&a.sources?`<span class="pm small">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</span>`:""}`;
+      return `<div class="pm">${window.kindIcon ? kindIcon(r.name, r.type) : ""}${r.time?esc(hm12(r.time))+" · ":""}${esc(r.name)} · ${hm(r.minutes)}${r.miles?" · "+r.miles+" mi":""}${r.np_w?" · NP "+r.np_w+" W":r.avg_w?" · "+r.avg_w+" W":""}${h?` · HR ${h.avg} avg, ${h.max} max`:r.avg_hr?" · "+r.avg_hr+" bpm":""}${r.tss!=null?" · ~"+r.tss+" TSS":""}</div>
+        ${h?`<div class="pm">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</div>`:a&&a.sources?`<div class="pm">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</div>`:""}`;
     };
+    const fold = (inner)=> inner ? `<details class="why pdet"><summary>details</summary>${inner}</details>` : "";
     const word = (c)=> c.zone_over?"Above Z1":c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
+    // A ride is drawn once: inside the planned session it was graded against
+    // when there is one, on its own when nothing was planned.
     let ridesShown = false;
     for (const w of d.planned){
       const c = w.compliance;
       const withRides = !!(c && !w.logged && d.done.length && !ridesShown);
       if (withRides) ridesShown = true;
-      rows.push(`<a class="pitem planned${c?" graded "+c.band:""}" href="#workout?id=${encodeURIComponent(w.id)}">
-        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""}${c?` · <b>${c.pct}%</b> ${esc(c.basis)}`:""}</span>
-        <span class="pn">${window.kindIcon ? kindIcon(w.name, w.sport) : ""}${esc(w.name)}</span>
-        <span class="pm">${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS ${w.logged?`<span class="pbadge ok" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`:c?`<span class="pbadge ${c.band==="green"?"ok":c.band==="yellow"?"warn":"bad"}">${word(c)}</span>`:syncBadge(w)}</span>
-        ${withRides?`<span class="pk">Ridden</span>${d.done.map(rideLines).join("")}`:""}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></a>`);
+      const chip = w.logged ? `<span class="hu-chip hu-go" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`
+        : c ? `<span class="hu-chip ${TONE[c.band]||"hu-dim"}" title="${esc(c.basis||"")}">${c.zone_over ? "Above Z1" : !d.done.length && c.band==="red" ? "Missed" : c.pct+"%"}</span>`
+        : syncChip(w);
+      const rides = withRides ? d.done : [];
+      rows.push(`<div class="pitem planned hu-stripe ${c?STRIPE[c.band]||"":""}${c?" graded "+c.band:""}">
+        <div class="ptop"><a class="pn" href="#workout?id=${encodeURIComponent(w.id)}">${window.kindIcon ? kindIcon(w.name, w.sport) : ""}<span>${esc(w.name)}</span></a>${chip}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div>
+        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""} · ${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS${c&&!w.logged&&!c.zone_over&&!(!d.done.length&&c.band==="red")?` · <b class="${TONE[c.band]||""}">${word(c)}</b>`:""}</span>
+        ${sessBars(w, c, rides)}
+        ${rides.map(rideOne).join("")}
+        ${fold((c&&c.basis?`<div class="pm">${c.pct}% · ${esc(c.basis)}</div>`:"")+rides.map(rideLines).join(""))}
+      </div>`);
     }
-    for (const e of d.intervals) rows.push(`<div class="pitem icu">
-        <span class="pk">intervals.icu${e.time?" · "+esc(hm12(e.time)):""}</span>
-        <span class="pn">${esc(e.name)}</span>
-        <span class="pm">${e.minutes?hm(e.minutes):"—"}${e.tss?" · "+e.tss+" TSS":""} <span class="pbadge">Planned outside The Way</span></span></div>`);
+    for (const e of d.intervals) rows.push(`<div class="pitem icu hu-stripe">
+        <div class="ptop"><span class="pn"><span>${esc(e.name)}</span></span><span class="hu-chip hu-dim">intervals.icu</span></div>
+        <span class="pk">${e.time?esc(hm12(e.time))+" · ":""}${e.minutes?hm(e.minutes):"—"}${e.tss?" · "+e.tss+" TSS":""} · planned outside The Way</span></div>`);
     if (!ridesShown) for (const r of d.done){
-      rows.push(`<div class="pitem done">
-        <span class="pk">Done${r.time?" · "+esc(hm12(r.time)):""}</span>
-        <span class="pn">${esc(r.name)}</span>
-        ${rideLines(r)}</div>`);
+      rows.push(`<div class="pitem done hu-stripe water">
+        <div class="ptop"><span class="pn">${window.kindIcon ? kindIcon(r.name, r.type) : ""}<span>${esc(r.name)}</span></span><span class="hu-chip hu-water">Done</span></div>
+        <span class="pk">${r.time?esc(hm12(r.time))+" · ":""}${hm(r.minutes)}${r.tss!=null?" · ~"+r.tss+" TSS":""}${d.planned.length||d.intervals.length?"":" · unplanned"}</span>
+        ${rideOne(r)}
+        ${fold(rideLines(r))}</div>`);
     }
-    let verdict = "";
     const dc = d.compliance;
-    if (dc && dc.band === "extra") verdict = `<span class="pbadge">Unplanned ride</span>`;
-    else if (dc) verdict = `<span class="pbadge ${dc.band==="green"?"ok":dc.band==="yellow"?"warn":"bad"}">${dc.pct}% · ${dc.band==="green"?"done":dc.over?"over the plan":dc.band==="yellow"?"partly":d.done.length?"short":"missed"}</span>`;
-    html += `<div class="card pday${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}">
-      <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?" · today":""}</h4>
-        <span class="small">${d.totals.planned_min?hm(d.totals.planned_min)+" planned":""}${d.totals.done_min?" · "+hm(d.totals.done_min)+" done":""} ${verdict}</span></div>
+    const verdict = !dc ? "" : dc.band === "extra" ? `<span class="hu-chip hu-water">Unplanned</span>`
+      : `<span class="hu-chip ${TONE[dc.band]||"hu-dim"}">${dc.pct}% · ${dc.band==="green"?"done":dc.over?"over":dc.band==="yellow"?"partly":d.done.length?"short":"missed"}</span>`;
+    const sub = [d.totals.planned_min?hm(d.totals.planned_min)+" planned":"", d.totals.done_min?hm(d.totals.done_min)+" done":""].filter(Boolean).join(" · ");
+    html += `<div class="card pday hu-stripe ${dc?STRIPE[dc.band]||"":""}${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}" id="pday-${d.date}">
+      <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?` <span class="ptoday">today</span>`:""}</h4>${verdict}</div>
+      ${sub?`<div class="pdaysub">${sub}</div>`:""}
       ${rows.join("") || `<div class="small pempty">Rest${past?"":", or nothing planned yet"}.</div>`}
       ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
@@ -109,6 +182,11 @@ V.calendar = async function(){
     if (!confirm("Take this session off the calendar?")) return;
     try{ await bridge("/workouts/"+encodeURIComponent(b.dataset.delw),{method:"DELETE"}); V.calendar(); }
     catch(e){ alert(e.message); }
+  });
+  // a tap on a column goes to that day's card
+  document.querySelectorAll(".pwd[data-day]").forEach(b => b.onclick = ()=>{
+    const el = document.getElementById("pday-"+b.dataset.day);
+    if (el) el.scrollIntoView({behavior:"smooth", block:"start"});
   });
 };
 
@@ -317,10 +395,10 @@ V.workout = async function(){
     try{
       const r = await bridge("/workouts/preview",{method:"POST",headers:J,body:JSON.stringify({steps:W.steps})});
       const m = r.metrics;
-      el.innerHTML = `<div class="pcols">
-          <div><label>Time</label><div class="pbig">${clock(m.duration_s)}</div></div>
-          <div><label>Load</label><div class="pbig">${m.tss}</div><div class="small">TSS</div></div>
-          <div><label>Intensity</label><div class="pbig">${m.if.toFixed(2)}</div><div class="small">IF</div></div>
+      el.innerHTML = `<div class="hu-fields">
+          <div class="hu-field"><span class="k">Time</span><span class="n">${clock(m.duration_s)}</span><span class="u">duration</span></div>
+          <div class="hu-field"><span class="k">Load</span><span class="n">${m.tss}</span><span class="u">TSS</span></div>
+          <div class="hu-field"><span class="k">Intensity</span><span class="n">${m.if.toFixed(2)}</span><span class="u">IF</span></div>
         </div>${profileSVG(r.profile)}
 `;
       const pre = document.getElementById("wText"); if (pre) pre.textContent = r.intervals_text;
