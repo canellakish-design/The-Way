@@ -881,3 +881,9 @@ svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
 .saywrite{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line)}
 .saywrite textarea{width:100%}
 .talkbtn.live{background:#5A2620; border-color:var(--red); color:var(--ink); animation:micpulse 1s ease-in-out infinite}
+
+/* fitness on the Ride page */
+.fitcard .fitrow{display:flex; align-items:center; justify-content:space-between; gap:12px}
+.fitcard .fitnum{font-family:var(--mono); font-size:30px; font-weight:700; line-height:1.1}
+.ctlspark{width:150px; height:52px; color:var(--ink); flex:none}
+.auditnote{margin-top:10px}

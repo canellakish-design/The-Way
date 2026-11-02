@@ -101,8 +101,17 @@ V.ride = async function(){
         ${ride && ride.time ? `<div class="ghr">${ride.ridden || ride.done ? "Ridden" : "Your ride"} at ${esc(hm12(ride.time))}: ${rideG ? gradeBadge(rideG) : "—"}<span class="small">${kindIcon(ride.name, ride.sport)}${esc(ride.name)}, ${ride.minutes} min${ride.ridden && ride.compliance ? `, ${esc(String(ride.compliance.basis || "").split(";")[0])}` : ""}</span></div>` : ""}
       </div></div>` : "";
 
+  // fitness (the 42-day load) and the four-week progress strip live here now, with the riding
+  const tr = scores && scores.training, ser = (scores && scores.series || []).slice(-42);
+  const sparkCtl = (()=>{ if (ser.length < 2) return ""; const vs = ser.map(p => p.ctl), lo = Math.min(...vs), hi = Math.max(...vs), sp = hi - lo || 1;
+    const pts = vs.map((v, i) => `${(i / (vs.length - 1) * 156 + 2).toFixed(1)},${(52 - (v - lo) / sp * 46).toFixed(1)}`).join(" ");
+    return `<svg class="ctlspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/></svg>`; })();
+  const fitness = tr ? `<div class="card fitcard"><div class="fitrow"><div><span class="eyebrow">Fitness</span><div class="fitnum">${Math.round(tr.ctl)} <span class="small">base</span></div><div class="small">${tr.ramp_7d >= 0 ? "+" : ""}${tr.ramp_7d}/wk · ${esc(tr.ramp && tr.ramp.word || "")}</div></div>${sparkCtl}</div>
+    <div class="small">The 42-day average of the riding load, against the planning FTP. Lifting never counts toward it.</div></div>` : "";
   document.getElementById("ridePage").innerHTML = `
     ${hero}
+    ${fitness}
+    <div class="card progress" id="progress" hidden></div>
     <div class="card"><h4>Conditions · ${esc(d.label || dayName)}</h4>
       ${hourStrips(d)}
       ${w ? "" : `<div class="small">No forecast for this day yet.</div>`}
@@ -125,6 +134,7 @@ V.ride = async function(){
     <div class="card"><h4>Planning numbers</h4><div class="small">The FTP every zone and target follows. Yours to set; the signature on the Zones page is the evidence, never the hand that writes it.</div><div id="pSettings" class="small">loading…</div></div>`;
   bridge("/workouts/settings").then(st => { if (location.hash.startsWith("#ride") && window.drawPlanningNumbers) window.drawPlanningNumbers(st); }).catch(()=>{ const el = document.getElementById("pSettings"); if (el) el.textContent = "bridge unreachable"; });
 
+  bridge("/progress").then(v => { if (location.hash.startsWith("#ride") && typeof drawProgress === "function") drawProgress(v); }).catch(()=>{});
   const msg = t => { const el = document.getElementById("rMsg"); if (el) el.textContent = t || ""; };
   // a course onto the ride: the plan's own ride takes it in place; otherwise a new ride is made at the start
   const putCourse = async (c, startAt) => {

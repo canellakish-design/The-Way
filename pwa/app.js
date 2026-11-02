@@ -1483,8 +1483,7 @@ function dayCard(d, plan, nowMin, rec, solo){
         <div class="mgrid"><div class="mc c"><b>${m.carbs_g ?? "—"}</b><span>carbs g</span></div><div class="mc p"><b>${m.protein_g ?? "—"}</b><span>protein g</span></div><div class="mc f"><b>${m.fat_g ?? "—"}</b><span>fat g</span></div></div></div>`
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
-    <div class="dayhead"><h4>${isToday?"Today · ":""}${esc(d.label)}</h4><a class="btn" href="#food">Food log</a></div>
-    ${macroRow}${conditionsLine(d)}
+    <div class="dayhead"><h4>${isToday?"Today · ":""}${esc(d.label)}</h4></div>
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
@@ -1512,13 +1511,9 @@ const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
-    <button class="score hero" data-k="training"><span class="herotext"><span class="slabel">Fitness</span><span class="snum">—</span><span class="sword">&nbsp;</span><span class="ssub">reaching the bridge…</span></span><svg class="spark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></button>
     <div class="chainhead"><span>This week <span id="chainDates"></span></span><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="chain" id="scores">${chainHTML()}</div>
     <div class="chainword small" id="chainWord">&nbsp;</div>
-    <div class="scoreverdict small" id="scoreVerdict"></div>
-    <div class="card progress" id="progress" hidden></div>
-    <div class="small auditnote" id="auditNote"></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
@@ -1527,6 +1522,7 @@ V.today = async function(){
     </div>
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
+    <div class="small auditnote" id="auditNote"></div>
     <button id="toPlan" class="primary">The plan</button>
     <button id="toSettings">Settings</button>`;
 
