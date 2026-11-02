@@ -56,7 +56,10 @@
   // error or nothing heard puts the cursor in the box for the keyboard's own microphone.
   window.dictateInto = (input, btn, onFinal) => {
     const hint = msg => { input.focus(); if (msg) input.placeholder = msg; };
-    if (!SRec){ hint("Tap the microphone key on the keyboard and speak"); return; }
+    // iPhone and iPad: the browser's recognizer hangs in a home-screen app, so Say goes straight to the box and the
+    // keyboard, whose microphone key is Apple's own dictation and always works
+    const iOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!SRec || iOS){ hint("Tap the microphone key on your keyboard and talk, then Log it"); return; }
     if (btn.dataset.on === "1"){ if (btn.__done) btn.__done(true); return; }
     let rec; try{ rec = new SRec(); }catch{ hint("Tap the microphone key on the keyboard and speak"); return; }
     rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
