@@ -17,8 +17,13 @@
   --red:#E58273;   --red-soft:#33201C;
   --blue-soft:#1C2942;
   --carb:#E29A5A; --fat:#8FB4E8;
-  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
-  --sans:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --water:#5FB6E6;
+  --z1:#7FA3C9; --z2:#7BC48E; --z3:#D8A945; --z4:#E5884F; --z5:#E5605F;
+  /* the head-unit faces: a condensed face for every number you glance at, a plain sans for language,
+     a mono for labels and times (docs/redesign-head-unit.html) */
+  --num:"Saira Condensed","Arial Narrow","Roboto Condensed",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --shadow:3px 3px 0 #2A2C27;
   --radius:0px;
 }
@@ -35,7 +40,8 @@ nav a{font-family:var(--mono); color:var(--muted); text-decoration:none; font-si
   letter-spacing:.5px; text-transform:uppercase; padding:4px 8px; border:1px solid transparent;}
 nav a.on{color:var(--ink); border-color:var(--ink)}
 @media (max-width:560px){ header{padding:10px 12px} h1{font-size:15px; letter-spacing:2px} nav{gap:2px} nav a{font-size:10.5px; padding:4px 5px; letter-spacing:.2px} }
-main{max-width:660px; margin:0 auto; padding:14px 14px 80px}
+main{max-width:660px; margin:0 auto; padding:14px 14px 80px; overflow-wrap:break-word}
+main code, main .url{overflow-wrap:anywhere}
 
 /* ---- shared ---- */
 .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:3px; text-transform:uppercase; color:var(--muted)}
@@ -889,3 +895,39 @@ svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
 .ctlspark{width:150px; height:52px; color:var(--ink); flex:none}
 .auditnote{margin-top:10px}
 .drinksnote{margin:-4px 0 10px}
+
+/* ============================================================
+   Head unit (docs/redesign-head-unit.html): shared pieces every page uses.
+   Numbers wear the condensed face; status is a stripe on the edge, never a
+   fill; a row keeps one fixed column on the right for its chip.
+   ============================================================ */
+.bignum,.signum,.lhnum,.fitnum,.chain .cbox .cnum,.chain .tcell .snum,.xbn b,.pnow,.recscore,.fkcal b,.mgrid b{font-family:var(--num); font-weight:700; letter-spacing:0}
+.hu-n{font-family:var(--num); font-weight:700; font-variant-numeric:tabular-nums; line-height:.95; letter-spacing:0}
+.hu-lab{font-family:var(--mono); font-size:10.5px; letter-spacing:1.6px; text-transform:uppercase; color:var(--muted)}
+.hu-chip{display:inline-block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; padding:3px 7px; border:1px solid currentColor; white-space:nowrap; line-height:1.3}
+.hu-go{color:var(--green)} .hu-hold{color:var(--amber)} .hu-stop{color:var(--red)} .hu-dim{color:var(--muted)} .hu-water{color:var(--water)}
+.hu-stripe{border-left:3px solid var(--line)}
+.hu-stripe.good{border-left-color:var(--green)} .hu-stripe.warn{border-left-color:var(--amber)} .hu-stripe.bad{border-left-color:var(--red)} .hu-stripe.water{border-left-color:var(--water)}
+/* data fields: label, big number, a small line under it */
+.hu-fields{display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border:1px solid var(--line)}
+.hu-fields.two{grid-template-columns:1fr 1fr}
+.hu-field{background:var(--paper); padding:8px 9px 9px; display:flex; flex-direction:column; gap:3px; min-width:0}
+.hu-field .k{font-family:var(--mono); font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted)}
+.hu-field .n{font-family:var(--num); font-weight:700; font-size:34px; line-height:.95; font-variant-numeric:tabular-nums}
+.hu-field.big .n{font-size:52px}
+.hu-field .u{font-family:var(--mono); font-size:10px; color:var(--muted); letter-spacing:.4px}
+/* tiles: same-size buttons, two or four across */
+.hu-tiles{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.hu-tiles.four{grid-template-columns:repeat(4,1fr); gap:6px}
+.hu-tile{margin:0; min-height:72px; padding:10px; display:flex; flex-direction:column; align-items:flex-start; justify-content:space-between; gap:4px; text-align:left; background:var(--card); border:1px solid var(--line); box-shadow:none; color:var(--ink); text-transform:none; letter-spacing:0; font-family:var(--sans); font-weight:400}
+.hu-tile b{font-family:var(--num); font-weight:700; font-size:19px; text-transform:uppercase; letter-spacing:.4px; line-height:1}
+.hu-tile span{font-size:11.5px; color:var(--muted); line-height:1.3}
+.hu-tile svg{width:22px; height:22px}
+.hu-tile.primary{background:var(--ink); color:var(--paper); border-color:var(--ink)} .hu-tile.primary span{color:#3a3a3a}
+.hu-tiles.four .hu-tile{align-items:center; text-align:center; min-height:64px; padding:8px 4px}
+/* a bar with its target as a tick; past the tick it runs on hatched */
+.hu-track{position:relative; height:24px; background:#1b1d1a}
+.hu-track .f{position:absolute; left:0; top:0; bottom:0}
+.hu-track .over{position:absolute; top:0; bottom:0; background:repeating-linear-gradient(135deg, var(--red) 0 4px, transparent 4px 8px)}
+.hu-track .tick{position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--ink)}
+.hu-track .tl{position:absolute; top:-16px; transform:translateX(-50%); font-family:var(--mono); font-size:9.5px; color:var(--muted); white-space:nowrap}
