@@ -78,6 +78,9 @@ async function context() {
     else lines.push('No training today: no ride, no run, no lift. Do not name one.');
     if (day.cue) lines.push('Where the day stands: ' + day.cue.text);
     if (day.guidelines && day.guidelines.length) lines.push("Today's eating rules: " + day.guidelines.map(g => g.text).join(' ').slice(0, 400));
+    { const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })(), toM = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+      const recent = (day.entries || []).filter(e => !e.supplement && toM(e.time) != null && nowM - toM(e.time) <= 180);
+      if (recent.length) lines.push('ALREADY IN THE JOURNAL in the last three hours (never log any of these again unless he says another, more, a second or again): ' + recent.map(e => `${tz.hm12(e.time)} ${e.name}${e.written ? ` (he said "${String(e.written).slice(0, 60)}")` : ''}`).join('; ') + '.'); }
     if (day.meals && day.meals.length) lines.push('The meal plan: ' + day.meals.map(m => `${tz.hm12(m.time)} ${m.slot} (${m.carbs_g} C, ${m.protein_g || 0} P${(m.logged || []).length ? ', logged' + (m.match ? ', ' + m.match.word : '') : ''})`).join('; ') + '.');
     const e = day.energy;
     if (e && e.now) {
@@ -218,6 +221,12 @@ async function run(a, x) {
   const food = require('./food');
   switch (a.type) {
     case 'meal': case 'drink': {
+      // the same words logged again within twenty minutes are the same food, said twice, unless he says it was more
+      { const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\b(a|an|the|one|of|and|with|i|had|have|just)\b/g, ' ').replace(/\s+/g, ' ').trim();
+        const again = /\b(another|more|again|second|extra|other)\b/i.test(String(a.text || ''));
+        if (!again) { const day0 = await food.dayReport(tz.todayKey()); const p = tz.parts(new Date()), nowM = p.h * 60 + p.mi;
+          const twin = (day0.entries || []).find(e => !e.supplement && e.time && nowM - ((+e.time.slice(0, 2)) * 60 + (+e.time.slice(3, 5))) <= 20 && (norm(e.written) === norm(a.text) || norm(e.name) === norm(a.text)));
+          if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; } }
       const e = await food.addPhoto({ text: a.text, meal: a.meal || undefined });
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
       let celebrate = false, slot = null;

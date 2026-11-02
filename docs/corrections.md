@@ -35,8 +35,9 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 1 Nov | Plan detail formatting broken on a phone | Same row layout issue | `f5fba04` | new case |
 | 1 Nov | The now dot stuck near the top of the day card | It read the whole-day free band as a row | `89db4ec` | new case |
 | 1 Nov | Mountain bike ride graded "short 57%" | Strava's estimated power, from a ride with no meter, was read as real power; Zone 1 was marked down for low load | `c75c6e2`, `b523eed` | new case |
+| 1 Nov | Three beers logged twice, at 7:23p and 7:25p | The advisor did not see the beers already logged in an earlier turn, and the audit only compared neighbouring entries, so the shrimp logged between them hid the double | voice context lists the last three hours of the journal; the same words within twenty minutes are refused unless he says another; the audit compares every pair within ten minutes | advisor |
 
-**1 Nov: 17 corrections.** 9 new case, 5 disagreement, 2 my mistake, 1 advisor.
+**1 Nov: 18 corrections.** 9 new case, 5 disagreement, 2 my mistake, 2 advisor.
 
 ## Found by the Chrome tests (before Harry saw them)
 

@@ -31,7 +31,7 @@ async function run(o) {
 
   // 1. the journal: every plate carries the plan it was eaten under; doubles are marked
   try {
-    for (const date of [tz.shiftKey(today, -1), today]) {
+    for (const date of [tz.shiftKey(today, -1), today]) {   // yesterday too: a late double shows the next morning
       const doc = await food.dayDocFor(date);
       if (!doc || !doc.entries) continue;
       const g = await food.guidelinesFor(date);
@@ -47,13 +47,14 @@ async function run(o) {
         }
       }
       // the same thing logged twice within three minutes: marked, never removed
+      // every pair logged within ten minutes of each other, not only neighbours: a plate logged between two copies hid them
       const sorted = plates.filter(e => e.time).slice().sort((a, b) => a.time.localeCompare(b.time));
+      const sameItem = (a, b) => norm(a.name) === norm(b.name) || (a.written && b.written && norm(a.written) === norm(b.written)) || (a.drink && b.drink && norm(a.drink) === norm(b.drink) && Math.abs((a.kcal || 0) - (b.kcal || 0)) <= 30);
       for (let i = 1; i < sorted.length; i++) {
-        const a = sorted[i - 1], b = sorted[i];
-        const close = Math.abs(toMin(b.time) - toMin(a.time)) <= 3;
-        const same = norm(a.name) === norm(b.name) || (a.drink && b.drink && norm(a.drink) === norm(b.drink) && Math.abs((a.kcal || 0) - (b.kcal || 0)) <= 30);
-        if (close && same) { if (b.maybe_double_of !== a.id) { b.maybe_double_of = a.id; changed = true; } doubles.push({ date, id: b.id, name: b.name, time: b.time, twin: a.name, twin_time: a.time }); }
-        else if (b.maybe_double_of === a.id) { delete b.maybe_double_of; changed = true; }
+        const b = sorted[i];
+        const a = sorted.slice(0, i).reverse().find(x => Math.abs(toMin(b.time) - toMin(x.time)) <= 10 && sameItem(x, b));
+        if (a) { if (b.maybe_double_of !== a.id) { b.maybe_double_of = a.id; changed = true; } doubles.push({ date, id: b.id, name: b.name, time: b.time, twin: a.name, twin_time: a.time }); }
+        else if (b.maybe_double_of) { delete b.maybe_double_of; changed = true; }
       }
       if (changed) await food.saveDayDoc(date, doc);
       checks.push({ key: 'journal-' + date, ok: doubles.length === 0, fixed: backfilled, detail: `${plates.length} entries${backfilled ? `, ${backfilled} given the plan they were eaten under` : ''}${doubles.length ? `, ${doubles.length} possible double log${doubles.length === 1 ? '' : 's'}` : ''}`, items: doubles.map(d => `${tz.hm12(d.time)} ${d.name} looks like ${tz.hm12(d.twin_time)} ${d.twin} again`) });
