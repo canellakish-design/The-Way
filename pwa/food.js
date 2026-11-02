@@ -241,7 +241,7 @@ V.food = async function(){
           <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
-      <button id="writeBtn" class="writebtn">Write it instead</button>
+      <div class="quicklog"><button id="writeBtn" class="writebtn">Write it instead</button><button id="talkBtn" class="writebtn talkbtn">Say it</button></div>
       <div class="advisor">
         <div class="snaprow"><button class="big snapbtn" id="adviseBtn">What's in front of me</button><button class="big snapbtn" id="nearBtn">Find food near me</button></div>
         <input id="adviseFile" type="file" accept="image/*" capture="environment" hidden>
@@ -568,6 +568,13 @@ V.food = async function(){
     document.getElementById("snap").scrollIntoView({ behavior: "smooth", block: "start" });
     setTimeout(()=> document.getElementById("writeText").focus({ preventScroll: true }), 350);
   }
+  // say it: the written box opens, the phone listens, and what it heard is logged the same way
+  document.getElementById("talkBtn").onclick = ()=>{
+    wform.hidden = false; form.hidden = true;
+    const t = document.getElementById("talkBtn");
+    if (window.dictateInto) window.dictateInto(document.getElementById("writeText"), t, ()=> document.getElementById("writeLog").click());
+    else document.getElementById("writeText").focus();
+  };
   document.getElementById("writeLog").onclick = async ()=>{
     const text = document.getElementById("writeText").value.trim();
     if (!text) return;

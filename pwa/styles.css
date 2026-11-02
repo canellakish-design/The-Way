@@ -876,3 +876,8 @@ svg.bars .barlab{font-family:var(--mono); font-size:9px; fill:var(--muted)}
 svg.bars .barval{font-family:var(--mono); font-size:9px; fill:var(--ink)}
 svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
 .macrocard .mbars.day{margin-top:0}
+
+/* write it or say it */
+.saywrite{margin-top:12px; padding-top:10px; border-top:1px dashed var(--line)}
+.saywrite textarea{width:100%}
+.talkbtn.live{background:#5A2620; border-color:var(--red); color:var(--ink); animation:micpulse 1s ease-in-out infinite}

@@ -40,6 +40,37 @@
   const page = (title) => { view.innerHTML = `<span class="eyebrow">${esc(title)}</span><div id="linkPage"><div class="card"><div class="small">loading…</div></div></div>`; return document.getElementById("linkPage"); };
   const alive = h => location.hash.split("?")[0] === "#" + h;
 
+  // dictation into a box: the phone's own speech recognition; where there is none, the keyboard's microphone key
+  const SRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  window.dictateInto = (input, btn, onFinal) => {
+    if (!SRec){ input.focus(); input.placeholder = "Tap the microphone key on the keyboard and speak"; return; }
+    if (btn.dataset.on === "1"){ try{ btn.__rec && btn.__rec.stop(); }catch{} return; }
+    const rec = new SRec(); rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    btn.__rec = rec; btn.dataset.on = "1"; const label = btn.textContent; btn.textContent = "Listening… tap to stop"; btn.classList.add("live");
+    let heard = "";
+    rec.onresult = ev => { heard = [...ev.results].map(r => r[0].transcript).join(" ").trim(); input.value = heard; };
+    rec.onerror = () => {};
+    rec.onend = () => { btn.dataset.on = ""; btn.textContent = label; btn.classList.remove("live"); if (heard && onFinal) onFinal(heard); };
+    if (window.primeSound) primeSound();
+    try{ rec.start(); }catch{ btn.dataset.on = ""; btn.textContent = label; btn.classList.remove("live"); input.focus(); }
+  };
+  // write it or say it: the same reader as the Food page's written meal, so a drink or a bite is read and counted the same way
+  const sayWriteHTML = (p, placeholder) => `<div class="saywrite"><label for="${p}Text">Write it or say it</label>
+    <textarea id="${p}Text" rows="2" placeholder="${esc(placeholder)}"></textarea>
+    <div class="quicklog"><button class="primary" id="${p}Log">Log it</button><button id="${p}Talk" class="talkbtn">Say it</button></div>
+    <span class="small" id="${p}Msg"></span></div>`;
+  const wireSayWrite = (el, p, after) => {
+    const box = el.querySelector("#" + p + "Text"), msg = el.querySelector("#" + p + "Msg"), go = el.querySelector("#" + p + "Log"), talk = el.querySelector("#" + p + "Talk");
+    if (!box || !go) return;
+    const log = async ()=>{ const text = box.value.trim(); if (!text){ msg.textContent = "Write what you had, or tap Say it."; return; }
+      go.disabled = true; msg.textContent = "Reading it…"; if (window.primeSound) primeSound();
+      try{ const r = await bridge("/food/text", { method: "POST", headers: J, body: JSON.stringify({ text }) }); box.value = ""; msg.textContent = r && r.entry ? `Logged: ${r.entry.name}${r.entry.fluid_ml ? `, ${r.entry.fluid_ml} ml` : ""}${r.entry.kcal ? `, ${r.entry.kcal} kcal` : ""}.` : "Logged."; if (typeof cheerIf === "function") cheerIf(r); await after(); }
+      catch(e){ msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); }
+      finally{ go.disabled = false; } };
+    go.onclick = log;
+    if (talk) talk.onclick = ()=> window.dictateInto(box, talk, ()=> log());
+  };
+
   // ---------------- Hydration ----------------
   V.hydration = async function(){
     const el = page("Hydration");
@@ -57,7 +88,8 @@
           <div class="row2"><span><label>Other amount (ml)</label><input id="hyMl" type="number" inputmode="numeric" placeholder="330"></span>
             <span><label>With salt or electrolytes</label><select id="hySalt"><option value="">plain water</option><option value="1">with electrolytes</option></select></span></div>
           <button class="primary" id="hyGo">Log it</button> <span class="small" id="hyMsg"></span>
-          <div class="small">Coffee, a shake or anything with calories: log it on <a href="#food">Food</a>, where its calories count too.</div></div>
+          ${sayWriteHTML("hySw", "a large iced coffee with milk, or two glasses of water")}
+          <div class="small">Anything with calories, coffee or a shake, is read for its calories too.</div></div>
         <div class="card"><h4>Today's drinks</h4>${drinks.length ? `<ul class="agenda totals">${drinks.slice().reverse().map(e => `<li><span class="n">${esc(hm12(e.time))} · ${esc(e.name)}</span><span class="tag">${e.fluid_ml || 0} ml <button class="tdel" data-del="${esc(e.id)}" aria-label="Remove">${window.TRASH || "×"}</button></span></li>`).join("")}</ul>` : `<div class="small">None logged yet.</div>`}
           ${whyHTML(L)}</div>`;
       if (h && B.wireHydration) B.wireHydration(el, h);
@@ -68,6 +100,7 @@
       };
       el.querySelectorAll("[data-ml]").forEach(b => b.onclick = ()=> log(+b.dataset.ml, document.getElementById("hySalt").value === "1"));
       document.getElementById("hyGo").onclick = ()=>{ const ml = +document.getElementById("hyMl").value; if (!(ml > 0 && ml <= 3000)) { document.getElementById("hyMsg").textContent = "An amount in ml, up to 3000."; return; } log(ml, document.getElementById("hySalt").value === "1"); };
+      wireSayWrite(el, "hySw", draw);
       el.querySelectorAll("[data-del]").forEach(b => b.onclick = async ()=>{ if (!confirm("Remove this drink?")) return; b.disabled = true; try{ await bridge("/food/" + encodeURIComponent(b.dataset.del), { method: "DELETE" }); }catch(e){} await draw(); });
     };
     await draw();
@@ -88,6 +121,7 @@
           <div class="quicklog">
             <button data-item="tailwind">Tailwind bottle · 50 g</button><button data-item="gel">Gel · 22 g</button><button data-item="figbar">Fig bar · 38 g</button><button data-item="banana">Banana · 27 g</button>
           </div>
+          ${sayWriteHTML("fuSw", "a bottle of Tailwind and half a banana")}
           <h4 style="margin-top:12px">Pre-ride supplements</h4>
           ${rx.length ? `<ul class="agenda totals">${rx.map(x => `<li><span class="n">${esc(x.name)}<span class="small"> ${x.time ? esc(hm12(x.time)) + " · " : ""}${esc(x.why || "")}</span></span><span class="tag">${x.taken ? `<span class="mword green">✓ taken</span>` : `<button class="rxlog" data-supp="${esc(x.key)}">log</button>`}</span></li>`).join("")}</ul>` : `<div class="small">None due today. Beetroot is due 2 to 3 hours before a ride, bicarbonate before a hard one.</div>`}
           <div class="quicklog"><button data-supp="beetroot">Beetroot</button><button data-supp="sodium_bicarb">Bicarbonate</button></div>
@@ -99,6 +133,7 @@
       if (e && B.wireEnergy) B.wireEnergy(el, e, draw);
       const ITEMS = { tailwind: { name: "Tailwind, 2 scoops, 620 ml bottle", kcal: 200, carbs_g: 50, tags: ["drink"], fluid_ml: 620 }, gel: { name: "Energy gel", kcal: 90, carbs_g: 22, tags: [] },
         figbar: { name: "Fig bar", kcal: 200, carbs_g: 38, protein_g: 3, fat_g: 4, tags: [] }, banana: { name: "Banana", kcal: 105, carbs_g: 27, protein_g: 1, tags: ["veg"] } };
+      wireSayWrite(el, "fuSw", draw);
       const msg = t => { const m = document.getElementById("fuMsg"); if (m) m.textContent = t; };
       el.querySelectorAll("[data-item]").forEach(b => b.onclick = async ()=>{ const it = ITEMS[b.dataset.item]; b.disabled = true; msg("logging…");
         try{ await bridge("/food/item", { method: "POST", headers: J, body: JSON.stringify(Object.assign({ protein_g: 0, fat_g: 0, fits: "yes", why: "Fuel for the ride." }, it)) }); await draw(); }catch(err){ b.disabled = false; msg(String(err.message).replace(/^bridge \d+ — /, "")); } });
@@ -201,8 +236,9 @@
       const L = chain && chain.links && chain.links.micros, B = window.foodBits || {};
       el.innerHTML = headHTML("micros", "Micros", L) + `
         <div class="card">${B.microHTML && food ? B.microHTML(food.micros, food) : `<div class="small">loading…</div>`}</div>
-        <div class="card"><h4>Log food</h4><div class="small">Micronutrients come from what is logged on <a href="#food">Food</a>: every photo or written meal adds its iron, calcium, fibre and the rest. Supplements are logged above.</div>${whyHTML(L)}</div>`;
+        <div class="card"><h4>Log food</h4>${sayWriteHTML("miSw", "spinach salad with salmon and a handful of almonds")}<div class="small">Every meal logged here or on <a href="#food">Food</a> adds its iron, calcium, fibre and the rest. Supplements are logged above.</div>${whyHTML(L)}</div>`;
       if (B.wireMicro) B.wireMicro(el, draw);
+      wireSayWrite(el, "miSw", draw);
     };
     await draw();
   };
