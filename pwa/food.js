@@ -230,6 +230,7 @@ V.food = async function(){
   view.innerHTML = `<span class="eyebrow">Food</span>
     <div class="pweekhead"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
+    <div id="fMacros"></div>
     ${isToday ? `<div class="card day snapcard" id="snap">
       <div class="snaprow"><button class="primary big snapbtn" id="snapBtn">Snap a meal</button><button class="big snapbtn" id="rollBtn">From camera roll</button></div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
@@ -242,13 +243,6 @@ V.food = async function(){
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
       <div class="quicklog"><button id="writeBtn" class="writebtn">Write it instead</button><button id="talkBtn" class="writebtn talkbtn">Say it</button></div>
-      <div class="advisor">
-        <div class="snaprow"><button class="big snapbtn" id="adviseBtn">What's in front of me</button><button class="big snapbtn" id="nearBtn">Find food near me</button></div>
-        <input id="adviseFile" type="file" accept="image/*" capture="environment" hidden>
-        <div class="small adhint">A shelf, a cooler, a menu or a counter: it says what to pick for what the plan wants next. Near me finds places within a short walk and names the order; save a place and it comes up on its own whenever you are there.</div>
-        <div id="hereOut"></div>
-        <div id="adviseOut"></div>
-      </div>
       <div id="writeForm" hidden>
         <label for="writeText">What is on the plate, in your words</label>
         <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
@@ -259,7 +253,6 @@ V.food = async function(){
       <div id="snapResult"></div>
     </div>` : ""}
     <div id="fDay"><div class="card"><div class="small">Loading the day…</div></div></div>`;
-  // (the live fuel card is drawn inside the day, first thing)
   document.getElementById("fPrev").onclick = ()=>go(keyAdd(date,-1));
   document.getElementById("fNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
   document.getElementById("fToday").onclick = ()=>go(today);
@@ -268,51 +261,21 @@ V.food = async function(){
   const draw = ()=>{
     const el = document.getElementById("fDay");
     if (!el) return;
-    if (!day){ el.innerHTML = `<div class="card"><h4>Food</h4><div class="small">bridge unreachable</div></div>`; return; }
-    const c = day.compliance, b = c.band;
-    const m = c.macros && c.macros.per_macro;
-    const macroRow = (label,key)=>{ const x = m && m[key]; if (!x) return "";
-      return `<li><span class="n">${label}<span class="small"> ${x.actual} of ${x.target}${x.direction!=="on target"?` · ${esc(x.direction)} ${Math.abs(x.deviation_pct)}%`:""}</span></span>
-        <span class="tag"><b style="color:${x.score>=90?"var(--green)":x.score>=70?"var(--amber)":"var(--red)"}">${x.score}</b></span></li>`; };
-    const sessions = (day.sessions||[]).map(s=>`${window.kindIcon ? kindIcon(s.name, s.sport) : ""}${esc(s.name)}${s.minutes?" · "+s.minutes+" min":""}${s.done?" · done":" · planned"}`).join("<br>");
+    if (!day){ el.innerHTML = `<div class="card"><div class="small">bridge unreachable</div></div>`; return; }
+    // three bars for the day: protein, carbs, fat. The track is the day's target, the fill what is logged
+    const ents = (day.entries || []).filter(e => !e.supplement);
+    const sum = k => Math.round(ents.reduce((x, e) => x + (e[k] || 0), 0));
+    const t = day.target || {};
+    const BARS = [["protein","protein_g","var(--red)"],["carbs","carbs_g","var(--carb)"],["fat","fat_g","var(--fat)"]];
+    const bars = `<div class="mbars day">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0); const pct = g > 0 ? Math.min(100, a / g * 100) : 0; const over = g > 0 && a > g * 1.2; const left = Math.max(0, g - a);
+        return `<div class="xbar"><span class="xbl">${l}</span><span class="xbtrack"><span class="xbfill${over?" over":""}" style="width:${pct.toFixed(0)}%;background:${col}"></span></span><span class="xbn"><b>${a}</b> / ${g} g${over ? `<i class="ov">${a - g} g over</i>` : left ? `<i>${left} g to go</i>` : ""}</span></div>`; }).join("")}
+      <div class="small fkline">${sum("kcal")} of ${t.kcal || "—"} kcal</div></div>`;
+    const nMeals = ents.filter(e => !e.drink_only).length, nDrinks = ents.filter(e => e.drink_only).length;
+    const mEl = document.getElementById("fMacros");
+    if (mEl) mEl.innerHTML = `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${bars}</div>`;
     el.innerHTML = `
-      ${typeof complianceHTML === "function" ? `<div class="card macrocard"><h4>Macros · ${isToday ? "today" : "that day"}</h4>${complianceHTML({ target: day.target, meals: (day.actual && day.actual.meals) || 0, compliance: day.compliance, suggestion: null }, day)}</div>` : ""}
-      <a class="btn" href="${isToday?"#live":"#live?date="+date}">Live fuel and hydration</a>
-      <div class="card"><h4>${isToday?"Today's":"The day's"} guidelines</h4>
-        ${targetsRow(day.target)}
-        ${day.target.base_burn?`<details class="why"><summary>how the target is set</summary><div class="small">${day.target.base_burn} kcal before riding at ${day.target.kg} kg + ${day.target.ride_kcal} riding − ${Math.abs(day.target.deficit)} deficit · carbs ${day.target.per_kg.carbs} g/kg, protein ${day.target.per_kg.protein} g/kg${day.target.deficit_note?` · <b>${esc(day.target.deficit_note)}</b>`:""}</div></details>`:""}
-        <div class="small">${sessions || "No training on the calendar, so a rest day."}</div>
-        ${day.work ? `<div class="cue" style="border-color:${day.work.compliant?"var(--green)":"var(--amber)"};background:${day.work.compliant?"var(--green-soft)":"var(--amber-soft)"}"><b>From the ride:</b> ${esc(day.work.note)}</div>` : ""}
-        <ul class="rules">${day.guidelines.map(g=>`<li>${esc(g.text)}</li>`).join("")}</ul>
-        ${(day.ride_notes||[]).map(n=>`<details class="ridenotes"><summary>${esc(n.name)} · eating guidelines</summary><div class="ptext">${esc(n.notes)}</div></details>`).join("")}
-      </div>
-      <div class="card"><h4>${isToday?"Today's":"The day's"} meals · timed to the training</h4>
-        ${day.cue ? `<div class="cue"><b>Now:</b> ${esc(day.cue.text)}</div>` : ""}
-        <ul class="agenda mealplan">${(day.meals||[]).map(m=>{
-          const logged = (m.logged||[]).length, now = nowHM();
-          const mealOf = m.slot === "before" || m.slot === "after" ? "snack" : (MEALS.includes(m.slot) ? m.slot : "snack");
-          const mt = logged && m.match ? m.match : null;
-          // a meal that landed on the plan keeps the green check the cheer flew onto it
-          const mark = logged ? `<span class="mk ok${mt && mt.key === "green" ? " onplan" : ""}" title="${mt && mt.key === "green" ? "on the plan" : "logged"}">✓</span>` : (isToday && m.time < now) ? `<span class="mk no" title="nothing logged">✗</span>` : `<span class="mk"></span>`;
-          return `<li data-slot="${esc(m.slot)}" class="${logged?"done":(isToday&&m.time<now?"past":"")}${mt?` match ${mt.key}`:""}"><span class="t">${esc(hm12(logged && m.time_logged ? m.time_logged : m.time))}</span>
-            <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span>${m.kcal?`<span class="small"> ~${m.kcal} kcal · ${m.carbs_g}C${m.protein_g?` · ${m.protein_g}P`:""}${m.plan_kcal!=null&&m.plan_kcal!==m.kcal?` <s>${m.plan_kcal}</s>`:""}</span>`:m.covered_by?`<span class="small"> covered</span>`:""}${mt?`<span class="small mword"> ${mt.kcal} kcal · ${mt.carbs_g}C${mt.protein_g?` · ${mt.protein_g}P`:""} · ${esc(mt.word)}</span>`:""}</span>
-            <span class="tag mealtag">${mark}${isToday?`<button class="cam" data-cam="${esc(mealOf)}" aria-label="Snap this meal"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg></button>`:""}</span></li>`; }).join("")}</ul>
-      </div>
-      <div class="card"><h4>Compliance</h4>
-        <div class="recovery"><span class="recscore" style="color:${c.overall==null?"var(--muted)":toneC(b.tone)}">${c.overall==null?"—":c.overall}</span>
-          <span class="recmeta"><span class="recword" style="color:${b?toneC(b.tone):"var(--muted)"}">${b?esc(b.word):"nothing logged"}</span>
-            <div class="small">${c.guidelines.meals||0} photo${c.guidelines.meals===1?"":"s"}${c.guidelines.score!=null?` · guidelines ${c.guidelines.score}`:""}${c.macros&&c.macros.overall!=null&&c.guidelines.meals?` · macros ${c.macros.overall}`:""}</div></span></div>
-        ${checksList(c.guidelines.checks)}
-        ${m ? `<ul class="agenda totals">${macroRow("carbs","carbs_g")}${macroRow("protein","protein_g")}${macroRow("fat","fat_g")}${macroRow("kcal","kcal")}</ul>` : ""}
-        ${day.suggestion && !day.suggestion.none ? `<div class="snack"><b>Next on the plan</b> — ${esc(day.suggestion.name)}
-          <div class="small">${esc(day.suggestion.what||"")}</div>
-          <div class="small">~${day.suggestion.kcal} kcal · ${day.suggestion.low_carb?"under ":""}${day.suggestion.carbs_g}C · ${day.suggestion.protein_g}P${day.suggestion.score_after!=null?` — compliance ${day.suggestion.score_before??"—"} → <b>${day.suggestion.score_after}</b>`:""}</div>
-          ${isToday?`<button class="cam snackcam" data-cam="${esc(day.suggestion.snap||"snack")}">Snap it</button>`:""}</div>` : ""}
-      </div>
-      <div class="card" id="fMicro"><h4>Micronutrients · this week</h4>${microHTML(day.micros, day)}</div>
-      <span class="eyebrow">The journal · ${(n=>`${n} ${n===1?"meal":"meals"}`)(day.entries.filter(e=>!e.supplement&&!e.drink_only).length)}${day.entries.some(e=>e.drink_only)?` · ${day.entries.filter(e=>e.drink_only).length} drink${day.entries.filter(e=>e.drink_only).length===1?"":"s"}`:""}</span>
-      <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet. Snap the first meal.":"No photos that day."}</div></div>`}</div>`;
-    wireMicro(el, async ()=>{ await load(); });
+      <span class="eyebrow">Logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}${nDrinks?` · ${nDrinks} drink${nDrinks===1?"":"s"}`:""}</span>
+      <div class="journal">${day.entries.length ? day.entries.slice().reverse().map(entryHTML).join("") : `<div class="card"><div class="small">${isToday?"Nothing yet.":"Nothing logged that day."}</div></div>`}</div>`;
     el.querySelectorAll(".jentry").forEach(n => n.onclick = (ev)=>{ if (ev.target.closest("button,input,select,form")) return; n.classList.toggle("open"); });
     el.querySelectorAll("[data-merge]").forEach(btn => btn.onclick = async ()=>{
       // the entry logged just before this one, by time
@@ -401,14 +364,6 @@ V.food = async function(){
   document.getElementById("snapAdd").onclick = ()=> fileEl.click();
   document.getElementById("rollAdd").onclick = ()=> rollEl.click();
   document.getElementById("snapBtn").onclick = ()=> fileEl.click();
-  // the camera buttons beside each meal and on the suggestion are drawn after
-  // the day loads, so the click is caught on the page, not wired per button
-  view.addEventListener("click", (ev)=>{
-    const b = ev.target.closest("[data-cam]"); if (!b || !view.contains(b)) return;
-    const sel = document.getElementById("snapMeal"); if (sel) sel.value = b.dataset.cam;
-    const w = document.getElementById("writeMeal"); if (w) w.value = b.dataset.cam;
-    fileEl.click();
-  });
   // opened from the day page with a meal in hand: preselect it and bring the camera up
   const want = params().snap;
   if (want && MEALS.includes(want)){
@@ -440,122 +395,6 @@ V.food = async function(){
       ${mt && mt.macros && mt.rules ? `<div class="small">macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
       <div>${esc(a.why)}</div></div>`;
   };
-  /* ---- the advisor: what is in front of him, or what is near him ---- */
-  const adviseFile = document.getElementById("adviseFile"), adviseOut = document.getElementById("adviseOut");
-  const fitTone = f => f === "yes" ? "var(--green)" : f === "partly" ? "var(--amber)" : "var(--red)";
-  // an order from a known menu, with its published numbers: the row, and the button that logs it exactly
-  const orderRow = (o, place) => `<li class="${o.fits==="yes"?"pick":""}"><span class="n"><b style="color:${fitTone(o.fits)}">${esc(o.name)}</b>${o.yours?` <span class="small">· your usual</span>`:""}<span class="small"> ${o.kcal} kcal · ${o.carbs_g}C · ${o.protein_g}P · ${o.fat_g}F</span><span class="small adwhy">${esc(o.why||"")}</span></span>
-      <span class="tag"><button class="linkish" data-adorder="${encodeURIComponent(JSON.stringify({ name: o.name, kcal: o.kcal, carbs_g: o.carbs_g, protein_g: o.protein_g, fat_g: o.fat_g, place: place.name, brand: place.menu && place.menu.brand, fits: o.fits, why: o.why }))}">log it</button></span></li>`;
-  const renderAdvice = (r, places)=>{
-    const items = (r.items||[]).slice().sort((a,b)=>["yes","partly","no"].indexOf(a.fits)-["yes","partly","no"].indexOf(b.fits));
-    const pickName = r.pick && r.pick.name;
-    const withMenus = (r.places || []).filter(p => p.orders && p.orders.length);
-    const pickedMenu = r.place && withMenus.find(p => p.name === r.place.name);
-    adviseOut.innerHTML = `
-      ${r.reply ? `<div class="verdict" style="border-color:${pickName||pickedMenu?"var(--green)":"var(--amber)"}"><div>${esc(r.reply)}</div>${r.pick && r.pick.name ? `<div class="rowbtns"><button class="primary" data-adlog="${esc((r.pick.how_much?r.pick.how_much+" ":"")+r.pick.name)}">Log it · ${esc(r.pick.name.slice(0, 40))}</button></div>` : ""}</div>` : ""}
-      ${r.place ? `<div class="small adplace"><b>${esc(r.place.name)}</b> · ${esc(r.place.kind)} · ${r.place.dist_m} m · <a href="${esc(r.place.directions)}" target="_blank" rel="noopener">Navigate</a> · <a href="${esc(r.place.apple)}" target="_blank" rel="noopener">Apple Maps</a></div>` : ""}
-      ${pickedMenu ? `<div class="small"><b>What to order there</b> · published nutrition, the chain's app has the exact figure</div><ul class="agenda totals aditems">${pickedMenu.orders.map(o => orderRow(o, pickedMenu)).join("")}</ul>` : ""}
-      ${items.length && !pickedMenu ? `<ul class="agenda totals aditems">${items.map(i => `<li class="${i.name===pickName?"pick":""}"><span class="n"><b style="color:${fitTone(i.fits)}">${esc(i.name)}</b>${i.how_much?` <span class="small">${esc(i.how_much)}</span>`:""}<span class="small"> ${i.kcal} kcal · ${i.carbs_g}C · ${i.protein_g}P · ${i.fat_g}F${r.places?" · estimate":""}</span><span class="small adwhy">${esc(i.why||"")}</span></span>
-          <span class="tag"><button class="linkish${i.name===pickName?" pickbtn":""}" data-adlog="${esc((i.how_much?i.how_much+" ":"")+i.name)}">${i.name===pickName?"log the pick":"log it"}</button></span></li>`).join("")}</ul>` : (!pickedMenu && !items.length ? `<div class="small">Nothing here that it could name.</div>` : "")}
-      ${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).length ? `<details class="why"><summary>other places with a known menu</summary>${withMenus.filter(p => !pickedMenu || p.name !== pickedMenu.name).slice(0, 6).map(p => `<div class="small adplace"><b>${esc(p.name)}</b> · ${p.dist_m} m · <a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></div><ul class="agenda totals aditems">${p.orders.slice(0, 2).map(o => orderRow(o, p)).join("")}</ul>`).join("")}</details>` : ""}
-      ${places && places.length ? `<details class="why"><summary>everything near you</summary><ul class="agenda totals">${places.slice(0,15).map(p => `<li><span class="n">${esc(p.name)}${p.saved?` <span class="small">· yours</span>`:` <button class="linkish" data-saveplace="${esc(p.name)}">save</button>`}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m${p.menu?" · menu known":""}</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul></details>` : ""}`;
-    if (r.reply && typeof speak === "function") speak(r.reply);
-    adviseOut.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{
-      b.disabled = true; b.textContent = "logging…";
-      if (window.primeSound) primeSound();
-      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
-      catch(e){ b.textContent = "failed"; }
-    });
-    adviseOut.querySelectorAll("[data-adorder]").forEach(b => b.onclick = async ()=>{
-      b.disabled = true; b.textContent = "logging…";
-      if (window.primeSound) primeSound();
-      try{ const rr = await bridge("/food/item",{method:"POST",headers:J,body:decodeURIComponent(b.dataset.adorder)}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }
-      catch(e){ b.textContent = "failed"; }
-    });
-  };
-  document.getElementById("adviseBtn").onclick = ()=> adviseFile.click();
-  adviseFile.onchange = async ()=>{
-    const f = adviseFile.files && adviseFile.files[0]; if (!f) return;
-    adviseOut.innerHTML = `<div class="small">Looking at it…</div>`;
-    try{
-      const image_base64 = await fileToBase64(f, 1280, 0.75);
-      const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ images:[{image_base64, media_type:"image/jpeg"}] })});
-      renderAdvice(r, null);
-    }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't read it — ${esc(e.message)}</div>`; }
-    adviseFile.value = "";
-  };
-  // one of his saved places, close by: the card that says so and names the order
-  const hereCard = (h, lat, lon)=>{
-    const orders = (h.orders||[]);
-    return `<div class="verdict herecard" style="border-color:var(--green)">
-      <div class="jname">You're at ${esc(h.name)} <span class="small">· ${h.dist_m} m · your place</span></div>
-      ${orders.length ? `<ul class="agenda totals aditems">${orders.map(o => `<li class="${o.fits==="yes"?"pick":""}"><span class="n"><b style="color:${fitTone(o.fits||"yes")}">${esc(o.name)}</b>${o.kcal!=null?`<span class="small"> ${o.kcal} kcal · ${o.carbs_g||0}C · ${o.protein_g||0}P</span>`:""}${o.why?`<span class="small"> · ${esc(o.why)}</span>`:""}</span>
-          <span class="tag"><button class="linkish" data-adlog="${esc(o.name + " at " + h.name)}">log it</button></span></li>`).join("")}</ul>` : `<div class="small">${h.notes ? esc(h.notes) : "No order saved here yet."}</div>`}
-      <div class="small"><button class="linkish" data-addorder="${esc(h.id)}">+ add what you order here</button> · <button class="linkish" data-forget="${esc(h.id)}">forget this place</button></div>
-      <div class="small placeform" id="orderForm-${esc(h.id)}" hidden><input class="pfName" placeholder="the order, e.g. Sunrise burrito, no cheese"> <button class="linkish pfSave" data-pid="${esc(h.id)}">save</button></div>
-    </div>`;
-  };
-  const savePlaceForm = (lat, lon, suggest)=> `<div class="small placeform" id="savePlace"><b>Save this place</b> · it will come up whenever you are within 350 m
-      <input id="spName" placeholder="name" value="${esc(suggest||"")}"><input id="spOrder" placeholder="what you order here (optional)">
-      <button class="linkish" id="spSave">save</button> <button class="linkish" id="spCancel">cancel</button></div>`;
-  const wireHere = (lat, lon)=>{
-    const root = document.getElementById("hereOut");
-    root.querySelectorAll("[data-adlog]").forEach(b => b.onclick = async ()=>{ b.disabled = true; b.textContent = "logging…"; if (window.primeSound) primeSound();
-      try{ const rr = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text: b.dataset.adlog })}); b.textContent = "logged"; day = rr.day; draw(); cheerIf(rr); }catch(e){ b.textContent = "failed"; } });
-    root.querySelectorAll("[data-addorder]").forEach(b => b.onclick = ()=>{ const f = document.getElementById("orderForm-" + b.dataset.addorder); if (f){ f.hidden = !f.hidden; if (!f.hidden) f.querySelector(".pfName").focus(); } });
-    root.querySelectorAll(".pfSave").forEach(b => b.onclick = async ()=>{ const f = b.closest(".placeform"), name = f.querySelector(".pfName").value.trim(); if (!name) return; b.disabled = true;
-      try{ await bridge("/food/places/" + encodeURIComponent(b.dataset.pid) + "/order",{method:"POST",headers:J,body:JSON.stringify({ name })}); await showHere(lat, lon); }catch(e){ b.textContent = "failed"; } });
-    root.querySelectorAll("[data-forget]").forEach(b => b.onclick = async ()=>{ if (!confirm("Forget this place?")) return; try{ await bridge("/food/places/" + encodeURIComponent(b.dataset.forget),{method:"DELETE"}); root.innerHTML = ""; }catch{} });
-  };
-  const showHere = async (lat, lon)=>{
-    try{ const r = await bridge(`/food/places?lat=${lat}&lon=${lon}`); const root = document.getElementById("hereOut"); if (!root) return null;
-      root.innerHTML = r.here ? hereCard(r.here, lat, lon) : ""; wireHere(lat, lon); return r.here || null; }catch{ return null; }
-  };
-  // on arrival: when the site already has location, a saved place close by says so without a tap
-  (async ()=>{
-    try{
-      if (!navigator.geolocation || !navigator.permissions) return;
-      const st = await navigator.permissions.query({ name: "geolocation" }); if (st.state !== "granted") return;
-      navigator.geolocation.getCurrentPosition(pos => showHere(pos.coords.latitude, pos.coords.longitude), ()=>{}, { maximumAge: 300000, timeout: 5000 });
-    }catch{}
-  })();
-  const wireSave = (lat, lon, places)=>{
-    adviseOut.querySelectorAll("[data-saveplace]").forEach(b => b.onclick = ()=>{
-      const p = places && places.find(x => x.name === b.dataset.saveplace);
-      const holder = document.getElementById("savePlaceHolder"); if (!holder) return;
-      holder.innerHTML = savePlaceForm(lat, lon, b.dataset.saveplace === "__here" ? "" : b.dataset.saveplace);
-      holder.dataset.plat = p ? p.lat : lat; holder.dataset.plon = p ? p.lon : lon; holder.dataset.kind = p ? p.kind || "place" : "place";
-      document.getElementById("spName").focus();
-      document.getElementById("spCancel").onclick = ()=>{ holder.innerHTML = ""; };
-      document.getElementById("spSave").onclick = async ()=>{
-        const name = document.getElementById("spName").value.trim(), order = document.getElementById("spOrder").value.trim(); if (!name) return;
-        const btn = document.getElementById("spSave"); btn.disabled = true;
-        try{ await bridge("/food/places",{method:"POST",headers:J,body:JSON.stringify({ name, lat: Number(holder.dataset.plat), lon: Number(holder.dataset.plon), kind: holder.dataset.kind, orders: order ? [{ name: order }] : [] })});
-          holder.innerHTML = `<div class="small">Saved ${esc(name)}. It will come up when you are within 350 m.</div>`; await showHere(lat, lon); }
-        catch(e){ holder.innerHTML = `<div class="small">Couldn't save — ${esc(e.message)}</div>`; }
-      };
-    });
-  };
-  document.getElementById("nearBtn").onclick = ()=>{
-    if (!navigator.geolocation){ adviseOut.innerHTML = `<div class="small">This browser gives no location.</div>`; return; }
-    adviseOut.innerHTML = `<div class="small">Finding where you are…</div>`;
-    navigator.geolocation.getCurrentPosition(async pos => {
-      const lat = pos.coords.latitude, lon = pos.coords.longitude;
-      let near = null;
-      try{ near = await bridge("/food/nearby",{method:"POST",headers:J,body:JSON.stringify({ lat, lon })}); }
-      catch(e){ adviseOut.innerHTML = `<div class="small">The map service did not answer. <a href="https://www.google.com/maps/search/food/@${lat},${lon},15z" target="_blank" rel="noopener">Open the map</a> instead.</div>`; return; }
-      if (near.here){ document.getElementById("hereOut").innerHTML = hereCard(near.here, lat, lon); wireHere(lat, lon); }
-      const saveBar = `<div class="small savebar"><button class="linkish" data-saveplace="__here">+ save where I am</button><span id="savePlaceHolder"></span></div>`;
-      if (!near.places || !near.places.length){ adviseOut.innerHTML = `<div class="small">Nothing with a name within 1.5 km on the map. <a href="${esc(near.search)}" target="_blank" rel="noopener">Open the map</a>.</div>${saveBar}`; wireSave(lat, lon, []); return; }
-      adviseOut.innerHTML = `<div class="small">${near.places.length} places near you${near.saved ? `, ${near.saved} of them yours` : ""}${near.with_menus ? `, ${near.with_menus} with a known menu` : ""}. Choosing…</div>`;
-      try{
-        const r = await bridge("/food/advise",{method:"POST",headers:J,body:JSON.stringify({ places: near.places })});
-        renderAdvice(r, near.places);
-        adviseOut.insertAdjacentHTML("beforeend", saveBar); wireSave(lat, lon, near.places);
-      }catch(e){ adviseOut.innerHTML = `<div class="small">Couldn't choose — ${esc(e.message)}</div><ul class="agenda totals">${near.places.slice(0,10).map(p => `<li><span class="n">${esc(p.name)}<span class="small"> ${esc(p.kind)} · ${p.dist_m} m</span></span><span class="tag"><a href="${esc(p.directions)}" target="_blank" rel="noopener">go</a></span></li>`).join("")}</ul>`; }
-    }, err => { adviseOut.innerHTML = `<div class="small">Location was refused (${esc(err.message)}). Allow it for this site in Settings, or snap what is in front of you.</div>`; }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
-  };
-
   const wform = document.getElementById("writeForm");
   document.getElementById("writeBtn").onclick = ()=>{ wform.hidden = !wform.hidden; if (!wform.hidden){ form.hidden = true; document.getElementById("writeText").focus(); } };
   document.getElementById("writeCancel").onclick = ()=>{ wform.hidden = true; };
