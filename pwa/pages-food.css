@@ -151,3 +151,5 @@ details.ln-fold .primary{margin-top:10px}
 .ln-micros .mbar{position:relative; width:72px; height:8px; border:0; margin:0; background:#1b1d1a}
 .ln-micros .mbar::after{content:""; position:absolute; right:0; top:-3px; bottom:-3px; width:2px; background:var(--ink)}
 .ln-micros ul.agenda.totals.micros .tag b{min-width:28px; text-align:right}
+
+.fd-mk .fd-togo{display:block; font-size:9.5px; letter-spacing:.3px; text-transform:none; color:var(--muted); margin-top:2px; white-space:nowrap}

@@ -51,18 +51,32 @@
 
   // dictation into a box: the phone's own speech recognition; where there is none, the keyboard's microphone key
   const SRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+  // On a phone the recognizer can go quiet without ever ending (iOS in a home-screen app does this), so the
+  // listening never relies on it: a second tap always resets, silence for eight seconds stops it, and an
+  // error or nothing heard puts the cursor in the box for the keyboard's own microphone.
   window.dictateInto = (input, btn, onFinal) => {
-    if (!SRec){ input.focus(); input.placeholder = "Tap the microphone key on the keyboard and speak"; return; }
-    if (btn.dataset.on === "1"){ try{ btn.__rec && btn.__rec.stop(); }catch{} return; }
-    const rec = new SRec(); rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+    const hint = msg => { input.focus(); if (msg) input.placeholder = msg; };
+    if (!SRec){ hint("Tap the microphone key on the keyboard and speak"); return; }
+    if (btn.dataset.on === "1"){ if (btn.__done) btn.__done(true); return; }
+    let rec; try{ rec = new SRec(); }catch{ hint("Tap the microphone key on the keyboard and speak"); return; }
+    rec.lang = "en-US"; rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
     // the button may be a tile (a picture and two lines): keep its markup and put it back when the listening ends
-    btn.__rec = rec; btn.dataset.on = "1"; const label = btn.innerHTML; btn.textContent = "Listening… tap to stop"; btn.classList.add("live");
-    let heard = "";
-    rec.onresult = ev => { heard = [...ev.results].map(r => r[0].transcript).join(" ").trim(); input.value = heard; };
-    rec.onerror = () => {};
-    rec.onend = () => { btn.dataset.on = ""; btn.innerHTML = label; btn.classList.remove("live"); if (heard && onFinal) onFinal(heard); };
+    const label = btn.innerHTML; btn.dataset.on = "1"; btn.textContent = "Listening… tap to stop"; btn.classList.add("live");
+    let heard = "", ended = false, timer = null;
+    const arm = ms => { clearTimeout(timer); timer = setTimeout(() => done(false), ms); };
+    const done = (byTap) => {
+      if (ended) return; ended = true; clearTimeout(timer);
+      try{ rec.abort ? rec.abort() : rec.stop(); }catch{}
+      btn.dataset.on = ""; btn.innerHTML = label; btn.classList.remove("live"); btn.__done = null;
+      if (heard && onFinal) onFinal(heard);
+      else if (!heard) hint(byTap ? "Type it here, or tap the keyboard's microphone" : "Didn't catch that. Type it, or tap the keyboard's microphone");
+    };
+    btn.__done = done;
+    rec.onresult = ev => { heard = [...ev.results].map(r => r[0].transcript).join(" ").trim(); input.value = heard; arm(2500); if ([...ev.results].some(r => r.isFinal)) setTimeout(() => done(false), 600); };
+    rec.onerror = () => done(false);
+    rec.onend = () => done(false);
     if (window.primeSound) primeSound();
-    try{ rec.start(); }catch{ btn.dataset.on = ""; btn.innerHTML = label; btn.classList.remove("live"); input.focus(); }
+    try{ rec.start(); arm(8000); }catch{ done(false); }
   };
   // write it or say it: the same reader as the Food page's written meal, so a drink or a bite is read and counted the same way
   // two tiles, Write and Say; the box opens under them (Say opens it and listens)

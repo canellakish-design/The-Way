@@ -40,7 +40,12 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 1 Nov | Asked whether the calories follow the rides; they followed the plan when the plan was kept | A kept plan carried the planned ride's estimate, and a ride nobody planned was left out | the target carries every ride done plus what is still ahead | disagreement |
 | 1 Nov | Today's 20 minutes at 164 W, his best in 90 days, got "no breakthrough yet" and nothing else | The page only knew breakthroughs (beating the curve, which already allowed 174 W); a best against his own rides had no line | new bests listed beside breakthroughs, with the curve's number | new case |
 
+| 2 Nov | Say stuck on "Listening… tap to stop" on Food | The phone's recognizer went quiet without ending, and the reset waited on it | a tap always resets, eight seconds of silence stops it, an error puts the cursor in the box | new case |
+| 2 Nov | Magnesium "Due" at 6:25 a.m. | The new Sleep page called anything not yet logged today due | 8:45p until half an hour before | my mistake |
+| 2 Nov | Last night 4.4 h; the WHOOP said 5.9 h | First Garmin night, both watches worn; Claude first guessed the 4.4 was the WHOOP's | WHOOP's night entered at Harry's word | my mistake |
+
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
+**2 Nov so far: 3.** 1 new case, 2 my mistake.
 
 ## Found by the Chrome tests (before Harry saw them)
 

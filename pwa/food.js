@@ -286,8 +286,9 @@ V.food = async function(){
     const bars = `<div class="fd-mac">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0);
         const scale = Math.max(g / 0.78, a / 0.84, 1), tk = g / scale * 100, fp = Math.min(a, g) / scale * 100, op = a > g ? (a - g) / scale * 100 : 0;
         const over = g > 0 && a > g * 1.2, left = Math.max(0, g - a);
-        const note = !g ? "" : over ? `<span class="fd-note hu-stop">+${a - g}</span>` : a >= g * 0.9 ? `<span class="fd-note hu-go">✓</span>` : `<span class="fd-note hu-dim">${left} g to go</span>`;
-        return `<div class="fd-mrow"><span class="fd-mk">${l}<span class="hu-n">${a}</span></span>
+        const note = !g ? "" : over ? `<span class="fd-note hu-stop">+${a - g}</span>` : a >= g * 0.9 ? `<span class="fd-note hu-go">✓</span>` : "";
+        const togo = g && !over && a < g * 0.9 ? `<span class="fd-togo">${left} to go</span>` : "";
+        return `<div class="fd-mrow"><span class="fd-mk">${l}<span class="hu-n">${a}</span>${togo}</span>
           <div class="hu-track fd-track"><i class="f" style="width:${fp.toFixed(1)}%;background:${col}"></i>${op ? `<i class="over" style="left:${tk.toFixed(1)}%;width:${op.toFixed(1)}%;opacity:${over ? 1 : .5}"></i>` : ""}${g ? `<i class="tick" style="left:${tk.toFixed(1)}%"></i><span class="tl" style="left:${tk.toFixed(1)}%">${g}</span>` : ""}${note}</div></div>`; }).join("")}</div>`;
     const kEl = document.getElementById("fKcal"), kc = sum("kcal"), fmt = n => Number(n).toLocaleString("en-US");
     if (kEl) kEl.innerHTML = `<span class="hu-n">${fmt(kc)}</span> <span class="fd-kt">/ ${t.kcal ? fmt(t.kcal) : "—"} kcal</span>`;
@@ -462,6 +463,7 @@ V.food = async function(){
   // say it: the written box opens, the phone listens, and what it heard is logged the same way
   document.getElementById("talkBtn").onclick = ()=>{
     wform.hidden = false; form.hidden = true;
+    try{ wform.scrollIntoView({ behavior: "smooth", block: "center" }); }catch{}
     const t = document.getElementById("talkBtn");
     if (window.dictateInto) window.dictateInto(document.getElementById("writeText"), t, ()=> document.getElementById("writeLog").click());
     else document.getElementById("writeText").focus();
