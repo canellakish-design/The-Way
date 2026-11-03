@@ -145,12 +145,15 @@ async function runJob(id) {
       const left = Math.max(60000, 11 * 60 * 1000 - (Date.now() - t0));
       await step(`thinking (step ${hop + 1})`);
       let res;
+      const hb = setInterval(() => { job.wait = `step ${hop + 1}: waiting ${Math.round((Date.now() - t0) / 1000)} s`; setJSON(key, job).catch(() => {}); }, 15000);
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
         system: system(notebook), tools: TOOLS, messages
       }, left); }
       catch (e) {
+        clearInterval(hb);
+        job.debug = (job.debug || []).concat([`step ${hop + 1} failed after ${Math.round((Date.now() - t0) / 1000)} s: ${e.name} ${String(e.message).slice(0, 160)}`]); await setJSON(key, job).catch(() => {});
         if (e.name !== 'AbortError') throw e;
         await step('taking too long: answering from what was read');
         const last = messages[messages.length - 1];
@@ -159,6 +162,7 @@ async function runJob(id) {
         res = await create({ model: MODEL, max_tokens: 8000, fallbacks: 'default', thinking: { type: 'adaptive' }, output_config: { effort: 'medium' },
           system: system(notebook), tools: TOOLS, tool_choice: { type: 'none' }, messages }, 150000);
       }
+      clearInterval(hb);
       messages.push({ role: 'assistant', content: res.content });
       job.debug = (job.debug || []).concat([`step ${hop + 1}: ${res.stop_reason}, ${Math.round((Date.now() - t0) / 1000)} s, ${(res.usage && res.usage.input_tokens) || 0} in / ${(res.usage && res.usage.output_tokens) || 0} out`]);
       for (const b of res.content) {
