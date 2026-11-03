@@ -10,7 +10,7 @@ const ON_NETLIFY = !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT |
 // of the real data, and every write stays in the copy. The one exception is the login keys of the
 // services whose refresh tokens rotate (Strava, WHOOP, Withings, RWGPS): a refresh in the copy is
 // written through, so the real site's login never goes stale.
-const SANDBOX = process.env.THE_WAY_SANDBOX === '1';
+const SANDBOX = process.env.THE_WAY_SANDBOX === '1' || (() => { try { return require('./build-context.json').sandbox === true; } catch (e) { return false; } })();
 const MAIN = 'the-way', COPY = 'the-way-copy';
 const WRITE_THROUGH = new Set(['strava', 'whoop', 'withings', 'rwgps']);
 const storeP = {};
