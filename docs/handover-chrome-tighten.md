@@ -1,9 +1,9 @@
 # Handover: Claude in Chrome · one hour to make The Way tighter
 
 ## Where to work: the copy only
-- Use only **https://copy--thewayforward.netlify.app**.
+- Use only **https://deploy-preview-2--thewayforward.netlify.app**.
 - Every page there shows an amber banner: "The copy · test freely · nothing here reaches the real site, intervals.icu or your calendar". If the banner is missing, stop and work nowhere else.
-- Never open **thewayforward.netlify.app** (no "copy--" in front). That is Harry's real site.
+- Never open **thewayforward.netlify.app** (no "deploy-preview-2--" in front). That is Harry's real site.
 
 The copy opens on a snapshot of Harry's real data. Everything you add, move, log or delete there stays in the copy. Writes to intervals.icu and Google Calendar are held back on the server.
 
@@ -105,3 +105,5 @@ Put it in one Markdown file with these four parts:
 4. **Console errors and layout faults.** Page, error text, and scrollWidth if over 390.
 
 Leave the copy as you found it: remove what you added.
+
+When the report is done, give it to Harry. He will pass it to Claude Code, which turns it into recommendations for the real site.

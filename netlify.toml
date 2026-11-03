@@ -10,7 +10,7 @@
   to = "/.netlify/functions/api/:splat"
   status = 200
 
-# The copy of The Way: the "copy" branch (copy--thewayforward.netlify.app) and every deploy preview run
+# The copy of The Way: deploy previews (the copy is draft pull request 2, deploy-preview-2--thewayforward.netlify.app) run
 # on their own store, seeded from the real one, and never write to intervals.icu or Google Calendar.
 [context.copy.environment]
   THE_WAY_SANDBOX = "1"
