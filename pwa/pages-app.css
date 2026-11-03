@@ -222,9 +222,11 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 /* ================= DAY: the first screen (tighten, Nov 2) =================
    A compact chain, so the next thing due shows on the first screen under it: smaller numbers, one
    line of today under each, tighter wraps. Units are short words, sized to fit at 390 px. */
-.hufit{height:58px; margin-bottom:6px}
-.hufit .fn{font-size:30px}
-.hufit .fspark{height:42px}
+.hufit{height:96px; margin-bottom:8px; padding:10px 12px}
+.hufit .fn{font-size:52px}
+.hufit .fd{font-size:20px}
+.hufit .fw{font-size:11px}
+.hufit .fspark{height:72px}
 .hchain .score.clink, .hchain .score.clink:active{padding:6px 7px 6px; gap:2px}
 .hchain .cnum{font-size:27px}
 .hchain .cnum.long{font-size:22px}
