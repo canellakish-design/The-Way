@@ -699,7 +699,7 @@ function mealMatch(plan, logged, ctx) {
       // fuel slots (before a ride, on the bike) are judged on their carbs alone: the plate rules (protein, vegetables,
       // one starch, nothing processed) are for meals, and a gel or a banana before a hard session meets them by design
       if (/^(before|on the bike)$/.test(plan.slot || '') && !e.alcohol) { keyR = 'green'; wordR = 'rules met'; continue; }
-      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!slotProtein && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!slotVeg && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
+      wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' && (plan.low_carb || (plan.carbs_g || 0) <= 30) ? 'heavy on starch' : (!slotProtein && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!slotVeg && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = plateWhy || a.why || null;
     }
   }
