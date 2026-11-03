@@ -2,7 +2,7 @@
 // front of fetch: a write to intervals.icu, to Google Calendar or to Strava's webhook list is answered
 // here with a harmless stand-in and never leaves the function. Reads, logins (token refreshes), the
 // Anthropic API and Withings (whose reads are POSTs) pass through untouched.
-const SANDBOX = process.env.THE_WAY_SANDBOX === '1';
+const SANDBOX = process.env.THE_WAY_SANDBOX === '1' || (() => { try { return require('./build-context.json').sandbox === true; } catch (e) { return false; } })();
 const BLOCK = [/^https:\/\/intervals\.icu\//, /^https:\/\/www\.googleapis\.com\/calendar\//, /^https:\/\/www\.strava\.com\/api\/v3\/push_subscriptions/];
 if (SANDBOX && typeof globalThis.fetch === 'function' && !globalThis.fetch.__sandboxed) {
   const real = globalThis.fetch;

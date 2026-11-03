@@ -1,4 +1,5 @@
 [build]
+  command = "node scripts/build-flag.js"
   publish = "pwa"
   functions = "netlify/functions"
 [functions]
