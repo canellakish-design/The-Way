@@ -15,6 +15,11 @@ exports.handler = async (event) => {
   try { id = JSON.parse(event.body || '{}').id; } catch (e) { id = null; }
   // a heartbeat test: {"beat": "name"} writes the seconds alive every five seconds for two minutes
   try { const b = JSON.parse(event.body || '{}').beat; if (b) { const { setJSON } = require('../../bridge/storage'); const t0 = Date.now(); for (let i = 0; i < 24; i++) { await setJSON('coach-beat-' + String(b).replace(/\W/g, ''), { alive_s: Math.round((Date.now() - t0) / 1000), at: new Date().toISOString() }); await new Promise(r => setTimeout(r, 5000)); } return { statusCode: 200, body: 'beat done' }; } } catch (e) { /* not a beat */ }
+  // a network probe: {"probe": "name"} lists the models every three seconds for a minute, recording each answer
+  try { const pr = JSON.parse(event.body || '{}').probe; if (pr) { const { setJSON } = require('../../bridge/storage'); const t0 = Date.now(), out = [];
+    for (let i = 0; i < 20; i++) { let st; try { const r = await fetch('https://api.anthropic.com/v1/models?limit=1', { headers: { 'x-api-key': (process.env.ANTHROPIC_API_KEY || '').trim(), 'anthropic-version': '2023-06-01' } }); const j = await r.json(); st = r.status + ' ' + JSON.stringify(j).length; } catch (e) { st = 'err ' + e.message; }
+      out.push(Math.round((Date.now() - t0) / 1000) + 's ' + st); await setJSON('coach-beat-' + String(pr).replace(/\W/g, ''), { out }); await new Promise(r => setTimeout(r, 3000)); }
+    return { statusCode: 200, body: 'probe done' }; } } catch (e) { /* not a probe */ }
   if (!/^[a-f0-9]{12}$/.test(String(id || ''))) return { statusCode: 400, body: 'no job' };
   current = id; console.log('[coach] start', id); await coach.runJob(id, 'background'); console.log('[coach] end', id);
   return { statusCode: 200, body: 'done' };
