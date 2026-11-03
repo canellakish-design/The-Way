@@ -2297,11 +2297,15 @@ V.today = async function(){
     const el = document.getElementById("dayCoach"); if (!el) return;
     if (!isToday || !DEB.rides || !DEB.rides.length){ el.hidden = true; return; }
     el.innerHTML = DEB.rides.map(x => { const d = x.debrief, r = x.ride;
-      const head = `<span class="hu-lab">Coach · ${esc(r.name || "the ride")}${r.time ? " · " + esc(hm12(r.time)) : ""}</span>`;
+      const at = d && d.at ? new Date(d.at) : null, atWord = at && !isNaN(at) ? `${at.getHours() % 12 || 12}:${String(at.getMinutes()).padStart(2, "0")}${at.getHours() < 12 ? "a" : "p"}` : "";
+      const head = `<span class="hu-lab dc-head">Coach · ${esc(r.name || "the ride")}${atWord ? ` · ${atWord}` : ""}${d && d.status === "done" ? ` <button class="linkish dc-redo" data-ride="${esc(r.id)}" data-name="${esc(r.name || "")}">redo</button>` : ""}</span>`;
       if (!d || d.status === "running") return `<div class="dc-one">${head}<div class="small">reading the ride…</div></div>`;
       if (d.status === "error") return `<div class="dc-one">${head}<div class="small">The coach couldn't read it: ${esc(d.error || "")}</div></div>`;
       return `<div class="dc-one">${head}${d.say ? `<div class="ch-say dc-say">${esc(d.say)}</div>` : ""}<div class="ch-body dc-body">${mdLite(d.answer)}</div></div>`; }).join("");
     el.hidden = false;
+    el.querySelectorAll(".dc-redo").forEach(b => b.onclick = async () => { b.disabled = true;
+      try{ await bridge("/coach/debrief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ride_id: b.dataset.ride, name: b.dataset.name, again: true }) }); }catch{ b.disabled = false; return; }
+      const x = (DEB.rides || []).find(z => z.ride.id === b.dataset.ride); if (x){ x.debrief = { status: "running" }; DEB.polling[b.dataset.ride] = false; } lsSetD("way-debrief-said-" + b.dataset.ride, ""); loadCoach(); });
   }
   async function loadCoach(){
     let t = null; try{ t = await bridge("/coach/debrief/today"); }catch{ return; }

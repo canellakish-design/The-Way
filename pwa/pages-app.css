@@ -201,6 +201,7 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 .daycoach{display:flex; flex-direction:column; gap:12px; border-left:3px solid var(--green)}
 .daycoach[hidden]{display:none}
 .dc-one{display:flex; flex-direction:column; gap:6px}
+.dc-redo{font-family:var(--mono); font-size:10px; letter-spacing:1px; text-transform:uppercase; color:var(--muted); margin-left:8px; padding:0; min-height:0}
 .dc-say{font-size:19px}
 .dc-body p{margin:0 0 6px; font-size:14.5px}
 .wkday{border-bottom:0 !important; padding-top:8px !important}
