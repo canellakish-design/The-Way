@@ -27,7 +27,7 @@ ok('verdict: the first link from the left that is off is the break; all good and
   const lowMicro = Object.assign({}, all, { micros: { week: 55, state: 'bad', gaps: ['iron', 'calcium'] } });
   const v3 = C.verdict(lowMicro); assert.strictEqual(v3.break_at, 'micros'); assert.ok(/low on iron, calcium/.test(v3.text), v3.text);
   assert.deepStrictEqual(C.ORDER, ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight']);
-  assert.strictEqual(C.stateOf('fuel', 0.85), 'good'); assert.strictEqual(C.stateOf('fuel', 0.5), 'bad'); assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
+  assert.strictEqual(C.stateOf('fuel', 0.95), 'good'); assert.strictEqual(C.stateOf('fuel', 0.85), 'warn'); assert.strictEqual(C.stateOf('fuel', 0.5), 'bad');   // 100% is the plan now assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
   const unplanned = Object.assign({}, all, { plan: { week: 20, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 1 } });
   assert.ok(/breaks at planning: 60 of 360 minutes of riding placed for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
@@ -84,5 +84,21 @@ ok('plan link: the planning score on its own week, labelled so it cannot read as
 ok('lift link: the verdict reads the Lift page\'s count, "1 of 1 due" in the first week', () => {
   const L = { lift: { week: 0, state: 'bad', sessions: 0, target: 5, count_word: '0 of 1 due' } };
   assert.ok(/lifting: 0 of 1 due sessions/.test(C.verdict(L).text), C.verdict(L).text);
+});
+ok('fuel: a ride scores what went in against the plan (before, on the bike, supplements); under below 100, over above', () => {
+  const r = { sessions: [{ name: 'VO2 40/20s', sport: 'VirtualRide', time: '07:00', minutes: 51, done: true }],
+    meals: [{ slot: 'before', time: '06:15', carbs_g: 35 }, { slot: 'on the bike', time: '07:00', carbs_g: 50 }, { slot: 'breakfast', time: '08:20', carbs_g: 90 }],
+    entries: [{ time: '06:10', carbs_g: 27, kcal: 105 }, { time: '07:05', carbs_g: 50, kcal: 200, slot: 'on the bike' }, { supplement: true, key: 'beetroot', time: '04:30' }] };
+  const c = C.fuelChecks(r);
+  assert.strictEqual(c.length, 1);
+  const p = Object.fromEntries(c[0].parts.map(x => [x.kind, x]));
+  assert.strictEqual(p.pre.got_g, 27); assert.strictEqual(p.pre.plan_g, 35);
+  assert.strictEqual(p.bottle.got_g, 50);
+  assert.strictEqual(p.supp.due, 2); assert.strictEqual(p.supp.got, 1);          // a hard session wants bicarbonate too
+  assert.strictEqual(c[0].pct, Math.round((27 / 35 + 1 + 0.5) / 3 * 100));
+  const over = C.fuelChecks(Object.assign({}, r, { entries: r.entries.concat([{ time: '06:00', carbs_g: 60, kcal: 240 }, { supplement: true, key: 'sodium_bicarb', time: '05:30' }]) }));
+  assert.ok(over[0].pct > 100, over[0].pct);
+  assert.strictEqual(C.stateOf('fuel', 1.0), 'good'); assert.strictEqual(C.stateOf('fuel', 1.3), 'bad'); assert.strictEqual(C.stateOf('fuel', 0.8), 'warn');
+  assert.strictEqual(C.fuelChecks({ sessions: [{ name: 'Push', sport: 'WeightTraining', time: '13:30', minutes: 55 }], meals: [], entries: [] }).length, 0);
 });
 console.log(n + ' passed');
