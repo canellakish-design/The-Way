@@ -111,11 +111,11 @@ async function readSite(base, path) {
   } catch (e) { return { error: e.message }; }
 }
 
-async function runJob(id) {
+async function runJob(id, who) {
   const key = 'coach-job-' + id;
   const job = await getJSON(key, null);
   if (!job || job.status !== 'queued') return;
-  job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.FUNCTION_NAME || 'local';
+  job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = who || 'in-process';
   await setJSON(key, job);
   const T0 = Date.now(); const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await setJSON(key, job).catch(() => {}); };
   try {
@@ -225,8 +225,9 @@ function attach(app) {
       const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       if (r.status >= 400) throw new Error('background ' + r.status);
     } catch (e) {
-      // no background function here (the PC bridge): run it in this process instead
-      runJob(id).catch(() => {});
+      // on Netlify the job only ever runs in the background function: a request may live 30 seconds, a question needs minutes
+      if (require('./storage').ON_NETLIFY) { await setJSON('coach-job-' + id, { id, text, base, status: 'error', error: 'could not start the coach: ' + e.message, created: new Date().toISOString(), steps: [] }); return res.json({ id }); }
+      runJob(id).catch(() => {});   // the PC bridge has no background function: run it here
     }
     res.json({ id });
   });
