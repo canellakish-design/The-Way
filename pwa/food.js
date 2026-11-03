@@ -404,10 +404,11 @@ V.food = async function(){
       <div class="jmore fd-jmore">
         ${e.written || e.notes ?`<div class="small">You wrote: “${esc(e.written || e.notes)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
-        <div class="small">This plate: ${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
+        ${/^(before|on the bike)$/.test(e.slot || "") ? `<div class="small">Fuel for the ride: judged on its carbs, ${e.carbs_g} g${e.plan && e.plan.carbs_g != null ? ` against ${e.plan.carbs_g} g planned` : ""}.</div>`
+          : `<div class="small">This plate: ${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>`}
         ${isToday?`<div class="jfix">
           <div class="row2"><span><label>Name</label><input class="fxName" value="${esc(e.name)}"></span>
-            <span><label>Meal</label><select class="fxMeal">${MEALS.map(m=>`<option ${m===(MEALS.includes(e.slot) ? e.slot : e.meal)?"selected":""}>${m}</option>`).join("")}</select></span></div>
+            <span><label>Meal</label><select class="fxMeal">${e.slot === "before" ? `<option value="snack" selected>pre-ride</option>` : ""}${MEALS.map(m=>`<option ${e.slot !== "before" && m===(MEALS.includes(e.slot) ? e.slot : e.meal)?"selected":""}>${m}</option>`).join("")}</select></span></div>
           <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
           <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
           <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
