@@ -14,7 +14,7 @@
   }).join("");
   const split = t => { const m = /^\s*\**SAY:\**\s*([\s\S]*?)(?:\n\s*\n|$)/.exec(t || ""); return m ? { say: m[1].trim().replace(/\*\*/g, ""), answer: t.slice(m.index + m[0].length).trim() } : { say: "", answer: t || "" }; };
   const turnHTML = (q, say, answer, sources, when) => `<div class="ch-turn">
-      <div class="ch-q"><span class="hu-lab">You${when ? " · " + esc(when) : ""}</span><div>${esc(q)}</div></div>
+      <div class="ch-q"><span class="hu-lab">${when ? esc(when) : "You"}</span><div>${esc(q)}</div></div>
       <div class="ch-a">${say ? `<div class="ch-say">${esc(say)}</div>` : ""}<div class="ch-body">${md(answer)}</div>
         ${sources && sources.length ? `<details class="why"><summary>sources · ${sources.length}</summary><ul class="ch-src">${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join("")}</ul></details>` : ""}</div></div>`;
   const clock = iso => { const d = new Date(iso); if (isNaN(d)) return ""; let h = d.getHours(); const ap = h < 12 ? "a" : "p"; h = h % 12 || 12; return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${h}:${String(d.getMinutes()).padStart(2, "0")}${ap}`; };
@@ -26,7 +26,7 @@
         <div class="ch-row"><button class="primary" id="chGo">Ask</button></div>
       </div>
       <div id="chLive"></div>
-      <div id="chThread"><div class="small">loading the conversation…</div></div>
+      <div id="chThread"></div>
       <details class="why" id="chNoteFold"><summary>the coach's notebook</summary><div id="chNotes" class="small">loading…</div></details>`;
     const box = document.getElementById("chText"), go = document.getElementById("chGo"), live = document.getElementById("chLive");
 
@@ -35,7 +35,7 @@
       const el = document.getElementById("chThread"); if (!el || !alive()) return;
       const turns = (th && th.turns) || [], pairs = [];
       for (let i = 0; i < turns.length; i++) if (turns[i].role === "user" && turns[i + 1] && turns[i + 1].role === "assistant") { pairs.push([turns[i], turns[i + 1]]); i++; }
-      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a]) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at)); }).join("") : `<div class="small">Nothing asked yet.</div>`;
+      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a]) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at)); }).join("") : "";
     };
     const drawNotes = async () => {
       let nb = null; try { nb = await bridge("/coach/notebook"); } catch {}

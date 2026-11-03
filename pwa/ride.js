@@ -156,13 +156,13 @@ V.ride = async function(){
       <div class="rd-facts"><span class="hu-lab">${hNow ? `Right now · ${esc(hlbl(nowH))}` : `Best of ${esc(dayName.toLowerCase())} · ${esc(hlbl(top.a))}–${esc(hlbl(top.a + 2))}`}</span>
         <span class="hu-n rd-big">${f.big}</span>
         <span class="rd-line">${f.line}</span>
-        <span class="rd-why">${gNow.why.length ? esc(gNow.why.join(" · ")) : "nothing against it"}</span></div>
+        ${gNow.why.length ? `<span class="rd-why">${esc(gNow.why.join(" · "))}</span>` : ""}</div>
       ${wear}</section>`; })() : `<section class="rd-hero none"><div class="small">${w ? "No grade for these hours." : "No forecast for this day yet."}</div>${wear}</section>`;
 
   // the ride the page is about, planned or ridden, with how its hours read
   const rideDetail = ride && ride.time && !ride.done ? (() => { const pct = pctAt(ride.time); const endMin = hm2mm(ride.time) + (ride.minutes || 60), pastDark = setMin != null && endMin > setMin;
     const es = energy && (energy.sessions||[]).find(s => s.time === ride.time);
-    return `${rideG ? `over the ride${rideG.why.length ? ": " + esc(rideG.why.join(", ")) : ", nothing against it"}${pastDark ? ` · dark after ${esc(hm12(w.sunset))}` : ""}` : "No forecast for those hours"}${pct != null ? ` · fuel ${pct}% at the start${pct >= need ? ", enough" : `, short of the ${need}% it wants`}` : ""}${es && es.ready_at && !es.ready_now ? ` · ready at ${esc(hm12(es.ready_at))}` : ""}`; })() : "";
+    return `${rideG ? `over the ride${rideG.why.length ? ": " + esc(rideG.why.join(", ")) : ""}${pastDark ? ` · dark after ${esc(hm12(w.sunset))}` : ""}` : "No forecast for those hours"}${pct != null ? ` · fuel ${pct}% at the start${pct >= need ? "" : `, short of the ${need}% it wants`}` : ""}${es && es.ready_at && !es.ready_now ? ` · ready at ${esc(hm12(es.ready_at))}` : ""}`; })() : "";
   // every ride session of the day, one row each (rides only: `planned` already drops lifts, runs and walks);
   // `ride` stays the one the grade and the ribbon are about, and its row carries the grade over its hours
   const toneOf = x => x.compliance ? (x.compliance.band === "green" ? "good" : x.compliance.band === "yellow" ? "warn" : "bad") : x.done ? "good" : "";
@@ -238,7 +238,6 @@ V.ride = async function(){
     </section>
     ${fitness}
     ${indoor ? `<section class="rd-sec"><span class="hu-lab">Indoors at ${esc(whenWord)} · Zwift routes</span>
-      <div class="small">${/virtualride/i.test(ride.sport || "") ? "Planned on the trainer" : "The hours of the ride grade F" + (rideGrade0 && rideGrade0.why.length ? ` (${esc(rideGrade0.why.join(", "))})` : "")}: no outdoor courses.</div>
       ${courses && courses.zwift && courses.zwift.length ? `<ul class="agenda courses">${courses.zwift.map(zRow).join("")}</ul>` : ""}
     </section>` : `<section class="rd-sec"><span class="hu-lab">Courses for ${esc(whenWord)}${grade ? ` · <span class="${grade === "good" ? "hu-go" : grade === "ok" ? "hu-hold" : "hu-stop"}">${grade === "good" ? "green outside" : grade === "ok" ? "marginal" : "indoors"}</span>` : ""}</span>
       ${courses && courses.wind ? `<div class="small rd-cwind">Wind over the ride: ${courses.wind.mph} mph from the ${esc(courses.wind.from)}${courses.wind.gust_mph > courses.wind.mph + 8 ? `, gusts ${courses.wind.gust_mph}` : ""}. Ranked for the wind at your back on the way home.</div>` : ""}
@@ -246,7 +245,7 @@ V.ride = async function(){
       ${courses && courses.zwift && courses.zwift.length ? `<details class="why"${grade === "bad" ? " open" : ""}><summary>indoors: Zwift routes</summary><ul class="agenda courses">${courses.zwift.map(zRow).join("")}</ul></details>` : ""}
       <details class="why"><summary>how the courses are ranked</summary><div class="small">Each route is read as two halves, the heading of each the distance-weighted mean of its segments. The forecast wind over each half, from the start chosen above, reads as headwind, crosswind or tailwind against that heading. A tailwind home scores three, a crosswind home one and a half, a headwind out one more (the legs are fresh for it); a route far from the time planned loses points. Routes come from RideWithGPS when it is connected, otherwise from the roads Strava has seen you ride, grouped by name. The little drawing is a sketch from each half's heading, not the map.</div></details>
     </section>`}
-    <a class="rd-link hu-stripe" href="#zones"><span><b>Zones and the signature</b><span class="small">Power and heart-rate zones, the three numbers of the signature, the best efforts and the breakthroughs.</span></span><span class="rd-go" aria-hidden="true">›</span></a>
+    <a class="rd-link hu-stripe" href="#zones"><span><b>Zones and the signature</b></span><span class="rd-go" aria-hidden="true">›</span></a>
     <details class="why rd-plan"><summary>Planning numbers</summary><div class="small">The FTP every zone and target follows. Yours to set; the signature on the Zones page is the evidence, never the hand that writes it.</div><div id="pSettings" class="small">loading…</div></details>`;
   try{ localStorage.setItem(SNAPK, document.getElementById("ridePage").innerHTML); }catch{}
   bridge("/workouts/settings").then(st => { if (location.hash.startsWith("#ride") && window.drawPlanningNumbers) window.drawPlanningNumbers(st); }).catch(()=>{ const el = document.getElementById("pSettings"); if (el) el.textContent = "bridge unreachable"; });

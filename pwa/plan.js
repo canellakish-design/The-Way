@@ -175,11 +175,10 @@ V.calendar = async function(){
     html += `<div class="card pday hu-stripe ${dc?STRIPE[dc.band]||"":""}${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}" id="pday-${d.date}">
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?` <span class="ptoday">today</span>`:""}</h4>${verdict}</div>
       ${sub?`<div class="pdaysub">${sub}</div>`:""}
-      ${rows.join("") || `<div class="small pempty">Rest${past?"":", or nothing planned yet"}.</div>`}
+      ${rows.join("") || `<div class="small pempty">Rest</div>`}
       ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
   }
-  html += `<div class="small" style="margin:8px 2px">The planning numbers (FTP, threshold HR, resting HR) are set on the <a href="#ride">Ride</a> tab, under the zones.</div>`;
   document.getElementById("pWeek").innerHTML = html;
   document.querySelectorAll("[data-delw]").forEach(b => b.onclick = async (ev)=>{
     ev.preventDefault(); ev.stopPropagation();
