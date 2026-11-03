@@ -72,8 +72,8 @@ ok('mealMatch: a pre-ride snack is judged on its carbs, not the plate rules (no 
 });
 ok('mealMatch: starch is only a fault where the plan asked for few carbs; a carb meal on a training day is not "heavy on starch"', () => {
   const plate = [{ kcal: 640, carbs_g: 95, protein_g: 45, fat_g: 12, assessment: { fits: 'partly', carbs: 'heavy', protein_source: true, vegetables: true, why: 'A big bowl, but heavy on rice.' } }];
-  assert.ok(!/starch/.test(F.mealMatch({ slot: 'breakfast', kcal: 640, carbs_g: 90, protein_g: 45 }, plate).word));
-  assert.ok(/starch/.test(F.mealMatch({ slot: 'dinner', kcal: 640, carbs_g: 20, protein_g: 45, low_carb: true }, plate).word));
+  assert.ok(!/starch/.test(F.mealMatch({ slot: 'breakfast', kcal: 640, carbs_g: 90, protein_g: 45 }, plate).rules.word));
+  assert.strictEqual(F.mealMatch({ slot: 'dinner', kcal: 640, carbs_g: 20, protein_g: 45, low_carb: true }, plate).rules.word, 'heavy on starch');
 });
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
