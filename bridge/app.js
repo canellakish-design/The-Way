@@ -12,6 +12,7 @@ require('./plan').attach(app);
 require('./weather').attach(app);
 require('./courses').attach(app);
 require('./chain').attach(app);
+require('./coach').attach(app);
 require('./race').attach(app);
 require('./whoop').attach(app);
 require('./calendar').attach(app);
