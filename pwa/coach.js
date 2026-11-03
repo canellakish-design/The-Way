@@ -24,8 +24,8 @@
       <div class="ch-ask">
         <label for="chText" class="hu-lab">Ask your coach</label>
         <textarea id="chText" rows="3" placeholder="How is my week going? Why did my legs feel flat today? Should Thursday be hard or easy? Is my protein right for a 55-year-old in a deficit?"></textarea>
-        <div class="ch-row"><button class="primary" id="chGo">Ask</button><span class="small" id="chHint">Takes a minute or two: it reads your data and the research first. Tap the keyboard's microphone to talk.</span></div>
-        <div class="ch-chips">${["How is my week going?", "What should I eat before Thursday's VO2 session?", "Why is sleep breaking my chain, and what would fix it?", "Am I losing weight without losing power?"].map(q => `<button class="linkish ch-chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+        <div class="ch-row"><button class="primary" id="chGo">Ask</button><span class="small" id="chHint">Takes a minute or two: it reads your data and the research first. It can also schedule, move and log your training and log food. Tap the keyboard's microphone to talk.</span></div>
+        <div class="ch-chips">${["How is my week going?", "What should I eat before Thursday's VO2 session?", "Why is sleep breaking my chain, and what would fix it?", "Am I losing weight without losing power?", "I rode 45 minutes on Zwift at noon: log it", "Put a Zone 1, 90 min ride on Saturday at 9a"].map(q => `<button class="linkish ch-chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
       </div>
       <div id="chLive"></div>
       <div id="chThread"><div class="small">loading the conversation…</div></div>
