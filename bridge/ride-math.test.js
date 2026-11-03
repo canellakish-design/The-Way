@@ -5,14 +5,15 @@ const R = require('./ride-math');
 let n = 0;
 function ok(name, fn) { fn(); n++; console.log('ok ' + name); }
 
-ok('hrSummary: average, max, minutes above 152, Seiler zones', () => {
+ok('hrSummary: average, max, minutes above 139, Seiler zones', () => {
   const hr = [].concat(Array(600).fill(110), Array(300).fill(130), Array(240).fill(150), Array(60).fill(0));
   const s = R.hrSummary(hr);
   assert.strictEqual(s.seconds, 1140);
   assert.strictEqual(s.max, 150);
-  assert.strictEqual(s.minutes_above_hard, 0);   // 150 is under the 152 line
+  assert.strictEqual(s.minutes_above_hard, 4);   // the 150s are above the 139 line
   const hard = R.hrSummary(Array(300).fill(155));
   assert.strictEqual(hard.minutes_above_hard, 5);
+  assert.strictEqual(R.hrSummary(Array(300).fill(135)).minutes_above_hard, 0);
   assert.deepStrictEqual(s.zones, { z1_min: 10, z2_min: 5, z3_min: 4 });
   assert.strictEqual(s.zone_pct.z1, 53);
   assert.strictEqual(R.hrSummary([]), null);
@@ -26,7 +27,7 @@ ok('respSummary: breaths per minute with dropouts removed', () => {
   assert.strictEqual(R.respSummary([16, 17]), null);
 });
 
-ok('vo2Grade: 8 to 12 minutes above 152 is the target', () => {
+ok('vo2Grade: 8 to 12 minutes above 139 is the target', () => {
   assert.strictEqual(R.vo2Grade(9.5).band, 'green');
   assert.strictEqual(R.vo2Grade(6).band, 'yellow');
   assert.strictEqual(R.vo2Grade(14).band, 'yellow');
@@ -43,8 +44,8 @@ ok('hrSummaryFromZones: WHOOP zone times mapped onto the Seiler zones', () => {
   const z = { zone_zero_milli: 0, zone_one_milli: 600000, zone_two_milli: 600000, zone_three_milli: 600000, zone_four_milli: 300000, zone_five_milli: 540000 };
   const s = R.hrSummaryFromZones(z, 128, 158, 162);
   assert.strictEqual(s.seconds, 2640);
-  assert.strictEqual(s.minutes_above_hard, 5.6);   // zone five starts at 146; the share above the 152 line is taken as even
-  assert.strictEqual(s.hard_bpm, 152);             // the same line the stream is judged on
+  assert.strictEqual(s.minutes_above_hard, s.zones.z3_min);   // the line is VT2, so it is the minutes above VT2
+  assert.strictEqual(s.hard_bpm, 139);             // the same line the stream is judged on
   assert.ok(s.zones.z1_min > 20 && s.zones.z1_min < 24, 'below VT1 ' + s.zones.z1_min);
   assert.ok(/WHOOP/.test(s.estimated));
   assert.strictEqual(R.hrSummaryFromZones(null), null);

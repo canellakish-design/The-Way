@@ -65,7 +65,7 @@ function three(st, a) {
       sessions: LIBRARY.filter(l => /^mtb-/.test(l.key)).map(l => l.name), target_pct: TARGET.z2,
       why: 'The zone the plan avoids on purpose. Group rides and climbs drift here; the Zone 1 rule (watts come down when the heart rate climbs) is there to stop it.' },
     { key: 'z3', name: 'Zone 3', what: 'Hard. Threshold and above. The 40/20s live here.',
-      hr: { lo: hr.vt2, hi: null, cue: `${hr.vt2} and up · VO2 above ${hr.hard}` }, power: { lo: Math.round(ftp * 0.95), hi: null, pct: '95%+' },
+      hr: { lo: hr.vt2, hi: null, cue: `${hr.vt2} and up` }, power: { lo: Math.round(ftp * 0.95), hi: null, pct: '95%+' },
       sessions: LIBRARY.filter(l => /vo2/.test(l.key)).map(l => l.name), target_pct: TARGET.z3,
       why: `VO2 max and threshold. Judged by minutes above ${hr.hard} bpm, 8 to 12 a session. Once a week is enough; twice when recovery is green.` }
   ];
