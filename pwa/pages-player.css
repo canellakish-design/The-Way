@@ -127,11 +127,16 @@ body:has(.pl-ride) #micBtn{display:none}
 .pl-goal[hidden]{display:none}
 .gr{display:flex; align-items:center; gap:12px; min-width:0}
 .gr-svg{flex:none; display:block}
-.gr-track{fill:none; stroke:#23251f}
-.gr-arc{fill:none; stroke:var(--water); stroke-linecap:round; transition:stroke-dasharray .4s}
-.gr-arc.gr-go{stroke:var(--green)} .gr-arc.gr-hold{stroke:var(--amber)} .gr-arc.gr-stop{stroke:var(--red)}
+.gr-bg{fill:#121410}
+.gr-half{fill:none; stroke:#2c2f28; stroke-width:1; stroke-dasharray:3 4}
+.gr-fill{fill:var(--water); opacity:.9}
+.gr-fill.gr-go{fill:var(--green)} .gr-fill.gr-hold{fill:var(--amber)} .gr-fill.gr-stop{fill:var(--red)}
+.gr-rim{fill:none; stroke:#3a3d36; stroke-width:3}
+.gr-rim.gr-go{stroke:var(--green)} .gr-rim.gr-hold{stroke:var(--amber)} .gr-rim.gr-stop{stroke:var(--red)}
+.gr-big,.gr-of{paint-order:stroke; stroke:#0b0c0a; stroke-linejoin:round}
+.gr-big{stroke-width:5px} .gr-of{stroke-width:3px}
 .gr-big{fill:var(--ink); font-family:var(--num); font-weight:700}
-.gr-of{fill:var(--muted); font-family:var(--mono)}
+.gr-of{fill:var(--ink); font-family:var(--mono)}
 .gr-txt{display:flex; flex-direction:column; gap:3px; min-width:0}
 .gr-lab{font-family:var(--num); font-weight:700; font-size:22px; line-height:1.05; text-transform:uppercase}
 .gr-sub{font-family:var(--mono); font-size:11.5px; line-height:1.4}
