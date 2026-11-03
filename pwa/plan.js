@@ -115,10 +115,11 @@ V.calendar = async function(){
   // the week as seven columns: dashed outline planned, fill done, the percent on top
   const maxMin = Math.max(1, ...cal.days.map(d=>Math.max(d.totals.planned_min, d.totals.done_min)));
   html += `<div class="pwk" role="group" aria-label="Planned outline, done filled, each day">${cal.days.map((d,i)=>{
-    const dc = d.compliance, band = dc && dc.band, P = d.totals.planned_min, D = d.totals.done_min;
+    const dc = d.compliance, band = dc && dc.band, P = d.totals.planned_min, D = d.totals.done_min, ahead = d.date >= today && !D;
+    // a day still to come with something planned: its planned time on top, the bar an outline to fill
     const top = dc && dc.pct != null ? `<span class="pc ${TONE[band]||""}">${dc.pct}</span>`
-      : band === "extra" ? `<span class="pc hu-water">+${hm(D)}</span>` : `<span class="pc hu-dim">—</span>`;
-    return `<button class="pwd${d.date===today?" today":""}" data-day="${d.date}" aria-label="${esc(dayLabel(d.date))}: ${hm(D)} done of ${hm(P)} planned">${top}
+      : band === "extra" ? `<span class="pc hu-water">+${hm(D)}</span>` : ahead && P ? `<span class="pc pplan">${hm(P)}</span>` : `<span class="pc hu-dim">—</span>`;
+    return `<button class="pwd${d.date===today?" today":""}${ahead && P ? " ahead" : ""}" data-day="${d.date}" aria-label="${esc(dayLabel(d.date))}: ${hm(D)} done of ${hm(P)} planned">${top}
       <span class="col">${P?`<i class="p" style="height:${(P/maxMin*100).toFixed(1)}%"></i>`:""}${D?`<i class="d" style="height:${(D/maxMin*100).toFixed(1)}%;background:${BCOL[band]||"var(--muted)"}"></i>`:""}</span>
       <span class="k">${"MTWTFSS"[i]||""}</span></button>`;
   }).join("")}</div>`;
@@ -225,11 +226,20 @@ const blankStep = () => ({kind:"step", label:"", dur_s:600, target:{type:"power"
 V.workout = async function(){
   const p = params();
   let W = null, saved = null, lib = [], settings = null, timer = null;
-  view.innerHTML = `<a class="pback" href="#calendar">← The week</a><div id="pB"><div class="card"><div class="small">Loading…</div></div></div>`;
+  view.innerHTML = `<div id="pB"><div class="card"><div class="small">Loading…</div></div></div>`;
+  // the header's one way back goes to the week this workout sits in
+  const backTo = k => { const a = document.getElementById("navParent"); if (a && /^\d{4}-\d{2}-\d{2}$/.test(k||"")) a.href = "#calendar?week=" + mondayOf(k); };
+  backTo(p.date);
   try{
     const L = await bridge("/workouts/library"); lib = L.library; settings = L.settings;
-    if (p.id){ saved = await bridge("/workouts/"+encodeURIComponent(p.id)); W = clone(saved); }
-  }catch(e){ document.getElementById("pB").innerHTML = `<div class="card"><h4>Couldn't load</h4><div class="small">${esc(e.message)}</div></div>`; return; }
+    if (p.id){ saved = await bridge("/workouts/"+encodeURIComponent(p.id)); W = clone(saved); backTo(W.date); }
+  }catch(e){
+    // a workout taken off the calendar since the link was made: say so, and give the way to the week
+    const gone = p.id && /\b404\b|no such workout/i.test(String(e.message));
+    document.getElementById("pB").innerHTML = gone
+      ? `<div class="card"><h4>This workout was removed</h4><div class="small">It is no longer on the calendar.</div><div class="rowbtns"><a class="btn primary" href="#calendar${p.date ? "?week=" + mondayOf(p.date) : ""}">The week</a></div></div>`
+      : `<div class="card"><h4>Couldn't load</h4><div class="small">${esc(String(e.message).replace(/^bridge \d+ — /, ""))}</div></div>`;
+    return; }
   if (!location.hash.startsWith("#workout")) return;
 
   const box = document.getElementById("pB");
@@ -240,6 +250,20 @@ V.workout = async function(){
   const wanted = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : keyAdd(today, 1);
   const date0 = wanted < today ? keyAdd(today, 1) : wanted;
 
+  // A new workout's start: a window tapped on the day passes its own; today, the next whole hour at least
+  // fifteen minutes ahead with nothing else planned in it (10:00p at 9:36p, never 9:00p); 7:00a is the
+  // house start, nothing earlier. Another day keeps the old default, the time of day now in 15-minute steps.
+  let busy = [];
+  if (!/^\d{2}:\d{2}$/.test(p.time||"")) try{ const c = await bridge(`/calendar?from=${date0}&to=${date0}`); const d0 = c && c.days && c.days[0];
+    busy = ((d0 && d0.planned) || []).filter(w => /^\d{2}:\d{2}$/.test(w.time||"")).map(w => { const a = (+w.time.slice(0,2))*60 + (+w.time.slice(3,5)); return [a, a + Math.round(((w.metrics && w.metrics.duration_s) || 3600)/60)]; }); }catch(e){ busy = []; }
+  const hhmm = m => pad(Math.floor(m / 60)) + ":" + pad(m % 60);
+  const nextFree = () => {
+    const dnow = new Date();
+    if (date0 !== today){ let m = dnow.getHours() * 60 + dnow.getMinutes() + 15; m = Math.ceil(m / 15) * 15; return hhmm(Math.max(7 * 60, Math.min(21 * 60, m))); }
+    let m = Math.max(7 * 60, Math.ceil((dnow.getHours() * 60 + dnow.getMinutes() + 15) / 60) * 60);
+    while (m < 23 * 60 && busy.some(([a, b]) => m < b && m + 60 > a)) m += 60;
+    return hhmm(Math.min(23 * 60, m));
+  };
   if (!W){   // pick a starting point
     box.innerHTML = `<span class="eyebrow">New workout · ${esc(dayLabel(date0))}</span>
       <h2 class="ptitle">Start from</h2>
@@ -251,9 +275,9 @@ V.workout = async function(){
       const t = lib[+b.dataset.i];
       // 7:00 is the house start, nothing earlier; the meal plan hangs off this time. A window
       // tapped on the day passes its own start.
-      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? p.time : (() => { const dnow = new Date(); let m = dnow.getHours() * 60 + dnow.getMinutes() + 15; m = Math.ceil(m / 15) * 15; m = Math.max(7 * 60, Math.min(21 * 60, m)); return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); })();   // the next quarter hour, never before 7 a.m.
+      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? (p.time < "07:00" ? "07:00" : p.time) : nextFree();
       const where = p.where === "out" ? "Ride" : p.where === "in" ? "VirtualRide" : null;
-      W = t ? {name:t.name, date:date0, time:t0, sport:where || t.sport, notes:t.notes||"", steps:clone(t.steps)}
+      W = t ? {name:t.name, date:date0, time:t0, sport:where || t.sport, notes:notesFor(t, t.notes||"", where || t.sport), steps:clone(t.steps), tpl:t}
             : {name:"Workout", date:date0, time:t0, sport:where || "Ride", notes:"", steps:[blankStep()]};
       editor();
     });
@@ -268,28 +292,40 @@ V.workout = async function(){
         <label for="wName">Name</label><input id="wName" value="${esc(W.name)}">
         <div class="row3">
           <div><label for="wDate">Date</label><input id="wDate" type="date" min="${saved ? "" : today}" value="${esc(W.date)}"></div>
-          <div><label for="wTime">Start</label><input id="wTime" type="time" value="${esc(W.time||"")}"></div>
+          <div><label for="wTime">Start</label><input id="wTime" type="time" min="07:00" value="${esc(W.time||"")}"></div>
           <div><label for="wSport">Where</label><select id="wSport">
-            ${["Ride","VirtualRide"].map(s=>`<option value="${s}"${W.sport===s?" selected":""}>${SPORT[s]}</option>`).join("")}</select></div>
+            ${["Ride","VirtualRide"].concat(["Ride","VirtualRide"].includes(W.sport) ? [] : [W.sport]).map(s=>`<option value="${s}"${W.sport===s?" selected":""}>${SPORT[s]||s}</option>`).join("")}</select></div>
         </div>
-        <label for="wNotes">Notes (go to the Garmin with the workout)</label><textarea id="wNotes" rows="3">${esc(W.notes||"")}</textarea>
       </div>
       <div class="card day psum" id="wSum"></div>
-      <div id="wSteps"></div>
-      <div class="pbtns"><button id="addStep">+ Step</button><button id="addRep">+ Repeat block</button></div>
-      <div class="card">
-        <h4>Save</h4>
-        <div class="small" id="wSync">${saved ? syncLine(saved) : "Not saved yet."}</div>
+      <div class="card psave">
         <div class="pbtns">
           <button class="primary" id="wSend">${saved && saved.sync && saved.sync.state==="synced" ? "Save and update Garmin" : "Save and send to Garmin"}</button>
           <button id="wSave">Save only</button>
-          ${saved ? `<a class="btn" href="${(typeof DEFAULT_API!=="undefined"?DEFAULT_API:"")}/workouts/${encodeURIComponent(saved.id)}/zwo" download>Zwift file</a>` : ""}
-          ${saved ? `<button id="wDel" class="pdanger">Delete</button>` : ""}
         </div>
+        <div class="small pmsg" id="wMsg" role="status" aria-live="polite"></div>
+        <div class="small" id="wSync">${saved ? syncLine(saved) : "Not saved yet."}</div>
+        ${saved ? `<div class="pbtns"><a class="btn" href="${(typeof DEFAULT_API!=="undefined"?DEFAULT_API:"")}/workouts/${encodeURIComponent(saved.id)}/zwo" download>Zwift file</a><button id="wDel" class="pdanger">Delete</button></div>` : ""}
       </div>
+      <div id="wSteps"></div>
+      <div class="pbtns"><button id="addStep">+ Step</button><button id="addRep">+ Repeat block</button></div>
+      <div class="card"><label for="wNotes">Notes (go to the Garmin with the workout)</label><textarea id="wNotes" rows="4">${esc(W.notes||"")}</textarea></div>
       <details class="card"><summary>What intervals.icu receives</summary><pre id="wText" class="ptext"></pre></details>`;
     const bind = (id, k, f) => { const el = document.getElementById(id); el.oninput = el.onchange = ()=>{ W[k] = f ? f(el.value) : el.value; schedule(); }; };
-    bind("wName","name"); bind("wDate","date"); bind("wTime","time"); bind("wSport","sport"); bind("wNotes","notes");
+    bind("wName","name"); bind("wDate","date"); bind("wNotes","notes");
+    // no workouts before 7 a.m.: an earlier start is set back to 7:00a at once, and said beside Save (on the first screen)
+    const tEl = document.getElementById("wTime");
+    tEl.oninput = ()=>{ W.time = tEl.value; schedule(); };
+    tEl.onchange = ()=>{ const v = tEl.value, m2 = document.getElementById("wMsg");
+      if (v && v < "07:00"){ tEl.value = "07:00"; W.time = "07:00"; if (m2) m2.textContent = `No workouts before 7 a.m.: ${hm12(v)} is set to 7:00a.`; }
+      else { W.time = v; if (m2 && /^No workouts before/.test(m2.textContent)) m2.textContent = ""; }
+      schedule(); };
+    // the notes follow where the ride is: road notes for a road ride, trainer notes on the trainer
+    const sEl = document.getElementById("wSport");
+    sEl.onchange = ()=>{ const was = W.sport; W.sport = sEl.value; const nEl = document.getElementById("wNotes");
+      const swapped = notesFor(W.tpl || lib.find(t => t.name === W.name), W.notes, W.sport, was);
+      if (swapped !== W.notes){ W.notes = swapped; if (nEl) nEl.value = swapped; }
+      schedule(); };
     document.getElementById("addStep").onclick = ()=>{ W.steps.push(blankStep()); drawSteps(); schedule(); };
     document.getElementById("addRep").onclick = ()=>{ W.steps.push({kind:"repeat", label:"Main set", count:3, steps:[
       {kind:"step",label:"On",dur_s:300,target:{type:"power",lo:95,hi:105},cadence:null},
@@ -300,28 +336,31 @@ V.workout = async function(){
     if (del) del.onclick = async ()=>{
       if (del.dataset.armed !== "1"){ del.dataset.armed = "1"; del.textContent = "Tap again to delete"; setTimeout(()=>{ if(del.isConnected){ del.dataset.armed=""; del.textContent="Delete"; } }, 4000); return; }
       try{ await bridge("/workouts/"+encodeURIComponent(saved.id),{method:"DELETE"}); location.hash = "#calendar?week="+mondayOf(W.date); }
-      catch(e){ document.getElementById("wSync").textContent = e.message; }
+      catch(e){ document.getElementById("wMsg").textContent = e.message; }
     };
     drawSteps(); schedule(0);
   }
 
   function syncLine(w){
     const s = w.sync || {};
-    if (s.state==="synced") return `On the Garmin calendar via intervals.icu since ${esc((s.at||"").slice(0,16).replace("T"," "))}, planned at FTP ${esc(s.planned_at_ftp)} W and threshold ${esc(s.planned_at_lthr)} bpm.`;
+    if (s.state==="synced") return `On the Garmin calendar via intervals.icu since ${esc(s.at ? new Date(s.at).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).replace(/\s*([AP])M$/, (m0, x) => x.toLowerCase()) : "")}, planned at FTP ${esc(s.planned_at_ftp)} W and threshold ${esc(s.planned_at_lthr)} bpm.`;
     if (s.state==="error") return `<span class="pbadge bad">Not sent</span> ${esc(s.error||"")}`;
     return "Saved here, not yet sent to the Garmin.";
   }
 
   async function store(send){
-    const msg = document.getElementById("wSync"); msg.textContent = send ? "Saving and sending…" : "Saving…";
-    const body = JSON.stringify(Object.assign({}, W, {time: W.time || null, send}));
+    const msg = document.getElementById("wMsg") || document.getElementById("wSync"); msg.textContent = send ? "Saving and sending…" : "Saving…";
+    if (W.time && W.time < "07:00"){ const was = W.time; W.time = "07:00"; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = "07:00"; msg.textContent = `No workouts before 7 a.m.: ${hm12(was)} is set to 7:00a. Save again to keep it.`; return; }
+    const body = JSON.stringify(Object.assign({}, W, {time: W.time || null, send, tpl: undefined}));
     try{
       const r = saved ? await bridge("/workouts/"+encodeURIComponent(saved.id),{method:"PUT",headers:J,body})
                       : await bridge("/workouts",{method:"POST",headers:J,body});
       const first = !saved; saved = r; W = clone(r); W.time = W.time || "";
       if (first) history.replaceState(null, "", "#workout?id="+encodeURIComponent(r.id));
       editor();
-    }catch(e){ msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); }
+    }catch(e){ const t = String(e.message).replace(/^bridge \d+ — /, ""); msg.textContent = t;
+      // the server's 7 a.m. refusal: the field goes back to the earliest start, so the next Save is one tap
+      if (/before 7 a\.m\./i.test(t)){ W.time = "07:00"; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = "07:00"; msg.textContent = t + " The start is set to 7:00a."; } }
   }
 
   function drawSteps(){
@@ -418,6 +457,18 @@ function profileSVG(pr){
     <div class="pleg small"><span>dashed line = FTP</span><span><i style="background:var(--green)"></i>easy</span><span><i style="background:var(--amber)"></i>tempo to threshold</span><span><i style="background:var(--red)"></i>above</span></div>`;
 }
 function clone(o){ return JSON.parse(JSON.stringify(o)); }
+// A Zone 1 note's head line follows the sport (bridge/workout-library.js notesFor does the same on save):
+// road and heart rate for a road ride, trainer and ERG on the trainer. A note the rider has rewritten is left alone.
+const ROAD_HEAD = "ZONE 1 on the road: heart rate under 116 the whole ride. Flat route. If it climbs, the watts come down.";
+const TRAINER_HEAD = "ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: at 117, drop the bias 5%.";
+function notesFor(tpl, notes, sport, wasSport){
+  const t = String(notes || "");
+  const by = tpl && tpl.notes_by_sport;
+  if (by && by[sport] != null && (!wasSport || t === (by[wasSport] != null ? by[wasSport] : tpl.notes) || t === tpl.notes)) return by[sport];
+  if (sport === "Ride" && /^ZONE 1 on the trainer:[^\n]*/.test(t)) return t.replace(/^ZONE 1 on the trainer:[^\n]*/, ROAD_HEAD);
+  if (sport === "VirtualRide" && t.startsWith(ROAD_HEAD)) return TRAINER_HEAD + t.slice(ROAD_HEAD.length);
+  return t;
+}
 
 // app.js ran nav() before this file loaded; if the page opened on one of these
 // views it fell through, so draw it now.

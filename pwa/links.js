@@ -48,6 +48,32 @@
   const dayLong = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   const page = (title) => { view.innerHTML = `<div id="linkPage" class="ln-page">${ttlHTML(title)}<div class="card"><div class="small">loading…</div></div></div>`; return document.getElementById("linkPage"); };
   const alive = h => location.hash.split("?")[0] === "#" + h;
+  // These pages used to sit on "loading…" for three seconds or more, waiting on /chain (the slowest answer)
+  // even where the page's own numbers come from elsewhere. Now: the page as it last stood is shown at once
+  // from a small store in this browser, dimmed and not tappable, and each page draws as soon as the answers
+  // it cannot do without have landed (Hydration, Fuel and Micros need only the day's food report; the week's
+  // numbers from /chain fill in when they come). The last draw is kept as the next visit's first paint.
+  const SNAP = "way-snap:";
+  const snapShow = (el, key) => { try{ const h = localStorage.getItem(SNAP + key); if (h && el.isConnected){ el.innerHTML = h; el.classList.add("ln-stale"); } }catch{} };
+  const snapSave = (el, key) => { try{ localStorage.setItem(SNAP + key, el.innerHTML); }catch{} };
+  // paths: what to fetch; need: the indexes the page cannot draw without; render(...values, pending) may run more than once
+  function load(el, key, paths, need, render, first){
+    const gen = el.__gen = (el.__gen || 0) + 1;
+    if (first) snapShow(el, key);
+    const vals = paths.map(() => undefined);
+    let left = paths.length, drawn = false;
+    const live = () => alive(key) && el.isConnected && el.__gen === gen;
+    const draw = () => {
+      if (!live() || !need.every(i => vals[i] !== undefined)) return;
+      // never pull a box out from under the fingers: a draw waits until the field is left
+      const a = document.activeElement;
+      if (drawn && a && el.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)){ a.addEventListener("blur", () => setTimeout(draw, 0), { once: true }); return; }
+      el.classList.remove("ln-stale"); drawn = true;
+      render(...vals.map(v => v === undefined ? null : v), left > 0);
+    };
+    return Promise.all(paths.map((path, i) => get(path).then(v => { vals[i] = v; left--; draw(); })))
+      .then(() => { if (!drawn) draw(); if (live() && !el.classList.contains("ln-stale")) snapSave(el, key); });
+  }
 
   // dictation into a box: the phone's own speech recognition; where there is none, the keyboard's microphone key
   const SRec = window.SpeechRecognition || window.webkitSpeechRecognition || null;
@@ -99,8 +125,15 @@
     if (write) write.onclick = ()=>{ open(form.hidden); if (!form.hidden) box.focus(); };
     const log = async ()=>{ const text = box.value.trim(); if (!text){ msg.textContent = "Write what you had, or tap Say it."; return; }
       go.disabled = true; msg.textContent = "Reading it…"; if (window.primeSound) primeSound();
-      try{ const r = await bridge("/food/text", { method: "POST", headers: J, body: JSON.stringify({ text }) }); box.value = ""; msg.textContent = r && r.entry ? `Logged: ${r.entry.name}${r.entry.fluid_ml ? `, ${r.entry.fluid_ml} ml` : ""}${r.entry.kcal ? `, ${r.entry.kcal} kcal` : ""}.` : "Logged."; if (typeof cheerIf === "function") cheerIf(r); await after(); }
-      catch(e){ msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); }
+      const send = async force => { const r = await bridge("/food/text", { method: "POST", headers: J, body: JSON.stringify(force ? { text, force: true } : { text }) }); box.value = ""; msg.textContent = r && r.entry ? `Logged: ${r.entry.name}${r.entry.fluid_ml ? `, ${r.entry.fluid_ml} ml` : ""}${r.entry.kcal ? `, ${r.entry.kcal} kcal` : ""}.` : "Logged."; if (typeof cheerIf === "function") cheerIf(r); await after(); };
+      try{ await send(false); }
+      catch(e){
+        // the same entry again (409, double): ask, and keep both only when told to
+        const b = e && e.body;
+        if (e && e.status === 409 && b && b.double){ const tw = b.twin || {};
+          msg.innerHTML = `${esc(tw.name ? `Looks like the same as ${tw.time ? hm12(tw.time) : "earlier"}: ${tw.name}.` : (b.error || "Looks like the same entry again."))} Keep both? <button class="linkish" type="button">Keep both</button>`;
+          const kb = msg.querySelector("button"); kb.onclick = async ()=>{ kb.disabled = true; msg.textContent = "Reading it…"; try{ await send(true); }catch(e2){ msg.textContent = String(e2.message).replace(/^bridge \d+ — /, ""); } };
+        } else msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); }
       finally{ go.disabled = false; } };
     go.onclick = log;
     if (talk) talk.onclick = ()=>{ open(true); window.dictateInto(box, talk, ()=> log()); };
@@ -109,11 +142,22 @@
   // ---------------- Hydration ----------------
   V.hydration = async function(){
     const el = page("Hydration");
-    const draw = async ()=>{
-      const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("hydration") || !el.isConnected) return;   // a newer draw of this page has taken over
+    const draw = (first)=> load(el, "hydration", ["/chain", "/food/today"], [1], (chain, food) => {
       const L = chain && chain.links && chain.links.water, h = food && food.hydration, B = window.foodBits || {};
-      const drinks = (food && food.entries || []).filter(e => !e.supplement && (e.is_drink || e.drink_only || e.fluid_ml > 0));
+      // the drinks list and its count: the server's own (day.drinks, day.drink_count) when the day report carries
+      // them, so Food and Hydration count alike; else every drink-like entry of the journal
+      const ents = (food && food.entries) || [];
+      const drinks0 = ents.filter(e => !e.supplement && (e.is_drink || e.drink_only || e.fluid_ml > 0));
+      // day.drinks: the ids (or the entries) the server counts as drinks
+      const ids = food && Array.isArray(food.drinks) ? food.drinks.map(d => d && typeof d === "object" ? d.id : d).filter(Boolean) : null;
+      const drinks = ids ? ids.map(id => ents.find(e => e.id === id)).filter(Boolean) : drinks0;
+      const drinkCount = food && Number.isFinite(food.drink_count) ? food.drink_count : drinks.length;
+      // the bedtime note about alcohol, and the line that says why a glass moved the balance less than its size
+      const alcNote = h && (h.bedtime_note || h.alcohol_note) || (food && (food.bedtime_note || food.alcohol_note)) || "";
+      const glassNote = h && (h.landing_note || h.glass_note) || (h && h.now && h.now.landing_ml > 0 ? `${h.now.landing_ml} ml of what you drank is still on its way in: the balance counts water as it lands, over the next hour or so.` : "");
+      const dc = h && h.drank_counts, countsLine = !dc ? "" : typeof dc === "string" ? dc : typeof dc === "object" && (dc.word || dc.text) ? (dc.word || dc.text) : "";
+      // "0.0 L down on the morning" says nothing: dropped when it is zero
+      const note = h && h.note && !/^\s*0\.0 L (down|up) on the morning\.?\s*$/i.test(h.note) ? h.note : "";
       // The glass: the balance drawn on the same scale as the curve below it (2.5% of body weight down at the
       // bottom, 1% up at the brim), with a green line at 0, the morning level, where you should be.
       const kg = (h && h.kg) || 98, lo = -kg * 25, hi = kg * 10, hasNow = !!(h && h.now && h.now.ml != null);
@@ -125,8 +169,11 @@
       const tank = `<div class="hy-tank">
           <div class="hy-glass" role="img" aria-label="Balance ${esc(bal)} ml against the morning"><i style="height:${fill.toFixed(0)}%"></i><em style="bottom:${zero.toFixed(0)}%"></em></div>
           <div class="hy-read"><span class="hu-n hy-bal" style="color:${vc}">${esc(bal)}${hasNow ? `<span class="ln-uu">ml</span>` : ""}</span>
-            <span class="hy-say">${h ? `${esc(word.charAt(0).toUpperCase() + word.slice(1))}${word ? ". " : ""}Drank ${((h.drunk_ml || 0)/1000).toFixed(1)} L of ${((h.target_ml || 0)/1000).toFixed(1)} L.` : "No drinks yet today."}</span>
-            ${h && h.note ? `<span class="small">${esc(h.note)}</span>` : ""}</div></div>`;
+            <span class="hy-say">${h ? `${esc(word.charAt(0).toUpperCase() + word.slice(1))}${word ? ". " : ""}Drank ${(((h.drunk_ml != null ? h.drunk_ml : food.drinks_ml) || 0)/1000).toFixed(1)} L of ${((h.target_ml || 0)/1000).toFixed(1)} L.` : "No drinks yet today."}</span>
+            ${countsLine ? `<span class="small">${esc(countsLine)}</span>` : ""}
+            ${note ? `<span class="small">${esc(note)}</span>` : ""}
+            ${alcNote ? `<span class="small hu-hold">${esc(alcNote)}</span>` : ""}</div></div>
+        ${glassNote ? `<details class="why"><summary>why the balance moved less than the glass</summary><div class="small">${esc(glassNote)}</div></details>` : ""}`;
       // the four drinks as what they are, each drawn with water in it
       const GL = {
         glass: `<svg viewBox="0 0 20 26" aria-hidden="true"><path d="M3 2h14l-2 22H5z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.2 12h11.6l-1 11H5.2z" fill="var(--water)"/></svg>`,
@@ -138,6 +185,9 @@
       // what each drink did: water in blue; alcohol in amber, as the water it left after the alcohol
       const hd = (h && h.drinks) || [];
       const valOf = e => {
+        // the server's volume per row (drink_ml), so the list adds up to "Drank"; its net water (drink_net_ml, below zero for alcohol) small beside it
+        if (e.drink_ml != null){ const net = e.drink_net_ml;
+          return `<span class="${e.alcohol ? "hu-hold" : "hu-water"}">${e.drink_ml}<span class="ln-uu">ml</span></span>${net != null && net !== e.drink_ml ? `<span class="small hy-net" title="water left after the alcohol">${net < 0 ? "−" : "+"}${Math.abs(net)}</span>` : ""}`; }
         if (e.alcohol){ const d = hd.find(x => x.alcohol && x.time === e.time && String(x.name).toLowerCase() === String(e.name).toLowerCase());
           if (d && d.net_ml != null) return `<span class="hu-hold" title="${d.ml} ml, ${d.net_ml} ml left after the alcohol">${d.net_ml < 0 ? "−" : ""}${Math.abs(d.net_ml)}<span class="ln-uu">ml</span></span>`;
           return `<span class="hu-hold">${e.fluid_ml ? `${e.fluid_ml}<span class="ln-uu">ml</span>` : `${e.kcal || 0}<span class="ln-uu">kcal</span>`}</span>`; }
@@ -152,8 +202,7 @@
           <button class="primary" id="hyGo">Log it</button>
           <div class="small">The electrolytes choice counts for the four drinks above too.</div></details>
         ${sayWriteHTML("hySw", "a large iced coffee with milk, or two glasses of water", "“iced coffee with milk”")}
-        <div class="small">Anything with calories, coffee or a shake, is read for its calories too.</div>
-        <div class="ln-sec"><span class="hu-lab">Today's drinks · ${drinks.length}</span></div>
+        <div class="ln-sec"><span class="hu-lab">Today's drinks · ${drinkCount}</span></div>
         ${drinks.length ? `<div class="hy-list">${drinks.slice().reverse().map(e => `<div class="hy-row${e.alcohol ? " alc" : ""}"><span class="t">${esc(hm12(e.time))}</span><span class="nm">${esc(e.name)}${e.maybe_double_of ? ` <span class="hu-chip hu-hold">double?</span>` : ""}</span><span class="v hu-n">${valOf(e)}</span><button class="tdel" data-del="${esc(e.id)}" aria-label="Remove ${esc(e.name)}">${window.TRASH || "×"}</button></div>`).join("")}</div>` : `<div class="small">None logged yet.</div>`}
         <div class="card"><h4>The day's water</h4>${h && B.hydrationHTML ? B.hydrationHTML(h, { noHead: true }) : `<div class="small">No drinks yet today.</div>`}</div>
         ${whyHTML(L)}`;
@@ -167,16 +216,14 @@
       document.getElementById("hyGo").onclick = ()=>{ const ml = +document.getElementById("hyMl").value; if (!(ml > 0 && ml <= 3000)) { document.getElementById("hyMsg").textContent = "An amount in ml, up to 3000."; return; } log(ml, document.getElementById("hySalt").value === "1"); };
       wireSayWrite(el, "hySw", draw);
       el.querySelectorAll("[data-del]").forEach(b => b.onclick = async ()=>{ if (!confirm("Remove this drink?")) return; b.disabled = true; try{ await bridge("/food/" + encodeURIComponent(b.dataset.del), { method: "DELETE" }); }catch(e){} await draw(); });
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // ---------------- Fuel ----------------
   V.fuel = async function(){
     const el = page("Fuel");
-    const draw = async ()=>{
-      const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("fuel") || !el.isConnected) return;   // a newer draw of this page has taken over
+    const draw = (first)=> load(el, "fuel", ["/chain", "/food/today"], [1], (chain, food, pending) => {
       const L = chain && chain.links && chain.links.fuel, e = food && food.energy, B = window.foodBits || {};
       const due = (food && food.supps && (food.supps.due || food.supps)) || [];
       const rx = (Array.isArray(due) ? due : []).filter(x => x.link === "fuel");
@@ -195,8 +242,8 @@
         .concat(rx.filter(x => x.key !== "beetroot" && x.key !== "sodium_bicarb").map(x => [x.key, x.name, ""]));
       const suppField = ([k, name, dflt]) => { const r = rx.find(x => x.key === k), t = takenAt(k), taken = t != null || (r && r.taken);
         return `<div class="hu-field fu-supp"><span class="k">${esc(String(name).replace(/\s*\(.*\)$/, ""))}</span>
-          <span class="n ${taken ? "hu-go" : r ? "hu-hold" : "hu-dim"}">${taken ? `✓${t ? " " + esc(hm12(t)) : ""}` : r ? `Due${r.time ? " " + esc(hm12(r.time)) : ""}` : "Not due"}</span>
-          <span class="u">${esc(dflt || "")}</span><button class="fu-log" data-supp="${esc(k)}">${taken ? "log again" : "log it"}</button></div>`; };
+          <span class="n ${taken ? "hu-go" : r && !r.too_late ? "hu-hold" : "hu-dim"}">${taken ? `✓${t ? " " + esc(hm12(t)) : ""}` : r && r.too_late ? "Too late" : r ? `Due${r.time ? " " + esc(hm12(r.time)) : ""}` : "Not due"}</span>
+          <span class="u">${esc(dflt || "")}</span>${r && r.too_late && !taken ? `<span class="small hu-dim">${esc(r.word || "too late today")}</span>` : `<button class="fu-log" data-supp="${esc(k)}">${taken ? "log again" : "log it"}</button>`}</div>`; };
       // the week: one thin bar per ride, the target a white tick
       const wk = (L && L.list) || [];
       const wrow = c => { const bottle = c.kind === "bottle", col = TC[c.ok ? "good" : c.near ? "warn" : "bad"];
@@ -204,7 +251,8 @@
         return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}${bottle ? " · on the bike" : ""}</span>
           <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, v / scale * 100).toFixed(1)}%;background:${col}"></i><i class="tick" style="left:${(tg / scale * 100).toFixed(1)}%"></i></span>
           <span class="fu-v"><b style="color:${col}">${bottle ? `${c.got_g}` : `${c.pct}%`}</b> / ${bottle ? `${c.plan_g} g` : `${c.need}%`}</span></div>`; };
-      el.innerHTML = ttlHTML("Fuel", weekChip("fuel", L)) + top + `
+      // one headline: fuel now. The week's share of checks met heads the week's own section below.
+      el.innerHTML = ttlHTML("Fuel") + top + `
         <div class="hu-tiles four fu-carbs">
           <button class="hu-tile" data-item="tailwind"><b>50 g</b><span>Tailwind</span></button><button class="hu-tile" data-item="gel"><b>22 g</b><span>Gel</span></button><button class="hu-tile" data-item="figbar"><b>38 g</b><span>Fig bar</span></button><button class="hu-tile" data-item="banana"><b>27 g</b><span>Banana</span></button>
         </div>
@@ -214,11 +262,11 @@
         ${rx.length ? `<details class="why"><summary>why</summary><div class="small">${rx.map(x => `<b>${esc(x.name)}</b>${x.time ? ` at ${esc(hm12(x.time))}` : ""}: ${esc(x.why || "")}.`).join(" ")}</div></details>` : `<div class="small">None due today. Beetroot is due 2 to 3 hours before a ride, bicarbonate before a hard one.</div>`}
         <span class="small" id="fuMsg"></span>
         <div class="card"><h4>The tank today</h4>${e && B.energyHTML ? B.energyHTML(e, { noHead: true, noLegs: true }) : `<div class="small">Starts with the first meal.</div>`}</div>
-        <div class="ln-sec"><span class="hu-lab">Rides this week · started fed · bottles</span></div>
+        <div class="ln-sec"><span class="hu-lab">Rides this week${L && L.week != null ? ` · <span class="${HU[L.state] || HU.none}">${L.week}% of checks</span>` : ""}</span></div>
         ${wk.length ? `<div class="fu-wk">${wk.slice().reverse().map(wrow).join("")}</div>
-            <div class="small">${L.ok} of ${L.checks} checks met${L.rx && L.rx.beetroot ? ` · beetroot ${L.rx.beetroot.taken} of ${L.rx.beetroot.due} rides` : ""}.</div>` : `<div class="small">No rides this week to check yet.</div>`}
+            <div class="small">${L.ok} of ${L.checks} checks met${L.rx && L.rx.beetroot ? ` · beetroot ${L.rx.beetroot.taken} of ${L.rx.beetroot.due} rides` : ""}.</div>` : `<div class="small">${!L && pending ? "reading the week…" : "No rides this week to check yet."}</div>`}
         ${whyHTML(L)}`;
-      if (e && B.wireEnergy) B.wireEnergy(el, e, draw);
+      if (e && B.wireEnergy) B.wireEnergy(el, e, ()=> draw());
       const ITEMS = { tailwind: { name: "Tailwind, 2 scoops, 620 ml bottle", kcal: 200, carbs_g: 50, tags: ["drink"], fluid_ml: 620 }, gel: { name: "Energy gel", kcal: 90, carbs_g: 22, tags: [] },
         figbar: { name: "Fig bar", kcal: 200, carbs_g: 38, protein_g: 3, fat_g: 4, tags: [] }, banana: { name: "Banana", kcal: 105, carbs_g: 27, protein_g: 1, tags: ["veg"] } };
       wireSayWrite(el, "fuSw", draw);
@@ -227,16 +275,14 @@
         try{ await bridge("/food/item", { method: "POST", headers: J, body: JSON.stringify(Object.assign({ protein_g: 0, fat_g: 0, fits: "yes", why: "Fuel for the ride." }, it)) }); await draw(); }catch(err){ b.disabled = false; msg(String(err.message).replace(/^bridge \d+ — /, "")); } });
       el.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{ b.disabled = true; msg("logging…");
         try{ await bridge("/food/supplement", { method: "POST", headers: J, body: JSON.stringify({ key: b.dataset.supp }) }); await draw(); }catch(err){ b.disabled = false; msg(String(err.message).replace(/^bridge \d+ — /, "")); } });
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // ---------------- Sleep ----------------
   V.sleep = async function(){
     const el = page("Sleep");
-    const draw = async ()=>{
-      const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("sleep") || !el.isConnected) return;   // a newer draw of this page has taken over
+    const draw = (first)=> load(el, "sleep", ["/chain", "/food/today"], [0], (chain, food) => {
       const L = chain && chain.links && chain.links.sleep;
       const nights = (L && L.nights) || [];
       const mgE = (food && food.entries || []).filter(e => e.supplement && e.key === "magnesium"), mg = mgE.length > 0;
@@ -256,6 +302,7 @@
                 return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : "8:45p"}</span><span class="u">200 mg · ${due ? "tap to log" : "tonight · tap if taken"}</span></button>`; })()}
         </div>
         <div class="small">Magnesium an hour before bed.</div>
+        ${food && food.hydration && food.hydration.bedtime_note ? `<div class="small hu-hold">${esc(food.hydration.bedtime_note)}</div>` : ""}
         <details class="ln-fold"><summary>Watch missed a night? Add it</summary>
           <div class="small">When the watch did not sync, or another device has the night. A number entered here wins for its date.</div>
           <div class="row2"><span><label>Hours asleep</label><input id="slH" type="number" step="0.05" inputmode="decimal" placeholder="7.5"></span><span><label>Sleep score</label><input id="slS" type="number" inputmode="numeric" placeholder="80"></span></div>
@@ -266,23 +313,21 @@
         if (!(h > 0 && h <= 16)) { m.textContent = "Hours asleep, like 7.5."; return; }
         m.textContent = "saving…"; try{ await bridge("/wellness", { method: "POST", headers: J, body: JSON.stringify({ sleep_h: h, sleep_score: sc || undefined, source: document.getElementById("slSrc").value }) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
       el.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/food/supplement", { method: "POST", headers: J, body: JSON.stringify({ key: b.dataset.supp }) }); }catch(e){} await draw(); });
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // ---------------- Recovery ----------------
   V.recovery = async function(){
     const el = page("Recovery");
-    const draw = async ()=>{
-      const [chain, scores] = await Promise.all([get("/chain"), get("/scores")]);
-      if (!alive("recovery") || !el.isConnected) return;   // a newer draw of this page has taken over
+    const draw = (first)=> load(el, "recovery", ["/chain", "/scores"], [0], (chain, scores) => {
       const L = chain && chain.links && chain.links.recovery;
       const days = (L && L.days) || [], r = scores && scores.recovery;
       el.innerHTML = headHTML("recovery", "Recovery", L, { brk: chain && chain.break_at, weekU: L && L.score_week != null ? `average score ${L.score_week}` : "", todayK: "This morning",
           todayU: r && r.band ? r.band.word : "" }) + `
         <div class="ln-chart">
           ${days.length ? barsSVG(days.map(d => ({ v: d.score, label: `${dayLong(d.date)}${d.hrv ? `, HRV ${Math.round(d.hrv)} ms` : ""}`, short: dayShort(d.date) })), { max: 100, line: 67, lineLabel: "67", aria: "recovery score each morning", col: it => it.v >= 67 ? "var(--green)" : it.v >= 34 ? "var(--amber)" : "var(--red)" }) : `<div class="small">No mornings yet.</div>`}</div>
-        ${L && L.why ? `<div class="small"><b>The week:</b> ${esc(L.why)}${L.hrv_week_ms ? `. HRV ${L.hrv_week_ms} ms this week against ${L.hrv_base_ms} ms over 60 days` : ""}${L.rhr_week ? `; resting HR ${L.rhr_week}` : ""}.</div>` : ""}
+        ${L && L.why ? `<details class="why"><summary>why the week reads this way</summary><div class="small">${esc(L.why.charAt(0).toUpperCase() + L.why.slice(1))}${L.hrv_week_ms ? `. HRV ${L.hrv_week_ms} ms this week against ${L.hrv_base_ms} ms over 60 days` : ""}${L.rhr_week ? `; resting HR ${L.rhr_week}` : ""}.</div></details>` : ""}
         ${r ? `<div class="ln-sec"><span class="hu-lab">This morning</span></div>
         <div class="hu-fields">
           <div class="hu-field"><span class="k">HRV</span><span class="n">${r.hrv ? Math.round(r.hrv) : "—"}</span><span class="u">ms${r.hrv_baseline ? ` · base ${Math.round(r.hrv_baseline)}` : ""}</span></div>
@@ -298,59 +343,64 @@
       document.getElementById("rcGo").onclick = async ()=>{ const body = { recovery: +document.getElementById("rcR").value || undefined, hrv: +document.getElementById("rcH").value || undefined, rhr: +document.getElementById("rcB").value || undefined, source: document.getElementById("rcSrc").value }; const m = document.getElementById("rcMsg");
         if (!body.recovery && !body.hrv && !body.rhr) { m.textContent = "Enter at least one number."; return; }
         m.textContent = "saving…"; try{ await bridge("/wellness", { method: "POST", headers: J, body: JSON.stringify(body) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // ---------------- Weight ----------------
   V.weight = async function(){
     const el = page("Weight");
-    const draw = async ()=>{
-      const [chain, w] = await Promise.all([get("/chain"), get("/weigh-in")]);
-      if (!alive("weight") || !el.isConnected) return;   // a newer draw of this page has taken over
+    const draw = (first)=> load(el, "weight", ["/chain", "/weigh-in"], [1], (chain, w) => {
       const L = chain && chain.links && chain.links.weight;
+      // an old last reading is said up top ("Last weigh-in Aug 17"), and the explanation stays folded until there is data
+      const lat0 = w && w.latest, ageD = lat0 && lat0.at ? Math.floor((Date.now() - new Date(lat0.at).getTime()) / 864e5) : null;
+      const stale = !lat0 || (ageD != null && ageD > 7), hasTrend = !!(w && (w.trend_lb_wk != null || w.week_change_lb != null));
       const trend = w && w.trend_lb_wk != null ? `${w.trend_lb_wk > 0 ? "+" : ""}${w.trend_lb_wk} lb a week over ${w.trend_days} days` : w && w.week_change_lb != null ? `${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb} lb on the week` : "not enough readings for a trend yet";
       const lat = w && w.latest, latWhen = lat ? (lat.logged_today ? "today" : new Date(lat.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })) : "";
       const tNum = w && w.trend_lb_wk != null ? `${w.trend_lb_wk > 0 ? "+" : ""}${w.trend_lb_wk}` : w && w.week_change_lb != null ? `${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb}` : "—";
       const tTone = tNum === "—" ? "hu-dim" : +tNum <= -0.8 ? "hu-go" : +tNum <= 0 ? "hu-hold" : "hu-stop";
-      el.innerHTML = headHTML("weight", "Weight", L, { brk: chain && chain.break_at, weekU: "target −1 lb a week", todayK: "Latest",
-          todayU: lat ? `lb · ${latWhen}` : "no reading yet" }) + `
-        ${w && lat ? `<div class="hu-fields">
+      const staleHead = ttlHTML("Weight", L && chain && chain.break_at === "weight" ? `<span class="hu-chip hu-stop">Breaks the chain</span>` : "") + `<div class="hu-fields ln-top ln-one">
+          <div class="hu-field big"><span class="k">Last weigh-in${lat ? ` · ${esc(new Date(lat.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}` : ""}</span><span class="n hu-dim">${lat ? `${esc(String(Math.round(lat.lb)))}<span class="ln-uu">lb</span>` : "—"}</span><span class="u">${lat ? `${ageD != null ? `${ageD} days ago · ` : ""}no week to read until the next one` : "no reading yet"}</span></div></div>`;
+      el.innerHTML = (stale ? staleHead : headHTML("weight", "Weight", L, { brk: chain && chain.break_at, weekU: "target −1 lb a week", todayK: "Latest",
+          todayU: lat ? `lb · ${latWhen}` : "no reading yet" })) + `
+        ${stale ? "" : w && lat ? `<div class="hu-fields">
           <div class="hu-field"><span class="k">Trend</span><span class="n ${tTone}">${esc(tNum)}</span><span class="u">${tNum === "—" ? "not enough readings" : w.trend_lb_wk != null ? `lb a week · ${w.trend_days} days` : "lb on the week"}</span></div>
           <div class="hu-field"><span class="k">Since start</span><span class="n">${w.change_since_start_lb > 0 ? "+" : ""}${w.change_since_start_lb}</span><span class="u">lb from ${w.start_lb}</span></div>
           <div class="hu-field"><span class="k">Readings</span><span class="n">${w.readings_7d || 0}</span><span class="u">this week</span></div>
         </div>` : `<div class="small">No reading yet.</div>`}
-        <div class="small ln-trend" title="${esc(trend)}">Green at a pound a week down. The trend line needs about ten days of mornings; one heavy morning barely moves it.</div>
-        <details class="ln-fold"><summary>Log a weigh-in</summary>
+        ${stale || !hasTrend ? "" : `<div class="small ln-trend" title="${esc(trend)}">Green at a pound a week down. The trend line needs about ten days of mornings; one heavy morning barely moves it.</div>`}
+        <details class="ln-fold"${stale ? " open" : ""}><summary>Log a weigh-in</summary>
           <div class="small">Same time each morning, after the bathroom, before coffee.</div>
           <div class="row2"><span><label>Weight (lb)</label><input id="wtLb" type="number" step="0.1" inputmode="decimal" placeholder="216.4"></span><span><label>&nbsp;</label><button class="primary" id="wtGo">Save</button></span></div>
           <span class="small" id="wtMsg"></span></details>
         ${w && !w.withings_connected ? `<div class="small"><a href="${typeof DEFAULT_API !== "undefined" ? DEFAULT_API : ""}/withings/auth">Connect the Withings scale</a> and the mornings land on their own.</div>` : ""}
-        ${whyHTML(L)}`;
+        ${stale || !hasTrend ? (L && L.basis ? `<details class="why"><summary>how it's read</summary><div class="small">Green at a pound a week down. The trend line needs about ten days of mornings; one heavy morning barely moves it. ${esc(L.basis)}.</div></details>` : "") : whyHTML(L)}`;
       document.getElementById("wtGo").onclick = async ()=>{ const lb = +document.getElementById("wtLb").value; const m = document.getElementById("wtMsg");
         if (!(lb > 50 && lb < 500)) { m.textContent = "A weight in pounds, like 216.4."; return; }
         m.textContent = "saving…"; try{ await bridge("/weigh-in", { method: "POST", headers: J, body: JSON.stringify({ lb }) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // ---------------- Micros ----------------
   V.micros = async function(){
     const el = page("Micronutrients");
-    const draw = async ()=>{
-      const [chain, food] = await Promise.all([get("/chain"), get("/food/today")]);
-      if (!alive("micros") || !el.isConnected) return;   // a newer draw of this page has taken over
-      const L = chain && chain.links && chain.links.micros, B = window.foodBits || {};
+    const draw = (first)=> load(el, "micros", ["/chain", "/food/today"], [1], (chain, food) => {
+      // the link's numbers are the day report's own micros score; until /chain lands they are read from it
+      const m = food && food.micros, stOf = v => v == null ? "none" : v >= 80 ? "good" : v >= 60 ? "warn" : "bad";
+      const L = (chain && chain.links && chain.links.micros) || (m ? { week: m.score, state: stOf(m.score), today: m.score, today_word: m.band && m.band.word, gaps: (m.gaps || []).map(g => g.label), basis: "" } : null), B = window.foodBits || {};
+      // shortfalls first: the nutrients furthest from their targets at the top, the covered ones after
+      const mSorted = m && Array.isArray(m.per) ? Object.assign({}, m, { per: m.per.slice().sort((a, b) => (a.pct || 0) - (b.pct || 0)) }) : m;
       el.innerHTML = headHTML("micros", "Micros", L, { brk: chain && chain.break_at, weekU: "score, 13 nutrients" }) + `
-        <div class="card ln-micros">${B.microHTML && food ? B.microHTML(food.micros, food) : `<div class="small">loading…</div>`}</div>
+        <div class="card ln-micros">${B.microHTML && food ? B.microHTML(mSorted, food) : `<div class="small">loading…</div>`}</div>
         <div class="ln-sec"><span class="hu-lab">Log food</span></div>
         ${sayWriteHTML("miSw", "spinach salad with salmon and a handful of almonds", "“spinach salad, salmon”")}
         <div class="small">Every meal logged here or on <a href="#food">Food</a> adds its iron, calcium, fibre and the rest. Supplements are logged above.</div>
         ${whyHTML(L)}`;
-      if (B.wireMicro) B.wireMicro(el, draw);
+      if (B.wireMicro) B.wireMicro(el, ()=> draw());
       wireSayWrite(el, "miSw", draw);
-    };
-    await draw();
+    }, first);
+    await draw(true);
   };
 
   // opened straight onto one of these pages: app.js ran nav() before this file loaded

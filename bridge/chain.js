@@ -62,13 +62,13 @@ function verdict(links) {
   } else {
     const say = {
       sleep: () => `sleep: ${L.sleep.week} h a night this week. Appetite and recovery follow it.`,
-      food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days, averaging ${L.food.week}.`,
+      food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days${L.food.kcal_today != null && L.food.kcal_target ? `; today ${L.food.kcal_today.toLocaleString('en-US')} of ${L.food.kcal_target.toLocaleString('en-US')} kcal${L.food.protein_today != null && L.food.protein_target ? `, ${L.food.protein_today} of ${L.food.protein_target} g protein` : ''}` : ''}.`,
       micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
       water: () => `hydration: a balance score of ${L.water.week} on average this week; the scale wobbles with it.`,
-      plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding on the calendar for the week ahead, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
+      plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding placed for the week ahead${L.plan.week_label ? ` (${L.plan.week_label})` : ''}, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
       fuel: () => `fuelling: ${L.fuel.ok} of ${L.fuel.checks} checks met (rides started with enough in the tank, bottles on the longer rides, and the pre-ride supplements).`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
-      lift: () => `lifting: ${L.lift.sessions} of ${L.lift.target} sessions this week.`,
+      lift: () => `lifting: ${L.lift.count_word || `${L.lift.sessions} of ${L.lift.target}`} sessions this week.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
     }[first]();
     text = `Chain breaks at ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
@@ -140,6 +140,27 @@ async function pastDay(date, store) {
   return row;
 }
 
+// "Nov 2 – Nov 8": the Plan link's own week, the seven days from today
+function planWeekLabel(today) {
+  const lab = k => new Date(k + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return `${lab(today)} – ${lab(tz.shiftKey(today, 6))}`;
+}
+// Today's macros for the box, the Food page's own numbers: kcal and protein against the day's targets.
+// The tone reads them against what is due by now: over the whole day's kcal by more than 20% is red,
+// by 10% amber; protein under 60% of what is due by now red, under 80% amber; nothing logged is grey.
+function macrosToday(m) {
+  if (!m) return { kcal_today: null, kcal_target: null, protein_today: null, protein_target: null, protein_due: null, today_state: 'none' };
+  const kcal = m.kcal || 0, prot = m.protein_g || 0, tk = m.target_kcal || null, tp = m.target_protein_g || null;
+  const dueP = m.due_protein_g != null ? m.due_protein_g : tp;
+  let state = 'none';
+  if (m.logged && tk) {
+    const over = kcal / tk, pr = dueP ? prot / dueP : 1;
+    state = over > 1.2 || pr < 0.6 ? 'bad' : over > 1.1 || pr < 0.8 ? 'warn' : 'good';
+  }
+  return { kcal_today: m.logged ? Math.round(kcal) : null, kcal_target: tk ? Math.round(tk) : null, protein_today: m.logged ? Math.round(prot) : null, protein_target: tp ? Math.round(tp) : null,
+    protein_due: dueP != null ? Math.round(dueP) : null, today_state: state };
+}
+
 async function report() {
   const today = tz.todayKey();
   const dates = []; for (let i = DAYS - 1; i >= 0; i--) dates.push(tz.shiftKey(today, -i));
@@ -163,7 +184,10 @@ async function report() {
     todayRow = { fuel: fuelChecks(r).filter(c => c.kind === 'bottle' || (r.energy && (r.energy.starts || []).some(s => s.time === c.time && s.min <= (r.energy.now ? require('./food-math').toMin(r.energy.now.time) : 0)))), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
       ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
-      hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))), micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
+      hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))),
+      macros: { kcal: r.actual ? r.actual.kcal : null, protein_g: r.actual ? r.actual.protein_g : null, target_kcal: r.target ? r.target.kcal : null, target_protein_g: r.target ? r.target.protein_g : null,
+        due_kcal: r.compliance && r.compliance.due ? r.compliance.due.kcal : null, due_protein_g: r.compliance && r.compliance.due ? r.compliance.due.protein_g : null, logged },
+      micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
   } catch (e) { todayRow = null; }
   if (store.dirty) { delete store.dirty; for (const k of Object.keys(store.days)) if (k < tz.shiftKey(today, -45)) delete store.days[k]; await setJSON('chain-days', store).catch(() => {}); }
   const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
@@ -258,20 +282,15 @@ async function report() {
     hardYesterday = hard ? hard.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 30) : null;
   } catch (e) { hardYesterday = null; }
   // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
-  let lift = { sessions: 0, pumps: 0, target: 5, today: [], week: [] };
+  let lift = { sessions: 0, pumps: 0, target: 5, of: 5, word: '0 of 5', today: [], week: [] };
   try {
     const d = await getJSON('lifts', { sessions: [] });
     const L = require('./lifts');
-    const all7 = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today);
-    const pumps = all7.filter(x => x.template === 'pump').length;
-    const wk = all7.filter(x => x.template !== 'pump');
+    const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today && x.template !== 'pump');
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
-    // the plan's clock: from the first session on this plan; the first week is judged on pace, a ninth week is a deload
-    const first = (d.sessions || []).filter(x => L.TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
-    const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
-    const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
-    const expected = !first ? 0 : dayN < 7 ? Math.min(5, Math.ceil(5 * dayN / 7)) : 5;
-    lift = { sessions: wk.length, pumps, target: 5, expected, started: !!first, deload: weekNo > 0 && weekNo % 9 === 0, week_no: weekNo,
+    // the count is the Lift page's own (lifts.weekCount): the first week judged on the sessions due, a ninth week a deload
+    const c = L.weekCount(d.sessions || [], today);
+    lift = { sessions: c.sessions, pumps: c.pumps, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ }
   // the supplements over the week, and when creatine began (its water on the scale)
@@ -304,12 +323,19 @@ async function report() {
       const firstRide = td.rides.find(r => !r.logged && !r.ridden) || td.rides[td.rides.length - 1], firstLift = td.lifts[0];
       const todayWord = firstRide ? `${firstRide.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 26)}${firstRide.time ? ` ${tz.hm12(firstRide.time)}` : ', no time'}` : firstLift ? `${firstLift.name.slice(0, 20)}${firstLift.time ? ` ${tz.hm12(firstLift.time)}` : ''}` : 'rest';
       return { week: Math.round(score * 100), state: stateOf('plan', score), ride_min: planAhead.ride_min, ride_target_min: PLAN_RIDE_MIN, rides: planAhead.rides, untimed: planAhead.untimed, lifts: planAhead.lifts,
-        today: td.rides.length + td.lifts.length, today_word: todayWord, today_state: firstRide ? (firstRide.time ? 'good' : 'warn') : firstLift ? 'good' : 'none', days: planAhead.days, unit: 'ahead',
-        basis: `the seven days ahead as they stand on the calendar: minutes of riding against ${PLAN_RIDE_MIN} (half the mark), five lifts placed (three tenths), and every ride given a start time (two tenths); 80 green, 50 amber` };
+        today: td.rides.length + td.lifts.length, today_word: todayWord, today_state: firstRide ? (firstRide.time ? 'good' : 'warn') : firstLift ? 'good' : 'none', days: planAhead.days,
+        // the planning score, not the calendar's "done of plan": how much of the seven days ahead is placed, on its own week
+        unit: 'placed', from: today, to: tz.shiftKey(today, 6), week_label: planWeekLabel(today),
+        basis: `how much of the seven days ahead (${planWeekLabel(today)}) is placed on the calendar, not how much of it is done (that is the Calendar's "done of plan"): minutes of riding against ${PLAN_RIDE_MIN} (half the mark), five lifts placed (three tenths), and every ride given a start time (two tenths); 80 green, 50 amber` };
     })(),
     sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
       rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
-    food: { week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'compliance', micros: todayRow ? todayRow.micros : null, basis: `the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
+    // The Macros box shows what the Food page prints at its top, read from the same day report on every
+    // call: today's kcal against the day's target, and protein against its target. (The compliance
+    // average stays for the chain's verdict, but it is not on the box: its macro half bottoms out at 0
+    // once a macro is far past what is due, so on a day already over it did not move with a log.)
+    food: Object.assign({ week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'kcal', micros: todayRow ? todayRow.micros : null, basis: `the box is today's kcal and protein against the day's targets, the numbers at the top of the Food page; the chain's verdict uses the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
+      macrosToday(todayRow && todayRow.macros)),
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
     fuel: (() => {
@@ -329,13 +355,14 @@ async function report() {
       today_word: null, basis: 'minutes ridden against minutes of riding planned this week, each ride discounted by how far it strayed from its zone (a Zone 1 day wants 80% at 116 and under, a hard day 15% over threshold); the lifting is its own link' },
     // five a week on the seven-day clock, no grace week: none lifted is a broken link. A deload week stays grey.
     // the plan's first week is judged against the sessions due since it started, not a full five
-    lift: { week: Math.round(Math.min(1, lift.sessions / (lift.started && lift.expected > 0 && lift.expected < lift.target ? lift.expected : lift.target)) * 100),
-      state: lift.deload ? 'none' : stateOf('lift', lift.sessions / (lift.started && lift.expected > 0 && lift.expected < lift.target ? lift.expected : lift.target)),
-      first_week: !!(lift.started && lift.expected > 0 && lift.expected < lift.target),
+    // the box reads "1 of 1 due" in the plan's first week and "3 of 5" after it, the Lift page's own count
+    lift: { week: Math.round(Math.min(1, lift.sessions / (lift.of || 5)) * 100),
+      state: lift.deload ? 'none' : stateOf('lift', lift.sessions / (lift.of || 5)),
+      first_week: !!lift.first_week, of: lift.of || 5, count_word: lift.word,
       sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
-      today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: 'of plan',
+      today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: lift.first_week ? `of ${lift.of} due` : `of ${lift.of || 5}`,
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
-      basis: lift.started && lift.expected > 0 && lift.expected < lift.target ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions due since it started (five a week from day seven); 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
+      basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions due since it started (five a week from day seven); 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
     recovery: (() => {
       const todayScore = recToday ? recToday.score : null;
       const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';
@@ -380,4 +407,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, report, verdict, stateOf, recoveryState, ORDER };
+module.exports = { attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };
