@@ -49,10 +49,11 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 2 Nov | The advisor did not know the Push was done | The day's sessions (what the advisor and the food plan read) still judged a lift by the clock, so the saved Push read as not started and slid to 8:35p | one shared check: a lift saved on the Lift page is done everywhere | disagreement |
 | 2 Nov | Snack reading cut off mid-word; the day's target 180 kcal and 45 g carbs too high | Readings were cut at 240 characters; the advisor added a second, untimed Push at 8:19p when told the lift was done, and both copies were counted | readings to 420 characters and asked for 35 words; the advisor will not add a lift already on the calendar; an untimed copy of a timed lift counts once | advisor |
 | 3 Nov | Advisor said "you're fuelled for it now" at 5:34a with nothing eaten | The fuel figure (71%) is what is left from yesterday after the night; the advisor read it as having eaten | the advisor is told when nothing is eaten today and never says he is fuelled; it names what to eat before the session | advisor |
+| 3 Nov | Contradictions on the porridge before the VO2: "no real protein, no vegetables" and "heavy on starch" on a pre-ride snack whose plan asked for 0 g protein; the day's meals summed 200 kcal over the target; Fuel today read "no ride yet" with the pre-ride food in | Plate rules applied to fuel slots; the bottle was added on top of the day; today's fuel waited for the ride to start | fuel slots judged on carbs only; meals share the target after the bottle; today's fuel counts from four hours before a ride | disagreement |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
-**3 Nov so far: 1.** 1 advisor.
+**3 Nov so far: 2.** 1 disagreement, 1 advisor.
 
 ## Found by the Chrome tests (before Harry saw them)
 

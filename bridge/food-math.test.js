@@ -57,6 +57,19 @@ ok('balanceSeries: burn runs through the day, a ride burns over its minutes, foo
   assert.ok(b.points.find(p => p.m === 480).kcal < b.points.find(p => p.m === 420).kcal - 600);
   assert.strictEqual(b.points.find(p => p.m === 375).projected, true);
 });
+ok('mealPlan: the bottle is inside the day: every slot together adds up to the target', () => {
+  const t = F.targets('high', 384);
+  const day = F.mealPlan('high', [{ name: 'VO2 40/20s', sport: 'VirtualRide', time: '07:00', minutes: 51 }], t);
+  assert.ok(day.some(m => m.slot === 'on the bike'));
+  const sum = day.reduce((a, m) => a + (m.kcal || 0), 0);
+  assert.ok(Math.abs(sum - t.kcal) <= 30, `${sum} vs ${t.kcal}`);
+});
+ok('mealMatch: a pre-ride snack is judged on its carbs, not the plate rules (no protein, no vegetables, starch are fine before a ride)', () => {
+  const plan = { slot: 'before', kcal: 205, carbs_g: 35, protein_g: 0 };
+  const m = F.mealMatch(plan, [{ kcal: 300, carbs_g: 54, protein_g: 9, fat_g: 5, assessment: { fits: 'partly', carbs: 'heavy', protein_source: false, vegetables: false, why: 'Good carbs, but more than planned.' } }]);
+  assert.ok(!/starch|protein|vegetables/.test(m.word), m.word);
+  assert.strictEqual(m.rules.key, 'green');
+});
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
 });

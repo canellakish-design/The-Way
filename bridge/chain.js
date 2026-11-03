@@ -202,8 +202,9 @@ async function report() {
     const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
     const h = r.hydration || {};
     // today: the balance now, the same number the tile shows
-    // today counts only the rides that have started: one still ahead has had no chance to be fuelled
-    todayRow = { fuel: fuelChecks(r).filter(c => { const p = tz.parts(new Date()); return require('./food-math').toMin(c.time) <= p.h * 60 + p.mi; }), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+    // today counts the rides whose fuelling has begun (from four hours before the start): one further off has had no chance yet
+    const nowT = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
+    todayRow = { fuel: fuelChecks(r).filter(c => require('./food-math').toMin(c.time) - 240 <= nowT).map(c => require('./food-math').toMin(c.time) > nowT ? Object.assign({}, c, { so_far: true }) : c), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
       ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
       hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))),
@@ -367,7 +368,8 @@ async function report() {
       return { week: score == null ? null : Math.round(score * 100), state: stateOf('fuel', score), rides: all.filter(c => c.kind === 'ride').length, list: all.slice(-12),
         ok: all.filter(c => c.ok).length, checks: all.length,
         rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb, today: rxLine('fuel') || null },
-        today: todays != null ? Math.round(todays * 100) : null, today_word: todays != null ? (todays < 0.9 ? 'under' : todays > 1.1 ? 'over' : 'on plan') : (fn ? 'no ride yet' : null),
+        today: todays != null ? Math.round(todays * 100) : null,
+        today_word: todays != null ? `${todays < 0.9 ? 'under' : todays > 1.1 ? 'over' : 'on plan'}${(todayRow.fuel || []).some(c => c.so_far) ? ' so far' : ''}` : (fn ? 'no ride yet' : null),
         today_tone: todays != null ? stateOf('fuel', todays) : null, tank_now: fn ? fn.pct : null, legs_today: fn ? fn.legs_pct : null, unit: 'fuelled',
         basis: 'for each ride in the last seven days: the carbs eaten in the four hours before it against the plan\'s carbs for that window, the carbs taken on the bike against the planned bottle, and the pre-ride supplements due (beetroot on a ride day, bicarbonate before a hard one) against those taken; each part a ratio, a ride the mean of its parts, the week the mean of its rides. 100% is the plan; 90 to 110% green, 75 to 125% amber' };
     })(),

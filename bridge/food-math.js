@@ -316,6 +316,12 @@ function mealPlan(day, sessions, target) {
       out.push(snackAfter);
     }
   }
+  // the bottles are eaten too: the day's target holds them, so the meals share what is left (a day ends on its plan)
+  { const extra = out.filter(m => m.extra), rest = out.filter(m => !m.extra);
+    const eK = extra.reduce((a, m) => a + (m.kcal || 0), 0), eC = extra.reduce((a, m) => a + (m.carbs_g || 0), 0);
+    const rK = rest.reduce((a, m) => a + (m.kcal || 0), 0), rC = rest.reduce((a, m) => a + (m.carbs_g || 0), 0);
+    if (eK > 0 && rK > 0 && t.kcal) { const f = Math.max(0.5, (t.kcal - eK) / rK), fc = rC > 0 && t.carbs_g ? Math.max(0.5, (t.carbs_g - eC) / rC) : 1;
+      for (const m of rest) { m.kcal = r5(m.kcal * f); if (m.carbs_g && !m.low_carb) m.carbs_g = r5(m.carbs_g * fc); } } }
   return out.sort((a, b) => mmin(a) - mmin(b));
 }
 
@@ -690,6 +696,9 @@ function mealMatch(plan, logged, ctx) {
       keyR = k;
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
+      // fuel slots (before a ride, on the bike) are judged on their carbs alone: the plate rules (protein, vegetables,
+      // one starch, nothing processed) are for meals, and a gel or a banana before a hard session meets them by design
+      if (/^(before|on the bike)$/.test(plan.slot || '') && !e.alcohol) { keyR = 'green'; wordR = 'rules met'; continue; }
       wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' ? 'heavy on starch' : (!slotProtein && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!slotVeg && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = plateWhy || a.why || null;
     }
