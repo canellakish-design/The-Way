@@ -197,6 +197,14 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 /* ================= COACH (#coach) ================= */
 .navback.coachlink{border-color:var(--green); color:var(--green)}
 .ch-ask{display:flex; flex-direction:column; gap:8px; margin:10px 0 4px}
+/* the coach's debrief of today's ride, on the Day under "Next" */
+.daycoach{display:flex; flex-direction:column; gap:12px; border-left:3px solid var(--green)}
+.daycoach[hidden]{display:none}
+.dc-one{display:flex; flex-direction:column; gap:6px}
+.dc-say{font-size:19px}
+.dc-body p{margin:0 0 6px; font-size:14.5px}
+.wkday{border-bottom:0 !important; padding-top:8px !important}
+.wkday .n b{font-family:var(--mono); font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted)}
 .ch-ask textarea{width:100%; font:inherit; padding:10px; background:var(--card); color:var(--ink); border:1px solid var(--line)}
 .ch-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap} .ch-row button{margin:0}
 .ch-chips{display:flex; flex-wrap:wrap; gap:6px 12px}

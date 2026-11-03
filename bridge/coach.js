@@ -165,9 +165,9 @@ async function runJob(id, who) {
       let res;
       const hb = setInterval(() => { job.wait = `step ${hop + 1}: waiting ${Math.round((Date.now() - t0) / 1000)} s`; save(); }, 15000);
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
-        model: MODEL, max_tokens: 16000, fallbacks: 'default',
-        thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
-        system: sys, tools: TOOLS, messages: cached(messages)
+        model: MODEL, max_tokens: job.kind === 'debrief' ? 4000 : 16000, fallbacks: 'default',
+        thinking: { type: 'adaptive' }, output_config: { effort: job.kind === 'debrief' ? 'medium' : 'high' },
+        system: sys, tools: job.kind === 'debrief' ? TOOLS.filter(t => t.name === 'read_site') : TOOLS, messages: cached(messages)
       }, left); }
       catch (e) {
         clearInterval(hb);
@@ -225,32 +225,70 @@ async function runJob(id, who) {
     job.steps = job.steps.filter((x, i, a) => a.indexOf(x) === i);   // the same search said once
     job.status = 'done'; job.finished = new Date().toISOString();
     await save();
+    if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-' + String(job.ride_id).replace(/[^\w-]/g, ''), { job_id: job.id, status: 'done', ride: { id: job.ride_id, name: job.ride_name || null }, say: job.say, answer: job.answer, usage: job.usage || null, at: job.finished }).catch(() => {});
     const th = await getJSON('coach-thread', { turns: [] });
-    th.turns = (th.turns || []).concat([{ role: 'user', text: job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
+    th.turns = (th.turns || []).concat([{ role: 'user', text: job.kind === 'debrief' ? `Debrief: ${job.ride_name || 'the ride'}` : job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
     await setJSON('coach-thread', th);
   } catch (e) {
     job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
     await save();
+    if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-' + String(job.ride_id).replace(/[^\w-]/g, ''), { job_id: job.id, status: 'error', error: job.error, ride: { id: job.ride_id, name: job.ride_name || null }, at: new Date().toISOString() }).catch(() => {});
   }
 }
 
 function attach(app) {
-  app.post('/coach/ask', async (req, res) => { if (!auth(req, res)) return;
-    const text = String((req.body || {}).text || '').trim().slice(0, 4000);
-    if (!text) return res.status(400).json({ error: 'ask something' });
+  // a job starts here, whatever asked for it: a question from the page, or a ride that just landed
+  const baseOf = req => { const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app';
+    return /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app'; };
+  const startJob = async (text, base, extra) => {
     const id = crypto.randomBytes(6).toString('hex');
-    // the coach reads the site it was asked from: the real one, or the copy
-    const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app';
-    const base = /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app';
-    await setJSON('coach-job-' + id, { id, text, base, status: 'queued', created: new Date().toISOString(), steps: [] });
+    const job = Object.assign({ id, text, base, status: 'queued', created: new Date().toISOString(), steps: [] }, extra || {});
+    await setJSON('coach-job-' + id, job);
     try {
       const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
       if (r.status >= 400) throw new Error('background ' + r.status);
     } catch (e) {
       // on Netlify the job only ever runs in the background function: a request may live 30 seconds, a question needs minutes
-      if (require('./storage').ON_NETLIFY) { await setJSON('coach-job-' + id, { id, text, base, status: 'error', error: 'could not start the coach: ' + e.message, created: new Date().toISOString(), steps: [] }); return res.json({ id }); }
+      if (require('./storage').ON_NETLIFY) { await setJSON('coach-job-' + id, Object.assign(job, { status: 'error', error: 'could not start the coach: ' + e.message })); return id; }
       runJob(id).catch(() => {});   // the PC bridge has no background function: run it here
     }
+    return id;
+  };
+  app.post('/coach/ask', async (req, res) => { if (!auth(req, res)) return;
+    const text = String((req.body || {}).text || '').trim().slice(0, 4000);
+    if (!text) return res.status(400).json({ error: 'ask something' });
+    res.json({ id: await startJob(text, baseOf(req)) });
+  });
+  // The debrief: after a ride, the coach reads it and says how it went, what to improve and what to eat next.
+  // One per ride, keyed by the ride; asking again for a ride that has one returns it. The Day asks for today's.
+  const DEBRIEF_KEY = id => 'coach-debrief-' + String(id).replace(/[^\w-]/g, '');
+  const todayRides = async () => {
+    const W = require('./workouts'), today = tz.todayKey();
+    const cal = await W.calendar(today, today);
+    const day = (cal.days || [])[0] || {};
+    return (day.done || []).filter(r => W.isRideSport ? W.isRideSport(r) : true).map(r => ({ id: String(r.id), name: r.name, time: r.time || null, minutes: r.minutes || null,
+      planned: (day.planned || []).filter(w => w.compliance).map(w => ({ name: w.name, band: w.compliance.band, pct: w.compliance.pct, basis: w.compliance.basis })) }));
+  };
+  app.get('/coach/debrief/today', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const rides = await todayRides();
+      const out = [];
+      for (const r of rides) { const d = await getJSON(DEBRIEF_KEY(r.id), null); out.push({ ride: r, debrief: d }); }
+      res.json({ rides: out });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post('/coach/debrief', async (req, res) => { if (!auth(req, res)) return;
+    const rid = String((req.body || {}).ride_id || '').trim(); if (!rid) return res.status(400).json({ error: 'ride_id' });
+    const have = await getJSON(DEBRIEF_KEY(rid), null);
+    if (have && have.status !== 'error') return res.json({ id: have.job_id, debrief: have });
+    const rides = await todayRides().catch(() => []);
+    const ride = rides.find(r => r.id === rid) || { id: rid, name: String((req.body || {}).name || 'the ride') };
+    const text = `DEBRIEF the ride "${ride.name}" (${tz.todayKey()}${ride.time ? ' ' + tz.hm12(ride.time) : ''}, ride id ${rid}). Read /rides/${rid}/analysis, /calendar?from=${tz.todayKey()}&to=${tz.todayKey()} (the plan it was graded against), /food/today and /fuel/ahead. Then answer in exactly this shape:
+SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time.
+**The ride**: at most three short lines, each a number from the pages (minutes, the zone split against the plan, heart rate against the goal, power). Encouragement where it is earned; one concrete improvement where it is not, said once.
+**Next meal**: what to eat now and by when, from today's plan and what is still due (grams of carbs and protein, a real food or two). One line.
+No research, no links, nothing else.`;
+    const id = await startJob(text, baseOf(req), { kind: 'debrief', ride_id: rid, ride_name: ride.name });
+    await setJSON(DEBRIEF_KEY(rid), { job_id: id, status: 'running', ride: { id: rid, name: ride.name, time: ride.time || null }, at: new Date().toISOString() });
     res.json({ id });
   });
   app.get('/coach/job/:id', async (req, res) => { if (!auth(req, res)) return;

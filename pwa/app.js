@@ -1657,6 +1657,7 @@ V.today = async function(){
     <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
+    <div class="card daycoach" id="dayCoach" hidden></div>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
     <div class="daystep">
       <button id="dayPrev" aria-label="Previous day">‹</button>
@@ -1797,7 +1798,7 @@ V.today = async function(){
   };
   // What the fitness number means for a masters amateur: CTL in TSS a day.
   const fitLevel = c => c == null ? "" : c < 25 ? "base" : c < 45 ? "recreational" : c < 65 ? "solid" : c < 85 ? "strong" : "racer";
-  let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null, chainData = null;
+  let scoresData = null, complianceData = null, foodData = null, workoutsData = null, openScore = null, chainData = null, weekCal = null;
   // the fitness field at the top: CTL big, its weekly change and word, the six-week line; the field is the link to Ride
   const paintFit = (t, why)=>{
     const el = document.getElementById("fitField"); if (!el) return;
@@ -2082,20 +2083,33 @@ V.today = async function(){
       return;
     }
     if (openScore === "workouts"){
-      const t = workoutsToday();
+      // the week's rides: each planned ride against what was done, and what is still to do. The same seven days as the box.
       const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
-      // the same words the calendar uses: done, over, partly, short (a ride, but not enough), missed
+      const isRide = w => !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(w.sport || w.type || ""));
       const gradeWordOf = (p, rides) => p.zone_over ? "above Z1" : p.band === "green" ? (p.pct > 120 ? "over" : "done") : p.band === "yellow" ? "partly" : p.band === "red" ? (rides ? "short" : "missed") : "done";
-      html = `<h4>Workouts · today</h4>
-        ${!t ? `<div class="small">bridge unreachable</div>` : `<ul class="agenda totals">
-          ${t.planned.map(p => row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${p.minutes ? ` <span class="small">${p.minutes} min</span>` : ""}`,
-              p.done ? `<b style="color:${toneC(bandTone(p.band || "green"))}">${gradeWordOf(p, t.rides.length)}</b>${p.pct != null ? ` · ${p.pct}%` : ""}` : `<span class="small">to do</span>`)).join("")}
-          ${t.rides.filter(r => !t.planned.some(p => p.done)).map(r => row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`)).join("")}
-          ${!t.planned.length && !t.rides.length ? `<li><span class="n">Nothing planned</span><span class="tag">rest day</span></li>` : ""}
-        </ul>`}
-        <a class="btn primary" href="#calendar">The calendar</a> <a class="btn" href="#zones">Training zones</a>
-        <details class="why"><summary>how it's scored</summary><div class="small">Done over planned. A session is done when Strava has the ride or it was logged by hand. Green all done, amber part-way, red once the last session's time has passed.</div></details>`;
-      box.innerHTML = html; placeGo(box, openScore); box.hidden = false; return;
+      const dlabel = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+      const today = dayAt(0);
+      const draw = cal => {
+        let planned = 0, done = 0;
+        const days = (cal && cal.days || []).map(d => {
+          const ps = (d.planned || []).filter(isRide), rs = (d.done || []).filter(isRide), iv = (d.intervals || []).filter(isRide);
+          if (!ps.length && !rs.length && !iv.length) return "";
+          const ahead = d.date > today;
+          const rows = ps.map(p => { const m = p.metrics ? Math.round(p.metrics.duration_s / 60) : null; planned += m || 0;
+            const c = p.compliance, st = p.logged ? `<b style="color:${toneC("good")}">logged</b>` : c ? `<b style="color:${toneC(bandTone(c.band))}">${gradeWordOf(c, rs.length)}</b>${c.pct != null ? ` · ${c.pct}%` : ""}` : `<span class="small">${ahead ? "ahead" : d.date === today ? "to do" : "not done"}</span>`;
+            if (p.logged || (c && c.band !== "red")) done += m || 0;
+            return row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${m ? ` <span class="small">${m} min</span>` : ""}`, st); })
+            .concat(iv.map(e => row(`${e.time ? hm12(e.time) + " · " : ""}${esc(e.name)}${e.minutes ? ` <span class="small">${e.minutes} min</span>` : ""}`, `<span class="small">${ahead ? "ahead" : "to do"}</span>`)))
+            .concat(rs.filter(r => !ps.some(p => p.compliance || p.logged)).map(r => { done += r.minutes || 0; return row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`); }));
+          return `<li class="wkday"><span class="n"><b>${esc(dlabel(d.date))}</b></span></li>${rows.join("")}`;
+        }).join("");
+        return `<h4>Rides · this week</h4>
+          ${!cal ? `<div class="small">bridge unreachable</div>` : days ? `<ul class="agenda totals">${days}</ul><div class="small">${done} of ${planned} min</div>` : `<div class="small">No rides planned this week.</div>`}
+          <a class="btn primary" href="#calendar">The calendar</a>`;
+      };
+      html = draw(weekCal); box.innerHTML = html; placeGo(box, openScore); box.hidden = false;
+      if (!weekCal) bridge(`/calendar?from=${dayAt(-6)}&to=${today}`).then(c => { weekCal = c; if (openScore === "workouts") box.innerHTML = draw(c); }).catch(() => {});
+      return;
     }
     if (openScore === "hydration"){
       const h = foodData && foodData.hydration;
@@ -2194,6 +2208,7 @@ V.today = async function(){
   const refreshScores = async ()=>{
     scoresLoading = true;
     const get = (path, set) => { const once = () => bridge(path).then(v => { set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
+    weekCal = null; loadCoach();
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
@@ -2293,7 +2308,47 @@ V.today = async function(){
     const el = document.getElementById("nowNext");
     if (el) el.textContent = "";
     paintNextLine(rows, nm, isToday);
+    paintCoach(isToday);
   };
+  // The coach's debrief of today's ride: asked for the first time the Day is opened after a ride lands, kept by the
+  // ride, spoken once. Encouragement or the one thing to improve, and what to eat next.
+  const DEB = { rides: null, polling: {} };
+  const mdLite = t => esc(String(t || "")).split(/\n{2,}/).map(p => { const lines = p.split("\n").map(l => l.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"));
+    return lines.every(l => /^\s*[-•]\s/.test(l)) ? `<ul class="ch-ul">${lines.map(l => `<li>${l.replace(/^\s*[-•]\s/, "")}</li>`).join("")}</ul>` : `<p>${lines.join("<br>")}</p>`; }).join("");
+  function paintCoach(isToday){
+    const el = document.getElementById("dayCoach"); if (!el) return;
+    if (!isToday || !DEB.rides || !DEB.rides.length){ el.hidden = true; return; }
+    el.innerHTML = DEB.rides.map(x => { const d = x.debrief, r = x.ride;
+      const head = `<span class="hu-lab">Coach · ${esc(r.name || "the ride")}${r.time ? " · " + esc(hm12(r.time)) : ""}</span>`;
+      if (!d || d.status === "running") return `<div class="dc-one">${head}<div class="small">reading the ride…</div></div>`;
+      if (d.status === "error") return `<div class="dc-one">${head}<div class="small">The coach couldn't read it: ${esc(d.error || "")}</div></div>`;
+      return `<div class="dc-one">${head}${d.say ? `<div class="ch-say dc-say">${esc(d.say)}</div>` : ""}<div class="ch-body dc-body">${mdLite(d.answer)}</div></div>`; }).join("");
+    el.hidden = false;
+  }
+  async function loadCoach(){
+    let t = null; try{ t = await bridge("/coach/debrief/today"); }catch{ return; }
+    DEB.rides = (t && t.rides) || [];
+    paintCoach(offset === 0);
+    for (const x of DEB.rides){
+      const id = x.ride.id;
+      if (!x.debrief){ try{ await bridge("/coach/debrief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ride_id: id, name: x.ride.name }) }); x.debrief = { status: "running" }; paintCoach(offset === 0); }catch{ continue; } }
+      if (x.debrief && x.debrief.status === "running" && !DEB.polling[id]){
+        DEB.polling[id] = true;
+        const t0 = Date.now();
+        const poll = async () => {
+          let t2 = null; try{ t2 = await bridge("/coach/debrief/today"); }catch{}
+          const y = t2 && (t2.rides || []).find(z => z.ride.id === id);
+          if (y && y.debrief && y.debrief.status !== "running"){ x.debrief = y.debrief; DEB.polling[id] = false; paintCoach(offset === 0);
+            if (y.debrief.say && !lsGetD("way-debrief-said-" + id)){ lsSetD("way-debrief-said-" + id, "1"); if (typeof speak === "function" && offset === 0) speak(y.debrief.say); } return; }
+          if (Date.now() - t0 < 12 * 60 * 1000 && location.hash.split("?")[0] === "#today") setTimeout(poll, 6000);
+        };
+        setTimeout(poll, 8000);
+      }
+      if (x.debrief && x.debrief.status === "done" && x.debrief.say && !lsGetD("way-debrief-said-" + id)) lsSetD("way-debrief-said-" + id, "1");   // one already shown is not spoken again
+    }
+  }
+  const lsGetD = k => { try{ return localStorage.getItem(k); }catch{ return null; } };
+  const lsSetD = (k, v) => { try{ localStorage.setItem(k, v); }catch{} };
   // "Next:" right under the chain: the next thing due from the schedule, and for a session what to eat before it.
   // Done things (a logged meal, a taken supplement, a logged session) are not next.
   const paintNextLine = (rows, nm, isToday)=>{
