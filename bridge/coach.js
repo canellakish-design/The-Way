@@ -231,7 +231,11 @@ function attach(app) {
     if (!job) return res.status(404).json({ error: 'no such question' });
     res.json(job);
   });
+  // how long a function may run here: waits ?s seconds (at most 90), then answers
+  app.get('/coach/wait', async (req, res) => { if (!auth(req, res)) return;
+    const s = Math.min(90, Math.max(0, Number(req.query.s) || 0)); await new Promise(r => setTimeout(r, s * 1000)); res.json({ waited: s }); });
   app.get('/coach/thread', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-thread', { turns: [] })); });
+  app.get('/coach/beat/:b', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-beat-' + String(req.params.b).replace(/\W/g, ''), null)); });
   app.get('/coach/notebook', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-notebook', { notes: [] })); });
 }
 
