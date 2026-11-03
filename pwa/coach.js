@@ -67,7 +67,7 @@
           go.disabled = false; drawNotes(); return;
         }
         if (job && job.status === "error"){ live.innerHTML += `<div class="small hu-stop">The coach hit an error: ${esc(job.error || "")}. Ask again.</div>`; go.disabled = false; return; }
-        if (Date.now() - t0 > 16 * 60 * 1000){ live.innerHTML += `<div class="small">No answer after sixteen minutes. Ask again.</div>`; go.disabled = false; return; }
+        if (Date.now() - t0 > 15.5 * 60 * 1000 || (job && job.status === "running" && job.started && Date.now() - new Date(job.started).getTime() > 15.5 * 60 * 1000)){ live.innerHTML += `<div class="small">No answer after sixteen minutes. Ask again.</div>`; go.disabled = false; return; }
         setTimeout(poll, 2500);
       };
       setTimeout(poll, 1500);

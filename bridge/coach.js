@@ -70,7 +70,7 @@ const TOOLS = [
       required: ['date', 'text', 'time', 'new_date', 'minutes', 'library_key'], additionalProperties: false }, strict: true },
   { name: 'log_food', description: 'Log a meal, snack or drink he tells you he had, in his words with amounts (the same reader the Food page uses grades it). One call per meal or drink. Only when he says he ate or drank it.',
     input_schema: { type: 'object', properties: { text: { type: 'string' }, kind: { type: 'string', enum: ['meal', 'drink'] } }, required: ['text', 'kind'], additionalProperties: false }, strict: true },
-  { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
+  { type: 'web_search_20260209', name: 'web_search', max_uses: 5 },
   { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6 }
 ];
 
@@ -137,8 +137,10 @@ async function runJob(id) {
     while (messages.length && messages[0].role !== 'user') messages.shift();
     messages.push({ role: 'user', content: job.text });
     let final = null, sources = [];
+    const t0 = Date.now(), late = () => Date.now() - t0 > 9 * 60 * 1000;   // the background function stops at fifteen minutes
     for (let hop = 0; hop < 16; hop++) {
-      const res = await create({
+      if (late() && hop) { const last = messages[messages.length - 1]; if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is nearly up: answer now from what you have read.' }); }
+      const res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
         system: system(notebook), tools: TOOLS, messages
