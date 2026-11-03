@@ -2086,32 +2086,10 @@ V.today = async function(){
       return;
     }
     if (openScore === "workouts"){
-      // the week's rides: each planned ride against what was done, and what is still to do. The same seven days as the box.
-      const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
-      const isRide = w => !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(w.sport || w.type || ""));
-      const gradeWordOf = (p, rides) => p.zone_over ? "above Z1" : p.band === "green" ? (p.pct > 120 ? "over" : "done") : p.band === "yellow" ? "partly" : p.band === "red" ? (rides ? "short" : "missed") : "done";
-      const dlabel = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
       const today = dayAt(0);
-      const draw = cal => {
-        let planned = 0, done = 0;
-        const days = (cal && cal.days || []).map(d => {
-          const ps = (d.planned || []).filter(isRide), rs = (d.done || []).filter(isRide), iv = (d.intervals || []).filter(isRide);
-          if (!ps.length && !rs.length && !iv.length) return "";
-          const ahead = d.date > today;
-          const rows = ps.map(p => { const m = p.metrics ? Math.round(p.metrics.duration_s / 60) : null; planned += m || 0;
-            const c = p.compliance, st = p.logged ? `<b style="color:${toneC("good")}">logged</b>` : c ? `<b style="color:${toneC(bandTone(c.band))}">${gradeWordOf(c, rs.length)}</b>${c.pct != null ? ` · ${c.pct}%` : ""}` : `<span class="small">${ahead ? "ahead" : d.date === today ? "to do" : "not done"}</span>`;
-            if (p.logged || (c && c.band !== "red")) done += m || 0;
-            return row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${m ? ` <span class="small">${m} min</span>` : ""}`, st); })
-            .concat(iv.map(e => row(`${e.time ? hm12(e.time) + " · " : ""}${esc(e.name)}${e.minutes ? ` <span class="small">${e.minutes} min</span>` : ""}`, `<span class="small">${ahead ? "ahead" : "to do"}</span>`)))
-            .concat(rs.filter(r => !ps.some(p => p.compliance || p.logged)).map(r => { done += r.minutes || 0; return row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`); }));
-          return `<li class="wkday"><span class="n"><b>${esc(dlabel(d.date))}</b></span></li>${rows.join("")}`;
-        }).join("");
-        return `<h4>Rides · this week</h4>
-          ${!cal ? `<div class="small">bridge unreachable</div>` : days ? `<ul class="agenda totals">${days}</ul><div class="small">${done} of ${planned} min</div>` : `<div class="small">No rides planned this week.</div>`}
-          <a class="btn primary" href="#calendar">The calendar</a>`;
-      };
-      html = draw(weekCal); box.innerHTML = html; placeGo(box, openScore); box.hidden = false;
-      if (!weekCal) bridge(`/calendar?from=${dayAt(-6)}&to=${today}`).then(c => { weekCal = c; if (openScore === "workouts") box.innerHTML = draw(c); }).catch(() => {});
+      html = `<h4>Rides · this week</h4>${weekRidesHTML(weekCal, today)}<a class="btn primary" href="#calendar">The calendar</a>`;
+      box.innerHTML = html; placeGo(box, openScore); box.hidden = false;
+      if (!weekCal) bridge(`/calendar?from=${dayAt(-6)}&to=${today}`).then(c => { weekCal = c; if (openScore === "workouts") box.innerHTML = `<h4>Rides · this week</h4>${weekRidesHTML(c, today)}<a class="btn primary" href="#calendar">The calendar</a>`; }).catch(() => {});
       return;
     }
     if (openScore === "hydration"){
@@ -2613,6 +2591,32 @@ V.today = async function(){
 /* ---------------- FOOD (front page) ----------------
    The journal in brief. Hexis and Alma are gone: the target comes from the
    day's training (bridge/food-math.js), the intake from the photos. */
+// The week's rides, planned against done: each planned ride with done, short, missed, to do or ahead, the rides
+// outside the plan, and the minutes done of planned. Drawn on the Ride page and in the Ride box.
+function weekRidesHTML(cal, today){
+  const row = (n, v) => `<li><span class="n">${n}</span><span class="tag">${v}</span></li>`;
+  const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
+  const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
+  const isRide = w => !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(w.sport || w.type || ""));
+  const wordOf = (c, rides) => c.zone_over ? "above Z1" : c.band === "green" ? (c.pct > 120 ? "over" : "done") : c.band === "yellow" ? "partly" : c.band === "red" ? (rides ? "short" : "missed") : "done";
+  const dlabel = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  if (!cal) return `<div class="small">reading the week…</div>`;
+  let planned = 0, done = 0;
+  const days = (cal.days || []).map(d => {
+    const ps = (d.planned || []).filter(isRide), rs = (d.done || []).filter(isRide), iv = (d.intervals || []).filter(isRide);
+    if (!ps.length && !rs.length && !iv.length) return "";
+    const ahead = d.date > today;
+    const rows = ps.map(p => { const m = p.metrics ? Math.round(p.metrics.duration_s / 60) : null; planned += m || 0;
+      const c = p.compliance, st = p.logged ? `<b style="color:${toneC("good")}">logged</b>` : c ? `<b style="color:${toneC(bandTone(c.band))}">${wordOf(c, rs.length)}</b>${c.pct != null ? ` · ${c.pct}%` : ""}` : `<span class="small">${ahead ? "ahead" : d.date === today ? "to do" : "not done"}</span>`;
+      if (p.logged || (c && c.band !== "red")) done += m || 0;
+      return row(`${p.time ? hm12(p.time) + " · " : ""}${esc(p.name)}${m ? ` <span class="small">${m} min</span>` : ""}`, st); })
+      .concat(iv.map(e => row(`${e.time ? hm12(e.time) + " · " : ""}${esc(e.name)}${e.minutes ? ` <span class="small">${e.minutes} min</span>` : ""}`, `<span class="small">${ahead ? "ahead" : "to do"}</span>`)))
+      .concat(rs.filter(() => !ps.some(p => p.compliance || p.logged)).map(r => { done += r.minutes || 0; return row(`${r.time ? hm12(r.time) + " · " : ""}${esc(r.name)} <span class="small">${r.minutes} min</span>`, `<b style="color:${toneC("good")}">ridden</b>${r.tss ? ` · ${r.tss} TSS` : ""}`); }));
+    return `<li class="wkday"><span class="n"><b>${esc(dlabel(d.date))}</b></span></li>${rows.join("")}`;
+  }).join("");
+  return days ? `<ul class="agenda totals">${days}</ul><div class="small">${done} of ${planned} min</div>` : `<div class="small">No rides planned this week.</div>`;
+}
+window.weekRidesHTML = weekRidesHTML;
 function hm12(t){ const m=/^(\d{2}):(\d{2})$/.exec(t||""); if(!m) return t||""; let h=(+m[1])%24; const ap=h<12?"a":"p"; h=h%12; if(h===0)h=12; return h+":"+m[2]+ap; }
 // a date a person reads: "Mon, Nov 2" (from "2026-11-02")
 function dayFmt(k){ if (!/^\d{4}-\d{2}-\d{2}/.test(k||"")) return k||""; return new Date(String(k).slice(0,10)+"T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }); }

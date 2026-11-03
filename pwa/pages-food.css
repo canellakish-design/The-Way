@@ -5,6 +5,18 @@
 .fd-ttl,.ln-ttl{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin:6px 0 2px; flex-wrap:wrap}
 .fd-h,.ln-h{font-family:var(--num); font-weight:700; font-size:30px; line-height:1; text-transform:uppercase; letter-spacing:.3px; margin:0}
 .fd-kcal{white-space:nowrap}
+/* the week's score card */
+.fw-card{display:flex; flex-direction:column; gap:10px}
+.fw-head{display:flex; align-items:center; gap:14px}
+.fw-big{font-family:var(--num); font-weight:700; font-size:56px; line-height:1}
+.fw-days{display:flex; gap:4px; flex:1; justify-content:space-between}
+.fw-day{display:flex; flex-direction:column; align-items:center; gap:2px; min-width:0}
+.fw-day b{font-family:var(--num); font-weight:700; font-size:20px; line-height:1}
+.fw-day span{font-family:var(--mono); font-size:9px; letter-spacing:.8px; text-transform:uppercase; color:var(--muted)}
+.fw-day.today span{color:var(--ink)}
+.fw-todo{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px}
+.fw-todo li{display:flex; justify-content:space-between; gap:10px; font-size:14.5px; line-height:1.35; border-left:3px solid var(--line); padding-left:10px}
+.fw-todo li b{font-family:var(--mono); font-size:12px; color:var(--green); white-space:nowrap}
 .fd-kcal .hu-n{font-size:24px}
 .fd-kcal .fd-kt{font-family:var(--num); font-weight:600; font-size:16px; color:var(--muted)}
 .fd-day{align-items:center; margin-top:6px}
