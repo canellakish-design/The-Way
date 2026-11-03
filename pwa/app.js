@@ -1140,7 +1140,7 @@ const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="
 function chainHTML(){
   // three fields a row with an arrow between each, the arrow out of a row's last field wrapping round to the next
   // row; each arrow wears the colour of the link it leaves, a cross where the chain breaks. Weight sits beside the verdict.
-  const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
+  const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctr" hidden></span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
   const arrow = ck => `<span class="carrow" data-k="${ck}" aria-hidden="true"><i>${ARROW}</i></span>`;
   const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));
   const out = rows.map((r, ri) => {
@@ -1186,6 +1186,9 @@ function paintChain(c){
     if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`; }
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
     el.querySelector(".cweek").textContent = unit;
+    // the trend against the week before: a small triangle and the change, green when it is better, red when worse; nothing when it barely moved
+    const tr = L.trend, te = el.querySelector(".ctr"), moved = tr && Math.abs(tr.delta) >= (ck === "sleep" ? 0.3 : 2);
+    if (te){ te.hidden = !moved; if (moved){ te.textContent = `${tr.delta > 0 ? "▲" : "▼"}${Math.abs(tr.delta)}`; te.className = `ctr ${tr.better ? "good" : "bad"}`; } }
     el.dataset.week = state || "none";
     // the Plan box names its own week (the seven days ahead), so it is never read as the chain's week or the Calendar's
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }

@@ -616,6 +616,8 @@ ul.agenda.courses li .t{font-size:13px}
 .chain .cbox .slabel{font-size:8px; letter-spacing:.8px; white-space:nowrap}
 .chain .cbox .cnum{font-family:var(--mono); font-size:17px; font-weight:700; line-height:1.1; letter-spacing:-.5px; font-variant-numeric:tabular-nums}
 .chain .cbox .cweek{font-family:var(--mono); font-size:6.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted); white-space:nowrap}
+.chain .cbox .ctr{font-family:var(--mono); font-size:8px; font-weight:700; letter-spacing:0; margin-left:auto; white-space:nowrap; align-self:center}
+.chain .cbox .ctr.good{color:var(--green)} .chain .cbox .ctr.bad{color:var(--red)} .chain .cbox .ctr[hidden]{display:none}
 .chain .cbox .ctoday{display:flex; flex-direction:column; align-items:center; margin-top:4px; max-width:100%; min-height:22px}
 .chain .cbox .ctoday .snum{font-size:11px; font-weight:700; letter-spacing:0; margin:0; line-height:1.1}
 .chain .cbox .ctoday .sword{font-size:7px; letter-spacing:.4px; max-width:100%}
