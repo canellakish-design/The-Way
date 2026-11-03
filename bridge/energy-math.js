@@ -141,7 +141,7 @@ function model(o) {
     if (c || pr >= 10 || (e.kcal || 0) >= 80) meals.push({ time: e.time, min: m, carbs_g: c, protein_g: pr, name: e.name, logged: true, protein_only: !c && pr >= 10 });
   }
   for (const p of o.meals || []) {
-    const m = toMin(p.time); if (m == null || m < now) continue;
+    const m = toMin(p.time); if (m == null || m < now || p.next_day) continue;   // a bedtime snack after midnight is tomorrow's curve
     if ((p.logged || []).length) continue;
     const c = p.carbs_g || 0; if (!c) continue;
     add(absorbProj, m, kernel(c, 0, p.protein_g || 0, p.slot === 'on the bike'));

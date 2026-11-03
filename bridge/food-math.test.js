@@ -310,4 +310,174 @@ ok('the Now line names the meal by the clock: no breakfast talk before an aftern
   assert.ok(c && !/breakfast/i.test(c.text), c && c.text);
   assert.ok(/light|protein/i.test(c.text), c.text);
 });
+
+// ---- the tighten review of 2 Nov: one slot, frozen meals, late rides, lifts, bottles ----
+const lateRide = { name: 'Zone 1, 90 min', sport: 'VirtualRide', time: '23:00', end_time: '00:30', minutes: 90, tss: 59 };
+const pullLift = { name: 'Pull', sport: 'WeightTraining', time: '17:30', end_time: '18:25', minutes: 55 };
+
+ok('#1 one slot: after 8 p.m. with dinner open a meal is dinner; once dinner holds food the nearest slot takes it; his word wins', () => {
+  const plan = F.mealPlan('rest', [], F.targets('rest', 0));
+  assert.strictEqual(F.slotFor(plan, '21:26'), 'dinner');
+  assert.strictEqual(F.slotFor(plan, '21:26', '', { logged: ['dinner'] }), 'snack');
+  assert.strictEqual(F.slotFor(plan, '21:26', 'snack'), 'snack');
+  assert.strictEqual(F.slotFor(plan, '19:30'), 'dinner');
+  assert.strictEqual(F.slotFor(plan, '20:40', '', { logged: ['dinner'] }), 'snack');
+  // the rows say what is logged when no list is given
+  const rows = plan.map(m => Object.assign({}, m, { logged: m.slot === 'dinner' ? ['x'] : [] }));
+  assert.strictEqual(F.slotFor(rows, '21:26'), 'snack');
+  // the photo of the chicken a few minutes after the eggs is the same dinner, not the snack nearest the clock
+  assert.strictEqual(F.slotFor(plan, '21:31', '', { logged: ['dinner', 'snack'], last: { slot: 'dinner', time: '21:26' } }), 'dinner');
+  // dinner still open beats the chips logged twenty minutes before
+  assert.strictEqual(F.slotFor(plan, '21:26', '', { logged: ['snack'], last: { slot: 'snack', time: '21:04' } }), 'dinner');
+});
+
+ok('#2 #3 a logged meal is frozen: its slot, its plan and its grade stay when the plan is redrawn; the snapshot is the row it was logged against', () => {
+  const t = F.targets('rest', 0);
+  const plan = F.mealPlan('rest', [], t);
+  const before = F.dayMeals(plan, [], { target_kcal: t.kcal });
+  const snackRow = before.find(r => r.slot === 'snack');
+  const chips = { id: 'c1', time: '21:04', slot: 'snack', name: 'Chips', kcal: 300, carbs_g: 30, protein_g: 4, fat_g: 18, assessment: { fits: 'no', processed: true, why: 'Chips.' } };
+  chips.plan = F.planSnapshot(snackRow, chips.time);
+  const now = F.dayMeals(plan, [chips], { target_kcal: t.kcal });
+  const row = now.find(r => r.logged.includes('c1'));
+  assert.strictEqual(row.slot, 'snack');
+  assert.deepStrictEqual([row.kcal, row.carbs_g, row.protein_g], [chips.plan.kcal, chips.plan.carbs_g, chips.plan.protein_g], 'the verdict and the card read one object');
+  const grade = row.match.word;
+  // a 10 p.m. ride is added: the plan has no snack any more and a "before" slot appears
+  const ride = { name: 'Zone 1, 60 min', sport: 'VirtualRide', time: '22:00', minutes: 60, tss: 36 };
+  const plan2 = F.mealPlan('normal', [ride], F.targets('normal', 200));
+  assert.ok(!plan2.some(m => m.slot === 'snack'), 'the new plan has no snack slot');
+  const later = F.dayMeals(plan2, [chips], { target_kcal: t.kcal });
+  const still = later.find(r => r.logged.includes('c1'));
+  assert.ok(still, 'the chips keep their row');
+  assert.strictEqual(still.slot, 'snack');
+  assert.strictEqual(still.time, snackRow.time);
+  assert.strictEqual(still.kcal, chips.plan.kcal);
+  assert.strictEqual(still.match.word, grade, 'the grade never moves');
+  assert.ok(!later.some(r => r.slot === 'before' && r.logged.includes('c1')), 'never re-filed under the new "before" row');
+  // a slot that keeps its name keeps its numbers even when the plan for it changes
+  const dinner = { id: 'd1', time: '18:40', slot: 'dinner', name: 'Salmon and rice', kcal: 700, carbs_g: 70, protein_g: 50, fat_g: 20, assessment: { fits: 'yes', why: 'Good.' } };
+  dinner.plan = F.planSnapshot(before.find(r => r.slot === 'dinner'), dinner.time);
+  const moved = plan.map(m => m.slot === 'dinner' ? Object.assign({}, m, { kcal: m.kcal + 300, carbs_g: m.carbs_g + 60 }) : m);
+  const dr = F.dayMeals(moved, [dinner], { target_kcal: t.kcal }).find(r => r.slot === 'dinner');
+  assert.strictEqual(dr.kcal, dinner.plan.kcal); assert.strictEqual(dr.carbs_g, dinner.plan.carbs_g);
+  assert.ok(dr.frozen && dr.logged.includes('d1'));
+});
+
+ok('#2 plan changes reshape only open slots: an overage rolls into an open slot, never into one that already holds food', () => {
+  const plan = [{ time: '11:00', slot: 'after', kcal: 600, carbs_g: 80, protein_g: 45 }, { time: '12:55', slot: 'lunch', kcal: 600, carbs_g: 60, protein_g: 50 }];
+  const sushi = { id: 's', time: '11:39', slot: 'after', kcal: 1100, carbs_g: 150, protein_g: 50, assessment: { fits: 'yes' } };
+  const open = F.dayMeals(plan, [sushi]);
+  assert.ok(open.find(r => r.slot === 'lunch').kcal < 600, 'open lunch is lighter');
+  const lunchPlate = { id: 'l', time: '13:00', slot: 'lunch', kcal: 300, carbs_g: 10, protein_g: 40, plan: { slot: 'lunch', time: '12:55', kcal: 600, carbs_g: 60, protein_g: 50, at: '13:00' }, assessment: { fits: 'yes' } };
+  const both = F.dayMeals(plan, [sushi, lunchPlate]);
+  const l = both.find(r => r.slot === 'lunch');
+  assert.strictEqual(l.kcal, 600, 'a logged lunch keeps the plan it was eaten under');
+  assert.ok(both.find(r => r.slot === 'after').rolled_out, 'the post-ride meal still rolled (its own grade does not change)');
+});
+
+ok('#9 #12 a late ride past midnight keeps dinner, gets its bottle, and a bedtime snack after it, sorted last', () => {
+  const day = F.fuelDay([lateRide]);
+  const p = F.mealPlan(day, [lateRide], F.targets(day, 300));
+  const dn = p.find(m => m.slot === 'dinner');
+  assert.ok(dn && F.toMin(dn.time) <= 18 * 60 + 30, 'dinner at dinner time: ' + (dn && dn.time));
+  const bottle = p.find(m => m.slot === 'on the bike');
+  assert.ok(bottle && bottle.carbs_g >= 40, 'a 90-minute ride carries its bottle: ' + JSON.stringify(bottle));
+  const after = p[p.length - 1];
+  assert.strictEqual(after.slot, 'after');
+  assert.strictEqual(after.time, '01:00'); assert.strictEqual(after.next_day, true); assert.strictEqual(after.at_min, 1500);
+  assert.ok(/before bed/.test(after.what) && after.protein_g >= 20, after.what);
+  assert.ok(p.every((m, i) => i === 0 || F.mmin(m) >= F.mmin(p[i - 1])), 'in time order, the snack after midnight last');
+  // a 10 p.m. hour still gets its post-ride bite, at 11:30p
+  const tenPm = F.mealPlan('normal', [{ name: 'Zone 1, 60 min', sport: 'VirtualRide', time: '22:00', minutes: 60, tss: 36 }], F.targets('normal', 200));
+  assert.ok(tenPm.some(m => m.slot === 'after' && m.time === '23:30'), JSON.stringify(tenPm.map(m => m.time + ' ' + m.slot)));
+  assert.ok(tenPm.some(m => m.slot === 'dinner'));
+  // nothing after midnight is ever due this morning
+  const due = F.dueSoFar(p, F.targets(day, 300), '07:00');
+  assert.ok(!due.meals || due.kcal < after.kcal + 1000, 'not counted as due at 7 a.m.');
+  assert.ok(F.dueSoFar(p, F.targets(day, 300), '02:00').kcal === 0 || F.dueSoFar(p, F.targets(day, 300), '02:00').meals === 0);
+});
+
+ok('#10 a lift never takes the ride\'s post-ride meal or its words', () => {
+  const day = F.fuelDay([pullLift, lateRide]);
+  const p = F.mealPlan(day, [pullLift, lateRide], F.targets(day, 300));
+  const dn = p.find(m => m.slot === 'dinner');
+  assert.ok(!/within 2 hours of the ride/i.test(dn.what), dn.what);
+  assert.ok(F.toMin(dn.time) >= 18 * 60 + 25, 'dinner after the lift: ' + dn.time);
+  assert.ok(!p.some(m => /within 2 hours of the ride/i.test(m.what) && F.mmin(m) < 23 * 60), 'no ride-sized meal hung on the lift');
+  // a lift alone: no ride meals at all
+  const lone = F.mealPlan('rest', [pullLift], F.targets('rest', 150));
+  assert.ok(!lone.some(m => /ride/i.test(m.what) || m.slot === 'on the bike' || m.slot === 'before' || m.slot === 'after'), JSON.stringify(lone.map(m => m.slot)));
+  // a ride at 3 p.m. and a lift at 5:30: the post-ride meal stays right after the ride
+  const r3 = { name: 'Zone 1, 60 min', sport: 'VirtualRide', time: '15:00', minutes: 60, tss: 36 };
+  const p3 = F.mealPlan('normal', [r3, pullLift], F.targets('normal', 200));
+  const post = p3.find(m => m.post_ride);
+  assert.ok(F.toMin(post.time) >= 16 * 60 && F.toMin(post.time) <= 17 * 60, 'post-ride after the ride, before the lift: ' + post.time);
+});
+
+ok('#12 every ride of 75 minutes or more gets its bottle, the second ride as much as the first', () => {
+  const am = { name: 'Zone 1, 75 min', sport: 'VirtualRide', time: '09:00', minutes: 75, tss: 48 };
+  const pm = { name: 'Zone 1, 90 min', sport: 'VirtualRide', time: '17:00', minutes: 90, tss: 59 };
+  const p = F.mealPlan('normal', [am, pm], F.targets('normal', 500));
+  const bottles = p.filter(m => m.slot === 'on the bike');
+  assert.strictEqual(bottles.length, 2, JSON.stringify(bottles));
+  assert.ok(bottles.every(b => b.carbs_g > 0), JSON.stringify(bottles));
+  assert.ok(F.onBike(75).carbs > 0 && F.onBike(74).carbs === 0);
+});
+
+ok('#13 a slot that appeared after its time had passed is not shown today; one there from the morning is', () => {
+  const ride = { name: 'Zone 1, 60 min', sport: 'VirtualRide', time: '22:00', minutes: 60, tss: 36 };
+  const plain = F.mealPlan('rest', [], F.targets('rest', 0));
+  const first = F.pastOnArrival(plain, {}, '07:00');
+  assert.strictEqual(first.hide.size, 0); assert.ok(Object.values(first.seen).every(v => v === '00:00'));
+  const plan = F.mealPlan('normal', [ride], F.targets('normal', 200));
+  const later = F.pastOnArrival(plan, first.seen, '21:37');
+  assert.ok(later.hide.has('before#0'), 'the 8:00p "before" added at 9:37p is hidden: ' + JSON.stringify([...later.hide]));
+  assert.ok(!later.hide.has('dinner#0'), 'dinner, there since the morning, stays');
+  const rows = F.dayMeals(plan, [], { hide: later.hide });
+  assert.ok(!rows.some(r => r.slot === 'before'));
+  assert.ok(rows.some(r => r.slot === 'dinner') && rows.some(r => r.slot === 'on the bike'));
+  // a slot with food in it is never hidden
+  const bite = { id: 'b', time: '20:05', slot: 'before', kcal: 150, carbs_g: 10, protein_g: 15, assessment: { fits: 'yes' } };
+  assert.ok(F.dayMeals(plan, [bite], { hide: later.hide }).some(r => r.slot === 'before' && r.logged.includes('b')));
+});
+
+ok('#11 the work note never prints null', () => {
+  const note = F.workNote({ pm: 90, dm: 0, pct: null, plannedDay: 'normal', actualDay: 'normal' });
+  assert.ok(!/null/.test(note), note);
+  assert.ok(/\(92%\)/.test(F.workNote({ pm: 90, dm: 83, pct: 92, plannedDay: 'normal', actualDay: 'normal' })));
+  assert.ok(!/null/.test(F.workNote({ pm: 120, dm: 40, pct: null, plannedDay: 'high', actualDay: 'normal' })));
+});
+
+ok('#27 the coach\'s sentence is never cut mid-sentence', () => {
+  assert.strictEqual(F.tidyWhy('Good plate: eggs and toast. Keep dinner to protein and vegetables, no butter, and'), 'Good plate: eggs and toast.');
+  assert.strictEqual(F.tidyWhy('Protein is in and the day is on plan, no butter, and'), 'Protein is in and the day is on plan, no butter.');
+  const long = 'A sentence that is fine. '.repeat(30);
+  const t = F.tidyWhy(long, 420);
+  assert.ok(t.length <= 420 && /\.$/.test(t), t.slice(-30));
+  assert.strictEqual(F.tidyWhy('All good.'), 'All good.');
+});
+
+ok('#16 the same words within twenty minutes are a double, unless he says it was more', () => {
+  const es = [{ id: 'a', time: '19:23', name: 'Two eggs, toast and a banana', written: 'two eggs, toast, a banana' }];
+  assert.strictEqual(F.twinOf(es, 'two eggs, toast, a banana', 19 * 60 + 40).id, 'a');
+  assert.strictEqual(F.twinOf(es, 'two eggs, toast, a banana', 19 * 60 + 50), null, 'past twenty minutes');
+  assert.strictEqual(F.twinOf(es, 'another two eggs, toast, a banana', 19 * 60 + 30), null);
+  assert.strictEqual(F.twinOf(es, 'rice 200 g', 19 * 60 + 30), null);
+});
+
+ok('#4 one drinks list: Hydration lists it, Food counts it, drank is its sum', () => {
+  const es = [
+    { id: 'w', name: 'Water, 250 ml', fluid_ml: 250, drink_only: true, is_drink: true },
+    { id: 'b', name: 'Two beers', fluid_ml: 0, alcohol: 2, is_drink: true },
+    { id: 's', name: 'Protein shake', fluid_ml: 400, kcal: 250, protein_g: 40, is_drink: false },
+    { id: 'm', name: 'Salmon and rice', kcal: 700, is_drink: false },
+    { id: 'x', name: 'Creatine', supplement: true }
+  ];
+  const d = F.drinksOf(es, [{ id: 'w', ml: 250 }, { id: 'b', ml: 710, net_ml: -280 }, { id: 's', ml: 400 }]);
+  assert.deepStrictEqual(d.ids, ['w', 'b', 's']);
+  assert.strictEqual(d.count, 3); assert.strictEqual(d.food_count, 1);
+  assert.strictEqual(d.ml, 1360);
+  assert.strictEqual(d.rows.find(r => r.id === 'b').net_ml, -280);
+});
 console.log(n + ' passed');
