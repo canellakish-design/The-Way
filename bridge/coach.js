@@ -209,7 +209,10 @@ async function runJob(id, who) {
     job.say = m ? m[1].trim() : final.split('\n')[0];
     job.answer = m ? final.slice(m.index + m[0].length).trim() : final;
     // cited links: the ones the answer names, then the rest it searched
-    const seen = new Set(); job.sources = sources.filter(s => s.url && !seen.has(s.url) && seen.add(s.url)).filter(s => job.answer.includes(s.url) || job.answer.includes(s.title || '§')).slice(0, 12);
+    // sources: every link the answer cites, titled from the search results where they match
+    const cited = [...new Set((job.answer.match(/https?:\/\/[^\s)\]<>"]+/g) || []).map(u => u.replace(/[.,;:]+$/, '')))];
+    job.sources = cited.map(u => ({ url: u, title: (sources.find(s => s.url === u) || {}).title || u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 70) })).slice(0, 12);
+    job.steps = job.steps.filter((x, i, a) => a.indexOf(x) === i);   // the same search said once
     job.status = 'done'; job.finished = new Date().toISOString();
     await save();
     const th = await getJSON('coach-thread', { turns: [] });
