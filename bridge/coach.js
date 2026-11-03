@@ -12,6 +12,7 @@ const crypto = require('crypto');
 const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
 const BRIEF = require('./coach-brief');
+const { LIBRARY } = require('./workout-library');
 
 const MODEL = process.env.COACH_MODEL || 'claude-opus-5-5';
 const auth = (req, res) => { if (req.get('x-the-way-app') === '1') return true; res.status(401).json({ error: 'bad token' }); return false; };
@@ -56,6 +57,19 @@ const TOOLS = [
     input_schema: { type: 'object', properties: { path: { type: 'string', description: 'one of the paths above, with its query filled in' } }, required: ['path'], additionalProperties: false }, strict: true },
   { name: 'write_note', description: 'Write one line to your coaching notebook: a decision made with Harry, a pattern you noticed in his data, or something to check next time. Kept between conversations. Not for things the site already records.',
     input_schema: { type: 'object', properties: { note: { type: 'string' }, kind: { type: 'string', enum: ['decision', 'pattern', 'follow-up'] } }, required: ['note', 'kind'], additionalProperties: false }, strict: true },
+  { name: 'schedule_workout', description: 'Put a session on the calendar, or log one already done ("I rode 45 minutes on Zwift at noon": the time it started, today). It goes through the same checks as every other way in: no session before 7 a.m. (if a time could be a.m. or p.m., ask instead of guessing), no second copy of a lift already planned that day. Use library_key when a library session fits; otherwise name, sport and minutes.',
+    input_schema: { type: 'object', properties: {
+      date: { type: 'string', description: 'YYYY-MM-DD' }, time: { type: 'string', description: 'HH:MM 24-hour, or "" for no time' },
+      library_key: { type: 'string', enum: [''].concat(LIBRARY.map(l => l.key)) },
+      name: { type: 'string' }, sport: { type: 'string', enum: ['Ride', 'VirtualRide', 'Run', 'WeightTraining', 'Walk'] }, minutes: { type: 'integer' } },
+      required: ['date', 'time', 'library_key', 'name', 'sport', 'minutes'], additionalProperties: false }, strict: true },
+  { name: 'change_workout', description: 'Change a planned session: a new length (minutes = the new total), a new start (time), another day (new_date), or swap it for a library session. date = the day it is on now; text = what it is called.',
+    input_schema: { type: 'object', properties: {
+      date: { type: 'string' }, text: { type: 'string' }, time: { type: 'string', description: 'new HH:MM or ""' }, new_date: { type: 'string', description: 'YYYY-MM-DD or ""' },
+      minutes: { type: 'integer', description: 'new total length, or 0 to keep' }, library_key: { type: 'string', enum: [''].concat(LIBRARY.map(l => l.key)) } },
+      required: ['date', 'text', 'time', 'new_date', 'minutes', 'library_key'], additionalProperties: false }, strict: true },
+  { name: 'log_food', description: 'Log a meal, snack or drink he tells you he had, in his words with amounts (the same reader the Food page uses grades it). One call per meal or drink. Only when he says he ate or drank it.',
+    input_schema: { type: 'object', properties: { text: { type: 'string' }, kind: { type: 'string', enum: ['meal', 'drink'] } }, required: ['text', 'kind'], additionalProperties: false }, strict: true },
   { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
   { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6 }
 ];
@@ -70,7 +84,7 @@ How you work:
 - When the question turns on evidence (fuelling, protein timing, sleep, HRV, training load, masters athletes, weight loss without losing power, supplements), search for current research: position stands (ISSN, ACSM, IOC, ACSM/AND/DC), systematic reviews and meta-analyses first, then strong trials. Fetch the paper or the abstract when you rely on it. Say how strong the evidence is, plainly.
 - Reason to one clear call. Weigh his data against the evidence and his goals; say what you would do, why, and what would change your mind.
 - Write to your notebook when you make a decision with him or notice a pattern worth remembering. Read your notebook (below) before answering.
-- You change nothing in the app. If something should change, say exactly what and where.
+- You can act: schedule_workout puts a session on the calendar or logs one already done, change_workout moves, lengthens or swaps a planned one, log_food logs what he ate or drank. Act when he asks you to, or when he agrees to what you proposed; say plainly in your answer what you changed. Never before 7 a.m.; when a time could be a.m. or p.m., ask. You never delete anything: removals are his, on the page.
 
 Your answer has two parts, in this order:
 SAY: one or two sentences, spoken aloud, the call and the reason, to him as "you".
@@ -105,8 +119,17 @@ async function runJob(id) {
   await setJSON(key, job);
   const step = async s => { job.steps.push(s); await setJSON(key, job).catch(() => {}); };
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client = new (Anthropic.default || Anthropic)({ apiKey: (process.env.ANTHROPIC_API_KEY || '').trim(), timeout: 600000 });
+    const key = (process.env.ANTHROPIC_API_KEY || '').trim();
+    if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
+    // the Messages API, called directly as the rest of the bridge does
+    const create = async body => {
+      const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+        headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body) });
+      const j = await r.json();
+      if (!r.ok) throw new Error('coach ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
+      return j;
+    };
     const notebook = (await getJSON('coach-notebook', { notes: [] })).notes || [];
     const thread = (await getJSON('coach-thread', { turns: [] })).turns || [];
     const messages = [];
@@ -115,8 +138,8 @@ async function runJob(id) {
     messages.push({ role: 'user', content: job.text });
     let final = null, sources = [];
     for (let hop = 0; hop < 16; hop++) {
-      const res = await client.beta.messages.create({
-        model: MODEL, max_tokens: 16000, betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default',
+      const res = await create({
+        model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
         system: system(notebook), tools: TOOLS, messages
       });
@@ -132,6 +155,15 @@ async function runJob(id) {
       if (res.stop_reason !== 'tool_use' || !uses.length) { final = res.content.filter(b => b.type === 'text').map(b => b.text).join('\n').trim(); break; }
       const results = await Promise.all(uses.map(async u => {
         if (u.name === 'read_site') { await step(`reading ${u.input.path}`); const out = await readSite(job.base, u.input.path); return { type: 'tool_result', tool_use_id: u.id, content: typeof out === 'string' ? out : JSON.stringify(out), is_error: typeof out !== 'string' }; }
+        if (u.name === 'schedule_workout' || u.name === 'change_workout' || u.name === 'log_food') {
+          const V = require('./voice'), i = u.input || {};
+          const a = u.name === 'schedule_workout' ? { type: 'workout', date: i.date, time: i.time, library_key: i.library_key, name: i.name, sport: i.sport, minutes: i.minutes }
+            : u.name === 'change_workout' ? { type: 'workout_change', date: i.date, text: i.text, time: i.time, new_date: i.new_date, minutes: i.minutes, library_key: i.library_key }
+            : { type: i.kind === 'drink' ? 'drink' : 'meal', text: i.text };
+          let out; try { out = await V.run(a, {}); } catch (e) { out = { ok: false, summary: e.message }; }
+          await step(`${out.ok ? 'done' : 'refused'}: ${String(out.summary || '').slice(0, 90)}`);
+          return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out), is_error: !out.ok };
+        }
         if (u.name === 'write_note') {
           const nb = await getJSON('coach-notebook', { notes: [] });
           nb.notes = (nb.notes || []).concat([{ date: tz.todayKey(), kind: u.input.kind, note: String(u.input.note).slice(0, 400) }]).slice(-200);
