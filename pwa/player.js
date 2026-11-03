@@ -258,13 +258,16 @@
     const met = n / 60 >= g.target_min;
     return { frac: g.target_min ? Math.min(1, n / 60 / g.target_min) : 0, big: m(n), of: `of ${g.target_min} min`, lab: "ridden", band: met ? "go" : "run", sub: met ? "goal met" : "", met };
   }
+  // a disc that grows from the centre out to the border as the goal is met; its area is the share done, so half the goal is half the circle
   function ringSVG(st, size){
-    const S = size || 200, sw = Math.max(8, Math.round(S / 14)), r = (S - sw) / 2 - 2, C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, st.frac || 0));
+    const S = size || 200, c = S / 2, R = S / 2 - 3, f = Math.max(0, Math.min(1, st.frac || 0)), r = R * Math.sqrt(f);
     return `<svg class="gr-svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" role="img" aria-label="${esc(`${st.big} ${st.of} ${st.lab}`)}">
-      <circle class="gr-track" cx="${S / 2}" cy="${S / 2}" r="${r.toFixed(1)}" stroke-width="${sw}"/>
-      ${f > 0 ? "" : "<!-- nothing yet -->"}<circle class="gr-arc gr-${st.band}"${f > 0 ? "" : ' style="display:none"'} cx="${S / 2}" cy="${S / 2}" r="${r.toFixed(1)}" stroke-width="${sw}" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${S / 2} ${S / 2})"/>
-      <text class="gr-big" x="${S / 2}" y="${(S / 2 + S * 0.08).toFixed(1)}" text-anchor="middle" font-size="${Math.round(S * 0.3)}">${st.big}</text>
-      <text class="gr-of" x="${S / 2}" y="${(S / 2 + S * 0.22).toFixed(1)}" text-anchor="middle" font-size="${Math.max(10, Math.round(S * 0.065))}">${esc(st.of)}</text></svg>`;
+      <circle class="gr-bg" cx="${c}" cy="${c}" r="${R.toFixed(1)}"/>
+      <circle class="gr-half" cx="${c}" cy="${c}" r="${(R * Math.SQRT1_2).toFixed(1)}"/>
+      ${r > 0.5 ? `<circle class="gr-fill gr-${st.band}" cx="${c}" cy="${c}" r="${r.toFixed(1)}"/>` : ""}
+      <circle class="gr-rim${f >= 1 ? " gr-" + st.band : ""}" cx="${c}" cy="${c}" r="${R.toFixed(1)}"/>
+      <text class="gr-big" x="${c}" y="${(c + S * 0.08).toFixed(1)}" text-anchor="middle" font-size="${Math.round(S * 0.3)}">${st.big}</text>
+      <text class="gr-of" x="${c}" y="${(c + S * 0.22).toFixed(1)}" text-anchor="middle" font-size="${Math.max(10, Math.round(S * 0.065))}">${esc(st.of)}</text></svg>`;
   }
   function goalHTML(g, samples, size){
     if (!g) return "";
