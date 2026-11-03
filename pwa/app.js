@@ -1176,7 +1176,7 @@ function paintChain(c){
   if (!c || !c.links) return;
   // short units, so each fits beside its number at 390 px. Plan is the planning score (how much of the seven
   // days ahead is placed), not the calendar's "done of plan"; Lift reads as the Lift page counts ("1 of 1 due").
-  const UNIT = { plan: "placed", fuel: "fed", sleep: "h", food: "kcal", micros: "avg", water: "bal", work: "done", lift: "of 5", recovery: "band", weight: "lb/wk" };
+  const UNIT = { plan: "placed", fuel: "fuelled", sleep: "h", food: "kcal", micros: "avg", water: "bal", work: "done", lift: "of 5", recovery: "band", weight: "lb/wk" };
   const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
   for (const [ck, k, label] of CHAIN){
     let L = c.links[ck]; const el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
@@ -1235,7 +1235,7 @@ function macrosFromDay(day){
 function todayCell(ck, L){
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
   // one headline per box (the week's %); fuel now is a word on the today line, not a second number
-  if (ck === "fuel") return { num: "", word: L.today == null ? "" : `now ${L.today}%`, tone: L.today_tone || "none" };
+  if (ck === "fuel") return L.today != null ? { num: `${L.today}%`, word: L.today_word || "today", tone: L.today_tone || "none" } : { num: "—", word: L.today_word || "no ride yet", tone: "none" };
   if (ck === "plan") return { num: L.today ? `${L.today}` : "—", word: L.today_word || "rest", tone: L.today_state || "none" };
   if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? (L.today_word || "") : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }

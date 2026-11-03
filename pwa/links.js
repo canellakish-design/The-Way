@@ -280,13 +280,21 @@
           <span class="u">${esc(dflt || "")}</span>${r && r.too_late && !taken ? `<span class="small hu-dim">${esc(r.word || "too late today")}</span>` : `<button class="fu-log" data-supp="${esc(k)}">${taken ? "log again" : "log it"}</button>`}</div>`; };
       // the week: one thin bar per ride, the target a white tick
       const wk = (L && L.list) || [];
-      const wrow = c => { const bottle = c.kind === "bottle", col = TC[c.ok ? "good" : c.near ? "warn" : "bad"];
-        const scale = bottle ? Math.max(c.plan_g || 0, c.got_g || 0, 1) * 1.15 : 100, v = bottle ? (c.got_g || 0) : (c.pct || 0), tg = bottle ? (c.plan_g || 0) : (c.need || 0);
-        return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}${bottle ? " · on the bike" : ""}</span>
-          <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, v / scale * 100).toFixed(1)}%;background:${col}"></i><i class="tick" style="left:${(tg / scale * 100).toFixed(1)}%"></i></span>
-          <span class="fu-v"><b style="color:${col}">${bottle ? `${c.got_g}` : `${c.pct}%`}</b> / ${bottle ? `${c.plan_g} g` : `${c.need}%`}</span></div>`; };
+      // each ride: what went in against the plan, 100% the plan; under reads short, over reads long. The parts underneath.
+      const PART = { pre: "before", bottle: "on the bike", supp: "supplements" };
+      const wrow = c => { if (c.kind !== "ride") return ""; const col = TC[c.ok ? "good" : c.near ? "warn" : "bad"], scale = Math.max(125, c.pct || 0) * 1.05;
+        const parts = (c.parts || []).map(p => `${PART[p.kind] || p.kind} ${p.kind === "supp" ? `${p.got} of ${p.due}` : `${p.got_g} of ${p.plan_g} g`}`).join(" · ");
+        return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}<span class="small hu-dim"> ${esc(parts)}</span></span>
+          <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, Math.min(c.pct || 0, 100) / scale * 100).toFixed(1)}%;background:${col}"></i>${(c.pct || 0) > 100 ? `<i class="over" style="left:${(100 / scale * 100).toFixed(1)}%;width:${(((c.pct || 0) - 100) / scale * 100).toFixed(1)}%"></i>` : ""}<i class="tick" style="left:${(100 / scale * 100).toFixed(1)}%"></i></span>
+          <span class="fu-v"><b style="color:${col}">${c.pct}%</b></span></div>`; };
       // one headline: fuel now. The week's share of checks met heads the week's own section below.
-      el.innerHTML = ttlHTML("Fuel") + balanceHTML(food && food.balance, food && food.target && food.target.base_burn) + top + `
+      // the headline: how much of what the plan asked for went in, this week and today (100% is the plan)
+      const fp = v => v == null ? "—" : `${v}<span class="ln-uu">%</span>`;
+      const fed = `<div class="hu-fields two ln-top fu-fed">
+          <div class="hu-field big"><span class="k">Fuelled this week</span><span class="n ${HU[L && L.state] || HU.none}">${fp(L && L.week)}</span><span class="u">${L && L.rides ? `${L.rides} ride${L.rides === 1 ? "" : "s"} · 100% is the plan` : "no rides yet"}</span></div>
+          <div class="hu-field big"><span class="k">Today</span><span class="n ${HU[L && L.today_tone] || HU.none}">${fp(L && L.today)}</span><span class="u">${esc((L && L.today_word) || "")}</span></div>
+        </div>`;
+      el.innerHTML = ttlHTML("Fuel") + fed + balanceHTML(food && food.balance, food && food.target && food.target.base_burn) + top + `
         <div class="hu-tiles four fu-carbs">
           <button class="hu-tile" data-item="tailwind"><b>50 g</b><span>Tailwind</span></button><button class="hu-tile" data-item="gel"><b>22 g</b><span>Gel</span></button><button class="hu-tile" data-item="figbar"><b>38 g</b><span>Fig bar</span></button><button class="hu-tile" data-item="banana"><b>27 g</b><span>Banana</span></button>
         </div>
@@ -296,7 +304,7 @@
         ${rx.length ? `<details class="why"><summary>why</summary><div class="small">${rx.map(x => `<b>${esc(x.name)}</b>${x.time ? ` at ${esc(hm12(x.time))}` : ""}: ${esc(x.why || "")}.`).join(" ")}</div></details>` : `<div class="small">None due today. Beetroot is due 2 to 3 hours before a ride, bicarbonate before a hard one.</div>`}
         <span class="small" id="fuMsg"></span>
         <div class="card"><h4>The tank today</h4>${e && B.energyHTML ? B.energyHTML(e, { noHead: true, noLegs: true }) : `<div class="small">Starts with the first meal.</div>`}</div>
-        <div class="ln-sec"><span class="hu-lab">Rides this week${L && L.week != null ? ` · <span class="${HU[L.state] || HU.none}">${L.week}% of checks</span>` : ""}</span></div>
+        <div class="ln-sec"><span class="hu-lab">Fuelled this week${L && L.week != null ? ` · <span class="${HU[L.state] || HU.none}">${L.week}% of the plan</span>` : ""}</span></div>
         ${wk.length ? `<div class="fu-wk">${wk.slice().reverse().map(wrow).join("")}</div>
             <div class="small">${L.ok} of ${L.checks} checks met${L.rx && L.rx.beetroot ? ` · beetroot ${L.rx.beetroot.taken} of ${L.rx.beetroot.due} rides` : ""}.</div>` : `<div class="small">${!L && pending ? "reading the week…" : "No rides this week to check yet."}</div>`}
         ${whyHTML(L)}`;
