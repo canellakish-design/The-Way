@@ -233,6 +233,38 @@ V.live = async function(){
   load();
 };
 
+// The week's score card (Food, today): the week's score with each day's, and what would raise it, as actions.
+// The score: half how close the day's carbs, protein and fat came to their targets, half five checks (protein at
+// the main meals, vegetables or fruit, starch where the plan puts it, nothing ultra-processed, fed after the ride).
+async function drawFoodWeek(){
+  const el = document.getElementById("fWeek"); if (!el) return;
+  let w = null; try{ w = await bridge("/food/week"); }catch{ return; }
+  if (!w || !w.days) return;
+  const tone = s => s == null ? "var(--muted)" : s >= 80 ? "var(--green)" : s >= 60 ? "var(--amber)" : "var(--red)";
+  const dshort = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
+  const scored = w.days.filter(d => d.logged && d.overall != null);
+  const tiles = w.days.map(d => `<span class="fw-day${d.date === w.today ? " today" : ""}"><b style="color:${tone(d.overall)}">${d.overall != null ? d.overall : "—"}</b><span>${dshort(d.date)}</span></span>`).join("");
+  // what would raise it: the checks that fail most, then the macro that misses most, each as the thing to do
+  const DO = { protein: "Protein at every main meal", plants: "Vegetables or fruit at two meals", carbs: "Starch where the plan puts it", processed: "Nothing ultra-processed", post: "Eat within two hours of the ride" };
+  const fails = {};
+  for (const d of scored) for (const c of d.checks || []) { fails[c.key] = fails[c.key] || { n: 0, of: 0, label: c.label }; fails[c.key].of++; if (!c.ok) fails[c.key].n++; }
+  const checkLines = Object.entries(fails).filter(([, f]) => f.n > 0).sort((a, b) => b[1].n - a[1].n)
+    .map(([k, f]) => ({ pts: Math.round(f.n / Math.max(1, scored.length) * 10), text: `${DO[k] || f.label}: missed ${f.n} of ${f.of} day${f.of === 1 ? "" : "s"}` }));
+  const MAC = { carbs_g: "Carbs", protein_g: "Protein", fat_g: "Fat" };
+  const macLines = Object.keys(MAC).map(k => { const ds = scored.filter(d => d.macros && d.macros[k] && d.macros[k].score != null);
+      const off = ds.filter(d => d.macros[k].score < 70), over = off.filter(d => d.macros[k].direction === "over").length, under = off.length - over;
+      if (!off.length) return null;
+      const lost = Math.round(ds.reduce((a, d) => a + (100 - d.macros[k].score), 0) / Math.max(1, ds.length) / 3 / 2);
+      return { pts: lost, text: `${MAC[k]}: off on ${off.length} of ${ds.length} day${ds.length === 1 ? "" : "s"}${over && under ? ` (${over} over, ${under} under)` : over ? " (over)" : " (under)"}` }; }).filter(Boolean);
+  const todo = checkLines.concat(macLines).sort((a, b) => b.pts - a.pts).slice(0, 5);
+  const today = w.days.find(d => d.date === w.today), open = today && today.logged ? (today.checks || []).filter(c => !c.ok) : [];
+  el.innerHTML = `<div class="card fw-card">
+    <div class="fw-head"><span class="fw-big" style="color:${tone(w.week)}">${w.week != null ? w.week : "—"}</span><span class="fw-days">${tiles}</span></div>
+    ${todo.length ? `<div class="hu-lab">To raise it</div><ul class="fw-todo">${todo.map(t => `<li><span>${esc(t.text)}</span><b>+${t.pts}</b></li>`).join("")}</ul>` : scored.length ? `<div class="small">Every check passed this week.</div>` : `<div class="small">Nothing logged yet this week.</div>`}
+    ${open.length ? `<div class="hu-lab">Today, still open</div><ul class="fw-todo"><li><span>${open.map(c => esc(DO[c.key] || c.label)).join(" · ")}</span></li></ul>` : ""}
+    <details class="why"><summary>how it's scored</summary><div class="small">A day is half how close carbs, protein and fat came to their targets, half five checks: protein at the main meals, vegetables or fruit, starch where the plan puts it, nothing ultra-processed, fed within two hours of a ride. The week is the average of the logged days. Green at 80, amber at 60. "+n" is roughly what each line is costing the week's score.</div></details>
+  </div>`;
+}
 V.food = async function(){
   const p = params(), today = localToday();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
@@ -243,6 +275,7 @@ V.food = async function(){
     <div class="pweekhead fd-day"><h2 class="ptitle">${isToday?"Today":esc(dayLabel(date))}</h2>
       <div class="pweeknav"><button id="fPrev" aria-label="Previous day">‹</button><button id="fToday">Today</button><button id="fNext" aria-label="Next day" ${isToday?"disabled":""}>›</button></div></div>
     <div id="fMacros"></div>
+    ${isToday ? `<div id="fWeek"></div>` : ""}
     ${isToday ? `<div class="fd-log" id="snap">
       <div class="hu-tiles fd-tiles">
         <button class="hu-tile primary snapbtn" id="snapBtn">${ICON.cam}<b>Snap a meal</b></button>
@@ -270,6 +303,7 @@ V.food = async function(){
       <div id="snapResult"></div>
     </div>` : ""}
     <div id="fDay"><div class="card"><div class="small">Loading the day…</div></div></div>`;
+  if (isToday) drawFoodWeek();
   document.getElementById("fPrev").onclick = ()=>go(keyAdd(date,-1));
   document.getElementById("fNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
   document.getElementById("fToday").onclick = ()=>go(today);

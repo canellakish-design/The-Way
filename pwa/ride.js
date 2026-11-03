@@ -33,10 +33,11 @@ V.ride = async function(){
   document.getElementById("rNext").onclick = ()=>{ location.hash = "#ride?date=" + keyAdd(date, 1); };
 
   const back = Math.max(0, Math.round((new Date(today) - new Date(date)) / 864e5));
-  const [sched, wx, cal, food, scores] = await Promise.all([
+  const [sched, wx, cal, wk, food, scores] = await Promise.all([
     bridge(`/schedule?days=${Math.max(2, 2 + Math.round((new Date(date) - new Date(today)) / 864e5))}&back=${back}`).catch(()=>null),
     bridge("/weather/outlook").catch(()=>null),
     bridge(`/calendar?from=${date}&to=${date}`).catch(()=>null),
+    bridge(`/calendar?from=${keyAdd(today, -6)}&to=${today}`).catch(()=>null),
     date === today ? bridge("/food/today").catch(()=>null) : bridge(`/food/day?date=${date}`).catch(()=>null),
     bridge("/scores").catch(()=>null)
   ]);
@@ -224,6 +225,7 @@ V.ride = async function(){
   document.getElementById("ridePage").innerHTML = `
     ${hero}
     ${rideLine}
+    <section class="rd-sec"><span class="hu-lab">This week · planned against done</span>${typeof weekRidesHTML === "function" ? weekRidesHTML(wk, today) : ""}</section>
     <section class="rd-sec"><span class="hu-lab">The day · ${esc(d.label || dayName)}${w && w.sunrise ? ` · light ${esc(hm12(w.sunrise))}–${esc(hm12(w.sunset))}` : ""}</span>
       ${ribbon}
       ${w ? "" : `<div class="small">No forecast for this day yet.</div>`}

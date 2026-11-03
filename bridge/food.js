@@ -812,6 +812,29 @@ function attach(app) {
   app.get('/food/today', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await dayReport(tz.todayKey())); } catch (e) { res.status(500).json({ error: e.message }); } });
 
+  // The week's food score, day by day, with what each day missed: the Food page's score card. A past day's row is
+  // kept for an hour (a correction to yesterday shows within the hour); today is read fresh.
+  app.get('/food/week', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const today = tz.todayKey(), cache = await getJSON('food-week-cache', { rows: {} });
+      const rowOf = r => { const c = r.compliance || {}, pm = c.macros && c.macros.per_macro || {};
+        const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
+        return { logged, overall: logged ? c.overall : null, band: logged && c.band ? c.band.word : null, kcal: r.actual ? r.actual.kcal : null, kcal_target: r.target ? r.target.kcal : null,
+          macros: Object.fromEntries(['carbs_g', 'protein_g', 'fat_g'].map(k => [k, pm[k] ? { actual: pm[k].actual, target: pm[k].target, score: pm[k].score, direction: pm[k].direction } : null])),
+          macro_score: c.macros ? c.macros.overall : null, guide_score: c.guidelines ? c.guidelines.score : null,
+          checks: ((c.guidelines && c.guidelines.checks) || []).map(x => ({ key: x.key, label: x.label, ok: !!x.ok, detail: x.detail || '' })) }; };
+      const days = []; let dirty = false;
+      for (let i = 6; i >= 0; i--) {
+        const d = tz.shiftKey(today, -i);
+        let row = d !== today && cache.rows[d] && Date.now() - (cache.rows[d].at || 0) < 3600e3 ? cache.rows[d].row : null;
+        if (!row) { try { row = rowOf(await dayReport(d)); if (d !== today) { cache.rows[d] = { at: Date.now(), row }; dirty = true; } } catch (e) { row = { logged: false, overall: null, checks: [], macros: {} }; } }
+        days.push(Object.assign({ date: d }, row));
+      }
+      if (dirty) { for (const k of Object.keys(cache.rows)) if (k < tz.shiftKey(today, -14)) delete cache.rows[k]; await setJSON('food-week-cache', cache).catch(() => {}); }
+      const scored = days.filter(x => x.logged && x.overall != null);
+      res.json({ today, days, week: scored.length ? Math.round(scored.reduce((a, x) => a + x.overall, 0) / scored.length) : null, days_logged: scored.length });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
+
   app.get('/food/day', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await dayReport(isDate(req.query.date) ? req.query.date : tz.todayKey())); }
     catch (e) { res.status(500).json({ error: e.message }); } });
