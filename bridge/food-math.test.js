@@ -75,6 +75,10 @@ ok('mealMatch: starch is only a fault where the plan asked for few carbs; a carb
   assert.ok(!/starch/.test(F.mealMatch({ slot: 'breakfast', kcal: 640, carbs_g: 90, protein_g: 45 }, plate).rules.word));
   assert.strictEqual(F.mealMatch({ slot: 'dinner', kcal: 640, carbs_g: 20, protein_g: 45, low_carb: true }, plate).rules.word, 'heavy on starch');
 });
+ok('mealMatch: an overage taken from a later meal stays green but says so', () => {
+  const m = F.mealMatch({ slot: 'before', kcal: 205, carbs_g: 35, protein_g: 0, rolled_out: { to: 'breakfast', kcal: 95 } }, [{ kcal: 300, carbs_g: 54, protein_g: 9, assessment: { fits: 'yes' } }]);
+  assert.strictEqual(m.key, 'green'); assert.ok(/over, taken from breakfast/.test(m.word), m.word);
+});
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
 });

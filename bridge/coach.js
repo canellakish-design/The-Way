@@ -121,7 +121,6 @@ async function runJob(id, who) {
   job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = who || 'in-process';
   await save();
   const T0 = Date.now();
-  job.trace = []; global.__coachTrace = m => { job.trace.push(`${Math.round((Date.now() - T0) / 100) / 10} s ${m}`); save(); };
   const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await save(); };
   try {
     const key = (process.env.ANTHROPIC_API_KEY || '').trim();
@@ -129,13 +128,10 @@ async function runJob(id, who) {
     // the Messages API, called directly as the rest of the bridge does
     const create = async (body, ms) => {
       const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms || 300000);
-      const payload = JSON.stringify(body); console.log('[coach] model call', payload.length, 'bytes');
-      if (global.__coachTrace) global.__coachTrace(`call sent, ${Math.round(payload.length / 1024)} kB`);
+      const payload = JSON.stringify(body); 
       const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ac.signal,
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'Content-Type': 'application/json' },
         body: payload });
-      console.log('[coach] model status', r.status);
-      if (global.__coachTrace) global.__coachTrace(`status ${r.status}`);
       const j = await r.json().finally(() => clearTimeout(timer));
       if (!r.ok) throw new Error('coach ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
       return j;
@@ -248,15 +244,7 @@ function attach(app) {
     if (!job) return res.status(404).json({ error: 'no such question' });
     res.json(job);
   });
-  // how long a function may run here: waits ?s seconds (at most 90), then answers
-  app.get('/coach/wait', async (req, res) => { if (!auth(req, res)) return;
-    const s = Math.min(90, Math.max(0, Number(req.query.s) || 0)); await new Promise(r => setTimeout(r, s * 1000)); res.json({ waited: s }); });
   app.get('/coach/thread', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-thread', { turns: [] })); });
-  app.get('/coach/beatstart/:b', async (req, res) => { if (!auth(req, res)) return;
-    const host = req.get('x-forwarded-host') || req.get('host'); const base = 'https://' + host;
-    const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ beat: req.params.b }) });
-    res.json({ started: r.status, base }); });
-  app.get('/coach/beat/:b', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-beat-' + String(req.params.b).replace(/\W/g, ''), null)); });
   app.get('/coach/notebook', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-notebook', { notes: [] })); });
 }
 

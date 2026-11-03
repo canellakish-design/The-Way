@@ -204,7 +204,10 @@ async function report() {
     // today: the balance now, the same number the tile shows
     // today counts the rides whose fuelling has begun (from four hours before the start): one further off has had no chance yet
     const nowT = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
-    todayRow = { fuel: fuelChecks(r).filter(c => require('./food-math').toMin(c.time) - 240 <= nowT).map(c => require('./food-math').toMin(c.time) > nowT ? Object.assign({}, c, { so_far: true }) : c), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+    // a ride not yet started is scored on what is due so far: the food before it and the supplements, not the bottle
+    const soFar = c => { const parts = (c.parts || []).filter(p => p.kind !== 'bottle'); if (!parts.length) return null; const ratio = parts.reduce((a, p) => a + p.ratio, 0) / parts.length;
+      return Object.assign({}, c, { parts, ratio: Math.round(ratio * 100) / 100, pct: Math.round(ratio * 100), ok: ratio >= 0.9 && ratio <= 1.1, near: ratio >= 0.75 && ratio <= 1.25, so_far: true }); };
+    todayRow = { fuel: fuelChecks(r).filter(c => require('./food-math').toMin(c.time) - 240 <= nowT).map(c => require('./food-math').toMin(c.time) > nowT ? soFar(c) : c).filter(Boolean), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
       ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
       hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))),

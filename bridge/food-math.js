@@ -666,6 +666,9 @@ function mealMatch(plan, logged, ctx) {
   let keyM = w <= 0.2 ? 'green' : w <= 0.4 || !worst.both ? 'yellow' : 'red';
   const dir = worst.off > 0 ? 'over' : 'under';
   let wordM = keyM === 'green' ? 'macros on' : `${worst.k} ${Math.round(Math.abs(worst.off) * 100)}% ${dir}`;
+  // an overage the plan took out of a later meal is not a miss, but it is said, so the slot and the fuel numbers agree
+  const rolledOver = plan.rolled_out ? parts.filter(p => p.both && p.off > 0.2).sort((a, b) => b.off - a.off)[0] : null;
+  if (rolledOver && keyM === 'green') wordM = `${rolledOver.k} ${Math.round(rolledOver.off * 100)}% over, taken from ${plan.rolled_out.to || "the next meal"}`;
   // A light plate that still brings its protein is never a red: under is a deficit, not a miss.
   // When the day is already at its calories, the light plate is the right call and reads green.
   const proteinIn = !(plan.protein_g > 0) || got.protein_g >= 0.8 * plan.protein_g;
@@ -705,7 +708,7 @@ function mealMatch(plan, logged, ctx) {
   }
   if (plateWhy) whyR = plateWhy;
   const key = RANK[keyR] > RANK[keyM] ? keyR : keyM;
-  const word = key === 'green' ? 'as planned' : RANK[keyR] > RANK[keyM] ? wordR : (RANK[keyM] > RANK[keyR] ? wordM : `${wordM} · ${wordR}`);
+  const word = key === 'green' ? (rolledOver ? wordM : 'as planned') : RANK[keyR] > RANK[keyM] ? wordR : (RANK[keyM] > RANK[keyR] ? wordM : `${wordM} · ${wordR}`);
   return { key, word, kcal: got.kcal, carbs_g: got.carbs_g, protein_g: got.protein_g, worst: worst.k,
     macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
