@@ -28,6 +28,8 @@ function clock(iso){ const d=new Date(iso); if (isNaN(d)) return ""; let h=d.get
 const toneC = t => t==="good"?"var(--green)":t==="warn"?"var(--amber)":t==="bad"?"var(--red)":"var(--ink)";
 const FIT = { yes:{word:"fits", tone:"good"}, partly:{word:"partly", tone:"warn"}, no:{word:"miss", tone:"bad"} };
 const MEALS = ["breakfast","lunch","dinner","snack","on the bike"];
+// the slot an entry was given when it was logged, in words: one name on the verdict, the card and the Day row
+const slotWord = s => s === "after" ? "post-ride" : s === "before" ? "pre-ride" : (s || "");
 
 /* ---- pieces shared with the front page ---- */
 function fitBadge(a){ const f = FIT[a && a.fits] || FIT.partly; return `<span class="fit" style="color:${toneC(f.tone)};border-color:${toneC(f.tone)}">${f.word}</span>`; }
@@ -158,7 +160,7 @@ function hydrationHTML(h, opt){
     ${ses?`<div class="small">${ses}</div>`:""}
     ${h.advice?`<div class="egadvice" style="border-color:${verdictCol(nb.key)}">${esc(h.advice)}</div>`:""}
     ${h.weigh?`<div class="small">Scale: ${h.weigh.pre_lb.toFixed(1)} → ${h.weigh.post_lb.toFixed(1)} lb around the ride, ${(h.weigh.lost_ml/1000).toFixed(1)} L lost${h.weigh.modelled_ml?` (the model said ${(h.weigh.modelled_ml/1000).toFixed(1)})`:""}.</div>`:""}
-    <details class="why"><summary>what it counts</summary><div class="small">Water against the start of the day, which is yesterday's end less the night (a deficit carried to bed is still there at breakfast; a surplus is not), averaged with the scale when it has a morning reading against the last three days. It drifts down about 100 ml an hour awake (breath, skin, urine), half that asleep; each drink arrives as the stomach empties, most of it within 45 minutes; food brings its own water. A ride takes sweat at the rate the power, the air and the weather give: the fan on the trainer, the wind and the temperature on the road. Water drunk after a ride is kept at 70%, 90% when it carries salt. Alcohol brings its water less 100 ml for every 10 g of ethanol (a pint of lager is still about 350 ml ahead, a shot is behind); drinks after 8 p.m. are passed in the night rather than kept, and each costs the morning about 100 ml more. Coffee and tea count in full: in a daily drinker caffeine is not a diuretic. Under 1% of body weight down is fine, 1 to 2% costs endurance, over 2% is dry. A little above the morning is topped up and still green: the kidneys clear up to a litre or so in a few hours. Blue, past 1.5 L over, is too much; drinking far beyond what was lost is the dangerous side after a long day.${h.calibration&&h.calibration.points?` Tuned by ${h.calibration.points} post-ride weigh-in${h.calibration.points===1?"":"s"} (×${h.calibration.k}).`:" Weigh in after a ride and it tunes itself to you."}</div></details>
+    <details class="why"><summary>what it counts</summary><div class="small">Water against the start of the day, which is yesterday's end less the night (a deficit carried to bed is still there at breakfast; a surplus is not), averaged with the scale when it has a morning reading against the last three days. It drifts down about 100 ml an hour awake (breath, skin, urine), half that asleep; each drink arrives as the stomach empties, most of it within 45 minutes; food brings its own water. A ride takes sweat at the rate the power, the air and the weather give: the fan on the trainer, the wind and the temperature on the road. Water drunk after a ride is kept at 70%, 90% when it carries salt. Alcohol is a net loss: its own water is passed with it, and each 10 g of ethanol takes about 100 ml more, so a 12 oz beer leaves the balance about 140 ml lower; each drink after 8 p.m. costs the morning about 100 ml more again. "Drank" counts every drink on the list at the volume poured, beer included; the balance counts what the body keeps. Coffee and tea count in full: in a daily drinker caffeine is not a diuretic. Under 1% of body weight down is fine, 1 to 2% costs endurance, over 2% is dry. A little above the morning is topped up and still green: the kidneys clear up to a litre or so in a few hours. Blue, past 1.5 L over, is too much; drinking far beyond what was lost is the dangerous side after a long day.${h.calibration&&h.calibration.points?` Tuned by ${h.calibration.points} post-ride weigh-in${h.calibration.points===1?"":"s"} (×${h.calibration.k}).`:" Weigh in after a ride and it tunes itself to you."}</div></details>
   </div>`;
 }
 function wireHydration(root, h){
@@ -273,7 +275,7 @@ V.food = async function(){
   document.getElementById("fNext").onclick = ()=>{ if (!isToday) go(keyAdd(date,1)); };
   document.getElementById("fToday").onclick = ()=>go(today);
 
-  let day = null;
+  let day = null, saving = "";
   const draw = ()=>{
     const el = document.getElementById("fDay");
     if (!el) return;
@@ -284,23 +286,31 @@ V.food = async function(){
     const t = day.target || {};
     const BARS = [["protein","protein_g","var(--red)"],["carbs","carbs_g","var(--carb)"],["fat","fat_g","var(--fat)"]];
     // head-unit bars: the number big on the label side, the target a white tick with its number above;
-    // past the tick the bar runs on hatched (faint inside 20%, full past it); a ✓, a +N or what is left at the end
+    // past the tick the bar runs on hatched (faint inside 10%, full past it); a ✓ only within 10% either side,
+    // +N past that (over is over, carbs as much as protein), or what is left to go
     const bars = `<div class="fd-mac">${BARS.map(([l,k,col]) => { const a = sum(k), g = Math.round(t[k] || 0);
         const scale = Math.max(g / 0.78, a / 0.84, 1), tk = g / scale * 100, fp = Math.min(a, g) / scale * 100, op = a > g ? (a - g) / scale * 100 : 0;
-        const over = g > 0 && a > g * 1.2, left = Math.max(0, g - a);
-        const note = !g ? "" : over ? `<span class="fd-note hu-stop">+${a - g}</span>` : a >= g * 0.9 ? `<span class="fd-note hu-go">✓</span>` : "";
-        const togo = g && !over && a < g * 0.9 ? `<span class="fd-togo">${left} to go</span>` : "";
+        const over = g > 0 && a > g * 1.1, near = g > 0 && a >= g * 0.9 && !over, left = Math.max(0, g - a);
+        const note = !g ? "" : over ? `<span class="fd-note hu-stop">+${a - g}</span>` : near ? `<span class="fd-note hu-go">✓</span>` : "";
+        const togo = g && a < g * 0.9 ? `<span class="fd-togo">${left} to go</span>` : "";
         return `<div class="fd-mrow"><span class="fd-mk">${l}<span class="hu-n">${a}</span>${togo}</span>
           <div class="hu-track fd-track"><i class="f" style="width:${fp.toFixed(1)}%;background:${col}"></i>${op ? `<i class="over" style="left:${tk.toFixed(1)}%;width:${op.toFixed(1)}%;opacity:${over ? 1 : .5}"></i>` : ""}${g ? `<i class="tick" style="left:${tk.toFixed(1)}%"></i><span class="tl" style="left:${tk.toFixed(1)}%">${g}</span>` : ""}${note}</div></div>`; }).join("")}</div>`;
     const kEl = document.getElementById("fKcal"), kc = sum("kcal"), fmt = n => Number(n).toLocaleString("en-US");
     if (kEl) kEl.innerHTML = `<span class="hu-n">${fmt(kc)}</span> <span class="fd-kt">/ ${t.kcal ? fmt(t.kcal) : "—"} kcal</span>`;
     // food only here: drinks (water, coffee, beer, bottles) are listed and logged on the Hydration page; the bars above still count their calories
-    const isDr = e => e.is_drink || e.drink_only, foods = day.entries.filter(e => !isDr(e)), nMeals = foods.filter(e => !e.supplement).length, nDrinks = ents.filter(isDr).length;
+    // the drinks: the server's one list (day.drinks), the same the Hydration page lists; a shake with
+    // fluid in it is on both pages, so the line says how many of them are here as food too
+    const isDr = e => e.is_drink || e.drink_only, foods = day.entries.filter(e => !isDr(e)), nMeals = foods.filter(e => !e.supplement).length;
+    const drIds = Array.isArray(day.drinks) ? day.drinks : ents.filter(e => isDr(e) || e.fluid_ml > 0).map(e => e.id);
+    const drEnts = drIds.map(id => day.entries.find(e => e.id === id)).filter(Boolean);
+    const nDrinks = drEnts.length, alsoFood = drEnts.filter(e => !isDr(e));
+    const foodWord = alsoFood.length && alsoFood.every(e => /shake|smoothie/i.test(e.name || "")) ? (alsoFood.length === 1 ? " shake" : " shakes") : "";
+    const drLine = `${nDrinks} drink${nDrinks===1?"":"s"} today${alsoFood.length ? ` (${alsoFood.length}${foodWord} also count${alsoFood.length===1?"s":""} as food)` : ""} · on the <a href="#hydration">Hydration page</a>`;
     const mEl = document.getElementById("fMacros");
     if (mEl) mEl.innerHTML = bars;
     el.innerHTML = `
-      <div class="fd-jhead"><span class="hu-lab">Logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}</span>
-      ${nDrinks && isToday ? `<span class="small drinksnote">${nDrinks} drink${nDrinks===1?"":"s"} today, on the <a href="#hydration">Hydration page</a>.</span>` : ""}</div>
+      <div class="fd-jhead"><span class="hu-lab">Logged ${isToday ? "today" : "that day"} · ${nMeals} ${nMeals===1?"meal":"meals"}${saving ? ` · <span class="fd-saving">${esc(saving)}</span>` : ""}</span>
+      ${nDrinks && isToday ? `<span class="small drinksnote">${drLine}</span>` : ""}</div>
       <div class="journal fd-journal">${foods.length ? foods.slice().reverse().map(entryHTML).join("") : `<div class="small fd-none">${isToday?"Nothing yet.":"Nothing logged that day."}</div>`}</div>`;
     el.querySelectorAll(".jentry").forEach(n => {
       const top = n.querySelector(".fd-jrow");
@@ -320,37 +330,54 @@ V.food = async function(){
       try{ await bridge("/food/merge",{method:"POST",headers:J,body:JSON.stringify({ ids:[prev.id, cur.id], date, text: text.trim() || undefined, meal: prev.meal })}); day = await bridge(`/food/day?date=${date}`); draw(); }
       catch(err){ alert(err.message); btn.disabled = false; }
     });
+    // a removal or a correction shows at once, marked "saving…", and the server's day replaces it when it answers
     el.querySelectorAll("[data-del]").forEach(btn => btn.onclick = async ()=>{
       if (!confirm("Remove this from the journal?")) return;
-      try{ const r = await bridge(`/food/${encodeURIComponent(btn.dataset.del)}?date=${date}`,{method:"DELETE"}); day = r.day; draw(); }
-      catch(e){ btn.textContent = "failed — " + e.message; }
+      const id = btn.dataset.del, before = day;
+      day = Object.assign({}, day, { entries: (day.entries || []).filter(x => x.id !== id), meals: (day.meals || []).map(m => Object.assign({}, m, { logged: (m.logged || []).filter(x => x !== id) })) });
+      saving = "saving…"; draw();
+      try{ const r = await bridge(`/food/${encodeURIComponent(id)}?date=${date}`,{method:"DELETE"}); saving = ""; day = r.day; draw(); recheck(true); }
+      catch(e){ day = before; saving = "couldn't remove it — " + String(e.message).replace(/^bridge \d+ — /, ""); draw(); }
     });
     el.querySelectorAll("[data-fix]").forEach(btn => btn.onclick = async ()=>{
       const id = btn.dataset.fix, box = btn.closest(".jfix");
       const body = { date, name: box.querySelector(".fxName").value, meal: box.querySelector(".fxMeal").value,
         kcal: +box.querySelector(".fxK").value, carbs_g: +box.querySelector(".fxC").value, protein_g: +box.querySelector(".fxP").value, fat_g: +box.querySelector(".fxF").value,
         fits: box.querySelector(".fxFit").value };
-      try{ const r = await bridge(`/food/${encodeURIComponent(id)}`,{method:"PUT",headers:J,body:JSON.stringify(body)}); day = r.day; draw(); }
-      catch(e){ btn.textContent = "failed — " + e.message; }
+      const before = day, old = (day.entries || []).find(x => x.id === id) || {};
+      // the same arithmetic the bridge does: a new kcal alone scales the plate, it is not a different plate
+      const onlyK = ["carbs_g","protein_g","fat_g"].every(k => +body[k] === +old[k]) && old.kcal > 0 && body.kcal !== old.kcal;
+      const scaled = onlyK ? Object.fromEntries(["carbs_g","protein_g","fat_g"].map(k => [k, Math.max(0, Math.round((old[k] || 0) * body.kcal / old.kcal))])) : {};
+      const fresh = Object.assign({}, old, { name: body.name, meal: body.meal, kcal: body.kcal, carbs_g: body.carbs_g, protein_g: body.protein_g, fat_g: body.fat_g }, scaled,
+        { assessment: Object.assign({}, old.assessment || {}, { fits: body.fits }), corrected: true, _saving: true });
+      day = Object.assign({}, day, { entries: (day.entries || []).map(x => x.id === id ? fresh : x) });
+      saving = "saving…"; draw();
+      try{ const r = await bridge(`/food/${encodeURIComponent(id)}`,{method:"PUT",headers:J,body:JSON.stringify(body)}); saving = ""; day = r.day; draw(); recheck(true); }
+      catch(e){ day = before; saving = "couldn't save the correction — " + String(e.message).replace(/^bridge \d+ — /, ""); draw(); }
     });
   };
   // the grade chip in two words: what is wrong ("Protein low"), not the slot name and a percentage; the full grade sits in the opened row
   const cap = s => { s = String(s || ""); return s.charAt(0).toUpperCase() + s.slice(1); };
+  // A slot's grade belongs to the slot: with one plate in it the chip is that grade; with several, the
+  // chip is the plate's own reading and the slot's grade is said as the slot's ("the snack slot: kcal 845% over").
   const gradeOf = (e)=>{
     const a = e.assessment || {};
     const m = day && (day.meals||[]).find(x => (x.logged||[]).includes(e.id)), mt = m && m.match;
+    const f = FIT[a.fits] || FIT.partly, own = { tone: f.tone === "good" ? "go" : f.tone === "warn" ? "hold" : "stop", word: cap(f.word) };
     if (mt){
       const tone = mt.key === "green" ? "go" : mt.key === "yellow" ? "hold" : "stop";
+      const n = (m.logged || []).length, sw = slotWord(m.slot);
+      const slotGrade = mt.key === "green" ? "on plan" : String(mt.word || "");
+      if (n > 1) return { tone: own.tone, word: own.word, full: `the ${sw} slot (${n} plates together): ${slotGrade}`, slotTone: tone };
       let word = "On plan";
       if (mt.key !== "green"){
         const mm = /^(\w+)\s+\d+%\s+(over|under)/.exec(mt.macros && mt.macros.key !== "green" ? String(mt.macros.word || "") : "");
         const rw = String((mt.rules && mt.rules.key !== "green" && mt.rules.word) || "").trim();
         word = mm ? `${cap(mm[1])} ${mm[2] === "over" ? "high" : "low"}` : rw && rw.length <= 14 ? cap(rw) : mt.key === "yellow" ? "Partly" : "Off plan";
       }
-      return { tone, word, full: `${m.slot} slot · ${mt.key === "green" ? "on plan" : String(mt.word || "")}` };
+      return { tone, word, full: `the ${sw} slot: ${slotGrade}`, slotTone: tone };
     }
-    const f = FIT[a.fits] || FIT.partly;
-    return { tone: f.tone === "good" ? "go" : f.tone === "warn" ? "hold" : "stop", word: cap(f.word), full: null };
+    return { tone: own.tone, word: own.word, full: null };
   };
   const thumbOf = (e, txt)=> e.thumb ? `<img class="fd-th" src="data:image/jpeg;base64,${e.thumb}" alt="">` : `<span class="fd-th nothumb">${txt}</span>`;
   const entryHTML = (e)=>{
@@ -365,22 +392,22 @@ V.food = async function(){
     return `<div class="jentry fd-jr">
       <div class="fd-jrow" role="button" tabindex="0" aria-expanded="false">${thumbOf(e, e.written ? "✎" : esc((e.name||"?").slice(0,2)))}
         <div class="fd-jb"><div class="fd-top"><b class="jname">${esc(e.name)}</b><span class="hu-chip hu-${gr.tone}">${esc(gr.word)}</span></div>
-          <div class="fd-meta">${when} · ${e.drink_only?"drink":esc(e.meal)} · ${e.kcal} kcal · ${e.protein_g} P${e.maybe_double_of ? ` · <span class="hu-hold">double?</span>` : ""}</div>
+          <div class="fd-meta">${when} · ${e.drink_only?"drink":esc(slotWord(e.slot) || e.meal)} · ${e.kcal} kcal · ${e.protein_g} P${e.maybe_double_of ? ` · <span class="hu-hold">double?</span>` : ""}${e._saving ? ` · <span class="fd-saving">saving…</span>` : ""}</div>
           ${e.written || (e.notes && e.thumb) ? `<div class="fd-words">“${esc(e.written || e.notes)}”</div>` : ""}
           ${stack ? `<div class="fd-stack" aria-label="${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat">${stack}</div>` : ""}</div></div>
       <div class="fd-more">
-      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written && e.thumb ? ` · ${e.photos > 1 ? e.photos + " photos" : "photo"} + your words` : e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
-      ${gr.full ? `<div class="small fd-grade">Graded: <span class="hu-${gr.tone}">${esc(gr.full)}</span></div>` : ""}
+      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written && e.thumb ? ` · ${e.photos > 1 ? e.photos + " photos" : "photo"} + your words` : e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}${e.corrected?" · corrected":""}</div>
+      ${gr.full ? `<div class="small fd-grade">Graded: <span class="hu-${gr.slotTone || gr.tone}">${esc(gr.full)}</span></div>` : ""}
       ${e.plan && e.plan.kcal != null ? `<div class="small jplan">Graded against the plan as it stood at ${esc(hm12(e.plan.at||e.time))}: ${e.plan.kcal} kcal · ${e.plan.carbs_g}C · ${e.plan.protein_g}P${e.plan.low_carb ? " · low carb" : ""}${e.plan.backfilled ? " (filled in later)" : ""}</div>` : ""}
       ${e.maybe_double_of ? `<div class="small jdouble">Looks like the entry just before it, logged again. If it was one bottle, remove this one.</div>` : ""}
       <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
       <div class="jmore fd-jmore">
         ${e.written || e.notes ?`<div class="small">You wrote: “${esc(e.written || e.notes)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
-        <div class="small">${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
+        <div class="small">This plate: ${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
         ${isToday?`<div class="jfix">
           <div class="row2"><span><label>Name</label><input class="fxName" value="${esc(e.name)}"></span>
-            <span><label>Meal</label><select class="fxMeal">${MEALS.map(m=>`<option ${m===e.meal?"selected":""}>${m}</option>`).join("")}</select></span></div>
+            <span><label>Meal</label><select class="fxMeal">${MEALS.map(m=>`<option ${m===(MEALS.includes(e.slot) ? e.slot : e.meal)?"selected":""}>${m}</option>`).join("")}</select></span></div>
           <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
           <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
           <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
@@ -396,8 +423,8 @@ V.food = async function(){
     recheck();
   };
   // earlier sentences of the day are re-read whenever something newer has landed; once per newest entry
-  const recheck = async ()=>{
-    if (!day || !day.stale_readings || !day.stale_key || window.__recheckTried === day.stale_key) return;
+  const recheck = async (force)=>{
+    if (!day || !day.stale_readings || !day.stale_key || (!force && window.__recheckTried === day.stale_key)) return;
     window.__recheckTried = day.stale_key;
     try{ const r = await bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ date })}); if (r && r.day && location.hash.split("?")[0] === "#food"){ day = r.day; draw(); } }catch{}
   };
@@ -444,15 +471,18 @@ V.food = async function(){
   rollEl.onchange = ()=> picked(rollEl);
   document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; files = []; strip(); fileEl.value = ""; rollEl.value = ""; };
   // the verdict at logging time is the slot's grade, the same word the card shows, with the plate's reading under it
+  // The plan it shows is the one saved on the entry (e.plan), the same object the journal card shows;
+  // the slot is the one saved on the entry, the same the card and the Day row show.
   const showVerdict = (e, dayNow)=>{
     const a = e.assessment;
     const m = dayNow && (dayNow.meals||[]).find(x => (x.logged||[]).includes(e.id));
-    const mt = m && m.match;
+    const mt = m && m.match, p = e.plan && e.plan.kcal != null ? e.plan : null;
+    const n = m ? (m.logged || []).length : 0, sw = slotWord(e.slot || (m && m.slot));
     const tone = mt ? (mt.key === "green" ? "good" : mt.key === "yellow" ? "warn" : "bad") : (FIT[a.fits]||FIT.partly).tone;
     document.getElementById("snapResult").innerHTML = `<div class="verdict" style="border-color:${toneC(tone)}">
-      <div class="jname">${esc(e.name)} ${mt ? `<span class="fit" style="color:${toneC(tone)}">${esc(m.slot)} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a)}</div>
-      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}${m ? ` · the slot wanted ${m.kcal} kcal · ${m.carbs_g}C · ${m.protein_g}P` : ""}</div>
-      ${mt && mt.macros && mt.rules ? `<div class="small">macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
+      <div class="jname">${esc(e.name)} ${mt ? `<span class="fit" style="color:${toneC(tone)}">${esc(sw)}${n > 1 ? ` slot, ${n} plates` : ""} · ${mt.key === "green" ? "on plan" : esc(mt.word)}</span>` : fitBadge(a)}</div>
+      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.portion?` · ${esc(e.portion)}`:""}${p ? ` · the ${esc(sw)} slot wanted ${p.kcal} kcal · ${p.carbs_g}C · ${p.protein_g}P${p.low_carb ? " · low carb" : ""}` : ""}</div>
+      ${mt && mt.macros && mt.rules ? `<div class="small">${n > 1 ? `the ${esc(sw)} slot together: ` : ""}macros: ${esc(mt.macros.word)} · rules: ${esc(mt.rules.word)}</div>` : ""}
       <div>${esc(a.why)}</div>${e.drink_only || e.is_drink ? `<div class="small">A drink: it is listed on the <a href="#hydration">Hydration page</a>.</div>` : ""}</div>`;
   };
   const wform = document.getElementById("writeForm");
@@ -475,22 +505,31 @@ V.food = async function(){
     if (window.dictateInto) window.dictateInto(document.getElementById("writeText"), t, ()=> document.getElementById("writeLog").click());
     else document.getElementById("writeText").focus();
   };
-  document.getElementById("writeLog").onclick = async ()=>{
+  // the same words again within twenty minutes come back as a question (409): keep both resends with force
+  const writeSend = async (force)=>{
     const text = document.getElementById("writeText").value.trim();
-    if (!text) return;
-    if (window.primeSound) primeSound();
     const msg = document.getElementById("writeMsg"), btn = document.getElementById("writeLog");
+    if (!text){ msg.textContent = "Write what you ate first."; document.getElementById("writeText").focus(); return; }
+    if (window.primeSound) primeSound();
     btn.disabled = true; msg.textContent = "Reading it…";
     try{
-      const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined })});
+      const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined, force: force ? true : undefined })});
       showVerdict(r.entry, r.day);
       wform.hidden = true; msg.textContent = ""; document.getElementById("writeText").value = ""; document.getElementById("writeMeal").value = "";
       day = r.day; draw(); cheerIf(r);
-    }catch(e){ msg.textContent = "Couldn't log it — " + e.message; }
+    }catch(e){
+      const m409 = /^bridge 409(?: — )?(.*)$/.exec(String(e.message || ""));
+      if (m409){
+        msg.innerHTML = `${esc(m409[1] || "Looks like the same entry again: keep both?")} <button class="linkish" id="writeKeep">Keep both</button> <button class="linkish" id="writeDrop">No, it was one</button>`;
+        document.getElementById("writeKeep").onclick = ()=> writeSend(true);
+        document.getElementById("writeDrop").onclick = ()=>{ msg.textContent = ""; wform.hidden = true; document.getElementById("writeText").value = ""; };
+      } else msg.textContent = "Couldn't log it — " + String(e.message).replace(/^bridge \d+ — /, "");
+    }
     finally{ btn.disabled = false; }
   };
+  document.getElementById("writeLog").onclick = ()=> writeSend(false);
   document.getElementById("snapLog").onclick = async ()=>{
-    if (!files.length) return;
+    if (!files.length){ document.getElementById("snapMsg").textContent = "Add a photo first."; return; }
     if (window.primeSound) primeSound();
     const msg = document.getElementById("snapMsg"), btn = document.getElementById("snapLog");
     btn.disabled = true; msg.textContent = files.length > 1 ? `Reading the ${files.length} photos as one meal…` : "Reading the plate…";

@@ -213,7 +213,7 @@ function attach(app) {
     const id = crypto.randomBytes(6).toString('hex');
     // the coach reads the site it was asked from: the real one, or the copy
     const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app';
-    const base = /(^|\.)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app';
+    const base = /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app';
     await setJSON('coach-job-' + id, { id, text, base, status: 'queued', created: new Date().toISOString(), steps: [] });
     try {
       const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
