@@ -111,8 +111,8 @@
   // two tiles, Write and Say; the box opens under them (Say opens it and listens)
   const IC = (window.foodBits && foodBits.ICON) || {};
   const sayWriteHTML = (p, placeholder, hint) => `<div class="ln-sw"><div class="hu-tiles">
-      <button class="hu-tile" id="${p}Write" aria-expanded="false">${IC.pen || ""}<b>Write</b><span>${esc(hint || "in your words")}</span></button>
-      <button class="hu-tile talkbtn" id="${p}Talk">${IC.mic || ""}<b>Say</b><span>tap and talk</span></button></div>
+      <button class="hu-tile" id="${p}Write" aria-expanded="false">${IC.pen || ""}<b>Write</b></button>
+      <button class="hu-tile talkbtn" id="${p}Talk">${IC.mic || ""}<b>Say</b></button></div>
     <div class="ln-swform" id="${p}Form" hidden><label for="${p}Text">Write it or say it</label>
     <textarea id="${p}Text" rows="2" placeholder="${esc(placeholder)}"></textarea>
     <button class="primary" id="${p}Log">Log it</button></div>
@@ -169,8 +169,7 @@
       const tank = `<div class="hy-tank">
           <div class="hy-glass" role="img" aria-label="Balance ${esc(bal)} ml against the morning"><i style="height:${fill.toFixed(0)}%"></i><em style="bottom:${zero.toFixed(0)}%"></em></div>
           <div class="hy-read"><span class="hu-n hy-bal" style="color:${vc}">${esc(bal)}${hasNow ? `<span class="ln-uu">ml</span>` : ""}</span>
-            <span class="hy-say">${h ? `${esc(word.charAt(0).toUpperCase() + word.slice(1))}${word ? ". " : ""}Drank ${(((h.drunk_ml != null ? h.drunk_ml : food.drinks_ml) || 0)/1000).toFixed(1)} L of ${((h.target_ml || 0)/1000).toFixed(1)} L.` : "No drinks yet today."}</span>
-            ${countsLine ? `<span class="small">${esc(countsLine)}</span>` : ""}
+            <span class="hy-say">${h ? `${(((h.drunk_ml != null ? h.drunk_ml : food.drinks_ml) || 0)/1000).toFixed(1)} of ${((h.target_ml || 0)/1000).toFixed(1)} L` : "No drinks yet today."}</span>
             ${note ? `<span class="small">${esc(note)}</span>` : ""}
             ${alcNote ? `<span class="small hu-hold">${esc(alcNote)}</span>` : ""}</div></div>
         ${glassNote ? `<details class="why"><summary>why the balance moved less than the glass</summary><div class="small">${esc(glassNote)}</div></details>` : ""}`;
@@ -250,7 +249,7 @@
         <div class="eb-end"><span class="hu-lab">End of day</span><div><span class="hu-n eb-big ${tone}">${sign(b.end)}</span><span class="small"> predicted</span></div>${b.target_end != null ? `<span class="small">the plan: ${sign(b.target_end)}</span>` : ""}</div></div>
       <svg class="eb-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Calories in minus out since midnight: ${sign(b.now)} now, ${sign(b.end)} predicted at midnight">
         ${bands}${grid.join("")}${tgt}<path d="${path(past)}" class="eb-past"/>${ahead.length > 1 ? `<path d="${path(ahead)}" class="eb-ahead"/>` : ""}${dots}${nowDot}${hrs}</svg>
-      <div class="eb-key small"><span><i class="k1"></i>so far</span><span><i class="k2"></i>predicted</span><span><i class="k3"></i>eaten</span><span><i class="k4"></i>planned</span><span><i class="k5"></i>workout</span><span><i class="k6"></i>planned end</span></div>
+
       <details class="why"><summary>what it counts</summary><div class="small">Calories eaten minus calories burned since midnight. Your base burn${baseBurn ? `, about ${Math.round(baseBurn).toLocaleString("en-US")} kcal a day,` : ""} runs evenly through the day; each workout adds its burn over its minutes (Strava's number once done, the plan's estimate before); each meal lands when it was eaten. After now the line follows the open meals and workouts on the plan. It is the same energy your calorie target is built from, so a day that ends on the dotted line is the planned deficit.</div></details>
     </div>`;
   }
@@ -272,7 +271,7 @@
       // the pre-ride supplements as fields: taken with its time, or when it is due
       const ents = (food && food.entries) || [];
       const takenAt = k => ents.filter(x => x.supplement && x.key === k).map(x => x.time || "").sort().pop();
-      const SUPP = [["beetroot", "Beetroot", "2 to 3 h before"], ["sodium_bicarb", "Bicarbonate", "hard days only"]]
+      const SUPP = [["beetroot", "Beetroot", ""], ["sodium_bicarb", "Bicarbonate", ""]]
         .concat(rx.filter(x => x.key !== "beetroot" && x.key !== "sodium_bicarb").map(x => [x.key, x.name, ""]));
       const suppField = ([k, name, dflt]) => { const r = rx.find(x => x.key === k), t = takenAt(k), taken = t != null || (r && r.taken);
         return `<div class="hu-field fu-supp"><span class="k">${esc(String(name).replace(/\s*\(.*\)$/, ""))}</span>
@@ -283,7 +282,7 @@
       // each ride: what went in against the plan, 100% the plan; under reads short, over reads long. The parts underneath.
       const PART = { pre: "before", bottle: "on the bike", supp: "supplements" };
       const wrow = c => { if (c.kind !== "ride") return ""; const col = TC[c.ok ? "good" : c.near ? "warn" : "bad"], scale = Math.max(125, c.pct || 0) * 1.05;
-        const parts = (c.parts || []).map(p => `${PART[p.kind] || p.kind} ${p.kind === "supp" ? `${p.got} of ${p.due}` : `${p.got_g} of ${p.plan_g} g`}`).join(" · ");
+        const parts = (c.parts || []).map(p => p.kind === "supp" ? `${p.got}/${p.due}` : `${p.got_g}/${p.plan_g} g`).join(" · ");
         return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}<span class="small hu-dim"> ${esc(parts)}</span></span>
           <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, Math.min(c.pct || 0, 100) / scale * 100).toFixed(1)}%;background:${col}"></i>${(c.pct || 0) > 100 ? `<i class="over" style="left:${(100 / scale * 100).toFixed(1)}%;width:${(((c.pct || 0) - 100) / scale * 100).toFixed(1)}%"></i>` : ""}<i class="tick" style="left:${(100 / scale * 100).toFixed(1)}%"></i></span>
           <span class="fu-v"><b style="color:${col}">${c.pct}%</b></span></div>`; };
@@ -291,7 +290,7 @@
       // the headline: how much of what the plan asked for went in, this week and today (100% is the plan)
       const fp = v => v == null ? "—" : `${v}<span class="ln-uu">%</span>`;
       const fed = `<div class="hu-fields two ln-top fu-fed">
-          <div class="hu-field big"><span class="k">Fuelled this week</span><span class="n ${HU[L && L.state] || HU.none}">${fp(L && L.week)}</span><span class="u">${L && L.rides ? `${L.rides} ride${L.rides === 1 ? "" : "s"} · 100% is the plan` : "no rides yet"}</span></div>
+          <div class="hu-field big"><span class="k">Fuelled this week</span><span class="n ${HU[L && L.state] || HU.none}">${fp(L && L.week)}</span><span class="u">${L && L.rides ? `${L.rides} ride${L.rides === 1 ? "" : "s"}` : "no rides yet"}</span></div>
           <div class="hu-field big"><span class="k">Today</span><span class="n ${HU[L && L.today_tone] || HU.none}">${fp(L && L.today)}</span><span class="u">${esc((L && L.today_word) || "")}</span></div>
         </div>`;
       el.innerHTML = ttlHTML("Fuel") + fed + balanceHTML(food && food.balance, food && food.target && food.target.base_burn) + top + `
@@ -301,12 +300,12 @@
         ${sayWriteHTML("fuSw", "a bottle of Tailwind and half a banana", "“half a banana”")}
         <div class="ln-sec"><span class="hu-lab">Pre-ride supplements</span></div>
         <div class="hu-fields two fu-supps">${SUPP.map(suppField).join("")}</div>
-        ${rx.length ? `<details class="why"><summary>why</summary><div class="small">${rx.map(x => `<b>${esc(x.name)}</b>${x.time ? ` at ${esc(hm12(x.time))}` : ""}: ${esc(x.why || "")}.`).join(" ")}</div></details>` : `<div class="small">None due today. Beetroot is due 2 to 3 hours before a ride, bicarbonate before a hard one.</div>`}
+        ${rx.length ? `<details class="why"><summary>why</summary><div class="small">${rx.map(x => `<b>${esc(x.name)}</b>${x.time ? ` at ${esc(hm12(x.time))}` : ""}: ${esc(x.why || "")}.`).join(" ")}</div></details>` : `<div class="small">None due today.</div>`}
         <span class="small" id="fuMsg"></span>
         <div class="card"><h4>The tank today</h4>${e && B.energyHTML ? B.energyHTML(e, { noHead: true, noLegs: true }) : `<div class="small">Starts with the first meal.</div>`}</div>
         <div class="ln-sec"><span class="hu-lab">Fuelled this week${L && L.week != null ? ` · <span class="${HU[L.state] || HU.none}">${L.week}% of the plan</span>` : ""}</span></div>
         ${wk.length ? `<div class="fu-wk">${wk.slice().reverse().map(wrow).join("")}</div>
-            <div class="small">${L.ok} of ${L.checks} checks met${L.rx && L.rx.beetroot ? ` · beetroot ${L.rx.beetroot.taken} of ${L.rx.beetroot.due} rides` : ""}.</div>` : `<div class="small">${!L && pending ? "reading the week…" : "No rides this week to check yet."}</div>`}
+            <div class="small">${L.ok}/${L.checks}${L.rx && L.rx.beetroot ? ` · beetroot ${L.rx.beetroot.taken}/${L.rx.beetroot.due}` : ""}</div>` : `<div class="small">${!L && pending ? "reading the week…" : "No rides this week to check yet."}</div>`}
         ${whyHTML(L)}`;
       if (e && B.wireEnergy) B.wireEnergy(el, e, ()=> draw());
       const ITEMS = { tailwind: { name: "Tailwind, 2 scoops, 620 ml bottle", kcal: 200, carbs_g: 50, tags: ["drink"], fluid_ml: 620 }, gel: { name: "Energy gel", kcal: 90, carbs_g: 22, tags: [] },
@@ -337,16 +336,14 @@
           ${nights.length ? `<details class="why"><summary>each night</summary><ul class="agenda totals">${nights.slice().reverse().map(n => `<li><span class="n">${esc(dayLong(n.date))}${n.manual ? ` <span class="small">· ${esc(n.manual)}</span>` : ""}</span><span class="tag"><b style="color:${TC[n.hours >= 7 ? "good" : n.hours >= 6.25 ? "warn" : "bad"]}">${n.hours} h</b>${n.score != null ? ` · score ${n.score}` : ""}</span></li>`).join("")}</ul></details>` : ""}</div>
         <div class="ln-sec"><span class="hu-lab">Tonight</span></div>
         <div class="hu-fields two">
-          <div class="hu-field"><span class="k">Bed tonight</span><span class="n">9:45p</span><span class="u">pays down the week</span></div>
+          <div class="hu-field"><span class="k">Bed tonight</span><span class="n">9:45p</span></div>
           ${mg ? `<div class="hu-field"><span class="k">Magnesium</span><span class="n hu-go">✓${mgAt ? " " + esc(hm12(mgAt)) : ""}</span><span class="u">taken · 200 mg</span></div>`
             : (() => { const d = new Date(), nowM = d.getHours() * 60 + d.getMinutes(), dueM = 20 * 60 + 45;   // an hour before the 9:45p bedtime
                 const due = nowM >= dueM - 30;
-                return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : "8:45p"}</span><span class="u">200 mg · ${due ? "tap to log" : "tonight · tap if taken"}</span></button>`; })()}
+                return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : "8:45p"}</span><span class="u">200 mg</span></button>`; })()}
         </div>
-        <div class="small">Magnesium an hour before bed.</div>
         ${food && food.hydration && food.hydration.bedtime_note ? `<div class="small hu-hold">${esc(food.hydration.bedtime_note)}</div>` : ""}
-        <details class="ln-fold"><summary>Watch missed a night? Add it</summary>
-          <div class="small">When the watch did not sync, or another device has the night. A number entered here wins for its date.</div>
+        <details class="ln-fold"><summary>Add a night</summary>
           <div class="row2"><span><label>Hours asleep</label><input id="slH" type="number" step="0.05" inputmode="decimal" placeholder="7.5"></span><span><label>Sleep score</label><input id="slS" type="number" inputmode="numeric" placeholder="80"></span></div>
           <div class="row2"><span><label>From</label><select id="slSrc"><option>Garmin</option><option>WHOOP</option><option>by hand</option></select></span><span><label>&nbsp;</label><button class="primary" id="slGo">Save the night</button></span></div>
           <span class="small" id="slMsg"></span></details>
@@ -365,8 +362,7 @@
     const draw = (first)=> load(el, "recovery", ["/chain", "/scores"], [0], (chain, scores) => {
       const L = chain && chain.links && chain.links.recovery;
       const days = (L && L.days) || [], r = scores && scores.recovery;
-      el.innerHTML = headHTML("recovery", "Recovery", L, { brk: chain && chain.break_at, weekU: L && L.score_week != null ? `average score ${L.score_week}` : "", todayK: "This morning",
-          todayU: r && r.band ? r.band.word : "" }) + `
+      el.innerHTML = headHTML("recovery", "Recovery", L, { brk: chain && chain.break_at, weekU: "", todayK: "This morning", todayU: "" }) + `
         <div class="ln-chart">
           ${days.length ? barsSVG(days.map(d => ({ v: d.score, label: `${dayLong(d.date)}${d.hrv ? `, HRV ${Math.round(d.hrv)} ms` : ""}`, short: dayShort(d.date) })), { max: 100, line: 67, lineLabel: "67", aria: "recovery score each morning", col: it => it.v >= 67 ? "var(--green)" : it.v >= 34 ? "var(--amber)" : "var(--red)" }) : `<div class="small">No mornings yet.</div>`}</div>
         ${L && L.why ? `<details class="why"><summary>why the week reads this way</summary><div class="small">${esc(L.why.charAt(0).toUpperCase() + L.why.slice(1))}${L.hrv_week_ms ? `. HRV ${L.hrv_week_ms} ms this week against ${L.hrv_base_ms} ms over 60 days` : ""}${L.rhr_week ? `; resting HR ${L.rhr_week}` : ""}.</div></details>` : ""}
@@ -376,8 +372,7 @@
           <div class="hu-field"><span class="k">Resting HR</span><span class="n">${r.rhr || "—"}</span><span class="u">bpm${r.rhr_baseline ? ` · base ${Math.round(r.rhr_baseline)}` : ""}</span></div>
           <div class="hu-field"><span class="k">Slept</span><span class="n">${r.sleep_h || "—"}</span><span class="u">h</span></div>
         </div>` : ""}
-        <details class="ln-fold"><summary>Watch not synced? Log this morning</summary>
-          <div class="small">When the watch has not synced, or a strap has the number. A number entered here wins for today.</div>
+        <details class="ln-fold"><summary>Log this morning</summary>
           <div class="row2"><span><label>Recovery or readiness</label><input id="rcR" type="number" inputmode="numeric" placeholder="85"></span><span><label>HRV (ms)</label><input id="rcH" type="number" inputmode="numeric" placeholder="25"></span></div>
           <div class="row2"><span><label>Resting HR</label><input id="rcB" type="number" inputmode="numeric" placeholder="56"></span><span><label>From</label><select id="rcSrc"><option>Garmin</option><option>WHOOP</option><option>by hand</option></select></span></div>
           <button class="primary" id="rcGo">Save the morning</button> <span class="small" id="rcMsg"></span></details>
@@ -402,7 +397,7 @@
       const tNum = w && w.trend_lb_wk != null ? `${w.trend_lb_wk > 0 ? "+" : ""}${w.trend_lb_wk}` : w && w.week_change_lb != null ? `${w.week_change_lb > 0 ? "+" : ""}${w.week_change_lb}` : "—";
       const tTone = tNum === "—" ? "hu-dim" : +tNum <= -0.8 ? "hu-go" : +tNum <= 0 ? "hu-hold" : "hu-stop";
       const staleHead = ttlHTML("Weight", L && chain && chain.break_at === "weight" ? `<span class="hu-chip hu-stop">Breaks the chain</span>` : "") + `<div class="hu-fields ln-top ln-one">
-          <div class="hu-field big"><span class="k">Last weigh-in${lat ? ` · ${esc(new Date(lat.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}` : ""}</span><span class="n hu-dim">${lat ? `${esc(String(Math.round(lat.lb)))}<span class="ln-uu">lb</span>` : "—"}</span><span class="u">${lat ? `${ageD != null ? `${ageD} days ago · ` : ""}no week to read until the next one` : "no reading yet"}</span></div></div>`;
+          <div class="hu-field big"><span class="k">Last weigh-in${lat ? ` · ${esc(new Date(lat.at).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}` : ""}</span><span class="n hu-dim">${lat ? `${esc(String(Math.round(lat.lb)))}<span class="ln-uu">lb</span>` : "—"}</span><span class="u">${lat ? `${ageD != null ? `${ageD} days ago` : ""}` : "no reading yet"}</span></div></div>`;
       el.innerHTML = (stale ? staleHead : headHTML("weight", "Weight", L, { brk: chain && chain.break_at, weekU: "target −1 lb a week", todayK: "Latest",
           todayU: lat ? `lb · ${latWhen}` : "no reading yet" })) + `
         ${stale ? "" : w && lat ? `<div class="hu-fields">
@@ -412,10 +407,9 @@
         </div>` : `<div class="small">No reading yet.</div>`}
         ${stale || !hasTrend ? "" : `<div class="small ln-trend" title="${esc(trend)}">Green at a pound a week down. The trend line needs about ten days of mornings; one heavy morning barely moves it.</div>`}
         <details class="ln-fold"${stale ? " open" : ""}><summary>Log a weigh-in</summary>
-          <div class="small">Same time each morning, after the bathroom, before coffee.</div>
           <div class="row2"><span><label>Weight (lb)</label><input id="wtLb" type="number" step="0.1" inputmode="decimal" placeholder="216.4"></span><span><label>&nbsp;</label><button class="primary" id="wtGo">Save</button></span></div>
           <span class="small" id="wtMsg"></span></details>
-        ${w && !w.withings_connected ? `<div class="small"><a href="${typeof DEFAULT_API !== "undefined" ? DEFAULT_API : ""}/withings/auth">Connect the Withings scale</a> and the mornings land on their own.</div>` : ""}
+        ${w && !w.withings_connected ? `<div class="small"><a href="${typeof DEFAULT_API !== "undefined" ? DEFAULT_API : ""}/withings/auth">Connect the Withings scale</a></div>` : ""}
         ${stale || !hasTrend ? (L && L.basis ? `<details class="why"><summary>how it's read</summary><div class="small">Green at a pound a week down. The trend line needs about ten days of mornings; one heavy morning barely moves it. ${esc(L.basis)}.</div></details>` : "") : whyHTML(L)}`;
       document.getElementById("wtGo").onclick = async ()=>{ const lb = +document.getElementById("wtLb").value; const m = document.getElementById("wtMsg");
         if (!(lb > 50 && lb < 500)) { m.textContent = "A weight in pounds, like 216.4."; return; }
@@ -433,11 +427,10 @@
       const L = (chain && chain.links && chain.links.micros) || (m ? { week: m.score, state: stOf(m.score), today: m.score, today_word: m.band && m.band.word, gaps: (m.gaps || []).map(g => g.label), basis: "" } : null), B = window.foodBits || {};
       // shortfalls first: the nutrients furthest from their targets at the top, the covered ones after
       const mSorted = m && Array.isArray(m.per) ? Object.assign({}, m, { per: m.per.slice().sort((a, b) => (a.pct || 0) - (b.pct || 0)) }) : m;
-      el.innerHTML = headHTML("micros", "Micros", L, { brk: chain && chain.break_at, weekU: "score, 13 nutrients" }) + `
+      el.innerHTML = headHTML("micros", "Micros", L, { brk: chain && chain.break_at, weekU: "" }) + `
         <div class="card ln-micros">${B.microHTML && food ? B.microHTML(mSorted, food) : `<div class="small">loading…</div>`}</div>
         <div class="ln-sec"><span class="hu-lab">Log food</span></div>
         ${sayWriteHTML("miSw", "spinach salad with salmon and a handful of almonds", "“spinach salad, salmon”")}
-        <div class="small">Every meal logged here or on <a href="#food">Food</a> adds its iron, calcium, fibre and the rest. Supplements are logged above.</div>
         ${whyHTML(L)}`;
       if (B.wireMicro) B.wireMicro(el, ()=> draw());
       wireSayWrite(el, "miSw", draw);

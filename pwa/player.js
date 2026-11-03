@@ -272,7 +272,7 @@
   function goalHTML(g, samples, size){
     if (!g) return "";
     const st = goalNow(g, samples);
-    return `<div class="gr${st.met ? " met" : ""}">${ringSVG(st, size)}<div class="gr-txt"><span class="hu-lab">Goal${st.met ? " · met" : ""}</span><span class="gr-lab">${esc(st.lab)}</span><span class="gr-sub small">${esc(st.sub)}</span></div></div>`;
+    return `<div class="gr${st.met ? " met" : ""}">${ringSVG(st, size)}<div class="gr-txt">${st.met ? `<span class="hu-lab">Met</span>` : ""}<span class="gr-lab">${esc(st.lab)}</span><span class="gr-sub small">${esc(st.sub)}</span></div></div>`;
   }
 
   // ---------- the devices ----------
@@ -574,14 +574,14 @@
       <div class="pl-sec pl-fsec"><span class="hu-lab">The power to follow · watts at FTP ${ftp}</span><div class="pf-box pf-whole" id="plWhole"></div>${goalOf(w, ivs) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(w, ivs), [], 88)}</div>` : ""}</div>
       <div class="hu-fields pl-sum">
         <div class="hu-field"><span class="k">Duration</span><span class="n">${clock(total)}</span><span class="u">${ivs.length} interval${ivs.length === 1 ? "" : "s"}</span></div>
-        <div class="hu-field"><span class="k">Targets at FTP ${ftp}</span><span class="n">${hi != null ? hi : "—"}<small> W</small></span><span class="u">${hi != null ? "the hardest interval" : "ride by feel"}${w.np_w ? ` · NP ${w.np_w} W` : ""}</span></div>
-        <div class="hu-field"><span class="k">Load</span><span class="n">${w.tss != null ? w.tss : "—"}</span><span class="u">TSS planned</span></div>
+        <div class="hu-field"><span class="k">Targets at FTP ${ftp}</span><span class="n">${hi != null ? hi : "—"}<small> W</small></span><span class="u">${w.np_w ? `NP ${w.np_w} W` : ""}</span></div>
+        <div class="hu-field"><span class="k">Load</span><span class="n">${w.tss != null ? w.tss : "—"}</span><span class="u">TSS</span></div>
       </div>
       ${fuel}
-      <div class="pl-sec"><span class="hu-lab">Connect, then start</span>
+      <div class="pl-sec">
         <div class="pl-devs">${devHTML("trainer")}${devHTML("strap")}</div>
         <button class="primary pl-go" id="plStart"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}>${DEV.trainer ? "Start" : "Start without the trainer"}</button>
-        <div class="small pl-hint">Close Zwift first: the trainer talks to one app at a time. Start counts in 3 seconds; End always saves the ride.</div>
+        <div class="small pl-hint">End always saves the ride.</div>
       </div>
       <details class="why"><summary>the steps · ${ivs.length}</summary><ul class="pl-steps">${rows}</ul></details>
       ${others.length ? `<div class="small pl-also">Also today: ${others.map(c => `<a href="#player?id=${encodeURIComponent(c.id)}${SIM.on ? "&sim=1" : ""}">${esc(c.name)}${c.time ? " · " + esc(hm12(c.time)) : ""}</a>`).join(" · ")}</div>` : ""}
@@ -594,8 +594,7 @@
     try{ window.scrollTo(0, 0); }catch{}
     el.innerHTML = `<div class="pl-ride">
       <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}</div></div>
-      <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div>
-      <div class="pf-key small"><span class="pf-k-t"></span>target watts to hold <span class="pf-k-r"></span>your power (3 s) <span class="pf-k-n"></span>now</div></div>
+      <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div></div>
       <div class="hu-fields pl-fields">
         <div class="hu-field big pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
         <div class="hu-field big pl-hr"><span class="k">Heart rate</span><span class="n" id="fH">—</span><span class="u" id="fHz"></span></div>
@@ -638,18 +637,18 @@
     $("plPos").textContent = r.state === "paused" ? "Paused" : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
     $("plLbl").textContent = iv ? iv.label + (iv.rep ? " · " + iv.rep : "") : "Ride on, or End to save";
     $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
-    $("fPt").textContent = !iv ? "no target" : iv.target_w != null ? `target ${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `ride by feel · hold HR ≤ ${iv.target_hr ? iv.target_hr.hi : HR_Z1}` : "ride by feel";
+    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `HR ≤ ${iv.target_hr ? iv.target_hr.hi : HR_Z1}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
     $("fH").className = "n " + (hr == null ? "hu-dim" : hr <= HR_Z1 ? "hu-go" : hr <= HR_Z2 ? "hu-hold" : "hu-stop");
-    $("fHz").textContent = hr == null ? (DEV.strap ? "waiting for the strap" : "no strap") : hr <= HR_Z1 ? `Zone 1 · ≤ ${HR_Z1}` : hr <= HR_Z2 ? "Zone 2 · above Z1" : "Zone 3 · above VT2";
+    $("fHz").textContent = hr == null ? "" : hr <= HR_Z1 ? "Z1" : hr <= HR_Z2 ? "Z2" : "Z3";
     $("fC").textContent = fresh(L.bikeAt) && L.cadence != null ? L.cadence : "—";
     $("fI").textContent = iv ? clock(iv.start_s + iv.dur_s - r.wt) : "—";
     $("fIl").textContent = iv ? `of ${clock(iv.dur_s)}` : "";
     $("fT").textContent = clock(Math.max(0, total - r.wt));
     $("fTr").textContent = `${clock(r.samples.length)} ridden`;
     $("fE").textContent = !iv || iv.target_w == null ? "Free" : r.erg ? "ERG" : "Off";
-    $("fB").textContent = `bias ${r.bias > 0 ? "+" : r.bias < 0 ? "−" : ""}${Math.abs(r.bias)}%`;
+    $("fB").textContent = r.bias ? `bias ${r.bias > 0 ? "+" : "−"}${Math.abs(r.bias)}%` : "";
     $("cPause").textContent = r.state === "paused" ? "Resume" : "Pause";
     $("cPause").classList.toggle("primary", r.state === "paused");
     $("cErg").textContent = r.erg ? "ERG off" : "ERG on";

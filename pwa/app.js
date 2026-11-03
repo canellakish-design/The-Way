@@ -805,7 +805,7 @@ V.lift = async function(){
       <button type="button" class="lexhead" aria-expanded="${i === 0}"><span class="n"><b>${esc(e.name)}</b><span class="hu-lab lsum">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${restLabel(e.rest_min)}<span class="ldone"></span></span></span>
         <span class="tag"><span class="hu-chip ${e.target.progress ? "hu-go" : e.target.back ? "hu-hold" : ""}">${timed ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</span></span></button>
       <div class="lbody">
-        <div class="small">${esc(e.target.why)}${e.last ? ` · last: ${esc(dayFmt(e.last.date))}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
+        <div class="small">${e.last ? `last: ${esc(dayFmt(e.last.date))}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
         <div class="lsets">${Array.from({ length: e.sets }, (_, k) => `<div class="lset${timed ? " timed" : ""}"><label>Set ${k+1}</label>${timed ? "" : stepper("llb", e.target.lb, 5, "pounds", "lb")}${stepper("lreps", e.target.reps, e.kind === "time" ? 5 : 1, unit(e), e.kind === "time" ? "s" : "reps")}<button type="button" class="ltick" aria-pressed="false" aria-label="Set ${k+1} done">✓</button></div>`).join("")}</div>
         <div class="lrest" aria-live="polite" hidden></div>
         ${e.note?`<details class="why lcues"><summary>cues</summary><span class="small lnote">${esc(e.note)}</span></details>`:""}
@@ -836,7 +836,7 @@ V.lift = async function(){
         <span class="ld">${esc(dayFmt(x.date).slice(0,3))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
         <b>${ls.length ? ls.map(k => `${sh(k)}${dk.includes(k) ? "✓" : ""}`).join(" ") : "—"}</b>${sug ? `<span class="lsug">${sh(sug)}?</span>` : ""}
       </a>`; }).join("")}</div>
-      <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${L.week.some(sugOf) ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
+      <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${false ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
       <details class="why"><summary>why these days</summary><div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
@@ -854,7 +854,6 @@ V.lift = async function(){
       <div class="lheatcap"><span>${esc(say(now))} now</span><span>${esc(say(last))} by ${esc(new Date(last.from + "T12:00:00").toLocaleDateString("en-US", { month: "short" }))}</span></div>`;
   };
   const periodHTML = PT ? `<div class="card"><h4>The plan ahead · ${esc(T.short)} · ${P.weeks} weeks</h4>
-      <div class="small">Targets are a forecast from your last session and move with every one you save.</div>
       ${heatHTML(PT)}
       <details class="why ptfold"><summary>the full table</summary>
       <div class="small">Three blocks: strength (4 to 6), strength-endurance (6 to 8, lighter), strength again from above where the first block ended. A deload week closes each.</div>
@@ -866,16 +865,15 @@ V.lift = async function(){
   document.getElementById("liftPage").innerHTML = `
     ${weekHTML}
     <div class="card"><h4>${esc(T.name)}${T.short && /Upper/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(dayFmt(L.next_date)) : ""}` : ""}</h4>
-      <div class="small">${esc(T.why)}</div>
-      <div class="small">${T.hard_sets} hard sets · about ${T.minutes} min${T.supplement ? " · extra, not one of the five" : ""} · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
+      <div class="small">${T.hard_sets} hard sets · ${T.minutes} min${T.supplement ? " · extra, not one of the five" : ""} · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
       <ul class="agenda lexlist">${T.exercises.map(exHTML).join("")}</ul>
-      <label for="lNotes">Notes</label><input id="lNotes" placeholder="how it felt, anything that hurt">
+      <label for="lNotes">Notes</label><input id="lNotes" placeholder="notes">
       <div class="rowbtns"><button class="primary" id="lSave">Save the session</button><button id="lPlan">Put this one on the calendar</button></div>
       <div class="small" id="lMsg"></div>
       <details class="why"><summary>how the targets move</summary><div class="small">Mike Matthews' double progression (Bigger Leaner Stronger). The big lifts work in 4 to 6 reps, about 80 to 85% of a one-rep max, three minutes between hard sets; the small lifts in 6 to 8 or 8 to 10. When a hard set reaches the top of its range the weight goes up next time (ten pounds on the bar, five on a dumbbell or a small lift, the next bell at home) and the reps drop back to the bottom; a set that cannot reach the bottom of the range takes the weight back a step. Nine to twelve hard sets a session, each of the five once every seven days, eight weeks on and then a deload. Legs is the cycling day of the five, so it goes the day before a day off the bike or a long coaching day, where the soreness costs no ride. The five are the book's barbell and dumbbell lifts, done at school or at Lifetime; each note names the home version on the Bowflex and the bells. The Pump at home is extra.</div></details>
     </div>
     ${periodHTML}
-    ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small">Estimated one-rep max (Epley), the best set of each session. This is where lifting shows up: not in the ride CTL.</div></div>` : ""}
+    ${hist.length ? `<div class="card"><h4>Strength</h4><ul class="agenda totals">${hist.map(([name, rows]) => `<li><span class="n">${esc(name)}<span class="small"> ${rows.length} session${rows.length===1?"":"s"} · top set ${rows[rows.length-1].top_lb} lb</span></span><span class="tag"><b>${rows[rows.length-1].e1rm}</b> <span class="small">1RM</span> ${spark(rows)}</span></li>`).join("")}</ul><div class="small"></div></div>` : ""}
     ${L.sessions && L.sessions.length ? `<div class="card"><h4>Sessions</h4><ul class="agenda">${L.sessions.map(s => `<li><span class="t">${esc(dayFmt(s.date).replace(", ", " "))}</span><span class="n">${esc(s.name)}<span class="small"> ${s.exercises.map(e => `${e.name.replace(/^(Kettlebell|Bowflex|Barbell|Dumbbell|Incline barbell|One-arm dumbbell|Alternating dumbbell|Seated dumbbell) /, "")} ${e.sets.map(x => (x.lb ? x.lb + "×" : "") + x.reps).join(",")}`).join(" · ")}${s.notes ? " · " + esc(s.notes) : ""}</span></span><span class="tag">${(s.volume_lb/1000).toFixed(1)}k lb <button class="tdel" data-dell="${esc(s.id)}" aria-label="Remove">${TRASH}</button></span></li>`).join("")}</ul></div>` : ""}`;
   const page = document.getElementById("liftPage");
   page.querySelectorAll(".lsb").forEach(b => b.onclick = ()=>{ const inp = b.parentNode.querySelector("input"); inp.value = Math.max(0, (+inp.value || 0) + (+b.dataset.step)); });
@@ -1209,7 +1207,7 @@ function paintChain(c){
       const i = ar.querySelector("i"); if (i) i.innerHTML = brk || cut ? CROSS : (wrap ? "" : ARROW);
     }
   }
-  const w = document.getElementById("chainWord"); if (w){ w.textContent = c.verdict || ""; w.dataset.tone = c.break_at ? "bad" : c.verdict ? "good" : "none"; }
+  const w = document.getElementById("chainWord"); if (w){ w.textContent = String(c.verdict || "").replace(/^Chain breaks at /i, "Breaks at ").split(/\.\s/)[0].replace(/\.$/, ""); w.dataset.tone = c.break_at ? "bad" : c.verdict ? "good" : "none"; }
   // the header: the week's dates, and today with the day's type
   const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
   const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
@@ -1656,7 +1654,7 @@ V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
     <a class="hufit" id="fitField" href="#ride" aria-label="Fitness, open the Ride page"><span class="fl"><span class="fk">Fitness · CTL</span><span class="fv"><b class="fn">—</b><span class="fr"><span class="fd">reaching the bridge…</span><span class="fw"></span></span></span></span><svg class="fspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-    <div class="chainhead"><span>This week <span id="chainDates"></span></span><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
+    <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
     <div class="card scoredetail" id="scoreDetail" hidden></div>
@@ -2204,7 +2202,7 @@ V.today = async function(){
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/progress", v => { drawProgress(v); }),
-      get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
+      get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word || !v.flagged) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;

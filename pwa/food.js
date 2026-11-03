@@ -119,7 +119,6 @@ function energyHTML(e, opt){
     ${c.svg}
     <div class="small egread"></div>
     ${ses?`<div class="small">${ses}</div>`:""}
-    ${(e.supps||[]).length ? `<div class="small">Supplements: ${(e.supps||[]).map(x => `${esc(hm12(x.time))} ${esc(String(x.name).replace(/,.*$/, ""))}`).join(" · ")}</div>` : ""}
     ${e.advice?`<div class="egadvice">${esc(e.advice)}</div>`:""}
     ${e.legs_tap && !opt.noLegs?legsTapHTML(e.legs_tap):""}
     <details class="why"><summary>what it counts</summary><div class="small">Two stores. The line is the quick store, liver and blood, what a hard effort runs on and what bonking empties: about 110 g full, half that after a night's sleep. The thin line is the legs, muscle glycogen, which only a ride drains and only a day refills; it carries over from yesterday. Each meal's carbs arrive as the stomach empties, slower with fat and protein; protein adds about a sixth of its weight as glucose over the afternoon, so a salmon dinner is a hollow dot and a small slow rise. On the bike a quarter of the carbohydrate burned comes from the quick store, the rest from the legs; carbs eaten on the bike count up to 60 g an hour, 90 with Tailwind. The faint band is the model's own uncertainty. Fat is not drawn: it is the fuel Zone 1 burns, which is why Zone 1 needs only a quarter of a tank.</div></details>
@@ -177,7 +176,7 @@ function microHTML(m, day){
     <span class="tag">${m.score} → <b>${x.score_after}</b> <button class="linkish" data-supp="${esc(x.key)}">log</button></span></li>`).join("");
   return `<div class="recovery"><span class="recscore" style="color:${toneC(m.band.tone)}">${m.score}</span>
       <span class="recmeta"><span class="recword" style="color:${toneC(m.band.tone)}">${esc(m.band.word)}</span>
-        <div class="small">${m.days_used} day${m.days_used===1?"":"s"} of photos${m.gaps&&m.gaps.length?` · low: ${esc(m.gaps.map(g=>g.label).join(", "))}`:""}</div></span></div>
+        </span></div>
     <ul class="agenda totals micros">${m.per.map(bar).join("")}</ul>
     ${foods?`<div class="small" style="margin-top:10px"><b>Eat</b></div><ul class="agenda totals">${foods}</ul>`:""}
     ${supps?`<div class="small" style="margin-top:10px"><b>Supplements</b></div><ul class="agenda totals">${supps}</ul>`:""}
@@ -246,10 +245,10 @@ V.food = async function(){
     <div id="fMacros"></div>
     ${isToday ? `<div class="fd-log" id="snap">
       <div class="hu-tiles fd-tiles">
-        <button class="hu-tile primary snapbtn" id="snapBtn">${ICON.cam}<b>Snap a meal</b><span>up to 4 photos</span></button>
-        <button class="hu-tile snapbtn" id="rollBtn">${ICON.roll}<b>From camera roll</b><span>a photo you took</span></button>
-        <button class="hu-tile" id="writeBtn">${ICON.pen}<b>Write</b><span>"rice 200 g, salmon"</span></button>
-        <button class="hu-tile talkbtn" id="talkBtn">${ICON.mic}<b>Say</b><span>tap and talk</span></button></div>
+        <button class="hu-tile primary snapbtn" id="snapBtn">${ICON.cam}<b>Snap a meal</b></button>
+        <button class="hu-tile snapbtn" id="rollBtn">${ICON.roll}<b>From camera roll</b></button>
+        <button class="hu-tile" id="writeBtn">${ICON.pen}<b>Write</b></button>
+        <button class="hu-tile talkbtn" id="talkBtn">${ICON.mic}<b>Say</b></button></div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
       <input id="rollFile" type="file" accept="image/*" multiple hidden>
       <div id="snapForm" hidden>
@@ -305,7 +304,7 @@ V.food = async function(){
     const drEnts = drIds.map(id => day.entries.find(e => e.id === id)).filter(Boolean);
     const nDrinks = drEnts.length, alsoFood = drEnts.filter(e => !isDr(e));
     const foodWord = alsoFood.length && alsoFood.every(e => /shake|smoothie/i.test(e.name || "")) ? (alsoFood.length === 1 ? " shake" : " shakes") : "";
-    const drLine = `${nDrinks} drink${nDrinks===1?"":"s"} today${alsoFood.length ? ` (${alsoFood.length}${foodWord} also count${alsoFood.length===1?"s":""} as food)` : ""} · on the <a href="#hydration">Hydration page</a>`;
+    const drLine = `${nDrinks} drink${nDrinks===1?"":"s"} today${alsoFood.length ? ` (${alsoFood.length}${foodWord} also count${alsoFood.length===1?"s":""} as food)` : ""} · <a href="#hydration">Hydration</a>`;
     const mEl = document.getElementById("fMacros");
     if (mEl) mEl.innerHTML = bars;
     el.innerHTML = `
