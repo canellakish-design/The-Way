@@ -230,7 +230,29 @@ function dedupeRides(rides) {
   }
   return out;
 }
+// A ride from The Way's own workout player (bridge/player.js) is a done ride the moment it is saved, in the
+// shape a Strava ride has here: measured power (the trainer), its load from NP against the planning FTP.
+function playerRideAsDone(x, st) {
+  const ftp = (st && st.ftp) || 175, secs = x.seconds || 0;
+  const watts = x.np_w || x.avg_w || null;
+  let tss = null, basis = null;
+  if (watts) { const IF = watts / ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = x.np_w ? 'power' : 'average power'; }
+  else if (x.avg_hr) { tss = Math.round(hrLoad(secs, x.avg_hr, Object.assign({ hr_rest: 55, lthr: 139 }, st || {}))); basis = 'heart rate (TRIMP)'; }
+  return { id: x.id, date: x.date, time: x.time, name: x.name || 'Indoor ride', type: 'VirtualRide', minutes: Math.round(secs / 60),
+    miles: x.distance_m ? Math.round(x.distance_m / 1609.34 * 10) / 10 : null, device_watts: true,
+    avg_w: x.avg_w != null ? Math.round(x.avg_w) : null, np_w: x.np_w != null ? Math.round(x.np_w) : null, max_w: x.max_w != null ? x.max_w : null,
+    avg_hr: x.avg_hr != null ? Math.round(x.avg_hr) : null, max_hr: x.max_hr != null ? x.max_hr : null,
+    tss, tss_basis: basis, source: 'player', workout_id: x.workout_id || null, intervals_id: x.intervals_id || null };
+}
+// The done rides: Strava's, and the player's own, one ride kept where both have it.
 async function stravaDone(from, to, st, o) {
+  const r = await stravaOnly(from, to, st, o);
+  let mine = [];
+  try { mine = (await require('./player').ridesBetween(from, to)).map(x => playerRideAsDone(x, st)); } catch (e) { mine = []; }
+  if (!mine.length) return r;
+  return Object.assign({}, r, { rides: dedupeRides((r.rides || []).concat(mine)).filter(x => x.date >= from && x.date <= to) });
+}
+async function stravaOnly(from, to, st, o) {
   const key = 'calendar-strava-cache-v2';   // v2: estimated power no longer read as power
   const { wfrom, wto } = wideWindow(from, to);
   const c = await getJSON(key, null);
@@ -671,4 +693,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { playerRideAsDone, fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };

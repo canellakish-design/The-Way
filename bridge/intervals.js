@@ -193,4 +193,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, plannedRange, wellnessRange, configured, ping };
+module.exports = { attach, plannedRange, wellnessRange, configured, ping, headers };
