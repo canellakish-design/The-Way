@@ -93,7 +93,8 @@ async function context() {
     }
     const e = day.energy;
     if (e && e.now) {
-      lines.push(`Live fuel now: quick store ${e.now.pct}% (${e.now.band.word}), legs ${e.now.legs_pct}%.` + (e.sessions || []).map(s => ` ${s.name} at ${tz.hm12(s.time)} needs ${s.need}% quick and ${s.need_legs}% legs; it will have ${s.pct}% and ${s.legs_pct}% (${s.band.word}).`).join('') + (e.advice ? ' Advice: ' + e.advice : ''));
+      const ateToday = (day.entries || []).some(x => !x.supplement && (x.kcal || 0) > 0);
+      lines.push(`Live fuel now: quick store ${e.now.pct}% (${e.now.band.word}), legs ${e.now.legs_pct}%.` + (ateToday ? '' : ' NOTHING EATEN TODAY YET: these numbers are what is left from yesterday after the night. Never say he is fuelled, fed or has eaten; say what to eat before the session.') + (e.sessions || []).map(s => ` ${s.name} at ${tz.hm12(s.time)} needs ${s.need}% quick and ${s.need_legs}% legs; ${ateToday ? 'it will have' : 'with the planned food before it, it will have'} ${s.pct}% and ${s.legs_pct}% (${s.band.word}).`).join('') + (e.advice ? ' Advice: ' + e.advice : ''));
     }
     const h = day.hydration;
     if (h && h.now) lines.push(`Live hydration now: ${h.now.ml >= 0 ? '+' : '-'}${L(h.now.ml)} on the morning (${h.now.band.word}); ${L(h.drunk_ml)} drunk of about ${L(h.target_ml)} for the day.` + (h.sessions || []).filter(s => !s.done).map(s => ` ${s.name.replace(/,.*$/, '')} will sweat about ${L(s.sweat_ml_h)} an hour.`).join('') + (h.advice ? ' Advice: ' + h.advice : ''));
