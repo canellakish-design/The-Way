@@ -130,7 +130,7 @@ async function context() {
   if (lifts && lifts.sessions) {
     const wk = lifts.sessions.filter(x => x.date >= tz.shiftKey(today, -6));
     const last = lifts.sessions[lifts.sessions.length - 1];
-    lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${last.date}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
+    lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
   }
   return lines.join('\n');
 }
@@ -262,29 +262,29 @@ async function run(a, x) {
       if (/weight|lift|strength/i.test(String(body.sport || '')) || /^(push|pull|upper|legs|pump)\b/i.test(String(body.name || ''))) {
         const WK = require('./workouts'), db = await getJSON('plan-workouts', { workouts: {} });
         const same = Object.values(db.workouts || {}).find(w => w.date === body.date && !WK.isRideSport(w));
-        if (same) return { ok: true, summary: `${same.name} is already on the calendar for ${body.date}${same.time ? ' at ' + tz.hm12(same.time) : ''}; a session saved on the Lift page marks it done. Nothing added.` };
+        if (same) return { ok: true, summary: `${same.name} is already on the calendar for ${tz.dayShort(body.date)}${same.time ? ' at ' + tz.hm12(same.time) : ''}; a session saved on the Lift page marks it done. Nothing added.` };
       }
       let w; try { w = await require('./workouts').create(body); } catch (e) { return { ok: false, summary: e.message }; }
-      return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + tz.hm12(w.time) : ''}.`, workout_id: w.id };
+      return { ok: true, summary: `On the calendar: ${w.name}, ${tz.dayShort(w.date)}${w.time ? ' at ' + tz.hm12(w.time) : ''}.`, workout_id: w.id };
     }
     case 'workout_change': {
       const date = isDate(a.date) ? a.date : tz.todayKey();
       const hit = await findWorkout(date, a.text);
-      if (!hit) return { ok: false, summary: `No planned session on ${date} to change.` };
+      if (!hit) return { ok: false, summary: `No planned session on ${tz.dayShort(date)} to change.` };
       const body = { date: isDate(a.new_date) ? a.new_date : hit.date, time: isTime(a.time) ? a.time : hit.time };
       const lib = LIBRARY.find(l => l.key === a.library_key);
       if (lib) Object.assign(body, { name: lib.name, sport: lib.sport, notes: lib.notes, steps: lib.steps });
       else if (a.minutes > 0) Object.assign(body, resized(hit, a.minutes));
       let w; try { w = await require('./workouts').update(hit.id, body); } catch (e) { return { ok: false, summary: e.message }; }
-      const what = [lib ? `now ${w.name}` : a.minutes > 0 ? `now ${Math.round(w.metrics.duration_s / 60)} min` : null, isTime(a.time) ? `at ${tz.hm12(a.time)}` : null, isDate(a.new_date) ? `on ${a.new_date}` : null].filter(Boolean).join(', ');
+      const what = [lib ? `now ${w.name}` : a.minutes > 0 ? `now ${Math.round(w.metrics.duration_s / 60)} min` : null, isTime(a.time) ? `at ${tz.hm12(a.time)}` : null, isDate(a.new_date) ? `on ${tz.dayShort(a.new_date)}` : null].filter(Boolean).join(', ');
       return { ok: true, summary: `Changed: ${hit.name}${what ? ', ' + what : ''}${w.sync && w.sync.state === 'synced' ? ' (re-sent)' : ''}.`, workout_id: w.id };
     }
     case 'remove_workout': {
       const date = isDate(a.date) ? a.date : tz.todayKey();
       const hit = await findWorkout(date, a.text);
-      if (!hit) return { ok: false, summary: `No planned session on ${date}.` };
+      if (!hit) return { ok: false, summary: `No planned session on ${tz.dayShort(date)}.` };
       await require('./workouts').remove(hit.id);
-      return { ok: true, summary: `Off the calendar: ${hit.name}, ${hit.date}.` };
+      return { ok: true, summary: `Off the calendar: ${hit.name}, ${tz.dayShort(hit.date)}.` };
     }
     case 'event': {
       const j = await require('./calendar').addEvent({ title: a.name || a.text || 'Event', date: a.date, start: a.time || '', minutes: a.minutes || 60, notes: a.text && a.name ? a.text : '' });

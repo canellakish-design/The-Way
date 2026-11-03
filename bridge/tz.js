@@ -69,12 +69,15 @@ function labelOf(key, zone, opts) {
 }
 
 function fmtMin(m) {
+  m = ((Math.round(m) % 1440) + 1440) % 1440;   // past midnight reads 12:30a, not 12:30p
   let h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? 'a' : 'p';
   h = h % 12; if (h === 0) h = 12;
   return h + ':' + pad(mm) + ap;
 }
 
 // "19:00" → "7:00p", the way the app shows every time.
-function hm12(t) { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); if (!m) return t || ''; let h = +m[1]; const ap = h < 12 ? 'a' : 'p'; h = h % 12 || 12; return h + ':' + m[2] + ap; }
-module.exports = { hm12, ZONE, parts, keyOf, todayKey, minutesOf, isToday,
+function hm12(t) { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); if (!m) return t || ''; let h = (+m[1]) % 24; const ap = h < 12 ? 'a' : 'p'; h = h % 12 || 12; return h + ':' + m[2] + ap; }
+// "2026-11-02" → "Mon, Nov 2", the way a person reads a date
+function dayShort(key) { return /^\d{4}-\d{2}-\d{2}$/.test(key || '') ? labelOf(key, ZONE, { weekday: 'short', month: 'short' }) : (key || ''); }
+module.exports = { dayShort, hm12, ZONE, parts, keyOf, todayKey, minutesOf, isToday,
   shiftKey, noonOf, zonedToUTC, dowOf, dowIndexOf, labelOf, fmtMin };
