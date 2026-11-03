@@ -1180,8 +1180,8 @@ function paintChain(c){
     let L = c.links[ck]; const el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
     let num = L.week == null ? "—" : ck === "recovery" && L.week_kind === "score" ? `${L.week}` : ck === "work" || ck === "water" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     let unit = ck === "recovery" && L.week_kind === "score" ? "avg" : UNIT[ck], state = L.state;
-    // Macros: today's kcal against the day's target, the number at the top of the Food page, and its tone
-    if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.kcal_today == null ? "—" : Number(L.kcal_today).toLocaleString("en-US"); unit = L.kcal_target ? `/${Number(L.kcal_target).toLocaleString("en-US")}` : "kcal"; state = L.kcal_today == null ? "none" : (L.today_state || "none"); }
+    // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
+    if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
     if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`; }
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
@@ -1198,7 +1198,7 @@ function paintChain(c){
     const tn = el.querySelector(".ctn"); tn.textContent = t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || (t.num === "—" ? "var(--muted)" : "var(--ink)");
     el.querySelector(".ctw").textContent = t.word || "today";
     el.title = ck === "plan" ? `Plan: ${num} of the seven days ahead placed (${L.week_label || ""}); the Calendar's "done of plan" is a different number · today ${t.word || t.num}`
-      : ck === "food" ? `Macros today: ${num} ${unit} kcal, the Food page's number · ${t.num} g protein`
+      : ck === "food" ? `Macros: ${num} on plan this week · today ${t.num} ${t.word}`
       : `${label}: ${num} ${unit} this week · today ${t.num}${t.word ? ", " + t.word : ""}`;
     // the arrow out of this link: its colour, a cross where the chain breaks or the link is red
     for (const ar of document.querySelectorAll(`.carrow[data-k="${ck}"]`)){
@@ -1238,8 +1238,8 @@ function todayCell(ck, L){
   if (ck === "sleep") return { num: L.today == null ? "—" : `${L.today} h`, word: L.today == null ? (L.today_word || "") : (L.today >= 7 ? "enough" : L.today >= 6.25 ? "short" : "very short"), tone: band(L.today, 7, 6.25) };
   if (ck === "water"){ const w0 = L.today_word || ""; const tone = /topped|fine/.test(w0) ? "good" : /behind/.test(w0) ? "warn" : /dry/.test(w0) ? "bad" : /much/.test(w0) ? "warn" : "none"; const w = /topped/.test(w0) ? "ahead" : /much/.test(w0) ? "too much" : w0; return { num: L.today == null ? "—" : (Math.abs(L.today) >= 1000 ? `${L.today > 0 ? "+" : "−"}${(Math.abs(L.today)/1000).toFixed(1)} L` : `${L.today > 0 ? "+" : "−"}${Math.abs(L.today)} ml`), word: w, tone }; }
   // Macros: protein against its target, the Food page's protein bar; the kcal are the box's big number
-  if (ck === "food"){ const p = L.protein_today, tp = L.protein_target, due = L.protein_due || tp;
-    return { num: p == null ? "—" : `${p}${tp ? "/" + tp : ""}`, word: p == null ? "nothing logged" : "protein g", tone: p == null || !due ? "none" : p >= 0.8 * due ? "good" : p >= 0.6 * due ? "warn" : "bad" }; }
+  if (ck === "food"){ const k = L.kcal_today, kt = L.kcal_target;
+    return { num: k == null ? "—" : Number(k).toLocaleString("en-US"), word: k == null ? "" : kt ? `of ${Number(kt).toLocaleString("en-US")}` : "kcal", tone: k == null ? "none" : (L.today_state || "none") }; }
   if (ck === "micros") return { num: L.today == null ? "—" : `${L.today}`, word: L.gaps && L.gaps.length ? `low: ${L.gaps.slice(0,2).join(", ")}` : (L.today_word === "on target" ? "covered" : (L.today_word || "")), tone: band(L.today, 80, 60) };
   if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : L.planned_today ? { num: "1", word: L.planned_today, tone: "warn" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
   if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
