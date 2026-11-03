@@ -231,9 +231,9 @@
   // ---------- the goal circle: it fills as the session's one goal is met ----------
   // The plan has two rides, and each has one goal, the same one the Calendar grades it on (bridge/workouts.js):
   //   Zone 1: the planned minutes at heart rate 116 or under (117 is VT1); up to 10% of the ride at 117 or above still passes.
-  //   VO2 40/20s: 8 to 12 minutes above 152 (94% of max 162); the circle is full at 8, and past 12 is more than the session asks.
+  //   VO2 40/20s: 8 to 12 minutes above 139 (VT2, Harry's VO2 line); the circle is full at 8, and past 12 is more than the session asks.
   //   Anything else: the planned time, ridden.
-  const HR_HARD = 152, VT1 = 117, VT2 = 139;
+  const VT1 = 117, VT2 = 139, HR_HARD = VT2;
   function goalOf(w, ivs){
     const name = String(w && w.name || ""), plannedS = (ivs || []).reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
     if (/vo2|40\s*\/\s*20/i.test(name)) return { kind: "vo2", target_min: 8, hi_min: 12, words: `8 to 12 min above ${HR_HARD}` };
@@ -248,7 +248,7 @@
     if (g.kind === "vo2"){
       const v = hard / 60, met = v >= g.target_min, past = v > g.hi_min;
       return { frac: Math.min(1, v / g.target_min), big: m(hard), of: `of ${g.target_min} min`, lab: `above ${HR_HARD}`, band: past ? "hold" : met ? "go" : "run",
-        sub: past ? `past ${g.hi_min}: more than the session asks` : met ? `goal met · up to ${g.hi_min} min` : hrN ? `${m(z3)} min at ${VT2}+ so far` : "waiting for heart rate", met };
+        sub: past ? `past ${g.hi_min}: more than the session asks` : met ? `up to ${g.hi_min} min` : hrN ? "" : "waiting for heart rate", met };
     }
     if (g.kind === "z1"){
       const over = hrN ? Math.round((hrN - under) / hrN * 100) : 0, met = under / 60 >= g.target_min;

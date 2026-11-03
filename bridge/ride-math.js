@@ -1,18 +1,17 @@
 // ============================================================
 // ride-math.js — what a ride's streams say, as arithmetic. Pure.
 //
-// Heart rate is read for every ride: average, max, minutes above 152 bpm
-// (the VO2 session's one yardstick: 8 to 12 is the target) and minutes in
+// Heart rate is read for every ride: average, max, minutes above VT2 (139 bpm,
+// the VO2 session's one yardstick: 8 to 12 is the target) and minutes in
 // the three Seiler zones (VT1 117 bpm, VT2 139 bpm). Breathing comes from
 // the Garmin's respiration stream when the device recorded one; the same
 // summary applies.
 // ============================================================
-// vt1 and vt2 are measured (Tymewear). hard is the VO2 line: 90% of max
-// (146) is the textbook marker, but on 30/15 and 40/20 intervals heart-rate
-// time above 90% over-counts (Fleckenstein 2025: more time above 90% HRmax,
-// less above 90% VO2max than long intervals), so the line sits at 94% of a
-// 162 max. Target minutes stay Harry's 8 to 12.
-const HR = { vt1: 117, vt2: 139, hard: 152, max: 162 };
+// vt1 and vt2 are measured (Tymewear). hard is the VO2 line, and Harry set it
+// at VT2 (3 Nov 2026): 152 (94% of max) was never reached for more than
+// seconds in any ride on record, so a goal there graded every session red.
+// Target minutes stay Harry's 8 to 12.
+const HR = { vt1: 117, vt2: 139, hard: 139, max: 162 };
 const VO2_TARGET = { lo: 8, hi: 12 };
 
 const r1 = x => Math.round(x * 10) / 10;
@@ -60,8 +59,8 @@ function hrSummaryFromZones(z, avg, max, maxHr) {
   return {
     avg: avg != null ? Math.round(avg) : null, max: max != null ? Math.round(max) : null,
     seconds: Math.round(total / 1000),
-    // zone 5 starts at 90% of max (146); the share of it above the VO2 line (152) is taken as even across the zone
-    minutes_above_hard: m(zone[5] * Math.max(0, Math.min(1, (mh - HR.hard) / (mh - cuts[4])))), hard_bpm: HR.hard,
+    // the VO2 line is VT2, so the minutes above it are the minutes above VT2
+    minutes_above_hard: m(above), hard_bpm: HR.hard,
     zones: { z1_min: m(below), z2_min: m(mid), z3_min: m(above) },
     zone_pct: { z1: Math.round(below / total * 100), z2: Math.round(mid / total * 100), z3: Math.round(above / total * 100) },
     estimated: 'from WHOOP zone times, not a stream'
@@ -96,7 +95,7 @@ function respSummary(resp) {
   };
 }
 
-// The VO2 session's grade: minutes above 152.
+// The VO2 session's grade: minutes above the VO2 line (VT2, 139).
 function vo2Grade(minutesAbove) {
   if (minutesAbove == null) return null;
   const m = minutesAbove;
