@@ -32,6 +32,9 @@
 /* ---------- Food: the journal, one compact row each ---------- */
 .fd-jhead{display:flex; flex-direction:column; gap:2px; margin:22px 0 4px; padding-bottom:6px; border-bottom:1px solid var(--line)}
 .fd-jhead .drinksnote{margin:0; font-size:13px}
+/* a removal or a correction shown before the bridge answers */
+.fd-saving{color:var(--amber); letter-spacing:.4px; text-transform:none}
+#writeMsg button.linkish{margin-left:6px}
 .fd-journal{display:flex; flex-direction:column}
 .fd-none{padding:10px 0}
 .fd-jr{border-bottom:1px solid var(--line); padding:10px 0; cursor:pointer}

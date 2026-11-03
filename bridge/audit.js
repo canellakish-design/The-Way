@@ -31,33 +31,39 @@ async function run(o) {
 
   // 1. the journal: every plate carries the plan it was eaten under; doubles are marked
   try {
-    for (const date of [tz.shiftKey(today, -1), today]) {   // yesterday too: a late double shows the next morning
+    for (const date of [today]) {   // today only: the line on the Day page is about today
       const doc = await food.dayDocFor(date);
       if (!doc || !doc.entries) continue;
       const g = await food.guidelinesFor(date);
       let backfilled = 0, doubles = [], changed = false;
       const plates = doc.entries.filter(e => !e.supplement);
+      const seen = await getJSON('food-seen-' + date, null).catch(() => null);
       const F = require('./food-math');
       for (const e of plates) {
-        // a plate saved without a slot (before the wider rule) is slotted here the way the day report slots it
-        if (!e.slot && !e.drink_only && e.time) { const sl = F.slotFor(g.meals, e.time, e.meal); if (sl) { e.slot = sl; changed = true; } }
+        // a plate saved without a slot (before slots were always chosen at logging) is slotted once here, and keeps it
+        if (!e.slot && !e.slot_fixed && !e.drink_only && e.time) {
+          // the slot the day already gave it (food.js keeps it in food-seen-<date>), else one now, once
+          const sl = seen && seen.entry_slots && e.id in seen.entry_slots ? seen.entry_slots[e.id] : F.slotFor(g.meals, e.time, e.meal);
+          e.slot = sl || null; e.slot_fixed = true; changed = true;
+        }
         if (!e.plan && !e.drink_only && e.slot) {
-          const m = (g.meals || []).find(x => x.slot === e.slot);
-          if (m && m.kcal != null) { e.plan = { slot: e.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: e.time, backfilled: true }; backfilled++; changed = true; }
+          // the slot's own frozen plan when another plate in it carries one, else the plan as it stands
+          const sib = plates.find(x => x !== e && x.slot === e.slot && x.plan && x.plan.kcal != null && !x.plan.backfilled);
+          const m = sib ? sib.plan : (g.meals || []).find(x => x.slot === e.slot);
+          if (m && m.kcal != null) { e.plan = { slot: e.slot, time: m.time || null, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: e.time, backfilled: true }; backfilled++; changed = true; }
         }
       }
       // the same thing logged twice within three minutes: marked, never removed
       // every pair logged within ten minutes of each other, not only neighbours: a plate logged between two copies hid them
-      const sorted = plates.filter(e => e.time).slice().sort((a, b) => a.time.localeCompare(b.time));
-      const sameItem = (a, b) => norm(a.name) === norm(b.name) || (a.written && b.written && norm(a.written) === norm(b.written)) || (a.drink && b.drink && norm(a.drink) === norm(b.drink) && Math.abs((a.kcal || 0) - (b.kcal || 0)) <= 30);
-      for (let i = 1; i < sorted.length; i++) {
-        const b = sorted[i];
-        const a = sorted.slice(0, i).reverse().find(x => Math.abs(toMin(b.time) - toMin(x.time)) <= 10 && sameItem(x, b));
-        if (a) { if (b.maybe_double_of !== a.id) { b.maybe_double_of = a.id; changed = true; } doubles.push({ date, id: b.id, name: b.name, time: b.time, twin: a.name, twin_time: a.time }); }
-        else if (b.maybe_double_of) { delete b.maybe_double_of; changed = true; }
+      const r = doublesOf(plates);
+      for (const e of plates) {
+        const twin = r.mark[e.id];
+        if (twin && e.maybe_double_of !== twin) { e.maybe_double_of = twin; changed = true; }
+        else if (!twin && e.maybe_double_of) { delete e.maybe_double_of; changed = true; }
       }
+      doubles = r.groups;
       if (changed) await food.saveDayDoc(date, doc);
-      checks.push({ key: 'journal-' + date, ok: doubles.length === 0, fixed: backfilled, detail: `${plates.length} entries${backfilled ? `, ${backfilled} given the plan they were eaten under` : ''}${doubles.length ? `, ${doubles.length} possible double log${doubles.length === 1 ? '' : 's'}` : ''}`, items: doubles.map(d => `${tz.hm12(d.time)} ${d.name} looks like ${tz.hm12(d.twin_time)} ${d.twin} again`) });
+      checks.push({ key: 'journal-' + date, ok: doubles.length === 0, fixed: backfilled, detail: `${plates.length} entries${backfilled ? `, ${backfilled} given the plan they were eaten under` : ''}${doubles.length ? `, ${doubles.length} possible double log${doubles.length === 1 ? '' : 's'}` : ''}`, items: doubles.map(d => d.text) });
     }
   } catch (e) { checks.push({ key: 'journal', ok: false, detail: 'could not read the journal: ' + e.message, items: [] }); }
 
@@ -106,16 +112,45 @@ async function run(o) {
     }
   } catch (e) { /* no feed: nothing to compare */ }
 
-  const flagged = checks.filter(c => !c.ok);
   const fixed = checks.reduce((a, c) => a + (c.fixed || 0), 0);
-  const result = { at: new Date().toISOString(), today, checks, fixed, flagged: flagged.length,
-    word: flagged.length ? `${flagged.length} thing${flagged.length === 1 ? '' : 's'} to look at: ${flagged.flatMap(c => c.items.length ? c.items : [c.detail]).join(' · ')}` : (fixed ? `Checked: ${fixed} small repair${fixed === 1 ? '' : 's'} made, nothing to decide.` : 'Checked: every page reads the same day.') };
+  const result = Object.assign({ at: new Date().toISOString(), today, checks, fixed }, wordOf(checks, fixed));
   await setJSON('audit-last', { at: Date.now(), result }).catch(() => {});
   return result;
+}
+
+// Doubles: the same thing logged again within ten minutes. Every pair is found, not only neighbours
+// (a plate logged between two copies hid them), and three copies are one group, listed once.
+// plates: the day's entries. Returns { mark: {id: id of the first copy}, groups: [{ids, text}] }.
+function doublesOf(plates) {
+  const sorted = (plates || []).filter(e => e && e.time).slice().sort((a, b) => a.time.localeCompare(b.time));
+  const sameItem = (a, b) => norm(a.name) === norm(b.name) || (a.written && b.written && norm(a.written) === norm(b.written)) || (a.drink && b.drink && norm(a.drink) === norm(b.drink) && Math.abs((a.kcal || 0) - (b.kcal || 0)) <= 30);
+  const mark = {}, root = {};
+  for (let i = 1; i < sorted.length; i++) {
+    const b = sorted[i];
+    const a = sorted.slice(0, i).reverse().find(x => Math.abs(toMin(b.time) - toMin(x.time)) <= 10 && sameItem(x, b));
+    if (a) { const r = root[a.id] || a.id; mark[b.id] = r; root[b.id] = r; }
+  }
+  const byRoot = {};
+  for (const [id, r] of Object.entries(mark)) (byRoot[r] = byRoot[r] || []).push(id);
+  const groups = Object.entries(byRoot).map(([r, ids]) => {
+    const first = sorted.find(e => e.id === r), copies = ids.map(id => sorted.find(e => e.id === id));
+    const text = copies.length === 1 ? `${tz.hm12(copies[0].time)} ${copies[0].name} looks like ${tz.hm12(first.time)} ${first.name} again`
+      : `${first.name} logged ${copies.length + 1} times (${[first].concat(copies).map(e => tz.hm12(e.time)).join(', ')})`;
+    return { ids: [r].concat(ids), text };
+  });
+  return { mark, groups };
+}
+
+// The self-check's line: the count is the number of things listed, and every listed thing is counted.
+function wordOf(checks, fixed) {
+  const items = checks.filter(c => !c.ok).flatMap(c => c.items && c.items.length ? c.items : [c.detail]).filter(Boolean);
+  const uniq = Array.from(new Set(items));
+  return { flagged: uniq.length, items: uniq,
+    word: uniq.length ? `${uniq.length} thing${uniq.length === 1 ? '' : 's'} to look at: ${uniq.join(' · ')}` : (fixed ? `Checked: ${fixed} small repair${fixed === 1 ? '' : 's'} made, nothing to decide.` : 'Checked: every page reads the same day.') };
 }
 
 function attach(app) {
   app.get('/audit', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await run({ force: req.query.force === '1' })); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, run };
+module.exports = { attach, run, doublesOf, wordOf };

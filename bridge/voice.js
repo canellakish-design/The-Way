@@ -81,7 +81,16 @@ async function context() {
     { const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })(), toM = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
       const recent = (day.entries || []).filter(e => !e.supplement && toM(e.time) != null && nowM - toM(e.time) <= 180);
       if (recent.length) lines.push('ALREADY IN THE JOURNAL in the last three hours (never log any of these again unless he says another, more, a second or again): ' + recent.map(e => `${tz.hm12(e.time)} ${e.name}${e.written ? ` (he said "${String(e.written).slice(0, 60)}")` : ''}`).join('; ') + '.'); }
-    if (day.meals && day.meals.length) lines.push('The meal plan: ' + day.meals.map(m => `${tz.hm12(m.time)} ${m.slot} (${m.carbs_g} C, ${m.protein_g || 0} P${(m.logged || []).length ? ', logged' + (m.match ? ', ' + m.match.word : '') : ''})`).join('; ') + '.');
+    if (day.meals && day.meals.length) {
+      // the same rows the Day page and the Food page show (food.js rowsFor): what is eaten, and what is still open
+      const slotTxt = m => `${tz.hm12(m.time)}${m.next_day ? ' (after midnight)' : ''} ${m.slot === 'after' ? 'post-ride' : m.slot === 'before' ? 'pre-ride' : m.slot}`;
+      const nums = m => m.kcal ? `${m.kcal} kcal, ${m.low_carb ? 'under ' : ''}${m.carbs_g || 0} g carbs, ${m.protein_g || 0} g protein` : `${m.carbs_g || 0} g carbs`;
+      lines.push('The meal plan: ' + day.meals.map(m => `${slotTxt(m)} (${nums(m)}${(m.logged || []).length ? ', logged' + (m.match ? ', ' + m.match.word : '') : ''})`).join('; ') + '.');
+      const open = day.meals.filter(m => !(m.logged || []).length && !m.covered_by && !(m.slot === 'on the bike' && !(m.carbs_g > 0)));
+      lines.push(open.length
+        ? `STILL OPEN ON THE PLAN, exactly as the Day page shows it (when he asks what is left to eat, name these slots by time and name with their numbers and what each says, and nothing else): ${open.map(m => `${slotTxt(m)}: ${m.what} (${nums(m)})`).join('; ')}.`
+        : 'Every slot on the plan is logged: nothing is left to eat on the plan today.');
+    }
     const e = day.energy;
     if (e && e.now) {
       lines.push(`Live fuel now: quick store ${e.now.pct}% (${e.now.band.word}), legs ${e.now.legs_pct}%.` + (e.sessions || []).map(s => ` ${s.name} at ${tz.hm12(s.time)} needs ${s.need}% quick and ${s.need_legs}% legs; it will have ${s.pct}% and ${s.legs_pct}% (${s.band.word}).`).join('') + (e.advice ? ' Advice: ' + e.advice : ''));
@@ -222,11 +231,8 @@ async function run(a, x) {
   switch (a.type) {
     case 'meal': case 'drink': {
       // the same words logged again within twenty minutes are the same food, said twice, unless he says it was more
-      { const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\b(a|an|the|one|of|and|with|i|had|have|just)\b/g, ' ').replace(/\s+/g, ' ').trim();
-        const again = /\b(another|more|again|second|extra|other)\b/i.test(String(a.text || ''));
-        if (!again) { const day0 = await food.dayReport(tz.todayKey()); const p = tz.parts(new Date()), nowM = p.h * 60 + p.mi;
-          const twin = (day0.entries || []).find(e => !e.supplement && e.time && nowM - ((+e.time.slice(0, 2)) * 60 + (+e.time.slice(3, 5))) <= 20 && (norm(e.written) === norm(a.text) || norm(e.name) === norm(a.text)));
-          if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; } }
+      { const twin = await food.twinToday(a.text);   // one rule with the Food page's POST /food/text (food-math twinOf)
+        if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; }
       const e = await food.addPhoto({ text: a.text, meal: a.meal || undefined });
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
       let celebrate = false, slot = null;

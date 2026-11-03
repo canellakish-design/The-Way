@@ -147,16 +147,33 @@ function cue(day, sessions, nowIso) {
 // athlete's zone. Returns [{time, slot, what, kcal, carbs_g, protein_g}].
 // Energy shares: the three main meals carry most of it; the ride's own
 // fuelling is on top of the day, not inside it.
+// A session's end in minutes from today's midnight: a ride from 11:00p to 12:30a ends at 1470, not at 30
+// (its end_time "00:30" read as the same morning made the ride zero minutes long and lost its bottle and
+// its post-ride meal).
+function endOf(x, start) {
+  let e = toMin(x.end_time);
+  if (e != null) { if (e < start) e += 1440; return e; }
+  return start + (x.minutes || 60);
+}
+// A slot's minute in the day: past midnight it is 1440 and up (at_min), so it sorts last, never first.
+const mmin = m => m == null ? null : (m.at_min != null ? m.at_min : toMin(m.time));
+function stamp(row, t) {
+  const r = Math.round(t / 5) * 5;
+  row.time = toHM(r);
+  if (r >= 1440) { row.next_day = true; row.at_min = r; } else { delete row.next_day; delete row.at_min; }
+  return row;
+}
+
 function mealPlan(day, sessions, target) {
   const t = target || targets(day, 0);
   // the day is laid out around the first ride; a lift or a run never gets a "before" meal or an on-the-bike slot
   const timed = (sessions || []).filter(x => isRideSession(x) && toMin(x.time) != null)
-    .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
+    .map(x => ({ x, start: toMin(x.time), end: endOf(x, toMin(x.time)) }))
     .sort((a, b) => a.start - b.start)[0];
-  const meal = (time, slot, what, share, carbShare, protein) => ({
-    time: toHM(Math.round(time / 5) * 5), slot, what,
+  const meal = (time, slot, what, share, carbShare, protein) => stamp({
+    slot, what,
     kcal: r5(t.kcal * share), carbs_g: r5(t.carbs_g * carbShare), protein_g: protein
-  });
+  }, time);
   const out = [];
   const restDay = day === 'rest';
   // A low-carb breakfast means it: 20 g of carbs at most (eggs, Greek yogurt, a
@@ -191,9 +208,14 @@ function mealPlan(day, sessions, target) {
   const onBikeSlot = { time: toHM(start), slot: 'on the bike', what, kcal: carbs * 4, carbs_g: carbs, protein_g: 0, extra: true };
   // The post-ride meal is a real meal inside two hours (Aragon & Schoenfeld
   // 2013); the 30-minute window only matters with a second session that day.
-  const after = (slot, share, carbShare) => meal(end + 30, slot, (day === 'high'
+  // It belongs to its ride: marked post_ride, so a lift later never drags it along.
+  const after = (slot, share, carbShare) => Object.assign(meal(end + 30, slot, (day === 'high'
     ? 'Within 2 hours of the ride: 45 g protein and carbs. Post-ride bowl, or chocolate milk and a rice ball.'
-    : 'Within 2 hours of the ride: 45 g protein and carbs. Post-ride bowl.'), share, carbShare, 50);
+    : 'Within 2 hours of the ride: 45 g protein and carbs. Post-ride bowl.'), share, carbShare, 50), { post_ride: true, ride_end: end });
+  // After a late ride (back after 10 p.m., or past midnight) the post-ride meal is a bedtime snack:
+  // protein and some carbs, small enough to sleep on. Dinner stays at dinner time.
+  const bedtime = (endMin, share, carbShare) => Object.assign(meal(endMin + 30, 'after',
+    'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', share, carbShare, 25), { post_ride: true, ride_end: endMin });
   // A carb breakfast wants 2.5 h before a hard ride; a light low-carb one 1.5 h
   // before Zone 1. Breakfast sits at the latest of those, and if that would mean
   // getting up before 6:30 it becomes coffee and whey 45 minutes out, with
@@ -231,6 +253,23 @@ function mealPlan(day, sessions, target) {
     out.push(after('lunch', Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));   // carries what the low-carb breakfast did not
     out.push(dinner(Math.max(18 * 60 + 30, end + 240), Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));
     out.push(snack(20 * 60 + 45));
+  } else if (end + 30 > 22 * 60) {
+    // Late ride (back after 10 p.m., or past midnight): dinner at dinner time, a light bite before
+    // the ride when dinner is far from it, and a bedtime snack after it. Nothing vanishes.
+    const b = day === 'high' ? 0.25 : 0.15, bC = day === 'high' ? 0.30 : 0.08;
+    const lC = day === 'high' ? 0.25 : 0.30;
+    const dnT = Math.min(18 * 60 + 30, start - 150);
+    const hasBefore = start - dnT >= 210;
+    const pre = hasBefore ? 0.05 : 0, preC = hasBefore ? (day === 'high' ? 0.10 : 0.05) : 0;
+    const post = 0.10, postC = day === 'high' ? 0.15 : 0.12;
+    out.push(bfast(9 * 60));
+    out.push(lunch(13 * 60, 0.27, lC));
+    out.push(dinner(dnT, Math.round((1 - b - 0.27 - pre - post) * 100) / 100, Math.round((1 - bC - lC - preC - postC) * 100) / 100));
+    if (hasBefore) out.push(meal(start - 90, 'before', day === 'high'
+      ? `Before ${name}: a banana or two rice cakes with honey.`
+      : `Before ${name}: something light with protein, Greek yogurt or a whey shake.`, pre, preC, 15));
+    out.push(onBikeSlot);
+    out.push(bedtime(end, post, postC));
   } else {
     // Evening ride: a late breakfast, lunch, a light pre-ride meal, and the post-ride meal is dinner.
     out.push(bfast(9 * 60));
@@ -247,21 +286,37 @@ function mealPlan(day, sessions, target) {
   // A second timed session later in the day: the meals already laid out step around it. Nothing
   // lands inside it or in the hour before it; dinner never comes before an evening session ends;
   // the second session gets its own bottle when its length calls for one.
+  // A lift or a run steps the meals around it but never takes the ride's post-ride meal as its own:
+  // that meal keeps the ride's words only while it is still after the ride.
   const others = (sessions || []).filter(x => toMin(x.time) != null)
-    .map(x => ({ x, start: toMin(x.time), end: toMin(x.end_time) != null ? toMin(x.end_time) : toMin(x.time) + (x.minutes || 60) }))
+    .map(x => ({ x, start: toMin(x.time), end: endOf(x, toMin(x.time)) }))
     .filter(o => o.x !== timed.x).sort((a, b) => a.start - b.start);
   for (const s2 of others) {
+    const ride2 = isRideSession(s2.x);
     const ob = onBike(Math.max(0, s2.end - s2.start), /vo2|40\s*\/\s*20|threshold|race/i.test(s2.x.name || ''));
-    if (isRideSession(s2.x) && ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
+    // every ride gets its own bottle when its length calls for one, the second as much as the first
+    if (ride2 && ob.carbs > 0 && !out.some(m => m.slot === 'on the bike' && toMin(m.time) === s2.start)) out.push({ time: toHM(s2.start), slot: 'on the bike', what: ob.what, kcal: ob.carbs * 4, carbs_g: ob.carbs, protein_g: 0, extra: true });
     for (const m of out) {
       if (m.extra || m.slot === 'on the bike') continue;
-      const tm = toMin(m.time);
-      if (tm >= s2.start - 60 && tm <= s2.end + 20) m.time = toHM(Math.round((tm < s2.start ? Math.max(11 * 60, s2.start - 120) : s2.end + 30) / 5) * 5);
+      const tm = mmin(m);
+      if (!(tm >= s2.start - 60 && tm <= s2.end + 20)) continue;
+      let to = tm < s2.start ? Math.max(11 * 60, s2.start - 120) : s2.end + 30;
+      // a post-ride meal is never before its own ride is over: right after the ride when there is room before the next session, else after it
+      if (m.post_ride && to < m.ride_end + 15) to = m.ride_end + 15 <= s2.start - 45 ? m.ride_end + 15 : s2.end + 30;
+      stamp(m, to);
+      if (m.post_ride && !ride2 && to > m.ride_end + 120) m.what = `After the ride and the ${/run/i.test(String(s2.x.sport || '') + ' ' + String(s2.x.name || '')) ? 'run' : 'lift'}: 45 g protein and carbs.`;
     }
     const dn = out.find(m => m.slot === 'dinner');
-    if (dn && s2.end >= 17 * 60 && toMin(dn.time) < s2.end + 30) dn.time = toHM(Math.round((s2.end + 30) / 5) * 5);
+    // dinner never comes before an evening session ends, unless it is a ride's own post-ride meal and this is a lift
+    if (dn && s2.end >= 17 * 60 && s2.end + 30 <= 22 * 60 && mmin(dn) < s2.end + 30 && !(dn.post_ride && !ride2)) stamp(dn, s2.end + 30);
+    // a second ride that ends late gets its own bedtime snack, not a dinner pushed past midnight
+    if (ride2 && s2.end + 30 > 22 * 60 && s2.end - s2.start >= 45 && !out.some(m => m.post_ride && m.ride_end >= s2.end)) {
+      const snackAfter = Object.assign(meal(s2.end + 30, 'after', 'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', 0.08, 0.10, 25), { post_ride: true, ride_end: s2.end });
+      if (dn) { dn.kcal = Math.max(0, dn.kcal - snackAfter.kcal); dn.carbs_g = Math.max(0, dn.carbs_g - snackAfter.carbs_g); }   // the day is handed out once
+      out.push(snackAfter);
+    }
   }
-  return out.sort((a, b) => toMin(a.time) - toMin(b.time));
+  return out.sort((a, b) => mmin(a) - mmin(b));
 }
 
 // What goes in the bottle, by the session (Jeukendrup 2014): nothing under
@@ -286,8 +341,13 @@ function onBike(mins, hard) {
 // eaten up to four hours before the first slot is the first slot (an early
 // breakfast on a rest day whose plan says 9:00); after that the nearest
 // slot within two and a half hours. null only when nothing is near.
-function slotFor(plan, hm, mealHint) {
-  const slots = (plan || []).filter(p => p.slot && toMin(p.time) != null);
+// After 8 p.m. with dinner still open (nothing logged in it, its time come), a meal is dinner:
+// the eggs at 9:26p are dinner, not the evening snack. opts.logged: the slot names that already
+// hold food (the day payload's rows with logged ids); opts.last: the last plate logged {slot, time}.
+const DINNER_LATE = 20 * 60;
+function slotFor(plan, hm, mealHint, opts) {
+  const o = opts || {};
+  const slots = (plan || []).filter(p => p.slot && mmin(p) != null);
   const hint = String(mealHint || '').toLowerCase().trim();
   if (hint && hint !== 'supplement') {
     const direct = hint !== 'snack' ? slots.find(p => p.slot === hint) : null;   // "snack" is judged by time below
@@ -295,13 +355,117 @@ function slotFor(plan, hm, mealHint) {
   }
   const m = toMin(hm);
   if (m == null) return null;
+  if (!hint && m >= DINNER_LATE) {
+    const logged = new Set(o.logged || slots.filter(p => (p.logged || []).length).map(p => p.slot));
+    const dn = slots.find(p => p.slot === 'dinner');
+    if (dn && !logged.has('dinner') && mmin(dn) <= m + 60) return 'dinner';
+  }
+  // then a second plate within 45 minutes of the last one is the same meal: the photo of the chicken after
+  // the eggs goes where the eggs went
+  if (!hint && o.last && o.last.slot && toMin(o.last.time) != null && m - toMin(o.last.time) >= 0 && m - toMin(o.last.time) <= 45 && slots.some(p => p.slot === o.last.slot)) return o.last.slot;
   // "snack" names the plan's snack only when that slot is near (within three hours); a morning coffee is not the evening snack
-  if (hint === 'snack') { const sn = slots.find(p => p.slot === 'snack'); return sn && Math.abs(toMin(sn.time) - m) <= 180 ? 'snack' : null; }
-  const nearest = (limit) => { let best = null; for (const p of slots) { const d = Math.abs(toMin(p.time) - m); if (d <= limit && (!best || d < best.d)) best = { p, d }; } return best ? best.p.slot : null; };
+  if (hint === 'snack') { const sn = slots.find(p => p.slot === 'snack'); return sn && Math.abs(mmin(sn) - m) <= 180 ? 'snack' : null; }
+  const nearest = (limit) => { let best = null; for (const p of slots) { const d = Math.abs(mmin(p) - m); if (d <= limit && (!best || d < best.d)) best = { p, d }; } return best ? best.p.slot : null; };
   const near = nearest(90); if (near) return near;
-  const real = slots.filter(p => !p.extra).sort((a, b) => toMin(a.time) - toMin(b.time));
-  if (real.length && m < toMin(real[0].time) && toMin(real[0].time) - m <= 240) return real[0].slot;
+  const real = slots.filter(p => !p.extra).sort((a, b) => mmin(a) - mmin(b));
+  if (real.length && m < mmin(real[0]) && mmin(real[0]) - m <= 240) return real[0].slot;
   return nearest(150);
+}
+
+// The plan a logged meal is graded against, taken once from the row the day payload shows at that
+// minute (after any roll-forward), and kept on the entry. The verdict, the card and the Day row all
+// read this one object.
+function planSnapshot(row, at) {
+  if (!row || row.kcal == null) return null;
+  const s = { slot: row.slot, time: row.time, kcal: row.kcal, carbs_g: row.carbs_g || 0, protein_g: row.protein_g || 0, low_carb: !!row.low_carb, what: row.what || '', at: at || null };
+  if (row.at_min != null) { s.at_min = row.at_min; s.next_day = true; }
+  if (row.covered_by) s.covered_by = row.covered_by;
+  return s;
+}
+
+// Keys for a plan's rows: the slot and its place among rows of the same name ("on the bike#1").
+function slotKeys(plan) {
+  const seen = {};
+  return (plan || []).map(m => { const n = seen[m.slot] = (seen[m.slot] ?? -1) + 1; return `${m.slot}#${n}`; });
+}
+// A slot that only appeared after its own time had passed (a ride added at 9:37p brings a "before"
+// at 8:00p) is not shown for today. seen: { key: 'HH:MM' first seen }. Returns the keys to hide and
+// the map with new keys added; an empty map is the first look of the day, and everything in it counts
+// as there from the start.
+function pastOnArrival(plan, seen, nowHM) {
+  const keys = slotKeys(plan), now = toMin(nowHM);
+  const first = !seen || !Object.keys(seen).length;
+  const next = Object.assign({}, seen || {});
+  const hide = new Set();
+  keys.forEach((k, i) => {
+    if (!(k in next)) next[k] = first ? '00:00' : nowHM;
+    const at = toMin(next[k]);
+    if (at != null && now != null && mmin(plan[i]) < at) hide.add(k);
+  });
+  return { hide, seen: next, added: keys.filter(k => !(seen && k in seen)) };
+}
+
+// The day's rows, as every page reads them: a slot with food in it is frozen (its plan, numbers and
+// grade from the snapshot taken when its first plate was logged, its row even when a later plan has
+// no slot of that name), and the plan as it stands now reshapes only the open slots.
+//   plan: the current plan rows; entries: the day's entries with their saved slots
+//   ctx: { day_kcal, target_kcal, isDrink(e), hide: Set of slotKeys to leave out when open }
+function dayMeals(plan, entries, ctx) {
+  const c = ctx || {};
+  const isDrink = c.isDrink || (e => !!e.drink_only);
+  const keys = slotKeys(plan);
+  const rows = (plan || []).map((m, i) => Object.assign({}, m, { _key: keys[i] }));
+  const es = (entries || []).filter(e => e && !e.supplement && e.slot);
+  const byTime = (a, b) => String(a.time || '').localeCompare(String(b.time || ''));
+  const assigned = new Map(), orphans = new Map();
+  for (const e of es) {
+    const same = rows.filter(r => r.slot === e.slot);
+    if (!same.length) { if (!orphans.has(e.slot)) orphans.set(e.slot, []); orphans.get(e.slot).push(e); continue; }
+    // two rows of one name (a bottle for each ride): the one nearest the time it was logged against
+    const t = (e.plan && e.plan.slot === e.slot && mmin(e.plan) != null) ? mmin(e.plan) : (toMin(e.time) ?? 0);
+    const r = same.reduce((a, x) => Math.abs(t - mmin(x)) < Math.abs(t - mmin(a)) ? x : a, same[0]);
+    if (!assigned.has(r)) assigned.set(r, []); assigned.get(r).push(e);
+  }
+  const freeze = (base, mine) => {
+    const food = mine.filter(e => !isDrink(e)).sort(byTime);
+    if (!food.length) return null;
+    const snap = food.map(e => e.plan).find(p => p && p.slot === base.slot && p.kcal != null);
+    const row = Object.assign({}, base, { frozen: true });
+    if (snap) {
+      Object.assign(row, { kcal: snap.kcal, carbs_g: snap.carbs_g, protein_g: snap.protein_g, low_carb: !!snap.low_carb, what: snap.what || base.what, frozen_at: snap.at || null });
+      if (snap.time) stamp(row, snap.at_min != null ? snap.at_min : toMin(snap.time));
+      if (snap.covered_by) row.covered_by = snap.covered_by; else delete row.covered_by;
+    }
+    return row;
+  };
+  let out = [];
+  for (const r of rows) {
+    const mine = assigned.get(r) || [];
+    const fr = freeze(r, mine);
+    if (fr) out.push(Object.assign(fr, { _mine: mine }));
+    else if (!(c.hide && c.hide.has(r._key))) out.push(Object.assign(r, { _mine: mine }));
+  }
+  // a slot with food that today's plan no longer has: kept, as it was when it was eaten
+  for (const [slot, mine] of orphans) {
+    const food = mine.filter(e => !isDrink(e)).sort(byTime);
+    if (!food.length) continue;
+    const snap = food.map(e => e.plan).find(p => p && p.slot === slot && p.kcal != null);
+    const base = { slot, what: snap ? snap.what : '', kcal: snap ? snap.kcal : null, carbs_g: snap ? snap.carbs_g : null, protein_g: snap ? snap.protein_g : null, orphan: true };
+    stamp(base, snap && snap.time ? (snap.at_min != null ? snap.at_min : toMin(snap.time)) : (toMin(food[0].time) ?? 0));
+    const fr = freeze(base, mine);
+    if (fr) out.push(Object.assign(fr, { _mine: mine }));
+  }
+  out.sort((a, b) => mmin(a) - mmin(b));
+  out = rollForward(out, entries);
+  return out.map(m => {
+    const mine = m._mine || [];
+    const food = mine.filter(e => !isDrink(e));
+    const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort(byTime)[0];
+    const row = Object.assign({}, m, { logged: food.map(e => e.id),
+      match: m.kcal == null ? null : mealMatch(m, mine, { day_kcal: c.day_kcal, target_kcal: c.target_kcal }), time_logged: first ? first.time : null });
+    delete row._mine; delete row._key; delete row.ride_end;
+    return row;
+  });
 }
 
 // One photo's verdict, from the model's assessment, to points.
@@ -358,13 +522,13 @@ function dueSoFar(meals, target, nowHM) {
   const now = toMin(nowHM);
   // Every slot whose time has come counts, the bottle on the bike included:
   // the planned bottle must not read as "over" once it is drunk.
-  const due = meals.filter(m => toMin(m.time) <= now + 45);
+  const due = meals.filter(m => mmin(m) <= now + 45);
   const realMeals = due.filter(m => !m.extra);
   if (!realMeals.length) return { kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, share: 0, meals: 0, next: (meals.find(m => !m.extra) || meals[0]).time };
   const kcal = due.reduce((a, m) => a + (m.kcal || 0), 0);
   // fat is spread over the real meals only: a bottle on the bike carries none
   const share = target.kcal ? Math.min(1, realMeals.reduce((a, m) => a + (m.kcal || 0), 0) / target.kcal) : 0;
-  const nxt = meals.find(m => !m.extra && toMin(m.time) > now + 45);
+  const nxt = meals.find(m => !m.extra && mmin(m) > now + 45);
   // Floors: a low-carb slot's carbs are a cap, not a target, and such a slot
   // is light by design. Eating under them is within the plan, so the macro
   // score treats anything between the floor and the due figure as on target.
@@ -385,7 +549,7 @@ function dueSoFar(meals, target, nowHM) {
 function nextSlot(meals, nowHM) {
   const now = toMin(nowHM);
   const open = (meals || []).filter(m => !(m.logged || []).length);
-  return open.find(m => toMin(m.time) >= now - 45) || null;
+  return open.find(m => mmin(m) >= now - 45) || null;
 }
 
 function overall(macroScore, guideline) {
@@ -426,7 +590,7 @@ function rollForward(meals, entries) {
   const es = Array.isArray(entries) ? entries.filter(e => e && !e.supplement && !e.drink_only) : [];
   for (let i = 0; i + 1 < real.length; i++) {
     const a = real[i], b = real[i + 1];
-    if (a.low_carb || toMin(b.time) == null || toMin(a.time) == null || toMin(b.time) - toMin(a.time) > 150) continue;
+    if (a.low_carb || a.kcal == null || mmin(b) == null || mmin(a) == null || mmin(b) - mmin(a) > 150) continue;
     const got = es.filter(e => e.slot === a.slot);
     if (!got.length) continue;
     const sum = k => got.reduce((x, e) => x + (e[k] || 0), 0);
@@ -434,6 +598,8 @@ function rollForward(meals, entries) {
     if (over.kcal < 60 && over.carbs_g < 10 && over.protein_g < 10) continue;
     const aName = a.slot === 'after' ? 'post-ride meal' : a.slot === 'before' ? 'pre-ride snack' : a.slot;
     a.rolled_out = { to: b.slot, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
+    // a slot that already holds food keeps the plan it was eaten under: only open slots are reshaped
+    if (b.frozen) continue;
     b.plan_kcal = b.plan_kcal ?? b.kcal; b.plan_carbs_g = b.plan_carbs_g ?? b.carbs_g; b.plan_protein_g = b.plan_protein_g ?? b.protein_g;
     b.kcal = Math.max(0, (b.kcal || 0) - over.kcal); b.carbs_g = Math.max(0, (b.carbs_g || 0) - over.carbs_g); b.protein_g = Math.max(0, (b.protein_g || 0) - over.protein_g);
     // protein the meal did not carry lands at the next slot (up to 25 g, with its calories), so the day's protein holds
@@ -535,5 +701,58 @@ function mealMatch(plan, logged, ctx) {
     macros: { key: keyM, word: wordM }, rules: { key: keyR, word: wordR, why: whyR } };
 }
 
+// The coach's sentence, whole: never cut mid-sentence. Past the limit it ends at the last full stop
+// inside it; a sentence the model itself left hanging ("…no butter, and") goes back to its last whole
+// sentence, or is closed where its last clause ends.
+function tidyWhy(s, max) {
+  const lim = max || 420;
+  let t = String(s || '').replace(/\s+/g, ' ').trim();
+  if (!t) return '';
+  if (t.length > lim) {
+    const cut = t.slice(0, lim);
+    const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '), /[.!?]$/.test(cut) ? cut.length - 1 : -1);
+    t = end >= 40 ? cut.slice(0, end + 1) : cut.replace(/\s+\S*$/, '');
+  }
+  if (!/[.!?…)"'”]$/.test(t)) {
+    const m = /^(.*[.!?])\s+[^.!?]*$/.exec(t);
+    if (m && m[1].length >= 15) t = m[1];
+    else t = t.replace(/[\s,;:–—-]+(and|but|or|so|with|then|because|the|a|an|to|of|for)?[\s,;:–—-]*$/i, '').replace(/[\s,;:–—-]+$/, '') + '.';
+  }
+  return t;
+}
+
+// The same words logged again within twenty minutes are the same food said twice, unless he says
+// it was more ("another", "a second"). One rule for the Food page and the voice.
+const normWords = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\b(a|an|the|one|of|and|with|i|had|have|just)\b/g, ' ').replace(/\s+/g, ' ').trim();
+const SAYS_MORE = /\b(another|more|again|second|extra|other)\b/i;
+function twinOf(entries, text, nowMin, windowMin) {
+  const w = normWords(text);
+  if (!w || SAYS_MORE.test(String(text || '')) || nowMin == null) return null;
+  const win = windowMin || 20;
+  return (entries || []).filter(e => e && !e.supplement && toMin(e.time) != null && nowMin - toMin(e.time) >= 0 && nowMin - toMin(e.time) <= win
+    && (normWords(e.written) === w || normWords(e.name) === w)).sort((a, b) => String(b.time).localeCompare(String(a.time)))[0] || null;
+}
+
+// What the ride did to the day, in one line. A missing percentage is left out, never printed as null.
+function workNote(w) {
+  const pctTxt = w.pct != null ? ` (${w.pct}%)` : '';
+  if (!w.pm) return `Ridden ${w.dm} min with nothing planned: today is a ${LABEL[w.actualDay]}.`;
+  if (w.plannedDay === w.actualDay) return `Ridden ${w.dm} of ${w.pm} min planned${pctTxt}: still a ${LABEL[w.actualDay]}, sized to the ride.`;
+  return `Planned ${w.pm} min (${LABEL[w.plannedDay]}); ridden ${w.dm} min${pctTxt}, so the rest of today is a ${LABEL[w.actualDay]}.`;
+}
+
+// The day's drinks, one list for every page: the Hydration page lists these, the Food page counts
+// them, and "drank" is the sum of their volumes (alcohol at its poured volume; the balance takes its
+// net). modelDrinks: hydration-live's drinks, by entry id, for the volume and net it counted.
+const onDrinksList = e => !!e && !e.supplement && (!!e.is_drink || !!e.drink_only || (e.fluid_ml || 0) > 0);
+function drinksOf(entries, modelDrinks) {
+  const md = modelDrinks || [];
+  const rows = (entries || []).filter(onDrinksList).map(e => {
+    const d = md.find(x => x.id && x.id === e.id);
+    return { id: e.id, ml: d ? d.ml : Math.max(0, Math.round(e.fluid_ml || 0)), net_ml: d && d.net_ml != null ? d.net_ml : null, alcohol: e.alcohol || 0, food: !e.is_drink && !e.drink_only, name: e.name || '' };
+  });
+  return { ids: rows.map(r => r.id), count: rows.length, food_count: rows.filter(r => r.food).length, ml: rows.reduce((a, r) => a + r.ml, 0), rows };
+}
+
 module.exports = { burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
-  guidelineScore, overall, band, FIT_POINTS };
+  guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };

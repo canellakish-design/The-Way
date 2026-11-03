@@ -76,22 +76,55 @@ ok('carry-over: a deficit at bedtime is still there in the morning, a surplus is
   assert.ok(m.series[0].ml <= -1150 && m.series[0].ml > -1160, 'starts from the carried deficit: ' + m.series[0].ml); assert.strictEqual(m.now.band.key, 'yellow');
   assert.ok(/down/.test(m.advice), m.advice);
 });
-ok('alcohol: a pint is net water on the day, a shot is not; four pints after eight cost the morning', () => {
+ok('alcohol: a pint and a shot are both net losses on the day; four pints after eight cost the morning', () => {
   const kg = 98;
   const dry = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [] });
   const pint = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [{ time: '13:00', name: 'Pint of lager beer', kcal: 200, carbs_g: 17, protein_g: 2, drink: 'pint of lager' }] });
-  const gain = pint.end_ml - dry.end_ml; assert.ok(gain > 300 && gain < 420, 'pint net ' + gain);
+  const gain = pint.end_ml - dry.end_ml; assert.ok(gain < -150 && gain > -250, 'pint net ' + gain);
   assert.strictEqual(pint.drinks[0].alcohol, 1); assert.strictEqual(pint.alcohol.evening_drinks, 0);
   const shot = H.model({ kg, ftp: 175, now_min: 23 * 60, sessions: [], entries: [{ time: '13:00', name: 'Shot of bourbon', kcal: 100, drink: 'bourbon' }] });
   assert.ok(shot.end_ml < dry.end_ml, 'shot ' + (shot.end_ml - dry.end_ml));
   const four = H.model({ kg, ftp: 175, now_min: null, sessions: [], entries: [{ time: '19:20', name: 'Pint of lager beer', kcal: 200, drink: 'pint of lager' }, { time: '20:52', name: 'Three pints of lager beer', kcal: 600, drink: 'lager beer' }] });
   assert.strictEqual(four.alcohol.drinks, 4); assert.strictEqual(four.alcohol.evening_drinks, 3);
   const plain = H.carryOver(four.end_ml, null), after = H.carryOver(four.end_ml, null, four.alcohol);
-  assert.ok(after.start_ml < plain.start_ml - 500, `plain ${plain.start_ml} after ${after.start_ml}`);
+  assert.ok(four.alcohol.net_ml <= -700, 'four pints are a net loss on the day: ' + four.alcohol.net_ml);
+  assert.strictEqual(after.night.drain_ml, 300, 'and each of the three after eight costs the night 100 ml more');
+  const wet = H.carryOver(-600, null), wetAfter = H.carryOver(-600, null, four.alcohol);
+  assert.strictEqual(wetAfter.start_ml, wet.start_ml - 300, `plain ${wet.start_ml} after ${wetAfter.start_ml}`);
   assert.strictEqual(after.night.drinks, 3);
   const morning = H.model({ kg, ftp: 175, now_min: 7 * 60, sessions: [], entries: [], start_ml: after.start_ml, night: after.night });
   assert.ok(/three pints last night: starting \d\.\d L down/.test(morning.advice), morning.advice);
   const noon = H.model({ kg, ftp: 175, now_min: 12 * 60, sessions: [], entries: [{ time: '07:00', fluid_ml: 1000, drink_only: true }], start_ml: after.start_ml, night: after.night });
   assert.ok(!/last night/.test(noon.advice || ''), noon.advice);
+});
+ok('beer (#5): two 12 oz beers are 710 ml poured, the balance falls, and an evening round earns one bedtime note', () => {
+  const kg = 98;
+  const base = { kg, ftp: 175, now_min: 21 * 60 + 40, sessions: [] };
+  const water = { id: 'w1', time: '20:00', fluid_ml: 250, name: 'Water, 250 ml', drink_only: true };
+  const before = H.model(Object.assign({}, base, { entries: [water] }));
+  const beers = H.model(Object.assign({}, base, { entries: [water, { id: 'b1', time: '21:30', name: 'Two beers', drink: 'beer', kcal: 290, carbs_g: 26, protein_g: 3, alcohol: 2 }] }));
+  const d = beers.drinks.find(x => x.id === 'b1');
+  assert.strictEqual(d.ml, 710);
+  assert.ok(d.net_ml < 0, 'net ' + d.net_ml);
+  assert.ok(beers.now.ml < before.now.ml, `the balance falls: ${before.now.ml} -> ${beers.now.ml}`);
+  assert.strictEqual(beers.drunk_ml, 960, 'drank counts the beer at its poured volume');
+  assert.ok(/^Two beers this evening: about 280 ml down/.test(beers.bedtime_note), beers.bedtime_note);
+  assert.strictEqual(before.bedtime_note, null);
+  const lunch = H.model(Object.assign({}, base, { entries: [{ id: 'b2', time: '13:00', name: 'A beer', drink: 'beer', kcal: 150, alcohol: 1 }] }));
+  assert.strictEqual(lunch.bedtime_note, null, 'a beer at lunch earns no bedtime note');
+  assert.ok(H.alcoholNet(H.alcoholServing('shot of bourbon'), 1) < 0 && H.alcoholNet(H.alcoholServing('pint'), 1) < 0);
+});
+
+ok('a glass (#6): the balance takes it as it lands, and the page says how much is still landing', () => {
+  const kg = 98;
+  const o = { kg, ftp: 175, sessions: [], entries: [{ id: 'g', time: '21:40', fluid_ml: 250, name: 'Water, 250 ml', drink_only: true }] };
+  const at = H.model(Object.assign({ now_min: 21 * 60 + 40 }, o));
+  const dry = H.model({ kg, ftp: 175, sessions: [], entries: [], now_min: 21 * 60 + 40 });
+  const moved = at.now.ml - dry.now.ml;
+  assert.ok(moved > 30 && moved < 90, 'only the first minutes have landed: ' + moved);
+  assert.ok(Math.abs(moved + at.now.landing_ml - 250) <= 15, `landed ${moved} + landing ${at.now.landing_ml} = the glass`);
+  assert.ok(/still in the stomach/.test(at.landing_note), at.landing_note);
+  const later = H.model(Object.assign({ now_min: 23 * 60 }, o));
+  assert.strictEqual(later.landing_note, null);
 });
 console.log(n + ' passed');

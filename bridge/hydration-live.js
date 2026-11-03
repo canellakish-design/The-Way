@@ -37,27 +37,33 @@ const SODIUM_RE = /tailwind|electrolyte|nuun|lmnt|skratch|precision|salt|broth|s
 const GEL_RE = /gel|chew|block/i;
 const DEFAULT_KG = 98;
 const BOTTLE_ML = 600;
-// Alcohol: the drink's water arrives, and the kidneys pass about 10 ml more for every gram of
-// ethanol (Shirreffs & Maughan 1997; Eggleton 1942). A pint of lager is net positive on the day;
-// a shot is net negative. The reader logs alcohol with 0 ml, so the volume comes from the kind.
+// Alcohol is a net loss of water. Its own water does not stay (the diuresis passes it), and the
+// kidneys pass about 10 ml more for every gram of ethanol (Eggleton 1942; Shirreffs & Maughan 1997):
+// a 12 oz beer (355 ml, 14 g) leaves the balance about 140 ml lower, a shot the same. "Drank" still
+// counts the drink at its poured volume; the balance counts what the body keeps, which is less than
+// nothing. The reader logs alcohol with 0 ml, so the volume comes from the kind (US servings).
 const ETH_ML_PER_G = 10;
 const EVENING_MIN = 20 * 60;          // drinks from here run their diuresis into the night
-const NIGHT_DRINK_ML = 100;           // what each evening drink costs the morning beyond its own water
+const NIGHT_DRINK_ML = 100;           // what each evening drink costs the morning beyond its own loss
+const BEDTIME_NOTE_MIN = 18 * 60;     // alcohol logged from here earns one note before bed
 const SERVINGS = [
-  [/\bpints?\b/i, { ml: 568, g: 20, word: 'pint' }],
-  [/\b(beer|lager|ale|ipa|stout|porter|pilsner|cider)s?\b/i, { ml: 400, g: 16, word: 'beer' }],
-  [/\b(wine|prosecco|champagne|sangria|mimosa|spritz)\b/i, { ml: 175, g: 18, word: 'glass of wine' }],
+  [/\bpints?\b/i, { ml: 473, g: 19, word: 'pint' }],
+  [/\b(beer|lager|ale|ipa|stout|porter|pilsner|cider)s?\b/i, { ml: 355, g: 14, word: 'beer' }],
+  [/\b(wine|prosecco|champagne|sangria|mimosa|spritz)\b/i, { ml: 150, g: 14, word: 'glass of wine' }],
   [/\b(cocktail|margarita|martini|negroni)s?\b/i, { ml: 150, g: 20, word: 'cocktail' }],
   [/\b(hard seltzer|white claw)\b/i, { ml: 355, g: 14, word: 'seltzer' }],
-  [/\b(whisk(e)?y|bourbon|scotch|vodka|gin|rum|tequila|sake|shot of)\b/i, { ml: 45, g: 14, word: 'shot' }]
+  [/\b(whisk(e)?y|bourbon|scotch|vodka|gin|rum|tequila|sake|shot of)\b/i, { ml: 44, g: 14, word: 'shot' }]
 ];
-function alcoholServing(name) { for (const [re, v] of SERVINGS) if (re.test(name)) return v; return { ml: 350, g: 15, word: 'drink' }; }
+function alcoholServing(name) { for (const [re, v] of SERVINGS) if (re.test(name)) return v; return { ml: 355, g: 14, word: 'drink' }; }
+// What a round of n drinks does to the balance: always below zero.
+const alcoholNet = (sv, n) => -Math.round(sv.g * n * ETH_ML_PER_G);
 const drinkWords = (n, word) => `${['one', 'two', 'three', 'four', 'five', 'six'][n - 1] || n} ${word}${n === 1 ? '' : word.endsWith('wine') ? '' : 's'}`.replace('glass of wines', 'glasses of wine');
 
 const toMin = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
 const toHM = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 const say = m => { let h = Math.floor(m / 60); const mm = String(m % 60).padStart(2, '0'); const ap = h < 12 ? 'a' : 'p'; h = h % 12 || 12; return h + ':' + mm + ap; };
 const r50 = v => Math.round(v / 50) * 50;
+const r10 = v => Math.round(v / 10) * 10;
 const L = ml => (Math.round(Math.abs(ml) / 100) / 10).toFixed(1) + ' L';
 
 // Du Bois skin area.
@@ -147,12 +153,15 @@ function model(o) {
   const duringRide = m => sessions.some(s => m >= s.min && m < s.end_min);
   const drinks = [];
   const alc = { drinks: 0, net_ml: 0, evening_drinks: 0, evening_net_ml: 0, word: null };
-  const pour = (atMin, ml, halfMin) => {
+  // water already drunk but still in the stomach at this minute: the balance takes it as it lands
+  let landing = 0;
+  const pour = (atMin, ml, halfMin, isDrink) => {
     // first-order emptying from the stomach: the fraction still inside halves every halfMin
     const kk = Math.LN2 / halfMin; let left = ml;
     for (let j = 0; j < 72 && left > 0.5; j++) {
       const out = left * (1 - Math.exp(-kk * STEP));
       const i = idx(atMin) + j; if (i >= 0 && i < n) inflow[i] += out;
+      if (isDrink && atMin <= now && T0 + (idx(atMin) + j) * STEP > now) landing += out;
       left -= out;
     }
   };
@@ -165,10 +174,9 @@ function model(o) {
       // the water in it less what the ethanol makes the kidneys pass, spread over the hour after
       const sv = alcoholServing(String(e.name || '') + ' ' + name);
       const vol = e.fluid_ml > 0 ? e.fluid_ml : sv.ml * nAlc;
-      const net = vol - sv.g * nAlc * ETH_ML_PER_G;
-      if (net > 0) pour(m, net, 15);
-      else for (let j = 0; j < 12; j++) { const i = idx(m) + j; if (i >= 0 && i < n) inflow[i] += net / 12; }
-      drinks.push({ time: e.time, min: m, ml: Math.round(vol), net_ml: Math.round(net), alcohol: nAlc, name: name || sv.word, kept: 1, sodium: false });
+      const net = alcoholNet(sv, nAlc);
+      for (let j = 0; j < 12; j++) { const i = idx(m) + j; if (i >= 0 && i < n) inflow[i] += net / 12; }   // over the hour after
+      drinks.push({ id: e.id || null, time: e.time, min: m, ml: Math.round(vol), net_ml: Math.round(net), alcohol: nAlc, name: name || sv.word, word: sv.word, kept: 0, sodium: false });
       alc.drinks += nAlc; alc.net_ml += net; alc.word = alc.word || sv.word;
       if (m >= EVENING_MIN) { alc.evening_drinks += nAlc; alc.evening_net_ml += net; }
       continue;
@@ -179,8 +187,8 @@ function model(o) {
       const sodium = SODIUM_RE.test(name) || e.carbs_g >= 15 && /bottle|drink|mix/i.test(name);
       const keep = afterRide(m) ? (sodium ? RETAIN_SODIUM : RETAIN_PLAIN) : 1;
       const half = GEL_RE.test(name) && fluid < 150 ? 50 : duringRide(m) ? 20 : 15;
-      pour(m, fluid * keep, half);
-      drinks.push({ time: e.time, min: m, ml: Math.round(fluid), name: name || 'drink', kept: keep, sodium });
+      pour(m, fluid * keep, half, true);
+      drinks.push({ id: e.id || null, time: e.time, min: m, ml: Math.round(fluid), name: name || 'drink', kept: keep, sodium });
     }
     if (foodWater) pour(m, foodWater, 60);
   }
@@ -228,12 +236,33 @@ function model(o) {
   if (o.night && o.night.drinks > 0 && now < 11 * 60 && start <= -300 && (!advice || nowB.key !== 'green'))
     advice = `${drinkWords(o.night.drinks, o.night.word || 'drink')} last night: starting ${L(-start)} down. ${r50(Math.min(750, -start))} ml of water before the coffee, the rest through the morning.`;
   if (o.weigh && o.weigh.lost_ml > 0 && now - (o.weigh.end_min || 0) < 4 * 60) advice = `The scale says ${L(o.weigh.lost_ml)} lost on the ride. ${L(o.weigh.lost_ml * 1.3)} over the next three hours, with salt, not all at once.`;
-  return { series, now: { time: toHM(now), ml: nowPt.ml, pct: nowPt.pct, band: nowB }, sessions: upcoming, drinks,
+  return { series, now: { time: toHM(now), ml: nowPt.ml, pct: nowPt.pct, band: nowB, landing_ml: o.now_min == null ? 0 : r10(landing) }, sessions: upcoming, drinks,
     drunk_ml: drunk, target_ml: target, left_ml: Math.max(0, target - drunk), end_ml: Math.round(balActual), start_ml: Math.round(start), kg, sweat_k: k, step: STEP,
     weather_used: !!(o.weather && o.weather.hours && sessions.some(s => !s.env.indoor)),
     alcohol: alc.drinks ? { drinks: alc.drinks, net_ml: Math.round(alc.net_ml), evening_drinks: alc.evening_drinks, evening_net_ml: Math.round(alc.evening_net_ml), word: alc.word } : null,
     score: Math.max(0, Math.min(100, Math.round(100 - Math.max(0, -nowPt.ml) / (kg * 20) * 100))),   // 100 at the morning, 0 at 2% down
-    advice };
+    advice,
+    // one line each, for the pages to print as they are
+    bedtime_note: o.now_min == null ? null : bedtimeNote(drinks),
+    landing_note: o.now_min == null ? null : landingNote(landing),
+    drank_counts: DRANK_COUNTS };
+}
+
+const DRANK_COUNTS = 'Drank is every drink on the list at the volume poured, alcohol included; the balance is what the body keeps, and alcohol keeps less than nothing.';
+// One note before bed when alcohol was logged from 6 p.m.: what it cost and the water to drink.
+function bedtimeNote(drinks) {
+  const eve = (drinks || []).filter(d => d.alcohol > 0 && d.min >= BEDTIME_NOTE_MIN);
+  if (!eve.length) return null;
+  const nAlc = eve.reduce((a, d) => a + d.alcohol, 0), net = eve.reduce((a, d) => a + (d.net_ml || 0), 0);
+  const night = NIGHT_DRINK_ML * nAlc;
+  const water = r50(Math.min(750, Math.max(250, -net + night)));
+  const w = drinkWords(nAlc, eve[0].word || 'drink');
+  return `${w.charAt(0).toUpperCase() + w.slice(1)} this evening: about ${Math.abs(Math.round(net))} ml down on the balance, and the night takes about ${night} ml more. ${water} ml of water before bed.`;
+}
+// A drink just logged moves the balance as it leaves the stomach, not all at once.
+function landingNote(ml) {
+  const v = r10(ml);
+  return v >= 50 ? `${v} ml of what you just drank is still in the stomach: the balance takes it in as it lands, most of it within 45 minutes.` : null;
 }
 
 // Tomorrow's start from tonight's end: the night between the model's last
@@ -243,9 +272,9 @@ function model(o) {
 // three-day baseline, the two are averaged: the scale sees the whole body,
 // the model only what was logged.
 const NIGHT_ML = 5 * REST_ASLEEP_ML_H;
-// Evening alcohol: its own water is passed in the night rather than kept (the diuresis runs on
-// for hours after the last one), and each drink costs about 100 ml more. So the morning after
-// four pints starts further down than the day's end suggests, which is what the body does.
+// Evening alcohol: its net loss is already in the day's end, and the diuresis runs on for hours
+// after the last one, so each drink after 8 p.m. costs the morning about 100 ml more. The morning
+// after four pints starts further down than the day's end suggests, which is what the body does.
 function carryOver(prevEndMl, scale, prevAlc) {
   const night = prevAlc && prevAlc.evening_drinks > 0 ? { drinks: prevAlc.evening_drinks, word: prevAlc.word || 'drink', drain_ml: Math.round(Math.max(0, prevAlc.evening_net_ml) + NIGHT_DRINK_ML * prevAlc.evening_drinks) } : null;
   const base = prevEndMl == null ? null : prevEndMl - (night ? night.drain_ml : 0);
@@ -280,4 +309,4 @@ function measured(preKg, postKg, drankMl, minutes) {
   return Math.round(lost * (minutes >= 120 ? 0.9 : 0.95));
 }
 
-module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, alcoholServing, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };
+module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, alcoholServing, alcoholNet, bedtimeNote, landingNote, DRANK_COUNTS, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };

@@ -36,6 +36,78 @@ const photoKey = id => 'food-photo-' + id;
 
 async function dayDoc(date) { return getJSON(dayKey(date), { date, entries: [] }); }
 
+const MEAL_WORDS = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'];
+const hmNow = () => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); };
+// A drink is a drink, with or without calories: a pint, a latte, a juice counts in the totals and the
+// hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
+// A plate that mentions its drink ("a wrap and two bottles of water") is still a plate: the drink
+// flag alone does not make it one; little protein and few calories do.
+const drinkish = e => !e.supplement && (!!e.drink_only || !!e.alcohol || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300));
+const isDrink = e => drinkish(e) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
+
+// What the day remembers about its own plan (food-seen-<date>): when each slot was first shown (a
+// slot that only appeared after its time had passed is not shown), and the slot given once to an
+// entry saved before slots were always chosen at logging.
+const seenKey = date => 'food-seen-' + date;
+async function seenFor(date) { try { const s = await getJSON(seenKey(date), null); return Object.assign({ slots: {}, entry_slots: {} }, s || {}); } catch (e) { return { slots: {}, entry_slots: {} }; } }
+
+// An entry without a saved slot is given one once, against the plan as it stands the first time it is
+// read, and keeps it: the day never re-slots a meal on the way out.
+function legacySlots(entries, g, seen) {
+  let dirty = false;
+  for (const e of entries) {
+    if (e.supplement || e.drink_only || e.slot || e.slot_fixed) continue;
+    if (!(e.id in seen.entry_slots)) { seen.entry_slots[e.id] = F.slotFor(g.meals, e.time, e.meal) || null; dirty = true; }
+    e.slot = seen.entry_slots[e.id];
+  }
+  return dirty;
+}
+
+// The day's rows, the one list every page and the logging path read (food-math dayMeals): slots with
+// food frozen as they were when eaten, open slots from the plan as it stands, the evening snack's words
+// following the day's protein, and today's slots that appeared after their own time left out.
+async function rowsFor(date, g, entries, seen) {
+  const today = date === tz.todayKey();
+  const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
+  const plan = (g.meals || []).map(m => m.slot !== 'snack' || !today ? m : Object.assign({}, m, { what: (() => {
+    const short = (g.target.protein_g || 0) - proteinSoFar;
+    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: whey or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
+  })() }));
+  let hide = null;
+  if (today) {
+    const st = seen || await seenFor(date);
+    const r = F.pastOnArrival(plan, st.slots, hmNow());
+    hide = r.hide;
+    if (r.added.length) { st.slots = r.seen; await setJSON(seenKey(date), st).catch(() => {}); }
+  }
+  const dayKcal = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.kcal || 0), 0));
+  return F.dayMeals(plan, entries, { day_kcal: dayKcal, target_kcal: g.target && g.target.kcal, isDrink, hide });
+}
+
+// The day's entries as the pages read them, and its rows, for the logging path and the report alike.
+async function dayState(date, g) {
+  const doc = await dayDoc(date);
+  const seen = await seenFor(date);
+  const entries = (doc.entries || []).map(e => F.alcoholRule(Object.assign({}, e, { photo: undefined })));
+  if (legacySlots(entries, g, seen)) await setJSON(seenKey(date), seen).catch(() => {});
+  for (const e of entries) e.is_drink = drinkish(e);
+  const rows = await rowsFor(date, g, entries, seen);
+  return { doc, entries, rows };
+}
+
+// The slot a new entry goes in, chosen once, and the plan it is graded against, taken from that same
+// row: the verdict, the card and the Day row all show this one snapshot.
+function chooseSlot(rows, hm, hint, entries) {
+  const logged = rows.filter(r => (r.logged || []).length).map(r => r.slot);
+  const last = (entries || []).filter(e => !e.supplement && !isDrink(e) && e.slot && e.time && e.time <= hm).sort((a, b) => String(a.time).localeCompare(String(b.time))).pop() || null;
+  const slot = F.slotFor(rows, hm, hint, { logged, last });
+  const same = rows.filter(r => r.slot === slot);
+  const t = F.toMin(hm) ?? 0;
+  const row = same.length ? same.reduce((a, x) => Math.abs(F.mmin(x) - t) < Math.abs(F.mmin(a) - t) ? x : a, same[0]) : null;
+  return { slot: slot || null, row };
+}
+const mealWord = (slot, hint, guess) => MEAL_WORDS.includes(hint) ? hint : MEAL_WORDS.includes(slot) ? slot : MEAL_WORDS.includes(guess) ? guess : 'snack';
+
 // ---- the day's sessions: planned here, planned in intervals.icu, done on Strava ----
 async function buildSessions(date, o) {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
@@ -94,14 +166,17 @@ async function buildSessions(date, o) {
   // of that, the rest of the day is rebuilt from the work actually done.
   const done = out.filter(s => s.done), planned = out.filter(s => !s.done);
   let sessions = out, work = null, burn = out;
-  if (done.length) {
+  // only a ride done reshapes the day: a run or a lift done is counted in the burn and keeps its place,
+  // and never reads as "ridden 0 of 90 min"
+  if (done.some(F.isRideSession)) {
     const { gradeOne } = require('./workouts');
-    const lastEnd = Math.max(...done.map(d => F.toMin(d.end_time) ?? 0));
-    const lastRide = done.slice().sort((a, b) => (F.toMin(a.end_time) ?? 0) - (F.toMin(b.end_time) ?? 0)).pop();
+    const doneRides = done.filter(F.isRideSession);
+    const lastEnd = Math.max(...doneRides.map(d => F.toMin(d.end_time) ?? 0));
+    const lastRide = doneRides.slice().sort((a, b) => (F.toMin(a.end_time) ?? 0) - (F.toMin(b.end_time) ?? 0)).pop();
     // only rides are measured against the ride; a run or a lift keeps its own place in the day
     const covered = planned.filter(p => F.isRideSession(p) && !(F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
     const ahead = planned.filter(p => !F.isRideSession(p) || (F.toMin(p.time) != null && F.toMin(p.time) > lastEnd + 30));
-    const rides = done.map(r => ({ minutes: r.minutes, tss: r.tss }));
+    const rides = doneRides.map(r => ({ minutes: r.minutes, tss: r.tss }));
     const graded = covered.map(p => Object.assign({}, p, { compliance: gradeOne({ metrics: { duration_s: (p.minutes || 0) * 60, tss: p.tss || 0 } }, rides).compliance }));
     const compliant = graded.length > 0 && graded.every(p => p.compliance.pct >= 85);
     // the calories follow the work: every ride actually done (a third one nobody planned included) plus what is still ahead,
@@ -119,9 +194,7 @@ async function buildSessions(date, o) {
       sessions = done.concat(ahead);
       const plannedDay = F.fuelDay(planned), actualDay = F.fuelDay(sessions);
       work = { planned_min: pm, done_min: dm, pct, compliant: false, planned_day: plannedDay, day: actualDay, changed: plannedDay !== actualDay,
-        note: !pm ? `Ridden ${dm} min with nothing planned: today is a ${F.LABEL[actualDay]}.`
-          : plannedDay === actualDay ? `Ridden ${dm} of ${pm} min planned (${pct}%): still a ${F.LABEL[actualDay]}, sized to the ride.`
-          : `Planned ${pm} min (${F.LABEL[plannedDay]}); ridden ${dm} min (${pct}%), so the rest of today is a ${F.LABEL[actualDay]}.` };
+        note: F.workNote({ pm, dm, pct, plannedDay, actualDay }) };
     }
   }
   return { sessions, ftp: st.ftp, work, burn };
@@ -251,14 +324,16 @@ Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.
 Today's guidelines:
 ${rules}
 ${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan, timed around the training:
-${(g.meals || []).map(m => `- ${tz.hm12(m.time)} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}`).join('\n')}
+${(g.rows || g.meals || []).map(m => `- ${tz.hm12(m.time)}${m.next_day ? ' (after midnight)' : ''} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}${(m.logged || []).length ? ' [already eaten]' : ''}`).join('\n')}
 ${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g.logged.length ? `Already in the journal today (do not ask for a meal he has already eaten): ${g.logged.map(e => `${e.time} ${e.meal}: ${e.name} (${e.kcal} kcal, ${e.carbs_g} C / ${e.protein_g} P / ${e.fat_g} F${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''})`).join('; ')}. Eaten so far: ${g.logged.reduce((a, e) => a + (e.kcal || 0), 0)} kcal, ${g.logged.reduce((a, e) => a + (e.carbs_g || 0), 0)} C / ${g.logged.reduce((a, e) => a + (e.protein_g || 0), 0)} P / ${g.logged.reduce((a, e) => a + (e.fat_g || 0), 0)} F.\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
 
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo). Several photos are the same meal from different angles, or its courses and its drink: one entry, the whole of it added together, never counted twice.
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
-Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, whey, cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
-fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence of at most 35 words, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
+${g.slotRow ? `This plate goes in his ${g.slotRow.slot} slot (planned ${tz.hm12(g.slotRow.time)}: ~${g.slotRow.kcal} kcal, ${g.slotRow.carbs_g} g carbs${g.slotRow.protein_g ? `, ${g.slotRow.protein_g} g protein` : ''}${(g.slotRow.logged || []).length ? `, and already holding what he ate earlier in it` : ''}). Call it by that name, and judge it against that slot and today's guidelines.` : 'This plate falls outside the plan\'s slots: judge it against today\'s guidelines and what is left of the day.'}
+protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, whey, cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit.
+processed is true only for ultra-processed food, NOVA group 4: industrially formulated products such as chips and crisps, candy and sweets, pastries and packaged cakes, soft drinks, packaged snack bars, instant noodles, hot dogs and deli meats, sugary cereals, or a deep-fried fast-food plate. Whole and minimally processed foods are never processed, cooked at home or not: eggs, bread and toast, fruit, plain Greek yogurt, milk, cheese, rice, oats, potatoes, meat, fish, vegetables, nuts, olive oil, butter. Judge processed by what is on this plate only.
+fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one or two whole sentences, at most 35 words in all, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. He has already eaten this plate: never tell him to skip it, swap it, leave part of it, or save it for tomorrow, and never say "skip the rice"; say what it means for what comes next (the next slot on the plan, or the rest of the evening). Current time of day where he is: ${tz.hm12(hmNow())}.`;
 }
 
 async function analyze(images, g, meal, notes, written) {
@@ -319,7 +394,7 @@ ${doc.entries.filter(e => !e.supplement).slice().sort((a, b) => String(a.time).l
 Totals now: ${sum('kcal')} kcal, ${sum('carbs_g')} g carbs, ${sum('protein_g')} g protein, ${sum('fat_g')} g fat.
 Sentences to rewrite:
 ${stale.map(e => `- id ${e.id}, ${tz.hm12(e.time)} ${e.name}: "${e.assessment.why}"`).join('\n')}
-For each: one plain sentence, under 220 characters, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. No advice about meals that have already happened. Times in 12-hour form. Answer with JSON only: {"readings":[{"id":"...","why":"..."}]}.`;
+For each: one whole plain sentence, at most 35 words, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. Everything in the journal has been eaten: never tell him to skip, swap or undo any of it, or to save it for tomorrow; say only what is next. Times in 12-hour form. Answer with JSON only: {"readings":[{"id":"...","why":"..."}]}.`;
   const schema = { type: 'object', additionalProperties: false, required: ['readings'], properties: { readings: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -336,7 +411,7 @@ For each: one plain sentence, under 220 characters, spoken to him as "you" (neve
   const fresh = await dayDoc(date);      // re-read: a log may have landed while the model thought
   for (const rd of (out.readings || [])) {
     const e = fresh.entries.find(x => x.id === rd.id); if (!e || !e.assessment || !rd.why) continue;
-    const why = String(rd.why).slice(0, 420);
+    const why = F.tidyWhy(rd.why, 420);
     if (why !== e.assessment.why) { e.why_then = e.why_then || e.assessment.why; e.assessment.why = why; e.why_at = nowHM; n++; }
     e.why_as_of = latest.id;
   }
@@ -350,35 +425,20 @@ async function dayReport(date) {
   // a lift in the day: its calories are counted, and the rules say what it asks of the plate
   for (const sx of (g.sessions || [])) if (/weight|lift|strength/i.test(String(sx.sport || '')) || /\blift\b|^push\b|\bpull\b|\bupper\b|\blegs\b/i.test(String(sx.name || '')))
     g.guidelines = (g.guidelines || []).concat([{ key: 'lift', text: `Lift${sx.time ? ' at ' + tz.hm12(sx.time) : ''}: about ${Math.round((sx.kcal || (sx.tss ? sx.tss * 175 * 0.036 : 180)))} kcal added to the day; 25 g of protein within the hour after it.` }]);
-  const doc = await dayDoc(date);
-  // an entry saved without a slot (eaten far from the plan's time, before the wider rule) is slotted on the way out
-  const entries = doc.entries.map(e => F.alcoholRule(Object.assign({}, e, { photo: undefined }, !e.slot && !e.supplement && !e.drink_only ? { slot: F.slotFor(g.meals, e.time, e.meal) } : {})));
+  // Every entry keeps the slot it was given when it was logged; the rows freeze a slot with food in it
+  // and reshape only the open ones (rowsFor). The verdict, the card and the Day row read these.
+  const { doc, entries, rows } = await dayState(date, g);
   const sum = k => Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const meals = entries.filter(e => !e.supplement && !e.drink_only);
   const actual = { kcal: sum('kcal'), carbs_g: sum('carbs_g'), protein_g: sum('protein_g'), fat_g: sum('fat_g'), meals: entries.length };
   const { scoreDay } = require('./intake');
-  // A drink is a drink, with or without calories: a pint, a latte, a juice counts in the totals and the
-  // hydration curve but never stands in for a meal (a bottle with carbs on the bike is the exception).
-  // A plate that mentions its drink ("a wrap and two bottles of water") is still a plate: the drink
-  // flag alone does not make it one; little protein and few calories do.
-  const drinkish = e => !e.supplement && (!!e.drink_only || !!e.alcohol || (!!e.drink && (e.protein_g || 0) < 15 && (e.kcal || 0) < 300));
-  const isDrink = e => drinkish(e) && !(e.slot === 'on the bike' && (e.carbs_g || 0) >= 10);
-  // the pages list by the same rule: a drink (water, coffee, beer, a bottle on the bike) is on Hydration, the rest on Food
-  for (const e of entries) e.is_drink = drinkish(e);
-  // The snack's words follow the day: how short protein is, not "if".
-  const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
-  const planMeals = g.meals.map(m => m.slot !== 'snack' ? m : Object.assign({}, m, { what: (() => {
-    const short = (g.target.protein_g || 0) - proteinSoFar;
-    if (date !== tz.todayKey()) return m.what;
-    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: whey or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
-  })() }));
   // Macros are read against what the plan says should be in by now (today), or the whole day (a past day).
-  const nowHM0 = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
-  const due = date === tz.todayKey() ? F.dueSoFar(g.meals, g.target, nowHM0) : null;
+  const nowHM0 = hmNow();
+  const due = date === tz.todayKey() ? F.dueSoFar(rows, g.target, nowHM0) : null;
   const macroTarget = due ? (due.kcal > 0 ? Object.assign({}, g.target, due) : null) : g.target;
   const macro = macroTarget ? scoreDay(actual, macroTarget) : null;
   const rides = g.sessions.filter(s => s.done && s.end_at);
-  const guide = F.guidelineScore(g.day, meals, rides, g.meals);
+  const guide = F.guidelineScore(g.day, meals, rides, rows);
   const overall = F.overall(macro ? macro.overall : null, guide.score);
   // Micronutrients: today and up to six days before; each nutrient averages
   // over its own window (3 days for the quick ones, 7 for iron, D, B12,
@@ -396,31 +456,31 @@ async function dayReport(date) {
   const nowP = tz.parts(new Date());
   const nowMin = date === tz.todayKey() ? nowP.h * 60 + nowP.mi : null;
   const hydration = await liveHydration(date, entries, g, nowMin);
-  // the four supplements: what is due today and what was taken (supps.js)
+  // The day's drinks, one list: the Hydration page lists them, Food counts them, and "drank" is
+  // the sum of their poured volumes (food-math drinksOf). Each listed entry carries what it counted.
+  const dk = F.drinksOf(entries, hydration && hydration.drinks);
+  for (const r of dk.rows) { const e = entries.find(x => x.id === r.id); if (e) { e.drink_ml = r.ml; if (r.net_ml != null) e.drink_net_ml = r.net_ml; } }
+  if (hydration) { hydration.drunk_ml = dk.ml; hydration.left_ml = Math.max(0, (hydration.target_ml || 0) - dk.ml); }
+  // the four supplements: what is due today and what was taken (supps.js); a pre-ride one whose time
+  // has gone by untaken says so, rather than "due" at a time already past
   let supps = null;
   try { const S = require('./supps'); const y = await getJSON(dayKey(tz.shiftKey(date, -1)), null); supps = S.dueFor(date, g.sessions, entries, nowMin, (y && y.entries) || []); } catch (e) { supps = null; }
+  if (supps && nowMin != null) for (const d of supps.due || []) if (d.link === 'fuel' && !d.taken && !d.past && F.toMin(d.time) != null && F.toMin(d.time) < nowMin) { d.too_late = true; d.word = 'too late today'; }
   // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
   let energy = null;
-  try { energy = await liveFuel(date, entries, g, nowMin); } catch (e) { energy = null; }
+  try { energy = await liveFuel(date, entries, Object.assign({}, g, { meals: rows }), nowMin); } catch (e) { energy = null; }
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
-    meals: (() => { const rolled = F.rollForward(planMeals, entries);
-      // two slots with one name (a bottle for each ride): an entry belongs to the one nearest its time
-      const own = (m0, e) => { const same = rolled.filter(x => x.slot === m0.slot); if (same.length < 2) return true; const d = x => Math.abs((F.toMin(e.time) ?? 0) - (F.toMin(x.time) ?? 0)); return same.reduce((a, x) => d(x) < d(a) ? x : a, same[0]).time === m0.time; };
-      return rolled.map(m0 => { const mine = entries.filter(e => e.slot === m0.slot && own(m0, e)); const food = mine.filter(e => !e.supplement && !isDrink(e));
-      // the slot's plan as it stood when its first plate was logged, if that plate carries one
-      const fro = food.map(e => e.plan).find(p => p && p.slot === m0.slot && p.kcal != null);
-      const m = fro ? Object.assign({}, m0, { kcal: fro.kcal, carbs_g: fro.carbs_g, protein_g: fro.protein_g, low_carb: !!fro.low_carb, what: fro.what || m0.what, frozen_at: fro.at || null }) : m0;
-      const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort((a, b) => a.time.localeCompare(b.time))[0];
-      return Object.assign({}, m, { logged: food.map(e => e.id), match: F.mealMatch(m, mine, { day_kcal: actual.kcal, target_kcal: g.target && g.target.kcal }), time_logged: first ? first.time : null }); }); })(),
+    meals: rows,
     actual: Object.assign(actual, { meals: meals.length }), entries,
+    drinks: dk.ids, drink_count: dk.count, drink_food_count: dk.food_count, drinks_ml: dk.ml,
     stale_readings: staleOf(doc.entries).stale.length, stale_key: (staleOf(doc.entries).latest || {}).id || null,
     hydration, energy, supps,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
-    suggestion: date === tz.todayKey() ? nextUp(Object.assign({}, g, { meals: planMeals }), entries, actual, macro, nowHM0) : null,
+    suggestion: date === tz.todayKey() ? nextUp(Object.assign({}, g, { meals: rows }), entries, actual, macro, nowHM0) : null,
     basis: 'the journal against the day\'s guidelines, and the macros against what the plan says should be in by now'
   };
 }
@@ -432,7 +492,7 @@ async function dayReport(date) {
 // rides it tunes the model's two constants.
 async function liveFuel(date, entries, g, nowMin) {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
-  const planMeals = g.meals.map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) }));
+  const planMeals = g.meals.map(m => Array.isArray(m.logged) ? m : Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot).map(e => e.id) }));
   const days = await getJSON('energy-days', { days: {} });
   const prev = days.days[tz.shiftKey(date, -1)] || null;
   const taps = await getJSON('fuel-legs', { rides: [] });
@@ -554,7 +614,11 @@ async function liveHydration(date, entries, g, nowMin) {
   live.calibration = { k: live.sweat_k, points: HL.calibrate(cal.points).points };
   // the shape the tile already reads
   live.target = { total: live.target_ml, base: live.target_ml - live.sessions.reduce((a, s) => a + s.loss_ml, 0), ride: live.sessions.reduce((a, s) => a + s.loss_ml, 0) };
-  live.note = live.advice || (live.now.band.key === 'blue' ? 'Ahead of the morning.' : `${(Math.abs(live.now.ml) / 1000).toFixed(1)} L ${live.now.ml < 0 ? 'down' : 'up'} on the morning.`);
+  // the line under the balance: the bedtime note after evening alcohol, else the advice, else where it
+  // stands (never "0.0 L down"); a drink still landing says so, so a glass that moved the balance by a
+  // fifth of itself is explained
+  const where = live.now.band.key === 'blue' ? 'Ahead of the morning.' : Math.abs(live.now.ml) < 100 ? 'Level with the morning.' : `${(Math.abs(live.now.ml) / 1000).toFixed(1)} L ${live.now.ml < 0 ? 'down' : 'up'} on the morning.`;
+  live.note = [live.bedtime_note || live.advice || where, live.landing_note].filter(Boolean).join(' ');
   return live;
 }
 
@@ -564,7 +628,8 @@ async function liveHydration(date, entries, g, nowMin) {
 // earns a word (whey or cottage cheese, as the plan's snack says).
 function nextUp(g, entries, actual, macroNow, nowHM) {
   const { scoreDay } = require('./intake');
-  const meals = F.rollForward(g.meals, entries).map(m => Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot && !e.supplement && (!e.drink_only || m.slot === 'on the bike')).map(e => e.id) }));
+  // the day's rows (rowsFor): rolled forward already, a slot logged when it holds food
+  const meals = (g.meals || []).map(m => Array.isArray(m.logged) ? m : Object.assign({}, m, { logged: entries.filter(e => e.slot === m.slot && !e.supplement && (!e.drink_only || m.slot === 'on the bike')).map(e => e.id) }));
   // a slot the meal before it already covered is not next
   const nx = F.nextSlot(meals.filter(m => !m.covered_by), nowHM);
   const before = macroNow ? macroNow.overall : null;
@@ -600,6 +665,11 @@ async function removeEntry(id, date) {
 }
 // Today's entries, newest last, for the voice's "remove the ..." and "undo".
 async function todayEntries() { return (await dayDoc(tz.todayKey())).entries; }
+// The same words logged again within twenty minutes, today (food-math twinOf): the Food page and the voice ask the same.
+async function twinToday(text) {
+  const p = tz.parts(new Date());
+  return F.twinOf(await todayEntries(), text, p.h * 60 + p.mi, 20);
+}
 
 // A supplement taken: one tap, one entry, its micronutrients counted.
 async function addSupplement(key) {
@@ -622,23 +692,32 @@ async function addPhoto(body) {
   if (!images.length && !written) throw new Error('no photo and nothing written');
   const date = tz.todayKey();
   const g = await guidelinesFor(date);
-  const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(body.meal) ? body.meal : null;
+  const meal = MEAL_WORDS.includes(body.meal) ? body.meal : null;
   const notes = body.notes ? String(body.notes).slice(0, 300) : '';
-  // The coach sees what is already in the journal, so it never asks for a meal just eaten.
-  try { g.logged = (await dayDoc(date)).entries.filter(e => !e.supplement).map(e => ({ time: e.time, meal: e.drink_only ? 'drink' : e.meal, name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g, fluid_ml: e.fluid_ml || 0 })); } catch (e) { g.logged = []; }
+  const nowHM = hmNow();
+  // The slot is chosen once, here, from the rows the day shows this minute (after 8 p.m. with dinner
+  // open, a meal is dinner), and the coach is told it, so the verdict, the card and the Day row agree.
+  let pick = { slot: null, row: null };
+  try {
+    const st = await dayState(date, g);
+    g.rows = st.rows;
+    pick = chooseSlot(st.rows, nowHM, meal, st.entries);
+    g.slotRow = pick.row;
+    // The coach sees what is already in the journal, so it never asks for a meal just eaten.
+    g.logged = st.entries.filter(e => !e.supplement).map(e => ({ time: e.time, meal: e.drink_only ? 'drink' : e.meal, name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g, fluid_ml: e.fluid_ml || 0 }));
+  } catch (e) { g.logged = g.logged || []; }
   const a = await analyze(images, g, meal, notes, written);
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
-  const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
   const entry = {
     id, at: new Date().toISOString(), date, time: nowHM,
-    slot: F.slotFor(g.meals, nowHM, body.meal),
-    meal: meal || a.meal_guess || 'snack',
+    slot: pick.slot, slot_fixed: true,
+    meal: mealWord(pick.slot, meal, a.meal_guess),
     name: String(a.food_name || 'meal').slice(0, 80), portion: String(a.portion || '').slice(0, 120),
     kcal: Math.max(0, Math.round(a.kcal || 0)), carbs_g: Math.max(0, Math.round(a.carbs_g || 0)),
     protein_g: Math.max(0, Math.round(a.protein_g || 0)), fat_g: Math.max(0, Math.round(a.fat_g || 0)),
     confidence: a.confidence || 'medium', notes,
     assessment: { protein_source: !!a.protein_source, carbs: a.carbs || 'some', vegetables: !!a.vegetables,
-      processed: !!a.processed, fits: a.fits || 'partly', why: String(a.why || '').slice(0, 420) },
+      processed: !!a.processed, fits: a.fits || 'partly', why: F.tidyWhy(a.why, 420) },
     thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null,
     written: written || null,
     ingredients: Array.isArray(a.ingredients) ? a.ingredients.slice(0, 20).map(i => ({ name: String(i.name || '').slice(0, 60), grams: Math.max(0, Math.round(i.grams || 0)) })) : [],
@@ -647,8 +726,8 @@ async function addPhoto(body) {
   };
   // A bottle or a glass on its own is a drink: it counts for hydration, not as a meal the rules judge.
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
-  // the plan as it stood when this was eaten: a meal is graded against that, never against a plan redrawn later in the day
-  entry.plan = (() => { const m = (g.meals || []).find(x => x.slot === entry.slot); return m && !entry.drink_only ? { slot: entry.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: entry.time } : null; })();
+  // the plan as it stood when this was eaten, from the row the day showed: a meal is graded against that, never against a plan redrawn later in the day
+  entry.plan = !entry.drink_only ? F.planSnapshot(pick.row, entry.time) : null;
   const pm = MI.plateMicros(entry.ingredients, a.micronutrients || null);
   entry.micros = pm.micros; entry.micros_matched_pct = pm.matched_pct; entry.micros_unknown = pm.unknown;
   // The full photo in its own key, so the day document stays small enough to read on every page load.
@@ -674,25 +753,28 @@ async function addKnown(body) {
   if (!name || !(Number(b.kcal) >= 0)) throw new Error('name and kcal needed');
   const date = tz.todayKey();
   const g = await guidelinesFor(date);
-  const meal = ['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal) ? b.meal : null;
+  const meal = MEAL_WORDS.includes(b.meal) ? b.meal : null;
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
-  const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
-  const slot = F.slotFor(g.meals, nowHM, b.meal || body.meal);
+  const nowHM = hmNow();
   const tags = Array.isArray(b.tags) ? b.tags : [];
+  // a glass of water takes no slot; anything else gets its slot once, from the rows the day shows now
+  let pick = { slot: null, row: null };
+  try { const st = await dayState(date, g); pick = chooseSlot(st.rows, nowHM, meal, st.entries); } catch (e) { pick = { slot: F.slotFor(g.meals, nowHM, meal), row: null }; }
+  const slot = pick.slot;
   const entry = {
-    id, at: new Date().toISOString(), date, time: nowHM, slot,
-    meal: meal || (slot && ['breakfast', 'lunch', 'dinner'].includes(slot) ? slot : slot === 'on the bike' ? 'on the bike' : 'snack'),
+    id, at: new Date().toISOString(), date, time: nowHM, slot, slot_fixed: true,
+    meal: mealWord(slot, meal, null),
     name, portion: b.place ? `at ${String(b.place).slice(0, 60)}` : 'as sold', kcal: Math.round(Number(b.kcal) || 0), carbs_g: Math.round(Number(b.carbs_g) || 0),
     protein_g: Math.round(Number(b.protein_g) || 0), fat_g: Math.round(Number(b.fat_g) || 0), confidence: 'high', notes: 'published nutrition, approximate',
     assessment: { protein_source: (Number(b.protein_g) || 0) >= 25, carbs: (Number(b.carbs_g) || 0) >= 45 ? 'heavy' : (Number(b.carbs_g) || 0) >= 15 ? 'some' : 'none', vegetables: tags.includes('veg'),
-      processed: tags.includes('fried') || tags.includes('sweet'), fits: b.fits || 'partly', why: String(b.why || 'A known order, logged with its published numbers.').slice(0, 420) },
+      processed: tags.includes('fried') || tags.includes('sweet'), fits: b.fits || 'partly', why: F.tidyWhy(b.why || 'A known order, logged with its published numbers.', 420) },
     thumb: null, written: null, ingredients: [], micros: null, micros_matched_pct: null, micros_unknown: [],
     fluid_ml: tags.includes('drink') ? Math.max(0, Math.round(Number(b.fluid_ml) || 500)) : 0, drink: tags.includes('drink') ? name.slice(0, 40) : null,
     place: b.place ? { name: String(b.place).slice(0, 80), brand: b.brand || null } : null, source: 'menu'
   };
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
-  // the plan as it stood when this was eaten: a meal is graded against that, never against a plan redrawn later in the day
-  entry.plan = (() => { const m = (g.meals || []).find(x => x.slot === entry.slot); return m && !entry.drink_only ? { slot: entry.slot, kcal: m.kcal, carbs_g: m.carbs_g, protein_g: m.protein_g, low_carb: !!m.low_carb, what: m.what, at: entry.time } : null; })();
+  // the plan as it stood when this was eaten, from the row the day showed: a meal is graded against that, never against a plan redrawn later in the day
+  entry.plan = !entry.drink_only ? F.planSnapshot(pick.row, entry.time) : null;
   const doc = await dayDoc(date);
   doc.entries.push(F.alcoholRule(entry));
   await setJSON(dayKey(date), doc);
@@ -739,9 +821,17 @@ function attach(app) {
       const r = await recheckDay(date);
       res.json(Object.assign({ ok: true }, r, { day: await dayReport(date) }));
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+  // The same words again within twenty minutes are caught here, before the read, as the voice catches
+  // them: 409 with the earlier entry; sent again with force: true, both are kept.
   app.post('/food/text', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const entry = await addPhoto({ text: (req.body || {}).text, meal: (req.body || {}).meal });
+      const b = req.body || {};
+      if (!b.force) {
+        const twin = await twinToday(b.text);
+        if (twin) return res.status(409).json({ ok: false, double: true, twin: { id: twin.id, name: twin.name, time: twin.time, kcal: twin.kcal },
+          error: `Looks like the same as ${tz.hm12(twin.time)} (${twin.name}): keep both?` });
+      }
+      const entry = await addPhoto({ text: b.text, meal: b.meal });
       res.json({ ok: true, entry, day: await dayReport(entry.date) });
     } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 
@@ -789,18 +879,33 @@ function attach(app) {
       for (const k of ['kcal', 'carbs_g', 'protein_g', 'fat_g']) if (b[k] != null && Number.isFinite(Number(b[k]))) e[k] = Math.max(0, Math.round(Number(b[k])));
       for (const x of doc.entries) if (x.why_as_of) delete x.why_as_of;   // the day changed: every sentence is re-read, this plate's first
       if (b.name) e.name = String(b.name).slice(0, 80);
-      if (['breakfast', 'lunch', 'dinner', 'snack', 'on the bike'].includes(b.meal)) e.meal = b.meal;
+      // A slot changes only when he says so: a different meal named, or a different time. The plan it is
+      // graded against is then the one that slot shows (the slot's own frozen plan when it already holds food).
+      const shown = MEAL_WORDS.includes(e.slot) ? e.slot : e.meal;
+      const newMeal = MEAL_WORDS.includes(b.meal) && b.meal !== shown ? b.meal : null;
+      const newTime = /^\d{2}:\d{2}$/.test(b.time || '') && b.time !== e.time ? b.time : null;
+      if (MEAL_WORDS.includes(b.meal)) e.meal = b.meal;
       if (['yes', 'partly', 'no'].includes(b.fits)) e.assessment.fits = b.fits;
-      if (/^\d{2}:\d{2}$/.test(b.time || '')) { e.time = b.time; const gl = await guidelinesFor(date); e.slot = F.slotFor(gl.meals, e.time); doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time))); }
+      if (newTime) { e.time = newTime; doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time))); }
+      if ((newMeal || newTime) && !e.supplement) {
+        const gl = await guidelinesFor(date);
+        const st = await dayState(date, gl);
+        const others = st.entries.filter(x => x.id !== e.id);
+        const rows = await rowsFor(date, gl, others);
+        const pick = chooseSlot(rows, e.time, newMeal, others);
+        e.slot = newMeal && rows.some(r => r.slot === newMeal) ? newMeal : pick.slot;
+        e.slot_fixed = true;
+        const row = rows.find(r => r.slot === e.slot) || null;
+        if (!e.drink_only) e.plan = F.planSnapshot(row, e.time) || e.plan || null;
+      }
       e.corrected = true;
       await setJSON(dayKey(date), doc);
       // keep the ledger in step
       const led = await getJSON('fuel-log', { meals: [] });
       const m = led.meals.find(x => x.food_id === e.id);
       if (m) { Object.assign(m, { name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g }); await setJSON('fuel-log', led); }
-      try { await recheckDay(date); } catch (err) { /* the sentences catch up on the next read */ }
-      const fresh = (await dayDoc(date)).entries.find(x => x.id === e.id) || e;
-      res.json({ ok: true, entry: fresh, day: await dayReport(date) });
+      // the sentences are re-read by the Food page right after (POST /food/recheck): the correction answers at once
+      res.json({ ok: true, entry: e, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   // Two or more entries were one meal: fold them into one. With `text`, the
@@ -848,8 +953,11 @@ function attach(app) {
         await logMeal({ name: merged.name, meal: merged.meal === 'on the bike' ? 'snack' : merged.meal, kcal: merged.kcal, carbs_g: merged.carbs_g, protein_g: merged.protein_g, fat_g: merged.fat_g, food_id: merged.id });
         void g;
       }
+      // one meal in two entries keeps the first one's slot and the plan it was graded against
       merged.time = first.time; merged.at = first.at; merged.merged_from = ids;
-      const gl = await guidelinesFor(date); merged.slot = F.slotFor(gl.meals, merged.time);
+      if (first.slot !== undefined) { merged.slot = first.slot; merged.slot_fixed = true; if (first.plan) merged.plan = first.plan; }
+      else { const gl = await guidelinesFor(date); merged.slot = F.slotFor(gl.meals, merged.time); merged.slot_fixed = true; }
+      if (merged.assessment) merged.assessment.why = F.tidyWhy(merged.assessment.why, 420);
       doc.entries = doc.entries.filter(e => !ids.includes(e.id));
       doc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time)));
       await setJSON(dayKey(date), doc);
@@ -862,9 +970,9 @@ function attach(app) {
       const date = isDate(req.query.date) ? req.query.date : tz.todayKey();
       const gone = await removeEntry(req.params.id, date);
       if (!gone) return res.status(404).json({ error: 'no such entry' });
-      try { await recheckDay(date); } catch (err) { /* the sentences catch up on the next read */ }
+      // the sentences are re-read by the Food page right after (POST /food/recheck): the removal answers at once
       res.json({ ok: true, removed: gone, day: await dayReport(date) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, recheckDay, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, rateLegs };
+module.exports = { attach, dayReport, recheckDay, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };
