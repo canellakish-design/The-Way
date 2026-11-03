@@ -215,8 +215,8 @@ async function runJob(id, who) {
       messages.push({ role: 'user', content: results });
     }
     if (!final) final = 'SAY: I ran out of steps before I could finish that.\nAsk again more narrowly and I will start from what I found.';
-    const m = /^\s*SAY:\s*([\s\S]*?)(?:\n\s*\n|\n(?=[A-Z])|$)/.exec(final);
-    job.say = m ? m[1].trim() : final.split('\n')[0];
+    const m = /^\s*\**SAY:\**\s*([\s\S]*?)(?:\n\s*\n|\n(?=[A-Z*])|$)/.exec(final);
+    job.say = (m ? m[1].trim() : final.split('\n')[0]).replace(/\*\*/g, '');
     job.answer = m ? final.slice(m.index + m[0].length).trim() : final;
     // cited links: the ones the answer names, then the rest it searched
     // sources: every link the answer cites, titled from the search results where they match

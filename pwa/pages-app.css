@@ -196,12 +196,12 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 
 /* ================= COACH (#coach) ================= */
 .navback.coachlink{border-color:var(--green); color:var(--green)}
-.ch-ask{display:flex; flex-direction:column; gap:8px; margin:14px 0}
+.ch-ask{display:flex; flex-direction:column; gap:8px; margin:10px 0 4px}
 .ch-ask textarea{width:100%; font:inherit; padding:10px; background:var(--card); color:var(--ink); border:1px solid var(--line)}
 .ch-row{display:flex; align-items:center; gap:10px; flex-wrap:wrap} .ch-row button{margin:0}
 .ch-chips{display:flex; flex-wrap:wrap; gap:6px 12px}
 .ch-chip{font-size:12.5px; text-align:left; text-transform:none; letter-spacing:0; font-family:var(--sans); padding:0; min-height:0; margin:0; box-shadow:none; border:0; background:none; color:var(--muted); text-decoration:underline}
-.ch-turn,.ch-work{border-left:3px solid var(--line); padding:4px 0 4px 12px; margin:16px 0; display:flex; flex-direction:column; gap:10px}
+.ch-turn,.ch-work{border-left:3px solid var(--line); padding:4px 0 4px 12px; margin:18px 0; display:flex; flex-direction:column; gap:10px}
 .ch-work{border-left-color:var(--amber)}
 .ch-q div{font-size:15px; color:var(--ink)}
 .ch-say{font-family:var(--num); font-weight:700; font-size:22px; line-height:1.15; color:var(--green)}
