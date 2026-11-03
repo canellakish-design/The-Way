@@ -46,7 +46,10 @@ async function buildSessions(date, o) {
     const WK = require('./workouts');
     const savedLifts = ((await WK.liftsSavedBy(date, date))[date]) || [];
     const dayLifts = Object.values(d.workouts || {}).filter(w => w.date === date && !WK.isRideSport(w)).length;
-    for (const w of Object.values(d.workouts || {})) if (w.date === date) {
+    const dayW = Object.values(d.workouts || {}).filter(w => w.date === date);
+    for (const w of dayW) {
+      // an untimed copy of a timed lift of the same name is the same session said twice: counted once
+      if (!w.time && !WK.isRideSport(w) && dayW.some(o => o !== w && o.time && String(o.name).toLowerCase() === String(w.name).toLowerCase())) continue;
       const m = W.metrics(w.steps || [], st);
       const start = w.time ? tz.zonedToUTC(...date.split('-').map(Number), +w.time.slice(0, 2), +w.time.slice(3, 5)) : null;
       const { pastNow, liftMatches } = require('./workouts');
@@ -255,7 +258,7 @@ Identify the food and estimate the portion and its macros as eaten (read a scale
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
 Then judge the plate against today's guidelines and the meal-plan slot nearest to now: protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, whey, cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit; processed means ultra-processed or fried or sweets.
-fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
+fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one plain sentence of at most 35 words, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. Current time of day where he is: ${tz.parts(new Date()).h}:00.`;
 }
 
 async function analyze(images, g, meal, notes, written) {
@@ -333,7 +336,7 @@ For each: one plain sentence, under 220 characters, spoken to him as "you" (neve
   const fresh = await dayDoc(date);      // re-read: a log may have landed while the model thought
   for (const rd of (out.readings || [])) {
     const e = fresh.entries.find(x => x.id === rd.id); if (!e || !e.assessment || !rd.why) continue;
-    const why = String(rd.why).slice(0, 240);
+    const why = String(rd.why).slice(0, 420);
     if (why !== e.assessment.why) { e.why_then = e.why_then || e.assessment.why; e.assessment.why = why; e.why_at = nowHM; n++; }
     e.why_as_of = latest.id;
   }
@@ -635,7 +638,7 @@ async function addPhoto(body) {
     protein_g: Math.max(0, Math.round(a.protein_g || 0)), fat_g: Math.max(0, Math.round(a.fat_g || 0)),
     confidence: a.confidence || 'medium', notes,
     assessment: { protein_source: !!a.protein_source, carbs: a.carbs || 'some', vegetables: !!a.vegetables,
-      processed: !!a.processed, fits: a.fits || 'partly', why: String(a.why || '').slice(0, 240) },
+      processed: !!a.processed, fits: a.fits || 'partly', why: String(a.why || '').slice(0, 420) },
     thumb: body.thumb_base64 ? String(body.thumb_base64).slice(0, 60000) : null,
     written: written || null,
     ingredients: Array.isArray(a.ingredients) ? a.ingredients.slice(0, 20).map(i => ({ name: String(i.name || '').slice(0, 60), grams: Math.max(0, Math.round(i.grams || 0)) })) : [],
@@ -682,7 +685,7 @@ async function addKnown(body) {
     name, portion: b.place ? `at ${String(b.place).slice(0, 60)}` : 'as sold', kcal: Math.round(Number(b.kcal) || 0), carbs_g: Math.round(Number(b.carbs_g) || 0),
     protein_g: Math.round(Number(b.protein_g) || 0), fat_g: Math.round(Number(b.fat_g) || 0), confidence: 'high', notes: 'published nutrition, approximate',
     assessment: { protein_source: (Number(b.protein_g) || 0) >= 25, carbs: (Number(b.carbs_g) || 0) >= 45 ? 'heavy' : (Number(b.carbs_g) || 0) >= 15 ? 'some' : 'none', vegetables: tags.includes('veg'),
-      processed: tags.includes('fried') || tags.includes('sweet'), fits: b.fits || 'partly', why: String(b.why || 'A known order, logged with its published numbers.').slice(0, 240) },
+      processed: tags.includes('fried') || tags.includes('sweet'), fits: b.fits || 'partly', why: String(b.why || 'A known order, logged with its published numbers.').slice(0, 420) },
     thumb: null, written: null, ingredients: [], micros: null, micros_matched_pct: null, micros_unknown: [],
     fluid_ml: tags.includes('drink') ? Math.max(0, Math.round(Number(b.fluid_ml) || 500)) : 0, drink: tags.includes('drink') ? name.slice(0, 40) : null,
     place: b.place ? { name: String(b.place).slice(0, 80), brand: b.brand || null } : null, source: 'menu'
@@ -834,7 +837,7 @@ function attach(app) {
           assessment: { protein_source: olds.some(e => e.assessment && e.assessment.protein_source),
             carbs: olds.some(e => e.assessment && e.assessment.carbs === 'heavy') ? 'heavy' : olds.some(e => e.assessment && e.assessment.carbs === 'some') ? 'some' : 'none',
             vegetables: olds.some(e => e.assessment && e.assessment.vegetables), processed: olds.some(e => e.assessment && e.assessment.processed),
-            fits: first.assessment ? first.assessment.fits : 'partly', why: olds.map(e => e.assessment && e.assessment.why).filter(Boolean).join(' ').slice(0, 240) },
+            fits: first.assessment ? first.assessment.fits : 'partly', why: olds.map(e => e.assessment && e.assessment.why).filter(Boolean).join(' ').slice(0, 420) },
           written: olds.map(e => e.written).filter(Boolean).join('; ') || null, thumb: olds.map(e => e.thumb).find(Boolean) || null,
           ingredients: olds.flatMap(e => e.ingredients || []).slice(0, 20),
           micros: MI.sumDays(olds.map(e => e.micros).filter(Boolean)), micros_unknown: olds.flatMap(e => e.micros_unknown || []),

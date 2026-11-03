@@ -252,6 +252,12 @@ async function run(a, x) {
         : { name: a.name || `Ride, ${minutes} min`, sport: a.sport || 'Ride', notes: '', steps: [{ kind: 'step', label: 'Ride', dur_s: minutes * 60, target: { type: 'free' } }] };
       body.date = isDate(a.date) ? a.date : tz.todayKey();
       body.time = isTime(a.time) ? a.time : null;
+      // a lift said after the fact is already on the calendar (and saved on the Lift page): never add a second copy
+      if (/weight|lift|strength/i.test(String(body.sport || '')) || /^(push|pull|upper|legs|pump)\b/i.test(String(body.name || ''))) {
+        const WK = require('./workouts'), db = await getJSON('plan-workouts', { workouts: {} });
+        const same = Object.values(db.workouts || {}).find(w => w.date === body.date && !WK.isRideSport(w));
+        if (same) return { ok: true, summary: `${same.name} is already on the calendar for ${body.date}${same.time ? ' at ' + tz.hm12(same.time) : ''}; a session saved on the Lift page marks it done. Nothing added.` };
+      }
       let w; try { w = await require('./workouts').create(body); } catch (e) { return { ok: false, summary: e.message }; }
       return { ok: true, summary: `On the calendar: ${w.name}, ${w.date}${w.time ? ' at ' + tz.hm12(w.time) : ''}.`, workout_id: w.id };
     }
