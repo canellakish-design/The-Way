@@ -117,7 +117,10 @@ async function runJob(id, who) {
   if (!job || job.status !== 'queued') return;
   job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = who || 'in-process';
   await setJSON(key, job);
-  const T0 = Date.now(); const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await setJSON(key, job).catch(() => {}); };
+  const T0 = Date.now();
+  job.trace = []; global.__coachTrace = m => { job.trace.push(`${Math.round((Date.now() - T0) / 100) / 10} s ${m}`); setJSON(key, job).catch(() => {}); };
+  const ticker = setInterval(() => { job.tick = Math.round((Date.now() - T0) / 1000); setJSON(key, job).catch(() => {}); }, 2000);
+  const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await setJSON(key, job).catch(() => {}); };
   try {
     const key = (process.env.ANTHROPIC_API_KEY || '').trim();
     if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
@@ -125,10 +128,12 @@ async function runJob(id, who) {
     const create = async (body, ms) => {
       const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms || 300000);
       const payload = JSON.stringify(body); console.log('[coach] model call', payload.length, 'bytes');
+      if (global.__coachTrace) global.__coachTrace(`call sent, ${Math.round(payload.length / 1024)} kB`);
       const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ac.signal,
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'Content-Type': 'application/json' },
         body: payload });
       console.log('[coach] model status', r.status);
+      if (global.__coachTrace) global.__coachTrace(`status ${r.status}`);
       const j = await r.json().finally(() => clearTimeout(timer));
       if (!r.ok) throw new Error('coach ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
       return j;
@@ -203,13 +208,13 @@ async function runJob(id, who) {
     job.answer = m ? final.slice(m.index + m[0].length).trim() : final;
     // cited links: the ones the answer names, then the rest it searched
     const seen = new Set(); job.sources = sources.filter(s => s.url && !seen.has(s.url) && seen.add(s.url)).filter(s => job.answer.includes(s.url) || job.answer.includes(s.title || '§')).slice(0, 12);
-    job.status = 'done'; job.finished = new Date().toISOString();
+    clearInterval(ticker); job.status = 'done'; job.finished = new Date().toISOString();
     await setJSON(key, job);
     const th = await getJSON('coach-thread', { turns: [] });
     th.turns = (th.turns || []).concat([{ role: 'user', text: job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
     await setJSON('coach-thread', th);
   } catch (e) {
-    job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
+    clearInterval(ticker); job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
     await setJSON(key, job).catch(() => {});
   }
 }
