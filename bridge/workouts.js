@@ -386,6 +386,25 @@ function dayCompliance(planned, totals, dayOver, rideCount) {
   return { pct: 0, band: 'red', basis: 'nothing ridden' };
 }
 
+// The Lift page's saved sessions, by date: what answers a planned lift (Strava never sees one).
+async function liftsSavedBy(from, to) {
+  const out = {};
+  try {
+    const LS = await getJSON('lifts', { sessions: [] }), LT = require('./lifts').TEMPLATES || [];
+    for (const x of (LS.sessions || [])) if (x.date >= from && x.date <= to) {
+      const t = LT.find(t => t.key === x.template) || {};
+      (out[x.date] = out[x.date] || []).push({ key: x.template, names: [t.short, t.name, x.template].filter(Boolean).map(n => String(n).toLowerCase()) });
+    }
+  } catch (e) { /* no lift store */ }
+  return out;
+}
+// A planned lift is done when a saved session carries its name; with one lift planned that day, any saved session is it.
+function liftMatches(w, saved, plannedLifts) {
+  if (!saved.length || isRideSport(w)) return false;
+  const nm = String(w.name || '').toLowerCase();
+  if (saved.some(l => l.names.some(n => n && (nm === n || nm.startsWith(n) || n.startsWith(nm))))) return true;
+  return plannedLifts === 1 && saved.some(l => l.key !== 'pump');
+}
 async function calendar(from, to, o) {
   const st = await settings();
   const d = await db();
@@ -409,20 +428,8 @@ async function calendar(from, to, o) {
   const ridesByDate = {};
   for (const r of doneR.rides) (ridesByDate[r.date] = ridesByDate[r.date] || []).push(r);
   // lift sessions saved on the Lift page answer the planned lifts of their day (Strava never sees a lift)
-  const liftsByDate = {};
-  try {
-    const LS = await getJSON('lifts', { sessions: [] }), LT = require('./lifts').TEMPLATES || [];
-    for (const x of (LS.sessions || [])) if (x.date >= from && x.date <= to) {
-      const t = LT.find(t => t.key === x.template) || {};
-      (liftsByDate[x.date] = liftsByDate[x.date] || []).push({ key: x.template, names: [t.short, t.name, x.template].filter(Boolean).map(n => String(n).toLowerCase()) });
-    }
-  } catch (e) { /* no lift store */ }
-  const liftDone = (w, k, dayLifts) => {
-    const ls = liftsByDate[k] || []; if (!ls.length || isRideSport(w)) return false;
-    const nm = String(w.name || '').toLowerCase();
-    if (ls.some(l => l.names.some(n => n && (nm === n || nm.startsWith(n) || n.startsWith(nm))))) return true;
-    return dayLifts.length === 1 && ls.some(l => l.key !== 'pump');   // one planned lift, one saved: they are the same session
-  };
+  const liftsByDate = await liftsSavedBy(from, to);
+  const liftDone = (w, k, dayLifts) => liftMatches(w, liftsByDate[k] || [], dayLifts.length);
   const days = [];
   for (let k = from; k <= to; k = tz.shiftKey(k, 1)) {
     const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1)
@@ -638,4 +645,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };

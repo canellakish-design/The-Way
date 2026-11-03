@@ -42,11 +42,15 @@ async function buildSessions(date, o) {
   const out = [];
   try {
     const d = await getJSON('plan-workouts', { workouts: {} });
+    // a lift saved on the Lift page is done, whatever the clock says
+    const WK = require('./workouts');
+    const savedLifts = ((await WK.liftsSavedBy(date, date))[date]) || [];
+    const dayLifts = Object.values(d.workouts || {}).filter(w => w.date === date && !WK.isRideSport(w)).length;
     for (const w of Object.values(d.workouts || {})) if (w.date === date) {
       const m = W.metrics(w.steps || [], st);
       const start = w.time ? tz.zonedToUTC(...date.split('-').map(Number), +w.time.slice(0, 2), +w.time.slice(3, 5)) : null;
-      const { pastNow } = require('./workouts');
-      const logged = pastNow(w, tz.todayKey());
+      const { pastNow, liftMatches } = require('./workouts');
+      const logged = pastNow(w, tz.todayKey()) || liftMatches(w, savedLifts, dayLifts);
       // a run has no power behind its TSS: its calories are its minutes, about 11 a minute at his weight at an easy pace
       const runKcal = w.sport === 'Run' ? Math.round(m.duration_s / 60 * 11) : null;
       out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, kcal: runKcal, notes: w.notes || '', planned: !logged, done: logged,

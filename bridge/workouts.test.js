@@ -1,6 +1,6 @@
 // node bridge/workouts.test.js
 const assert = require('assert');
-const { pastNow, gradeOne, dayCompliance, hrLoad, clean, nameForLength, gradeDay } = require('./workouts');
+const { pastNow, gradeOne, dayCompliance, hrLoad, clean, nameForLength, gradeDay, liftMatches } = require('./workouts');
 const tz = require('./tz');
 
 let n = 0;
@@ -110,5 +110,13 @@ ok('a short ride above its zone is called short, not above Z1', () => {
   const z1 = { name: 'Zone 1, 150 min', sport: 'VirtualRide', time: '09:45', metrics: { duration_s: 9000, tss: 76 } };
   const r = gradeOne(z1, [{ id: 1, time: '09:49', minutes: 83, tss: 59, type: 'VirtualRide', analysis: { hr: { seconds: 4980, zones: { z1_min: 1, z2_min: 1, z3_min: 1 }, zone_pct: { z1: 76, z2: 21, z3: 3 } } } }]);
   assert.strictEqual(r.compliance.band, 'red'); assert.strictEqual(r.compliance.zone_over, null); assert.ok(/24% at 117/.test(r.compliance.basis), r.compliance.basis);
+});
+ok('a lift saved on the Lift page answers its planned lift; a ride never does', () => {
+  const saved = [{ key: 'push', names: ['push', 'push', 'push'] }];
+  assert.strictEqual(liftMatches({ name: 'Push', sport: 'WeightTraining' }, saved, 1), true);
+  assert.strictEqual(liftMatches({ name: 'Lift', sport: 'WeightTraining' }, saved, 1), true);     // one planned, one saved
+  assert.strictEqual(liftMatches({ name: 'Pull', sport: 'WeightTraining' }, saved, 2), false);    // two planned: names must match
+  assert.strictEqual(liftMatches({ name: 'Zone 1, 60 min', sport: 'Ride' }, saved, 1), false);
+  assert.strictEqual(liftMatches({ name: 'Push', sport: 'WeightTraining' }, [], 1), false);
 });
 console.log(n + ' passed');
