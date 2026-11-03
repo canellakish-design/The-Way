@@ -228,6 +228,50 @@
   let resizeT = null;
   window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!alive()) return; if (document.getElementById("plFollow")) drawFollow(); else if (S0) drawWhole(S0); }, 120); });
 
+  // ---------- the goal circle: it fills as the session's one goal is met ----------
+  // The plan has two rides, and each has one goal, the same one the Calendar grades it on (bridge/workouts.js):
+  //   Zone 1: the planned minutes at heart rate 116 or under (117 is VT1); up to 10% of the ride at 117 or above still passes.
+  //   VO2 40/20s: 8 to 12 minutes above 152 (94% of max 162); the circle is full at 8, and past 12 is more than the session asks.
+  //   Anything else: the planned time, ridden.
+  const HR_HARD = 152, VT1 = 117, VT2 = 139;
+  function goalOf(w, ivs){
+    const name = String(w && w.name || ""), plannedS = (ivs || []).reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
+    if (/vo2|40\s*\/\s*20/i.test(name)) return { kind: "vo2", target_min: 8, hi_min: 12, words: `8 to 12 min above ${HR_HARD}` };
+    if (/zone\s*1|\bz1\b/i.test(name)) return { kind: "z1", target_min: Math.round(plannedS / 60), words: `${Math.round(plannedS / 60)} min at ${HR_Z1} or under` };
+    if (!w || !w.id) return null;                         // a free ride has no goal
+    return { kind: "time", target_min: Math.round(plannedS / 60), words: `${Math.round(plannedS / 60)} min ridden` };
+  }
+  function goalNow(g, samples){
+    let n = 0, under = 0, hard = 0, z3 = 0, hrN = 0;
+    for (const a of samples || []){ n++; const h = a[3]; if (h == null || h < 30) continue; hrN++; if (h < VT1) under++; if (h > HR_HARD) hard++; if (h >= VT2) z3++; }
+    const m = s => Math.floor(s / 60);
+    if (g.kind === "vo2"){
+      const v = hard / 60, met = v >= g.target_min, past = v > g.hi_min;
+      return { frac: Math.min(1, v / g.target_min), big: m(hard), of: `of ${g.target_min} min`, lab: `above ${HR_HARD}`, band: past ? "hold" : met ? "go" : "run",
+        sub: past ? `past ${g.hi_min}: more than the session asks` : met ? `goal met · up to ${g.hi_min} min` : hrN ? `${m(z3)} min at ${VT2}+ so far` : "waiting for heart rate", met };
+    }
+    if (g.kind === "z1"){
+      const over = hrN ? Math.round((hrN - under) / hrN * 100) : 0, met = under / 60 >= g.target_min;
+      return { frac: g.target_min ? Math.min(1, under / 60 / g.target_min) : 0, big: m(under), of: `of ${g.target_min} min`, lab: `at ${HR_Z1} or under`, band: over > 20 ? "stop" : over > 10 ? "hold" : met ? "go" : "run",
+        sub: !hrN ? "waiting for heart rate" : `${over}% at ${VT1} or above · ${over > 10 ? "over the 10% limit" : "limit 10%"}`, met };
+    }
+    const met = n / 60 >= g.target_min;
+    return { frac: g.target_min ? Math.min(1, n / 60 / g.target_min) : 0, big: m(n), of: `of ${g.target_min} min`, lab: "ridden", band: met ? "go" : "run", sub: met ? "goal met" : "", met };
+  }
+  function ringSVG(st, size){
+    const S = size || 200, sw = Math.max(8, Math.round(S / 14)), r = (S - sw) / 2 - 2, C = 2 * Math.PI * r, f = Math.max(0, Math.min(1, st.frac || 0));
+    return `<svg class="gr-svg" width="${S}" height="${S}" viewBox="0 0 ${S} ${S}" role="img" aria-label="${esc(`${st.big} ${st.of} ${st.lab}`)}">
+      <circle class="gr-track" cx="${S / 2}" cy="${S / 2}" r="${r.toFixed(1)}" stroke-width="${sw}"/>
+      ${f > 0 ? "" : "<!-- nothing yet -->"}<circle class="gr-arc gr-${st.band}"${f > 0 ? "" : ' style="display:none"'} cx="${S / 2}" cy="${S / 2}" r="${r.toFixed(1)}" stroke-width="${sw}" stroke-dasharray="${(C * f).toFixed(1)} ${C.toFixed(1)}" transform="rotate(-90 ${S / 2} ${S / 2})"/>
+      <text class="gr-big" x="${S / 2}" y="${(S / 2 + S * 0.08).toFixed(1)}" text-anchor="middle" font-size="${Math.round(S * 0.3)}">${st.big}</text>
+      <text class="gr-of" x="${S / 2}" y="${(S / 2 + S * 0.22).toFixed(1)}" text-anchor="middle" font-size="${Math.max(10, Math.round(S * 0.065))}">${esc(st.of)}</text></svg>`;
+  }
+  function goalHTML(g, samples, size){
+    if (!g) return "";
+    const st = goalNow(g, samples);
+    return `<div class="gr${st.met ? " met" : ""}">${ringSVG(st, size)}<div class="gr-txt"><span class="hu-lab">Goal${st.met ? " · met" : ""}</span><span class="gr-lab">${esc(st.lab)}</span><span class="gr-sub small">${esc(st.sub)}</span></div></div>`;
+  }
+
   // ---------- the devices ----------
   const L = { power: null, cadence: null, speed: null, hr: null, bikeAt: 0, hrAt: 0 };
   const DEV = { trainer: null, control: null, strap: null, trainerName: null, strapName: null, sent: undefined, chooseNext: { trainer: false, strap: false } };
@@ -524,7 +568,7 @@
     const rows = ivs.map(x => `<li><span class="pl-it">${clock(x.start_s)}</span><span class="pl-il">${esc(x.label)}${x.rep ? ` <span class="small">${esc(x.rep)}</span>` : ""}</span><span class="pl-iw">${esc(targetWords(x, 0))}</span><span class="pl-id">${clock(x.dur_s)}</span></li>`).join("");
     return `${pending}${support()}
       <div class="pl-ttl"><h2 class="pl-h">${esc(w.name)}</h2>${when ? `<span class="hu-chip hu-dim">${esc(when)}</span>` : ""}</div>
-      <div class="pl-sec pl-fsec"><span class="hu-lab">The power to follow · watts at FTP ${ftp}</span><div class="pf-box pf-whole" id="plWhole"></div></div>
+      <div class="pl-sec pl-fsec"><span class="hu-lab">The power to follow · watts at FTP ${ftp}</span><div class="pf-box pf-whole" id="plWhole"></div>${goalOf(w, ivs) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(w, ivs), [], 88)}</div>` : ""}</div>
       <div class="hu-fields pl-sum">
         <div class="hu-field"><span class="k">Duration</span><span class="n">${clock(total)}</span><span class="u">${ivs.length} interval${ivs.length === 1 ? "" : "s"}</span></div>
         <div class="hu-field"><span class="k">Targets at FTP ${ftp}</span><span class="n">${hi != null ? hi : "—"}<small> W</small></span><span class="u">${hi != null ? "the hardest interval" : "ride by feel"}${w.np_w ? ` · NP ${w.np_w} W` : ""}</span></div>
@@ -547,8 +591,8 @@
     try{ window.scrollTo(0, 0); }catch{}
     el.innerHTML = `<div class="pl-ride">
       <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}</div></div>
-      <div class="pf-box pf-ride-box" id="plFollow"></div>
-      <div class="pf-key small"><span class="pf-k-t"></span>target watts to hold <span class="pf-k-r"></span>your power (3 s) <span class="pf-k-n"></span>now</div>
+      <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div>
+      <div class="pf-key small"><span class="pf-k-t"></span>target watts to hold <span class="pf-k-r"></span>your power (3 s) <span class="pf-k-n"></span>now</div></div>
       <div class="hu-fields pl-fields">
         <div class="hu-field big pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
         <div class="hu-field big pl-hr"><span class="k">Heart rate</span><span class="n" id="fH">—</span><span class="u" id="fHz"></span></div>
@@ -611,6 +655,8 @@
     $("plNext").innerHTML = !iv ? "" : nx ? `Next: <b>${esc(nx.label)}${nx.rep ? " " + esc(nx.rep) : ""}</b> · ${esc(targetWords(nx, r.bias))} in <b>${clock(left)}</b>` : `Last interval · ends in <b>${clock(left)}</b>`;
     $("plNext").classList.toggle("soon", left <= 5 && !!nx);
     drawFollow();
+    const gb = $("plGoal"), goal = goalOf(r.workout, r.intervals);
+    if (gb){ gb.hidden = !goal; if (goal) gb.innerHTML = goalHTML(goal, r.samples, innerWidth >= 900 ? 190 : 104); }
     if (r.wt !== stripAt){ stripAt = r.wt; $("plStrip").innerHTML = profileSVG(r.intervals, r.ftp, { h: 90, cursor: r.wt, cls: "pl-small" }); }
   }
   function drawSaving(rec){
@@ -634,6 +680,7 @@
     el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-go" : r.stored ? "hu-hold" : "hu-stop"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
       <div class="pl-result ${ok ? "ok" : "bad"}">${line}</div>
       ${fields}
+      ${!r.empty && goalOf(rec.workout, rec.intervals) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(rec.workout, rec.intervals), rec.samples, 120)}</div>` : ""}
       <div class="pl-ctl">${ok ? "" : `<button class="primary" id="cRetry">Retry</button>`}${lastFit && lastFit.id === rec.id ? `<button id="cFit">Download the FIT file</button>` : ""}<a class="btn" href="#today">‹ Day</a><a class="btn" href="#calendar">Calendar</a></div>
       <div class="pl-note small" id="plNote" hidden></div>`;
     const rt = document.getElementById("cRetry"); if (rt) rt.onclick = () => { rt.disabled = true; saveRide(rec); };
