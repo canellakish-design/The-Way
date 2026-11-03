@@ -80,3 +80,12 @@
 .prep{border-left-style:solid; border-left-color:var(--muted)}
 #pB > .eyebrow + .card{margin-top:8px}
 #wSync{font-size:13px}
+
+/* the week chart: a day still to come is an outline to fill, its planned time on top */
+.pwd.ahead .col .p{border:1.5px dashed var(--ink); opacity:.75}
+.pwd .pc.pplan{color:var(--muted); font-size:13px}
+/* the editor: Save on the first screen, its message (the 7 a.m. refusal among them) right beside it */
+.psave{padding:10px 12px}
+.psave .pbtns{margin:0}
+.pmsg{color:var(--amber); font-size:13px; margin-top:6px}
+.pmsg:empty{display:none}

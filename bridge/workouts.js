@@ -18,7 +18,7 @@ const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const tz = require('./tz');
 const W = require('./workout-math');
-const { LIBRARY } = require('./workout-library');
+const { LIBRARY, notesFor } = require('./workout-library');
 
 const envStr = k => (process.env[k] || '').trim().replace(/^['"]|['"]$/g, '');
 const KEY = envStr('INTERVALS_ICU_API_KEY');
@@ -66,7 +66,8 @@ function clean(body, prev) {
     time: b.time === '' || b.time === null ? null : (isTime(b.time) ? b.time : (p.time || null)),
     sport: SPORTS.includes(b.sport) ? b.sport : (p.sport || 'Ride'),
     name: nameForLength(String(b.name != null ? b.name : (p.name || 'Workout')).slice(0, 80) || 'Workout', b.steps ? W.normItems(b.steps) : (p.steps || [])),
-    notes: String(b.notes != null ? b.notes : (p.notes || '')).slice(0, 2000),
+    // a library note's head line follows the sport: road notes for a road ride, trainer notes on the trainer
+    notes: notesFor(String(b.notes != null ? b.notes : (p.notes || '')).slice(0, 2000), SPORTS.includes(b.sport) ? b.sport : (p.sport || 'Ride')),
     route_id: b.route_id != null ? String(b.route_id).replace(/\D/g, '').slice(0, 12) || null : (p.route_id || null),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
     course: b.course === null ? null : b.course && typeof b.course === 'object' ? {
@@ -290,6 +291,28 @@ function pastNow(w, today) {
   const endMin = (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) + Math.round(W.metrics(w.steps || [], W.DEFAULTS).duration_s / 60);
   return tz.minutesOf(saved) >= endMin;
 }
+// A session saved after the fact (pastNow) is done: it carries the logged grade wherever it is drawn,
+// whether or not the day has a Strava ride to grade the rest against. A run or a lift logged by the
+// advisor at 9:30p for noon reads "logged" on the Day row, not "plan".
+const LOGGED = { pct: 100, band: 'green', basis: 'logged by hand' };
+function markLogged(w) { return Object.assign({}, w, { logged: true, compliance: w.compliance || Object.assign({}, LOGGED) }); }
+// Two entries of one session on one day, one with a start time and an untimed copy (the advisor
+// saving "Push" again without a time): the timed one is the session and the copy counts once, in
+// the day's totals, its rows and the week's counts. The copy's id rides on the kept one so it can
+// still be removed. Same name, case and spacing aside, and the same kind (a lift never folds into a ride).
+const normName = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+function dropUntimedCopies(list) {
+  const timed = (list || []).filter(w => isTime(w.time));
+  const out = [];
+  for (const w of list || []) {
+    if (!isTime(w.time)) {
+      const twin = timed.find(t => t.date === w.date && normName(t.name) === normName(w.name) && isRideSport(t) === isRideSport(w));
+      if (twin) { twin.copies = (twin.copies || []).concat([w.id]); continue; }
+    }
+    out.push(w);
+  }
+  return out;
+}
 function loggedPlanned(workouts, st, today, ridesByDate) {
   return workouts.filter(w => pastNow(w, today) && !(ridesByDate[w.date] || []).length)
     .map(w => Object.assign(withMetrics(w, st), { logged: true }));
@@ -408,7 +431,7 @@ function liftMatches(w, saved, plannedLifts) {
 async function calendar(from, to, o) {
   const st = await settings();
   const d = await db();
-  const planned = Object.values(d.workouts).filter(w => w.date >= from && w.date <= to).map(w => withMetrics(w, st));
+  const planned = dropUntimedCopies(Object.values(d.workouts).filter(w => w.date >= from && w.date <= to).map(w => withMetrics(w, st)));
   const [icuR, doneR] = await Promise.all([
     icuEvents(from, to).catch(e => ({ configured: true, error: e.message, events: [] })),
     stravaDone(from, to, st, o).catch(e => ({ connected: false, reason: e.message, rides: [] }))
@@ -434,7 +457,7 @@ async function calendar(from, to, o) {
   for (let k = from; k <= to; k = tz.shiftKey(k, 1)) {
     const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1)
       .map((w, _i, all) => liftDone(w, k, all.filter(x => !isRideSport(x))) ? Object.assign({}, w, { logged: true, compliance: { pct: 100, band: 'green', basis: 'saved on the Lift page' } })
-        : pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? Object.assign({}, w, { logged: true }) : w);
+        : pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? markLogged(w) : w);
     const i = icuR.events.filter(e => e.date === k);
     const done = doneR.rides.filter(r => r.date === k);
     const logged = p.filter(w => w.logged);
@@ -459,7 +482,9 @@ async function calendar(from, to, o) {
 // The plan's own workouts in the shape the day page draws planned sessions
 // in (see intervals.js plannedRange), so a workout saved here shows on the
 // day whether or not it has been sent to the Garmin yet.
-function fmtMin(m) {
+// minutes from midnight to "12:30a"; past midnight (a late ride's end, 1470) wraps to the next morning's clock
+function fmtMin(m0) {
+  const m = ((Math.round(m0) % 1440) + 1440) % 1440;
   let h = Math.floor(m / 60), mm = m % 60, ap = h < 12 ? 'a' : 'p';
   h = h % 12; if (h === 0) h = 12;
   return h + ':' + String(mm).padStart(2, '0') + ap;
@@ -468,8 +493,7 @@ async function plannedDays(from, to) {
   const st = await settings();
   const d = await db();
   const days = {};
-  for (const w of Object.values(d.workouts)) {
-    if (w.date < from || w.date > to) continue;
+  for (const w of dropUntimedCopies(Object.values(d.workouts).filter(w => w.date >= from && w.date <= to).map(w => Object.assign({}, w)))) {
     const m = W.metrics(w.steps || [], st);
     const mins = Math.round(m.duration_s / 60);
     const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
@@ -497,7 +521,9 @@ function attach(app) {
   app.get('/workouts/library', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings();
     res.json({ settings: st, library: LIBRARY.map(t => Object.assign({}, t,
-      { steps: W.normItems(t.steps) }, { metrics: W.metrics(W.normItems(t.steps), st) })) }); });
+      { steps: W.normItems(t.steps) }, { metrics: W.metrics(W.normItems(t.steps), st) },
+      // the note for each place the ride can be: the editor swaps it when "Where" changes
+      { notes_by_sport: { Ride: notesFor(t.notes, 'Ride'), VirtualRide: notesFor(t.notes, 'VirtualRide') } })) }); });
 
   app.get('/workouts/preflight', async (req, res) => { if (!auth(req, res)) return;
     res.json(await preflight()); });
@@ -645,4 +671,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };

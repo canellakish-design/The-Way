@@ -21,10 +21,14 @@ V.ride = async function(){
   const p = Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||""));
   const today = localDateKey();
   const date = /^\d{4}-\d{2}-\d{2}$/.test(p.date||"") ? p.date : today;
-  const dayName = date === today ? "Today" : date === keyAdd(today, 1) ? "Tomorrow" : date;
+  const dayName = date === today ? "Today" : date === keyAdd(today, 1) ? "Tomorrow" : (typeof dayFmt === "function" ? dayFmt(date) : date);
   view.innerHTML = `<span class="eyebrow">Ride</span>
     <div class="daystep"><button id="rPrev" aria-label="Previous day">‹</button><div class="daystep-label">${esc(dayName)}</div><button id="rNext" aria-label="Next day">›</button></div>
     <div id="ridePage"><div class="card"><div class="small">reading the sky and the calendar…</div></div></div>`;
+  // the page as it last stood for this day, at once, dimmed and not tappable, while the sky, the calendar
+  // and the courses are read (three seconds and more); the fresh page replaces it
+  const SNAPK = "way-snap:ride:" + date;
+  try{ const h = localStorage.getItem(SNAPK), el0 = document.getElementById("ridePage"); if (h && el0){ el0.innerHTML = h; el0.classList.add("ln-stale"); } }catch{}
   document.getElementById("rPrev").onclick = ()=>{ location.hash = "#ride?date=" + keyAdd(date, -1); };
   document.getElementById("rNext").onclick = ()=>{ location.hash = "#ride?date=" + keyAdd(date, 1); };
 
@@ -69,12 +73,27 @@ V.ride = async function(){
     return `<li class="win ${r.kind}"><span class="t">${esc(hlbl(r.h0))}–${esc(hlbl(r.h1))}</span><span class="n">${gradeBadge(cg)}${len} h ${r.kind === "out" ? "outside" : r.kind === "ok" ? "outside, marginal" : "indoors"}${x ? `<span class="small"> · ${x.temp_f}°, wind ${x.wind_mph} ${esc(x.wind_from)}, ${x.rain_pct}% rain${fuel}</span>` : ""}</span>
       <span class="tag"><button class="rwin" data-h="${r.h0}" data-kind="${r.kind}">${ride && !ride.done ? "move the ride here" : "plan a ride here"}</button></span></li>`; };
   const best = wins.filter(x => x.kind === "out").sort((a, b) => (b.h1 - b.h0) - (a.h1 - a.h0))[0] || wins.filter(x => x.kind === "ok").sort((a, b) => (b.h1 - b.h0) - (a.h1 - a.h0))[0] || null;
-  const startHM = ride && ride.time ? ride.time : best ? mm2hm(best.h0 * 60) : "09:00";
   const minutes = ride ? ride.minutes : 90;
+  // The start the kit and the courses are for. Today with nothing left to ride and the day's light gone (no
+  // window ahead), that start is tomorrow's best hours, and every label says "tomorrow", never a 9:00a that
+  // already passed under today's header.
+  const nowMin0 = new Date().getHours() * 60 + new Date().getMinutes();
+  const tomorrow = keyAdd(today, 1);
+  const bestOf = wd => { if (!wd) return null; let top = null; for (let a = H0; a + 2 <= H1 + 1; a++){ const g = condGrade(wd.hours.filter(h => h.hour >= a && h.hour < a + 2)); if (g && (!top || g.score > top.score)) top = { a, score: g.score }; } return top ? mm2hm(top.a * 60) : null; };
+  let startHM = ride && ride.time && !ride.done ? ride.time : best ? mm2hm(best.h0 * 60) : null, startDate = date;
+  if (!startHM || (date === today && hm2mm(startHM) <= nowMin0)){
+    if (date === today && (!ride || ride.done) && (!best || best.h1 * 60 <= nowMin0)){ startDate = tomorrow; startHM = bestOf(WX[tomorrow]) || "09:00"; }
+    else startHM = startHM || (ride && ride.time) || "09:00";
+  }
+  const whenWord = startDate === date ? hm12(startHM) : `${hm12(startHM)} tomorrow`;
+  // Indoors: a ride planned on the trainer, or one whose hours grade F (dark, or unridable): trainer kit, Zwift, no outdoor ranking
+  const rideHours = ride && ride.time && w ? w.hours.filter(h => h.hour >= (hm2mm(ride.time)/60|0) && h.hour < Math.max((hm2mm(ride.time)/60|0) + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60))) : [];
+  const rideGrade0 = rideHours.length ? condGrade(rideHours) : null;
+  const indoor = !!(ride && !ride.done && startDate === date && (/virtualride/i.test(ride.sport || "") || (typeof kindOf === "function" && kindOf(ride.name, ride.sport) === "trainer") || (rideGrade0 && rideGrade0.letter === "F")));
 
   // ---- the courses for that start
   let courses = null;
-  try{ courses = await bridge(`/courses?date=${date}&start=${startHM}&minutes=${minutes}`); }catch(e){ courses = { error: e.message, courses: [], zwift: [] }; }
+  try{ courses = await bridge(`/courses?date=${startDate}&start=${startHM}&minutes=${minutes}`); }catch(e){ courses = { error: e.message, courses: [], zwift: [] }; }
   if (!location.hash.startsWith("#ride")) return;
   const kindWord = k => k === "headwind" ? "into the wind" : k === "tailwind" ? "wind at your back" : k === "crosswind" ? "crosswind" : "";
   // A course's shape, 64 by 64. The /courses answer carries no coordinates today (only the start, the mean
@@ -130,7 +149,8 @@ V.ride = async function(){
   const rideH1 = ride && ride.time ? Math.max(rideH0 + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60)) : null;
   const rideG = ride && ride.time && w ? condGrade(w.hours.filter(h => h.hour >= rideH0 && h.hour < rideH1)) : null;
   const heroH = hNow || (top && w.hours.find(h => h.hour === top.a));
-  const wear = kit && kit.items ? `<div class="rd-wear"><span class="hu-lab">Wear at ${esc(hm12(startHM))} · feels ${kit.feels_low_f}°</span>${kit.items.map(esc).join(", ")}.</div>` : "";
+  const wear = indoor ? `<div class="rd-wear"><span class="hu-lab">Indoors at ${esc(whenWord)} · trainer kit</span>Bibs and a light jersey, the fan on, a towel, two bottles.</div>`
+    : kit && kit.items ? `<div class="rd-wear"><span class="hu-lab">Wear at ${esc(whenWord)} · feels ${kit.feels_low_f}°</span>${kit.items.map(esc).join(", ")}.</div>` : "";
   const hero = gNow && heroH ? (() => { const f = hFacts(heroH); return `<section class="rd-hero">
       <span class="rd-letter g-${gNow.tier}" title="${attr(`conditions ${gNow.letter}${gNow.why.length ? ": " + gNow.why.join(", ") : ""}`)}">${gNow.letter}</span>
       <div class="rd-facts"><span class="hu-lab">${hNow ? `Right now · ${esc(hlbl(nowH))}` : `Best of ${esc(dayName.toLowerCase())} · ${esc(hlbl(top.a))}–${esc(hlbl(top.a + 2))}`}</span>
@@ -200,6 +220,7 @@ V.ride = async function(){
         <div class="progress" id="progress" hidden></div>
       </details></section>`;
 
+  document.getElementById("ridePage").classList.remove("ln-stale");
   document.getElementById("ridePage").innerHTML = `
     ${hero}
     ${rideLine}
@@ -216,14 +237,18 @@ V.ride = async function(){
       <details class="why"><summary>how the grade works</summary><div class="small glegend">Conditions grade, A+ a perfect day to F unridable: feels-like temperature (a point a degree under 55°, three a degree under 40°), wind on your bands (under 12 green, 12 to 15 amber, over 15 red), gusts, rain and daylight over the hours of the ride, leaning on the worst hour.</div></details>
     </section>
     ${fitness}
-    <section class="rd-sec"><span class="hu-lab">Courses for ${esc(hm12(startHM))}${grade ? ` · <span class="${grade === "good" ? "hu-go" : grade === "ok" ? "hu-hold" : "hu-stop"}">${grade === "good" ? "green outside" : grade === "ok" ? "marginal" : "indoors"}</span>` : ""}</span>
+    ${indoor ? `<section class="rd-sec"><span class="hu-lab">Indoors at ${esc(whenWord)} · Zwift routes</span>
+      <div class="small">${/virtualride/i.test(ride.sport || "") ? "Planned on the trainer" : "The hours of the ride grade F" + (rideGrade0 && rideGrade0.why.length ? ` (${esc(rideGrade0.why.join(", "))})` : "")}: no outdoor courses.</div>
+      ${courses && courses.zwift && courses.zwift.length ? `<ul class="agenda courses">${courses.zwift.map(zRow).join("")}</ul>` : ""}
+    </section>` : `<section class="rd-sec"><span class="hu-lab">Courses for ${esc(whenWord)}${grade ? ` · <span class="${grade === "good" ? "hu-go" : grade === "ok" ? "hu-hold" : "hu-stop"}">${grade === "good" ? "green outside" : grade === "ok" ? "marginal" : "indoors"}</span>` : ""}</span>
       ${courses && courses.wind ? `<div class="small rd-cwind">Wind over the ride: ${courses.wind.mph} mph from the ${esc(courses.wind.from)}${courses.wind.gust_mph > courses.wind.mph + 8 ? `, gusts ${courses.wind.gust_mph}` : ""}. Ranked for the wind at your back on the way home.</div>` : ""}
       ${courses && courses.courses && courses.courses.length ? `<ul class="rd-courses">${courses.courses.map(courseRow).join("")}</ul>` : `<div class="small">${esc((courses && (courses.note || courses.error)) || "No outdoor routes yet.")}</div>`}
       ${courses && courses.zwift && courses.zwift.length ? `<details class="why"${grade === "bad" ? " open" : ""}><summary>indoors: Zwift routes</summary><ul class="agenda courses">${courses.zwift.map(zRow).join("")}</ul></details>` : ""}
       <details class="why"><summary>how the courses are ranked</summary><div class="small">Each route is read as two halves, the heading of each the distance-weighted mean of its segments. The forecast wind over each half, from the start chosen above, reads as headwind, crosswind or tailwind against that heading. A tailwind home scores three, a crosswind home one and a half, a headwind out one more (the legs are fresh for it); a route far from the time planned loses points. Routes come from RideWithGPS when it is connected, otherwise from the roads Strava has seen you ride, grouped by name. The little drawing is a sketch from each half's heading, not the map.</div></details>
-    </section>
+    </section>`}
     <a class="rd-link hu-stripe" href="#zones"><span><b>Zones and the signature</b><span class="small">Power and heart-rate zones, the three numbers of the signature, the best efforts and the breakthroughs.</span></span><span class="rd-go" aria-hidden="true">›</span></a>
     <details class="why rd-plan"><summary>Planning numbers</summary><div class="small">The FTP every zone and target follows. Yours to set; the signature on the Zones page is the evidence, never the hand that writes it.</div><div id="pSettings" class="small">loading…</div></details>`;
+  try{ localStorage.setItem(SNAPK, document.getElementById("ridePage").innerHTML); }catch{}
   bridge("/workouts/settings").then(st => { if (location.hash.startsWith("#ride") && window.drawPlanningNumbers) window.drawPlanningNumbers(st); }).catch(()=>{ const el = document.getElementById("pSettings"); if (el) el.textContent = "bridge unreachable"; });
 
   // the progress list fills the fold; its five-minute and threshold numbers fill the two fields
@@ -243,9 +268,9 @@ V.ride = async function(){
       msg(`${c.name} is on ${ride.name}${startAt ? ` at ${hm12(startAt)}` : ""}.`);
     } else {
       const mins = ride ? ride.minutes : (c.est_min || 90);
-      await bridge("/workouts", { method: "POST", headers: J, body: JSON.stringify({ name: `Zone 1, ${mins} min · ${c.name}`, sport: "Ride", date, time: startAt || startHM, course,
+      await bridge("/workouts", { method: "POST", headers: J, body: JSON.stringify({ name: `Zone 1, ${mins} min · ${c.name}`, sport: "Ride", date: startDate, time: startAt || startHM, course,
         notes: `Course: ${c.name}. ${c.why || ""}`.trim(), steps: [{ kind: "step", label: "Zone 1", dur_s: mins * 60, target: { type: "free" } }] }) });
-      msg(`Planned: Zone 1, ${mins} min on ${c.name} at ${hm12(startAt || startHM)}. It is on the calendar and the Day card.`);
+      msg(`Planned: Zone 1, ${mins} min on ${c.name} at ${startAt ? hm12(startAt) : whenWord}. It is on the calendar and the Day card.`);
     }
     setTimeout(()=> V.ride(), 900);
   };

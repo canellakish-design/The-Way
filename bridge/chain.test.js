@@ -29,7 +29,7 @@ ok('verdict: the first link from the left that is off is the break; all good and
   assert.deepStrictEqual(C.ORDER, ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight']);
   assert.strictEqual(C.stateOf('fuel', 0.85), 'good'); assert.strictEqual(C.stateOf('fuel', 0.5), 'bad'); assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
   const unplanned = Object.assign({}, all, { plan: { week: 20, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 1 } });
-  assert.ok(/breaks at planning: 60 of 360 minutes of riding on the calendar for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
+  assert.ok(/breaks at planning: 60 of 360 minutes of riding placed for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
   assert.ok(/breaks at lifting: 1 of 5 sessions/.test(C.verdict(noLift).text));
   const noRide = Object.assign({}, all, { work: { week: 40, state: 'bad', done_min: 120, planned_min: 300 } });
@@ -51,5 +51,38 @@ ok('recovery: the week against the rider\'s own band; a dip is one step, two is 
   assert.strictEqual(few.state, 'none');
   const L = { sleep: { week: 7.4, state: 'good' }, water: { week: 90, state: 'good' }, food: { week: 88, state: 'good', days_on: 6, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, lift: { week: 20, state: 'bad', sessions: 1, target: 5 }, work: { week: 30, state: 'bad', done_min: 60, planned_min: 200 }, recovery: { week: 4, state: 'good', why: 'HRV inside your band (+4%)' }, weight: { week: 0.1, state: 'warn' } };
   assert.ok(/little was asked/.test(C.verdict(L).text), C.verdict(L).text);
+});
+
+ok('macros box: today\'s kcal and protein against the targets, the Food page\'s own numbers, moving with every log', () => {
+  const before = C.macrosToday({ kcal: 2009, protein_g: 140, target_kcal: 2190, target_protein_g: 170, due_protein_g: 150, logged: true });
+  assert.strictEqual(before.kcal_today, 2009); assert.strictEqual(before.kcal_target, 2190); assert.strictEqual(before.protein_today, 140); assert.strictEqual(before.protein_target, 170);
+  assert.strictEqual(before.today_state, 'good');
+  // a 410 kcal log and then a 502 kcal log, already over: the number moves with each, and the tone goes red past 20% over
+  const one = C.macrosToday({ kcal: 2419, protein_g: 160, target_kcal: 2190, target_protein_g: 170, due_protein_g: 170, logged: true });
+  const two = C.macrosToday({ kcal: 2921, protein_g: 180, target_kcal: 2190, target_protein_g: 170, due_protein_g: 170, logged: true });
+  assert.strictEqual(one.kcal_today, 2419); assert.strictEqual(one.today_state, 'warn');
+  assert.strictEqual(two.kcal_today, 2921); assert.strictEqual(two.today_state, 'bad');
+  // protein short of what is due by now
+  assert.strictEqual(C.macrosToday({ kcal: 900, protein_g: 40, target_kcal: 2190, target_protein_g: 170, due_protein_g: 80, logged: true }).today_state, 'bad');
+  // nothing logged: no number, grey
+  const none = C.macrosToday({ kcal: 0, protein_g: 0, target_kcal: 2190, target_protein_g: 170, logged: false });
+  assert.strictEqual(none.kcal_today, null); assert.strictEqual(none.today_state, 'none'); assert.strictEqual(none.kcal_target, 2190);
+  assert.strictEqual(C.macrosToday(null).today_state, 'none');
+  // the verdict at macros names today's numbers, not the compliance average
+  const L = { sleep: { week: 7.4, state: 'good' }, water: { week: 90, state: 'good' }, food: Object.assign({ week: 51, state: 'bad', days_on: 1, days_logged: 4 }, two) };
+  const v = C.verdict(L); assert.strictEqual(v.break_at, 'food');
+  assert.ok(/today 2,921 of 2,190 kcal, 180 of 170 g protein/.test(v.text), v.text); assert.ok(!/averaging 51/.test(v.text), v.text);
+});
+
+ok('plan link: the planning score on its own week, labelled so it cannot read as the calendar\'s done of plan', () => {
+  assert.strictEqual(C.planWeekLabel('2026-11-02'), 'Nov 2 – Nov 8');
+  assert.strictEqual(C.planWeekLabel('2026-12-29'), 'Dec 29 – Jan 4');
+  const L = { plan: { week: 40, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 0, week_label: 'Nov 2 – Nov 8' } };
+  assert.ok(/placed for the week ahead \(Nov 2 – Nov 8\)/.test(C.verdict(L).text), C.verdict(L).text);
+});
+
+ok('lift link: the verdict reads the Lift page\'s count, "1 of 1 due" in the first week', () => {
+  const L = { lift: { week: 0, state: 'bad', sessions: 0, target: 5, count_word: '0 of 1 due' } };
+  assert.ok(/lifting: 0 of 1 due sessions/.test(C.verdict(L).text), C.verdict(L).text);
 });
 console.log(n + ' passed');
