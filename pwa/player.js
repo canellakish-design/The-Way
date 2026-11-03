@@ -120,6 +120,114 @@
   }
   const targetWords = (x, bias) => !x ? "" : x.target_w != null ? `${Math.round(x.target_w * (1 + bias / 100))}${x.target_w_end != null ? "→" + Math.round(x.target_w_end * (1 + bias / 100)) : ""} W` : x.kind === "hr" ? `hold HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "ride by feel";
 
+  // ---------- the power to follow: target watts over time, what you're riding drawn over it ----------
+  // One axis, watts. Each interval is a block at its target (ramps slope), coloured by zone; the number on a block is
+  // the watts to hold. On the ride the window moves: the last minutes behind the now line with your power (3 s
+  // average) drawn in white over the target, the next minutes ahead with their watts and when they start.
+  // The SVG is drawn at the box's own pixel width, so the numbers keep their shape.
+  const nice = v => v <= 300 ? Math.ceil(v / 50) * 50 : Math.ceil(v / 100) * 100;
+  const span = s => s >= 3600 && s % 3600 === 0 ? `${s / 3600} h` : s % 60 === 0 ? `${s / 60} min` : clock(s);
+  function followSVG(ivs, ftp, o){
+    o = o || {};
+    const W = Math.max(280, Math.round(o.w || 800)), H = Math.max(140, Math.round(o.h || 240));
+    const L0 = 40, R0 = 10, T0 = 30, B0 = 22, pw = W - L0 - R0, ph = H - T0 - B0;
+    const bias = 1 + (o.bias || 0) / 100;
+    const total = ivs.reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0) || 1;
+    const from = o.from != null ? o.from : 0, to = o.to != null ? o.to : total, len = Math.max(1, to - from);
+    const X = t => L0 + (t - from) / len * pw;
+    const trace = o.trace || [];
+    const top = nice(Math.max(ftp * 1.15, ...ivs.map(x => Math.max(x.target_w || 0, x.target_w_end || 0) * bias * 1.08), ...trace.map(p => p[1] * 1.05)));
+    const Y = w => T0 + ph - Math.max(0, Math.min(1, w / top)) * ph;
+    const step = top <= 300 ? 50 : 100;
+    let g = "";
+    for (let w = 0; w <= top; w += step) g += `<line class="pf-grid" x1="${L0}" x2="${W - R0}" y1="${Y(w).toFixed(1)}" y2="${Y(w).toFixed(1)}"/><text class="pf-ax" x="${L0 - 6}" y="${(Y(w) + 4).toFixed(1)}" text-anchor="end">${w}</text>`;
+    g += `<text class="pf-ax" x="${L0 - 6}" y="${T0 - 14}" text-anchor="end">W</text>`;
+    // the time ticks: minutes from now on the ride, the workout clock on the start screen
+    const tickEvery = [30, 60, 120, 300, 600, 900, 1800, 3600].find(s => len / s <= (W < 600 ? 5 : 8)) || 3600;
+    const t0 = o.now != null ? o.now - Math.floor((o.now - from) / tickEvery) * tickEvery : Math.ceil(from / tickEvery) * tickEvery;
+    for (let t = t0; t <= to; t += tickEvery){
+      if (t < 0) continue;
+      const lab = o.now != null ? (t === o.now ? "now" : (t > o.now ? "+" : "−") + span(Math.abs(t - o.now))) : clock(t);
+      const xt = X(t), anchor = xt > W - R0 - 22 ? "end" : xt < L0 + 16 ? "start" : "middle";
+      g += `<line class="pf-tick" x1="${xt.toFixed(1)}" x2="${xt.toFixed(1)}" y1="${T0 + ph}" y2="${T0 + ph + 4}"/><text class="pf-ax" x="${xt.toFixed(1)}" y="${H - 5}" text-anchor="${anchor}">${lab}</text>`;
+    }
+    const hatchY = Y(ftp * 0.5);
+    let blocks = "", labels = "";
+    let lastLabelEnd = -1e9, lastLabel = { text: "", x: -1e9 };
+    ivs.forEach((x, k) => {
+      const s = x.start_s, e = x.start_s + x.dur_s;
+      if (e <= from || s >= to) return;
+      const a = Math.max(s, from), b = Math.min(e, to), xa = X(a), xb = X(b);
+      const curr = o.now != null && o.now >= s && o.now < e, past = o.now != null && e <= o.now;
+      const cls = `pf-blk${curr ? " now" : past ? " past" : ""}`;
+      const tip = `<title>${esc(x.label)}${x.rep ? " " + esc(x.rep) : ""} · ${esc(targetWords(x, o.bias || 0))} · ${clock(x.dur_s)}</title>`;
+      if (x.target_w == null){
+        blocks += `<rect class="${cls}" x="${xa.toFixed(1)}" y="${hatchY.toFixed(1)}" width="${Math.max(0.5, xb - xa - 1).toFixed(1)}" height="${(T0 + ph - hatchY).toFixed(1)}" fill="url(#pfHatch)">${tip}</rect>`;
+        if (xb - xa >= 46 && xa >= lastLabelEnd && !past){ labels += `<text class="pf-free" x="${(Math.max(xa, X(o.now != null ? Math.max(s, o.now) : s)) + 5).toFixed(1)}" y="${(hatchY - 7).toFixed(1)}">${x.kind === "hr" ? `HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "feel"}</text>`; lastLabelEnd = xa + 60; }
+        return;
+      }
+      const w0 = x.target_w * bias, w1 = (x.target_w_end != null ? x.target_w_end : x.target_w) * bias;
+      const at = t => w0 + (w1 - w0) * (t - s) / Math.max(1, x.dur_s);
+      const ya = Y(at(a)), yb = Y(at(b)), xe = Math.max(xa + 0.5, xb - 1);
+      const col = ZC(Math.max(w0, w1) / bias / ftp);
+      blocks += `<g class="${cls}">${tip}<polygon points="${xa.toFixed(1)},${T0 + ph} ${xa.toFixed(1)},${ya.toFixed(1)} ${xe.toFixed(1)},${yb.toFixed(1)} ${xe.toFixed(1)},${T0 + ph}" fill="${col}" class="pf-fill"/><line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xe.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" class="pf-edge"/></g>`;
+      // the watts to hold, on the block, where there is room; the next interval also says when it starts
+      if (past) return;
+      const watts = `${Math.round(w0)}${x.target_w_end != null ? "→" + Math.round(w1) : ""}`;
+      const tw = watts.length * (curr ? 15 : 10) + 4;
+      // a block too narrow for its number still gets it when it is a peak (a 40 s effort), once per run of equal ones
+      const hiOf = v => v ? Math.max(v.target_w || 0, v.target_w_end || 0) : 0, mine = hiOf(x);
+      const peak = mine > hiOf(ivs[k - 1]) && mine > hiOf(ivs[k + 1]);
+      let lx = curr ? X(o.now) + 6 : xa + 4;
+      if (xb - lx < tw){ if (!peak) return; lx = xa; }
+      if (lx < lastLabelEnd || (watts === lastLabel.text && lx - lastLabel.x < 160)) return;
+      lastLabel = { text: watts, x: lx };
+      const isNext = o.now != null && !curr && k > 0 && ivs[k - 1].start_s <= o.now && ivs[k - 1].start_s + ivs[k - 1].dur_s > o.now;
+      const ly = Math.min(ya, yb) - 7;
+      labels += `<text class="pf-w${curr ? " now" : ""}" x="${lx.toFixed(1)}" y="${Math.max(T0 - 12, ly).toFixed(1)}">${watts}</text>`;
+      if (isNext && xb - xa >= 52) labels += `<text class="pf-in" x="${(xa + 4).toFixed(1)}" y="${(T0 + ph - 6).toFixed(1)}">in ${clock(s - o.now)}</text>`;
+      lastLabelEnd = lx + tw + 4;
+    });
+    const ftpY = Y(ftp).toFixed(1);
+    const ftpLine = `<line class="pf-ftp" x1="${L0}" x2="${W - R0}" y1="${ftpY}" y2="${ftpY}"/><text class="pf-ax pf-ftpl" x="${W - R0 - 2}" y="${(+ftpY - 4).toFixed(1)}" text-anchor="end">FTP ${ftp}</text>`;
+    // what you rode: 3 s average, white over the target
+    let line = "";
+    if (trace.length > 1){
+      const pts = [];
+      for (let i = 0; i < trace.length; i++){
+        const lo = Math.max(0, i - 2); let s = 0, n = 0;
+        for (let j = lo; j <= i; j++) if (trace[j][1] != null && trace[j][0] - trace[i][0] > -4){ s += trace[j][1]; n++; }
+        if (n && trace[i][0] >= from) pts.push(`${(i && trace[i][0] - trace[i - 1][0] > 2 ? "M" : pts.length ? "L" : "M")}${X(trace[i][0]).toFixed(1)},${Y(s / n).toFixed(1)}`);
+      }
+      line = `<path class="pf-ride" d="${pts.join("")}"/>`;
+    }
+    let now = "";
+    if (o.now != null){
+      const nx = X(o.now).toFixed(1);
+      now = `<rect class="pf-past" x="${L0}" y="${T0}" width="${Math.max(0, +nx - L0).toFixed(1)}" height="${ph}"/><line class="pf-now" x1="${nx}" x2="${nx}" y1="${T0 - 6}" y2="${T0 + ph}"/>`;
+      if (o.power != null) now += `<circle class="pf-dot" cx="${nx}" cy="${Y(o.power).toFixed(1)}" r="5"/>`;
+      if (o.paused) now += `<text class="pf-paused" x="${(L0 + pw / 2).toFixed(1)}" y="${(T0 + ph / 2).toFixed(1)}" text-anchor="middle">PAUSED</text>`;
+    }
+    return `<svg class="pf" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label || "The power to follow")}"><defs><pattern id="pfHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#1b1d1a"/><rect width="3" height="8" fill="#3a3d36"/></pattern></defs>${g}${blocks}${ftpLine}${now}${line}${labels}</svg>`;
+  }
+  // the ride's window: two minutes behind, ten ahead on the PC; one behind, five ahead on a phone
+  function drawFollow(){
+    const box = document.getElementById("plFollow"); if (!box || !ride) return;
+    const w = box.clientWidth, h = box.clientHeight || 240, small = w < 600;
+    const back = small ? 60 : 120, ahead = small ? 300 : 600, wt = ride.wt;
+    const trace = [];
+    for (let i = ride.samples.length - 1; i >= 0; i--){ const a = ride.samples[i]; if (a[8] == null || a[8] < wt - back - 4) break; trace.push([a[8], a[1]]); }
+    trace.reverse();
+    const fresh = now() - L.bikeAt <= 3000;
+    box.innerHTML = followSVG(ride.intervals, ride.ftp, { w, h, from: wt - back, to: wt + ahead, now: wt, bias: ride.bias, trace, power: fresh ? L.power : null, paused: ride.state === "paused", label: "The power to follow: target watts ahead, your power behind" });
+  }
+  function drawWhole(S){
+    const box = document.getElementById("plWhole"); if (!box) return;
+    box.innerHTML = followSVG(S.intervals || [], S.settings && S.settings.ftp || 175, { w: box.clientWidth, h: box.clientHeight || 220, label: "The power to follow, the whole workout" });
+  }
+  let resizeT = null;
+  window.addEventListener("resize", () => { clearTimeout(resizeT); resizeT = setTimeout(() => { if (!alive()) return; if (document.getElementById("plFollow")) drawFollow(); else if (S0) drawWhole(S0); }, 120); });
+
   // ---------- the devices ----------
   const L = { power: null, cadence: null, speed: null, hr: null, bikeAt: 0, hrAt: 0 };
   const DEV = { trainer: null, control: null, strap: null, trainerName: null, strapName: null, sent: undefined, chooseNext: { trainer: false, strap: false } };
@@ -288,7 +396,7 @@
     if (SIM.on) simFeed(ts);
     const k = idxAt(r, r.wt), iv = r.intervals[k] || null, tgt = targetNow();
     const fresh = at => ts - at <= 3000;
-    r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null]);
+    r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
     r.wt += 1;
     const k2 = idxAt(r, r.wt);
     const left = iv ? iv.start_s + iv.dur_s - r.wt : null;
@@ -416,7 +524,7 @@
     const rows = ivs.map(x => `<li><span class="pl-it">${clock(x.start_s)}</span><span class="pl-il">${esc(x.label)}${x.rep ? ` <span class="small">${esc(x.rep)}</span>` : ""}</span><span class="pl-iw">${esc(targetWords(x, 0))}</span><span class="pl-id">${clock(x.dur_s)}</span></li>`).join("");
     return `${pending}${support()}
       <div class="pl-ttl"><h2 class="pl-h">${esc(w.name)}</h2>${when ? `<span class="hu-chip hu-dim">${esc(when)}</span>` : ""}</div>
-      ${profileSVG(ivs, ftp, { h: 140, cls: "pl-big" })}
+      <div class="pl-sec pl-fsec"><span class="hu-lab">The power to follow · watts at FTP ${ftp}</span><div class="pf-box pf-whole" id="plWhole"></div></div>
       <div class="hu-fields pl-sum">
         <div class="hu-field"><span class="k">Duration</span><span class="n">${clock(total)}</span><span class="u">${ivs.length} interval${ivs.length === 1 ? "" : "s"}</span></div>
         <div class="hu-field"><span class="k">Targets at FTP ${ftp}</span><span class="n">${hi != null ? hi : "—"}<small> W</small></span><span class="u">${hi != null ? "the hardest interval" : "ride by feel"}${w.np_w ? ` · NP ${w.np_w} W` : ""}</span></div>
@@ -436,8 +544,11 @@
   function drawRide(){
     const el = page(); if (!el || !ride) return;
     const ftp = ride.ftp;
+    try{ window.scrollTo(0, 0); }catch{}
     el.innerHTML = `<div class="pl-ride">
       <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}</div></div>
+      <div class="pf-box pf-ride-box" id="plFollow"></div>
+      <div class="pf-key small"><span class="pf-k-t"></span>target watts to hold <span class="pf-k-r"></span>your power (3 s) <span class="pf-k-n"></span>now</div>
       <div class="hu-fields pl-fields">
         <div class="hu-field big pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
         <div class="hu-field big pl-hr"><span class="k">Heart rate</span><span class="n" id="fH">—</span><span class="u" id="fHz"></span></div>
@@ -499,6 +610,7 @@
     const left = iv ? iv.start_s + iv.dur_s - r.wt : 0;
     $("plNext").innerHTML = !iv ? "" : nx ? `Next: <b>${esc(nx.label)}${nx.rep ? " " + esc(nx.rep) : ""}</b> · ${esc(targetWords(nx, r.bias))} in <b>${clock(left)}</b>` : `Last interval · ends in <b>${clock(left)}</b>`;
     $("plNext").classList.toggle("soon", left <= 5 && !!nx);
+    drawFollow();
     if (r.wt !== stripAt){ stripAt = r.wt; $("plStrip").innerHTML = profileSVG(r.intervals, r.ftp, { h: 90, cursor: r.wt, cls: "pl-small" }); }
   }
   function drawSaving(rec){
@@ -582,6 +694,7 @@
     if (!alive()) return;
     el.innerHTML = (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend);
     const go = document.getElementById("plStart");
+    drawWhole(S);
     if (go) go.onclick = () => { go.disabled = true; begin(S0); };
   };
 
