@@ -115,12 +115,14 @@ async function runJob(id, who) {
   const key = 'coach-job-' + id;
   const job = await getJSON(key, null);
   if (!job || job.status !== 'queued') return;
+  // one write queue per job: each save waits for the one before, so an older snapshot can never land after "done"
+  let queue = Promise.resolve();
+  const save = () => (queue = queue.then(() => setJSON(key, JSON.parse(JSON.stringify(job)))).catch(() => {}));
   job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = who || 'in-process';
-  await setJSON(key, job);
+  await save();
   const T0 = Date.now();
-  job.trace = []; global.__coachTrace = m => { job.trace.push(`${Math.round((Date.now() - T0) / 100) / 10} s ${m}`); setJSON(key, job).catch(() => {}); };
-  const ticker = setInterval(() => { job.tick = Math.round((Date.now() - T0) / 1000); setJSON(key, job).catch(() => {}); }, 2000);
-  const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await setJSON(key, job).catch(() => {}); };
+  job.trace = []; global.__coachTrace = m => { job.trace.push(`${Math.round((Date.now() - T0) / 100) / 10} s ${m}`); save(); };
+  const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await save(); };
   try {
     const key = (process.env.ANTHROPIC_API_KEY || '').trim();
     if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
@@ -152,7 +154,7 @@ async function runJob(id, who) {
       const left = Math.max(60000, 11 * 60 * 1000 - (Date.now() - t0));
       await step(`thinking (step ${hop + 1})`);
       let res;
-      const hb = setInterval(() => { job.wait = `step ${hop + 1}: waiting ${Math.round((Date.now() - t0) / 1000)} s`; setJSON(key, job).catch(() => {}); }, 15000);
+      const hb = setInterval(() => { job.wait = `step ${hop + 1}: waiting ${Math.round((Date.now() - t0) / 1000)} s`; save(); }, 15000);
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
@@ -160,7 +162,7 @@ async function runJob(id, who) {
       }, left); }
       catch (e) {
         clearInterval(hb);
-        job.debug = (job.debug || []).concat([`step ${hop + 1} failed after ${Math.round((Date.now() - t0) / 1000)} s: ${e.name} ${String(e.message).slice(0, 160)}`]); await setJSON(key, job).catch(() => {});
+        job.debug = (job.debug || []).concat([`step ${hop + 1} failed after ${Math.round((Date.now() - t0) / 1000)} s: ${e.name} ${String(e.message).slice(0, 160)}`]); await save();
         if (e.name !== 'AbortError') throw e;
         await step('taking too long: answering from what was read');
         const last = messages[messages.length - 1];
@@ -208,14 +210,14 @@ async function runJob(id, who) {
     job.answer = m ? final.slice(m.index + m[0].length).trim() : final;
     // cited links: the ones the answer names, then the rest it searched
     const seen = new Set(); job.sources = sources.filter(s => s.url && !seen.has(s.url) && seen.add(s.url)).filter(s => job.answer.includes(s.url) || job.answer.includes(s.title || '§')).slice(0, 12);
-    clearInterval(ticker); job.status = 'done'; job.finished = new Date().toISOString();
-    await setJSON(key, job);
+    job.status = 'done'; job.finished = new Date().toISOString();
+    await save();
     const th = await getJSON('coach-thread', { turns: [] });
     th.turns = (th.turns || []).concat([{ role: 'user', text: job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
     await setJSON('coach-thread', th);
   } catch (e) {
-    clearInterval(ticker); job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
-    await setJSON(key, job).catch(() => {});
+    job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
+    await save();
   }
 }
 
