@@ -224,6 +224,13 @@ async function report() {
   let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
   // the week before this one, for the trend on the Day's boxes: the same seven days a week earlier
   const prevFrom = tz.shiftKey(today, -13), prevDates = []; for (let i = 13; i >= 7; i--) prevDates.push(tz.shiftKey(today, -i));
+  // days the store missed (or holds in an older shape) are read fresh, a couple per call, like the week's own
+  let freshPrev = 0;
+  for (const d of prevDates) {
+    if (store.days[d] && store.days[d].v === ROW_V) continue;
+    if (freshPrev >= NEW_PER_CALL) break;
+    try { await pastDay(d, store); freshPrev++; } catch (e) { /* that day stays unread */ }
+  }
   const prevRows = prevDates.map(d => store.days[d]).filter(x => x && x.v === ROW_V);
   const prevNights = [], prevRecs = [];
   try {
