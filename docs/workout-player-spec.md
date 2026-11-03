@@ -1,9 +1,28 @@
-# The Way · workout player (spec v0, 3 Nov 2026)
+# The Way · workout player (spec v1, 3 Nov 2026)
 
 ## What it is
 A workout player built into The Way that replaces Zwift for indoor training. It plays the workouts built in The Way, controls the smart trainer (ERG), records the ride, and saves it to intervals.icu and Strava.
 
 It never needs Zwift running. It is not a virtual world; it is a head unit for structured training.
+
+
+## Decisions (Harry, 3 Nov)
+- **Trainer:** Wahoo KICKR CORE (the newer version). It supports FTMS; Wahoo's own trainer service is a fallback if a firmware quirk shows up.
+- **Where it runs:** the Windows PC that runs Zwift today, in Chrome (option A).
+- **Heart rate and breathing:** from the Tymewear chest strap, both. Breathing (rate, minute ventilation VE, tidal volume) is recorded with the ride and ends up on intervals.icu.
+- **Recording:** the player is the only recording of an indoor ride (the watch does not record it), and the ride is stored on intervals.icu.
+- **Nothing from Zwift is needed.**
+
+### What follows from them
+- **Breathing from the strap, live.**
+  - **Today:** breathing reaches intervals.icu through the Tymewear Connect IQ field on the Garmin. That field writes `tyme_breath_rate`, `tyme_minute_volume` and `tyme_tidal_volume` into the Garmin file, and the site reads them back from intervals.icu (bridge/rides.js).
+  - **With the player:** it reads the same values straight from the strap over Bluetooth, and writes them into its FIT file under the same field names. intervals.icu and the site then read them exactly as they do now, with no change to the analysis.
+  - **The unknown:** Tymewear's breathing channel is its own Bluetooth service, not a published standard. The spike lists the strap's Bluetooth services and decodes the breathing one.
+    - If it can't be decoded, ask Tymewear for the spec (they share it with app makers).
+    - Meanwhile, the player still records heart rate from the strap's standard service.
+- **The Way reads the ride from itself.** The site currently learns about finished rides from Strava. A player ride is posted to The Way's bridge the moment it ends, and counts as a done ride everywhere at once: Day, Calendar, the grade, Zone 1 time, Fuel, the power curve and the coach. The intervals.icu copy is for history and breathing analysis.
+- **Strava:** not uploaded, as decided. Consequence: indoor rides stop appearing on Strava, and the site's Strava-based features (the power curve's streams) read the player's own samples instead. A Strava upload can be switched on later with one reconnect.
+- **The watch:** on an indoor ride it stays a watch (sleep, HRV, steps) and doesn't record the ride, so there is no duplicate to sort out.
 
 ## Standing rules it must keep
 - **A ride is always saved, never just exited.** Samples are written to the device every second. A crash, a closed tab or a dead battery loses nothing, and the next launch offers to finish and save the ride.
@@ -71,17 +90,18 @@ A web page can talk to a trainer and a heart-rate strap over Bluetooth with **We
 - **The copy:** the player works on the copy (deploy preview). Uploads are held back there by the existing sandbox guard, so testing never puts a fake ride on Strava.
 
 ## Building it, in order
-1. **Spike (one evening):**
-   - A test page connects to the trainer by Web Bluetooth.
+1. **Spike (one evening, on the Windows PC in Chrome):**
+   - A test page connects to the KICKR CORE by Web Bluetooth.
    - It reads power and cadence, and sets ERG to 100 W, then 150 W.
-   - It reads HR.
-   - This proves the trainer speaks FTMS before anything else is built.
+   - It connects to the Tymewear strap, reads heart rate, and lists every service and value the strap sends, so the breathing channel can be found and decoded.
+   - This proves both devices work before anything else is built.
 2. **Player v1:**
-   - Today's workout, ERG, the ride screen, 1 Hz recording, crash-safe storage.
-   - A FIT file built and uploaded to intervals.icu.
-   - The ride shows on Day and Calendar.
-3. **v2:** Strava upload, fuel cues with logging, sounds, bias, skip, and HR-held Zone 1.
-4. **v3:** a tablet layout and, only if wanted, the iOS wrapper. The Tymewear breathing channel, if its strap broadcasts it, could also come here.
+   - Today's workout, ERG, the ride screen.
+   - 1 Hz recording of power, cadence, HR and breathing, with crash-safe storage.
+   - A FIT file (breathing in the Tymewear field names) uploaded to intervals.icu.
+   - The ride posted to The Way, so it shows on Day and Calendar at once.
+3. **v2:** fuel cues with logging, sounds, bias, skip, HR-held Zone 1, and breathing on the ride screen (rate and VE against VT1/VT2 from the ramp test).
+4. **v3:** a tablet layout; the iOS wrapper only if wanted; Strava upload only if wanted.
 
 Each step is tested on the copy, then by Harry on a short ride, before it replaces Zwift.
 
@@ -90,7 +110,7 @@ Each step is tested on the copy, then by Harry on a short ride, before it replac
 - **Possible later:** a simple "grade mode" from a course's elevation profile, replaying a road course from the Ride page on the trainer.
 - **Bonus:** Zwift's workout export to Garmin and TrainingPeaks isn't needed, because The Way already sends workouts to intervals.icu and Garmin.
 
-## Open questions for Harry
+## Open questions for Harry (answered 3 Nov: see Decisions)
 1. **Which trainer** (make and model)? It needs FTMS. Wahoo KICKR, Tacx Neo and Flux, Elite Direto, Saris H3 and newer Wahoo models all support it. An older Wahoo may need its firmware updated.
 2. **What runs Zwift today:** a Windows PC, a Mac, an iPad, or Apple TV? Option A needs a PC or Mac with Bluetooth.
 3. **Heart rate:** chest strap (which), the Tymewear strap, or the vívoactive 6 broadcasting? The watch can broadcast HR but uses more battery while it does.
