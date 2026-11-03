@@ -115,9 +115,9 @@ async function runJob(id) {
   const key = 'coach-job-' + id;
   const job = await getJSON(key, null);
   if (!job || job.status !== 'queued') return;
-  job.status = 'running'; job.steps = []; job.started = new Date().toISOString();
+  job.status = 'running'; job.steps = []; job.started = new Date().toISOString(); job.where = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.FUNCTION_NAME || 'local';
   await setJSON(key, job);
-  const step = async s => { job.steps.push(s); await setJSON(key, job).catch(() => {}); };
+  const T0 = Date.now(); const step = async s => { job.steps.push(`${s} · ${Math.round((Date.now() - T0) / 1000)} s`); await setJSON(key, job).catch(() => {}); };
   try {
     const key = (process.env.ANTHROPIC_API_KEY || '').trim();
     if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
