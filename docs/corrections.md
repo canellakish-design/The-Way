@@ -46,9 +46,10 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 2 Nov | Macros "off" (24) at 2 p.m. after a normal lunch | The meal plan laid the day around the first session of any kind, so the Push lift got a before meal and an on-the-bike slot, lunch moved to 3:50p, the chicken and rice was graded as on-bike food and the day was judged as a third gone. The 1 Nov fix covered ride minutes and the day type, not the meal timing | meal plan built around rides only; a test with a lift alone and a lift plus a ride | disagreement |
 | 2 Nov | Lift box red after the first Push of the plan, on schedule | The plan's first week was counted against a full five, though the code already worked out how many were due | first week judged against the sessions due since the start | my mistake |
 | 2 Nov | Push saved on the Lift page, still "plan" on the Day card | The Day card's lift row only knew "logged by hand" from the calendar; a session saved on the Lift page never reached it | the calendar marks a planned lift done when the Lift page saved that session that day | disagreement |
+| 2 Nov | The advisor did not know the Push was done | The day's sessions (what the advisor and the food plan read) still judged a lift by the clock, so the saved Push read as not started and slid to 8:35p | one shared check: a lift saved on the Lift page is done everywhere | disagreement |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
-**2 Nov: 6.** 1 new case, 2 disagreement, 3 my mistake.
+**2 Nov: 7.** 1 new case, 3 disagreement, 3 my mistake.
 
 ## Found by the Chrome tests (before Harry saw them)
 
