@@ -8,3 +8,12 @@
   from = "/*"
   to = "/.netlify/functions/api/:splat"
   status = 200
+
+# The copy of The Way: the "copy" branch (copy--thewayforward.netlify.app) and every deploy preview run
+# on their own store, seeded from the real one, and never write to intervals.icu or Google Calendar.
+[context.copy.environment]
+  THE_WAY_SANDBOX = "1"
+[context.deploy-preview.environment]
+  THE_WAY_SANDBOX = "1"
+[context.branch-deploy.environment]
+  THE_WAY_SANDBOX = "1"

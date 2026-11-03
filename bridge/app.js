@@ -2,9 +2,11 @@
 // Function in production). No listen() here.
 const express = require('express');
 const path = require('path');
-const { ON_NETLIFY } = require('./storage');
+require('./sandbox');   // the copy of the site never writes outside itself
+const { ON_NETLIFY, SANDBOX } = require('./storage');
 const app = express();
 app.use(express.json({ limit: '15mb' }));
+app.get('/sandbox', (req, res) => res.json({ sandbox: !!SANDBOX }));
 require('./fuel-log').attach(app);
 require('./plan').attach(app);
 require('./weather').attach(app);
