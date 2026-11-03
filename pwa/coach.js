@@ -12,7 +12,7 @@
     const html = lines.map(l => l.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>').replace(/(^|[\s(])(https?:\/\/[^\s)<]+)/g, '$1<a href="$2" target="_blank" rel="noopener">link</a>'));
     return lines.every(l => /^\s*[-•]\s/.test(l)) ? `<ul class="ch-ul">${html.map(l => `<li>${l.replace(/^\s*[-•]\s/, "")}</li>`).join("")}</ul>` : `<p>${html.join("<br>")}</p>`;
   }).join("");
-  const split = t => { const m = /^\s*SAY:\s*([\s\S]*?)(?:\n\s*\n|$)/.exec(t || ""); return m ? { say: m[1].trim(), answer: t.slice(m.index + m[0].length).trim() } : { say: "", answer: t || "" }; };
+  const split = t => { const m = /^\s*\**SAY:\**\s*([\s\S]*?)(?:\n\s*\n|$)/.exec(t || ""); return m ? { say: m[1].trim().replace(/\*\*/g, ""), answer: t.slice(m.index + m[0].length).trim() } : { say: "", answer: t || "" }; };
   const turnHTML = (q, say, answer, sources, when) => `<div class="ch-turn">
       <div class="ch-q"><span class="hu-lab">You${when ? " · " + esc(when) : ""}</span><div>${esc(q)}</div></div>
       <div class="ch-a">${say ? `<div class="ch-say">${esc(say)}</div>` : ""}<div class="ch-body">${md(answer)}</div>
@@ -20,18 +20,15 @@
   const clock = iso => { const d = new Date(iso); if (isNaN(d)) return ""; let h = d.getHours(); const ap = h < 12 ? "a" : "p"; h = h % 12 || 12; return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${h}:${String(d.getMinutes()).padStart(2, "0")}${ap}`; };
 
   V.coach = async function(){
-    view.innerHTML = `<div class="fd-ttl"><h2 class="fd-h">Coach</h2><span class="hu-chip hu-dim">reads the whole site · current research</span></div>
+    view.innerHTML = `<div class="fd-ttl"><h2 class="fd-h">Coach</h2></div>
       <div class="ch-ask">
-        <label for="chText" class="hu-lab">Ask your coach</label>
-        <textarea id="chText" rows="3" placeholder="How is my week going? Why did my legs feel flat today? Should Thursday be hard or easy? Is my protein right for a 55-year-old in a deficit?"></textarea>
-        <div class="ch-row"><button class="primary" id="chGo">Ask</button><span class="small" id="chHint">Takes a minute or two: it reads your data and the research first. It can also schedule, move and log your training and log food. Tap the keyboard's microphone to talk.</span></div>
-        <div class="ch-chips">${["How is my week going?", "What should I eat before Thursday's VO2 session?", "Why is sleep breaking my chain, and what would fix it?", "Am I losing weight without losing power?", "I rode 45 minutes on Zwift at noon: log it", "Put a Zone 1, 90 min ride on Saturday at 9a"].map(q => `<button class="linkish ch-chip" data-q="${esc(q)}">${esc(q)}</button>`).join("")}</div>
+        <textarea id="chText" rows="2" aria-label="Ask your coach" placeholder="Ask anything"></textarea>
+        <div class="ch-row"><button class="primary" id="chGo">Ask</button></div>
       </div>
       <div id="chLive"></div>
       <div id="chThread"><div class="small">loading the conversation…</div></div>
       <details class="why" id="chNoteFold"><summary>the coach's notebook</summary><div id="chNotes" class="small">loading…</div></details>`;
     const box = document.getElementById("chText"), go = document.getElementById("chGo"), live = document.getElementById("chLive");
-    view.querySelectorAll(".ch-chip").forEach(b => b.onclick = () => { box.value = b.dataset.q; box.focus(); });
 
     const drawThread = async () => {
       let th = null; try { th = await bridge("/coach/thread"); } catch {}
