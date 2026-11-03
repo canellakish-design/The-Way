@@ -102,7 +102,7 @@ Now: ${now}.`;
 async function readSite(base, path) {
   if (!ALLOWED.test(path)) return { error: `not a readable page: ${path}` };
   try {
-    const r = await fetch(base + '/.netlify/functions/api' + path, { headers: { 'x-the-way-app': '1' } });
+    const r = await fetch(base + '/.netlify/functions/api' + path, { headers: { 'x-the-way-app': '1' }, signal: AbortSignal.timeout(45000) });
     const t = await r.text();
     if (!r.ok) return { error: `${r.status} ${t.slice(0, 200)}` };
     // photos and thumbnails are of no use to the coach and cost a great deal
@@ -143,6 +143,7 @@ async function runJob(id) {
       if (late() && hop) { const last = messages[messages.length - 1]; if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is nearly up: answer now from what you have read.' }); }
       // each step gets what is left of eleven minutes (at least one); a step that runs out is retried once without tools
       const left = Math.max(60000, 11 * 60 * 1000 - (Date.now() - t0));
+      await step(`thinking (step ${hop + 1})`);
       let res;
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
@@ -159,6 +160,7 @@ async function runJob(id) {
           system: system(notebook), tools: TOOLS, tool_choice: { type: 'none' }, messages }, 150000);
       }
       messages.push({ role: 'assistant', content: res.content });
+      job.debug = (job.debug || []).concat([`step ${hop + 1}: ${res.stop_reason}, ${Math.round((Date.now() - t0) / 1000)} s, ${(res.usage && res.usage.input_tokens) || 0} in / ${(res.usage && res.usage.output_tokens) || 0} out`]);
       for (const b of res.content) {
         if (b.type === 'server_tool_use' && b.name === 'web_search') await step(`searching: ${String((b.input || {}).query || '').slice(0, 90)}`);
         if (b.type === 'server_tool_use' && b.name === 'web_fetch') await step(`reading: ${String((b.input || {}).url || '').slice(0, 90)}`);
