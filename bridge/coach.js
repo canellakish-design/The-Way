@@ -122,11 +122,12 @@ async function runJob(id) {
     const key = (process.env.ANTHROPIC_API_KEY || '').trim();
     if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
     // the Messages API, called directly as the rest of the bridge does
-    const create = async body => {
-      const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+    const create = async (body, ms) => {
+      const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms || 300000);
+      const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ac.signal,
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'Content-Type': 'application/json' },
         body: JSON.stringify(body) });
-      const j = await r.json();
+      const j = await r.json().finally(() => clearTimeout(timer));
       if (!r.ok) throw new Error('coach ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
       return j;
     };
@@ -140,11 +141,23 @@ async function runJob(id) {
     const t0 = Date.now(), late = () => Date.now() - t0 > 9 * 60 * 1000;   // the background function stops at fifteen minutes
     for (let hop = 0; hop < 16; hop++) {
       if (late() && hop) { const last = messages[messages.length - 1]; if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is nearly up: answer now from what you have read.' }); }
-      const res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
+      // each step gets what is left of eleven minutes (at least one); a step that runs out is retried once without tools
+      const left = Math.max(60000, 11 * 60 * 1000 - (Date.now() - t0));
+      let res;
+      try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
         system: system(notebook), tools: TOOLS, messages
-      });
+      }, left); }
+      catch (e) {
+        if (e.name !== 'AbortError') throw e;
+        await step('taking too long: answering from what was read');
+        const last = messages[messages.length - 1];
+        if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is up: answer now from what you have read.' });
+        else messages.push({ role: 'user', content: 'Time is up: answer now from what you have read so far.' });
+        res = await create({ model: MODEL, max_tokens: 8000, fallbacks: 'default', thinking: { type: 'adaptive' }, output_config: { effort: 'medium' },
+          system: system(notebook), tools: TOOLS, tool_choice: { type: 'none' }, messages }, 150000);
+      }
       messages.push({ role: 'assistant', content: res.content });
       for (const b of res.content) {
         if (b.type === 'server_tool_use' && b.name === 'web_search') await step(`searching: ${String((b.input || {}).query || '').slice(0, 90)}`);
