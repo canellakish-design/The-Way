@@ -239,9 +239,10 @@ const SCHEMA = {
   }
 };
 
-function promptFor(g, meal, notes, written) {
+function promptFor(g, meal, notes, written, photos) {
   const rules = g.guidelines.map(x => '- ' + x.text).join('\n');
-  return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.${written ? `
+  return `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo.${written && photos ? `
+This time he sent the photo AND wrote about the plate: "${written}". Read the two together as one meal. His words win on what a photo cannot show: weights he gives are from a kitchen scale and are exact, and he names the oil, the sauce, what is under the rice, what the bowl holds, the brand. The photo shows the portion and anything he did not mention. Never count the same food twice because it is both in the photo and in his words.` : written ? `
 This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume the usual portions for a ${g.kg || 98} kg cyclist and say so in the portion field, written to him ("your usual", never "his").` : ''}
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's guidelines:
@@ -262,7 +263,7 @@ async function analyze(images, g, meal, notes, written) {
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
   const content = (images || []).slice(0, 4).map(img => ({ type: 'image',
     source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
-  content.push({ type: 'text', text: promptFor(g, meal, notes, written) });
+  content.push({ type: 'text', text: promptFor(g, meal, notes, written, images.length) });
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json',

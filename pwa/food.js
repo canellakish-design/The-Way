@@ -253,14 +253,16 @@ V.food = async function(){
       <div id="snapForm" hidden>
         <div class="snapstrip" id="snapStrip"></div>
         <div class="small snapmore"><button class="linkish" id="snapAdd">+ another photo</button> <button class="linkish" id="rollAdd">+ from camera roll</button> <span id="snapCount"></span></div>
-        <div class="row2"><span><label>Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
-          <span><label>Note (optional)</label><input id="snapNote" placeholder="2 eggs, no toast"></span></div>
+        <label for="snapNote">Your words with the photo (optional)</label>
+        <textarea id="snapNote" rows="3" placeholder="What the photo can't show: chicken thigh 180 g, rice 1 cup, cooked in olive oil, a glass of milk"></textarea>
+        <div class="small">Weights from a scale are taken as exact; the coach reads your words and the photo together as one meal.</div>
+        <label for="snapMeal">Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
       <div id="writeForm" hidden>
         <label for="writeText">What is on the plate, in your words</label>
         <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
-        <div class="small">Add weights when you have them: "rice 200 g, salmon 150 g".</div>
+        <div class="small">Add weights when you have them: "rice 200 g, salmon 150 g". <button class="linkish" id="writePhoto">+ add a photo</button> <button class="linkish" id="writeRoll">+ from camera roll</button></div>
         <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
           <span><label>&nbsp;</label><button class="primary" id="writeLog">Log it</button> <button id="writeCancel">Cancel</button></span></div>
         <div class="small" id="writeMsg"></div></div>
@@ -364,15 +366,16 @@ V.food = async function(){
       <div class="fd-jrow" role="button" tabindex="0" aria-expanded="false">${thumbOf(e, e.written ? "✎" : esc((e.name||"?").slice(0,2)))}
         <div class="fd-jb"><div class="fd-top"><b class="jname">${esc(e.name)}</b><span class="hu-chip hu-${gr.tone}">${esc(gr.word)}</span></div>
           <div class="fd-meta">${when} · ${e.drink_only?"drink":esc(e.meal)} · ${e.kcal} kcal · ${e.protein_g} P${e.maybe_double_of ? ` · <span class="hu-hold">double?</span>` : ""}</div>
+          ${e.written || (e.notes && e.thumb) ? `<div class="fd-words">“${esc(e.written || e.notes)}”</div>` : ""}
           ${stack ? `<div class="fd-stack" aria-label="${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat">${stack}</div>` : ""}</div></div>
       <div class="fd-more">
-      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
+      <div class="small">${e.kcal} kcal · ${e.carbs_g}C · ${e.protein_g}P · ${e.fat_g}F${e.fluid_ml?` · ${e.fluid_ml} ml ${esc(e.drink||"fluid")}`:""}${e.drink_only?"":`${e.confidence&&e.confidence!=="high"?` · ${esc(e.confidence)} confidence`:""}${e.written && e.thumb ? ` · ${e.photos > 1 ? e.photos + " photos" : "photo"} + your words` : e.written?" · written":e.notes?"":(e.photos > 1 ? ` · ${e.photos} photos, ±35%` : " · photo only, ±35%")}`}${!e.drink_only&&e.slot&&e.slot!==e.meal?` · ${esc(e.slot)} slot`:""}${e.corrected?" · corrected":""}</div>
       ${gr.full ? `<div class="small fd-grade">Graded: <span class="hu-${gr.tone}">${esc(gr.full)}</span></div>` : ""}
       ${e.plan && e.plan.kcal != null ? `<div class="small jplan">Graded against the plan as it stood at ${esc(hm12(e.plan.at||e.time))}: ${e.plan.kcal} kcal · ${e.plan.carbs_g}C · ${e.plan.protein_g}P${e.plan.low_carb ? " · low carb" : ""}${e.plan.backfilled ? " (filled in later)" : ""}</div>` : ""}
       ${e.maybe_double_of ? `<div class="small jdouble">Looks like the entry just before it, logged again. If it was one bottle, remove this one.</div>` : ""}
       <div class="small jwhy">${esc(a.why||"")}${e.why_at ? ` <span class="reread" title="${esc(e.why_then||"")}">· re-read ${esc(hm12(e.why_at))}</span>` : ""}</div>
       <div class="jmore fd-jmore">
-        ${e.written?`<div class="small">You wrote: “${esc(e.written)}”</div>`:""}
+        ${e.written || e.notes ?`<div class="small">You wrote: “${esc(e.written || e.notes)}”</div>`:""}
         ${e.portion?`<div class="small">Portion: ${esc(e.portion)}</div>`:""}
         <div class="small">${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>
         ${isToday?`<div class="jfix">
@@ -430,10 +433,14 @@ V.food = async function(){
     const add = Array.from(el.files || []); el.value = "";
     if (!add.length) return;
     files = files.concat(add).slice(0, MAXP);
+    // a photo added while writing: the words come along into the photo's box, one meal
+    const wf = document.getElementById("writeForm"), wt = document.getElementById("writeText"), sn = document.getElementById("snapNote");
+    if (wf && !wf.hidden){ if (wt && wt.value.trim() && sn && !sn.value.trim()) sn.value = wt.value.trim(); const wm = document.getElementById("writeMeal"), sm = document.getElementById("snapMeal"); if (wm && sm && wm.value) sm.value = wm.value; wf.hidden = true; if (wt) wt.value = ""; }
     document.getElementById("snapResult").innerHTML = "";
     strip(); form.hidden = false;
   };
   fileEl.onchange = ()=> picked(fileEl);
+  { const wp = document.getElementById("writePhoto"), wr = document.getElementById("writeRoll"); if (wp) wp.onclick = ()=> fileEl.click(); if (wr) wr.onclick = ()=> rollEl.click(); }
   rollEl.onchange = ()=> picked(rollEl);
   document.getElementById("snapCancel").onclick = ()=>{ form.hidden = true; files = []; strip(); fileEl.value = ""; rollEl.value = ""; };
   // the verdict at logging time is the slot's grade, the same word the card shows, with the plate's reading under it
@@ -492,7 +499,7 @@ V.food = async function(){
       const r = await bridge("/food/photo",{method:"POST",headers:J,body:JSON.stringify({
         images: imgs.map(image_base64 => ({ image_base64, media_type:"image/jpeg" })), thumb_base64,
         meal: document.getElementById("snapMeal").value || undefined,
-        notes: document.getElementById("snapNote").value || undefined })});
+        text: document.getElementById("snapNote").value.trim() || undefined })});
       showVerdict(r.entry, r.day);
       form.hidden = true; files = []; strip(); fileEl.value = ""; rollEl.value = ""; msg.textContent = "";
       document.getElementById("snapNote").value = ""; document.getElementById("snapMeal").value = "";
