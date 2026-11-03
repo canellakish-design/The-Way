@@ -362,7 +362,7 @@ function gradeDay(planned, rides, dayOver, nowMin) {
   }
   return planned.map((w, i) => {
     // a run or a lift has no Strava ride to answer to: logged by hand once its time has passed, else still ahead
-    if (!isRideSport(w)) return w.logged ? Object.assign({}, w, { compliance: { pct: 100, band: 'green', basis: 'logged by hand' } }) : w;
+    if (!isRideSport(w)) return w.logged ? Object.assign({}, w, { compliance: w.compliance || { pct: 100, band: 'green', basis: 'logged by hand' } }) : w;
     if (!mine[i].length && !dayOver && w.time && nowMin != null && toMin(w.time) > nowMin) return w;   // still ahead
     return gradeOne(w, mine[i]);
   });
@@ -408,10 +408,26 @@ async function calendar(from, to, o) {
   }
   const ridesByDate = {};
   for (const r of doneR.rides) (ridesByDate[r.date] = ridesByDate[r.date] || []).push(r);
+  // lift sessions saved on the Lift page answer the planned lifts of their day (Strava never sees a lift)
+  const liftsByDate = {};
+  try {
+    const LS = await getJSON('lifts', { sessions: [] }), LT = require('./lifts').TEMPLATES || [];
+    for (const x of (LS.sessions || [])) if (x.date >= from && x.date <= to) {
+      const t = LT.find(t => t.key === x.template) || {};
+      (liftsByDate[x.date] = liftsByDate[x.date] || []).push({ key: x.template, names: [t.short, t.name, x.template].filter(Boolean).map(n => String(n).toLowerCase()) });
+    }
+  } catch (e) { /* no lift store */ }
+  const liftDone = (w, k, dayLifts) => {
+    const ls = liftsByDate[k] || []; if (!ls.length || isRideSport(w)) return false;
+    const nm = String(w.name || '').toLowerCase();
+    if (ls.some(l => l.names.some(n => n && (nm === n || nm.startsWith(n) || n.startsWith(nm))))) return true;
+    return dayLifts.length === 1 && ls.some(l => l.key !== 'pump');   // one planned lift, one saved: they are the same session
+  };
   const days = [];
   for (let k = from; k <= to; k = tz.shiftKey(k, 1)) {
     const p = planned.filter(w => w.date === k).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1)
-      .map(w => pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? Object.assign({}, w, { logged: true }) : w);
+      .map((w, _i, all) => liftDone(w, k, all.filter(x => !isRideSport(x))) ? Object.assign({}, w, { logged: true, compliance: { pct: 100, band: 'green', basis: 'saved on the Lift page' } })
+        : pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? Object.assign({}, w, { logged: true }) : w);
     const i = icuR.events.filter(e => e.date === k);
     const done = doneR.rides.filter(r => r.date === k);
     const logged = p.filter(w => w.logged);

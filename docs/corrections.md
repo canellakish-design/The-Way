@@ -45,9 +45,10 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 2 Nov | Last night 4.4 h; the WHOOP said 5.9 h | First Garmin night, both watches worn; Claude first guessed the 4.4 was the WHOOP's | WHOOP's night entered at Harry's word | my mistake |
 | 2 Nov | Macros "off" (24) at 2 p.m. after a normal lunch | The meal plan laid the day around the first session of any kind, so the Push lift got a before meal and an on-the-bike slot, lunch moved to 3:50p, the chicken and rice was graded as on-bike food and the day was judged as a third gone. The 1 Nov fix covered ride minutes and the day type, not the meal timing | meal plan built around rides only; a test with a lift alone and a lift plus a ride | disagreement |
 | 2 Nov | Lift box red after the first Push of the plan, on schedule | The plan's first week was counted against a full five, though the code already worked out how many were due | first week judged against the sessions due since the start | my mistake |
+| 2 Nov | Push saved on the Lift page, still "plan" on the Day card | The Day card's lift row only knew "logged by hand" from the calendar; a session saved on the Lift page never reached it | the calendar marks a planned lift done when the Lift page saved that session that day | disagreement |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
-**2 Nov so far: 5.** 1 new case, 1 disagreement, 3 my mistake.
+**2 Nov: 6.** 1 new case, 2 disagreement, 3 my mistake.
 
 ## Found by the Chrome tests (before Harry saw them)
 
