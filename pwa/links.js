@@ -221,6 +221,40 @@
   };
 
   // ---------------- Fuel ----------------
+
+  // Live energy, the Hexis view: calories in minus out since midnight. The day's base burn slides the line down,
+  // a session steepens it (shaded blue), food steps it up (filled dot eaten, ring planned). Solid until now, dashed
+  // after. The dotted green line is where the plan means the day to end.
+  function balanceHTML(b, baseBurn){
+    if (!b || !b.points || !b.points.length) return "";
+    const W = 360, H = 210, L = 40, R = 8, T = 10, Bm = 22;
+    const vals = b.points.map(p => p.kcal).concat(b.target_end != null ? [b.target_end] : []);
+    const lo = Math.floor(Math.min(-300, ...vals) / 300) * 300, hi = Math.ceil(Math.max(300, ...vals) / 300) * 300;
+    const x = m => L + (m / 1440) * (W - L - R), y = v => T + (hi - v) / (hi - lo) * (H - T - Bm);
+    const past = b.points.filter(p => !p.projected), ahead = b.points.filter(p => p.projected);
+    if (past.length && ahead.length) ahead.unshift(past[past.length - 1]);
+    const path = ps => ps.map((p, i) => `${i ? "L" : "M"}${x(p.m).toFixed(1)} ${y(p.kcal).toFixed(1)}`).join(" ");
+    const step = Math.max(300, Math.ceil((hi - lo) / 6 / 300) * 300), grid = [];
+    for (let v = lo; v <= hi; v += step) grid.push(`<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}" class="eb-grid"/><text x="${L - 4}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end" class="eb-lab">${v > 0 ? "+" + v : v}</text>`);
+    grid.push(`<line x1="${L}" x2="${W - R}" y1="${y(0).toFixed(1)}" y2="${y(0).toFixed(1)}" class="eb-zero"/>`);
+    const hrs = [0, 240, 480, 720, 960, 1200, 1440].map((m, i) => `<text x="${x(m).toFixed(1)}" y="${H - 6}" text-anchor="${i === 0 ? "start" : i === 6 ? "end" : "middle"}" class="eb-lab">${["12a","4a","8a","12p","4p","8p","12a"][i]}</text>`).join("");
+    const bands = (b.sessions || []).map(s => `<rect x="${x(s.start).toFixed(1)}" y="${T}" width="${Math.max(2, x(Math.min(1440, s.end)) - x(s.start)).toFixed(1)}" height="${H - T - Bm}" class="eb-ses"><title>${esc(s.name || "session")}: about ${s.kcal} kcal</title></rect>`).join("");
+    const dots = (b.meals || []).filter(m => m.min >= 0 && m.min <= 1440).map(m => `<circle cx="${x(m.min).toFixed(1)}" cy="${y(m.at).toFixed(1)}" r="4.5" class="${m.logged ? "eb-eat" : "eb-plan"}"><title>${esc(m.label || "")}: ${m.kcal} kcal${m.logged ? "" : " (planned)"}</title></circle>`).join("");
+    const tgt = b.target_end != null ? `<line x1="${L}" x2="${W - R}" y1="${y(b.target_end).toFixed(1)}" y2="${y(b.target_end).toFixed(1)}" class="eb-tgt"/>` : "";
+    const nowDot = b.now_min < 1440 ? `<circle cx="${x(b.now_min).toFixed(1)}" cy="${y(b.now).toFixed(1)}" r="5.5" class="eb-now"/>` : "";
+    const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("en-US");
+    const off = b.target_end != null ? b.end - b.target_end : null;
+    const tone = off == null ? "" : Math.abs(off) <= 150 ? "hu-go" : Math.abs(off) <= 400 ? "hu-hold" : "hu-stop";
+    return `<div class="eb-card">
+      <div class="eb-head"><div><span class="hu-lab">Live energy · now</span><div><span class="hu-n eb-big">${sign(b.now)}</span><span class="small"> kcal</span></div></div>
+        <div class="eb-end"><span class="hu-lab">End of day</span><div><span class="hu-n eb-big ${tone}">${sign(b.end)}</span><span class="small"> predicted</span></div>${b.target_end != null ? `<span class="small">the plan: ${sign(b.target_end)}</span>` : ""}</div></div>
+      <svg class="eb-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Calories in minus out since midnight: ${sign(b.now)} now, ${sign(b.end)} predicted at midnight">
+        ${bands}${grid.join("")}${tgt}<path d="${path(past)}" class="eb-past"/>${ahead.length > 1 ? `<path d="${path(ahead)}" class="eb-ahead"/>` : ""}${dots}${nowDot}${hrs}</svg>
+      <div class="eb-key small"><span><i class="k1"></i>so far</span><span><i class="k2"></i>predicted</span><span><i class="k3"></i>eaten</span><span><i class="k4"></i>planned</span><span><i class="k5"></i>workout</span><span><i class="k6"></i>planned end</span></div>
+      <details class="why"><summary>what it counts</summary><div class="small">Calories eaten minus calories burned since midnight. Your base burn${baseBurn ? `, about ${Math.round(baseBurn).toLocaleString("en-US")} kcal a day,` : ""} runs evenly through the day; each workout adds its burn over its minutes (Strava's number once done, the plan's estimate before); each meal lands when it was eaten. After now the line follows the open meals and workouts on the plan. It is the same energy your calorie target is built from, so a day that ends on the dotted line is the planned deficit.</div></details>
+    </div>`;
+  }
+
   V.fuel = async function(){
     const el = page("Fuel");
     const draw = (first)=> load(el, "fuel", ["/chain", "/food/today"], [1], (chain, food, pending) => {
@@ -252,7 +286,7 @@
           <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, v / scale * 100).toFixed(1)}%;background:${col}"></i><i class="tick" style="left:${(tg / scale * 100).toFixed(1)}%"></i></span>
           <span class="fu-v"><b style="color:${col}">${bottle ? `${c.got_g}` : `${c.pct}%`}</b> / ${bottle ? `${c.plan_g} g` : `${c.need}%`}</span></div>`; };
       // one headline: fuel now. The week's share of checks met heads the week's own section below.
-      el.innerHTML = ttlHTML("Fuel") + top + `
+      el.innerHTML = ttlHTML("Fuel") + balanceHTML(food && food.balance, food && food.target && food.target.base_burn) + top + `
         <div class="hu-tiles four fu-carbs">
           <button class="hu-tile" data-item="tailwind"><b>50 g</b><span>Tailwind</span></button><button class="hu-tile" data-item="gel"><b>22 g</b><span>Gel</span></button><button class="hu-tile" data-item="figbar"><b>38 g</b><span>Fig bar</span></button><button class="hu-tile" data-item="banana"><b>27 g</b><span>Banana</span></button>
         </div>

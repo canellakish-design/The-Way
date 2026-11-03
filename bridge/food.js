@@ -469,6 +469,16 @@ async function dayReport(date) {
   // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
   let energy = null;
   try { energy = await liveFuel(date, entries, Object.assign({}, g, { meals: rows }), nowMin); } catch (e) { energy = null; }
+  // live energy (calories in minus out since midnight), the Hexis view; past days run to midnight
+  let balance = null;
+  try {
+    const isToday = date === tz.todayKey(), mins = isToday ? nowMin : 1440;
+    const sess = (g.sessions || []).filter(x => F.toMin(x.time) != null).map(x => { const st = F.toMin(x.time); return { name: x.name, start: st, end: st + (x.minutes || 60), kcal: F.workoutKcal([x], g.ftp || 175) }; });
+    const eaten = entries.filter(e => !e.supplement && (e.kcal || 0) > 0 && F.toMin(e.time) != null).map(e => ({ min: F.toMin(e.time), kcal: e.kcal, label: e.name }));
+    const planned = isToday ? rows.filter(m => !(m.logged || []).length && (m.kcal || 0) > 0).map(m => ({ min: (m.at_min != null ? m.at_min : F.toMin(m.time)), kcal: m.kcal, label: m.slot })) : [];
+    balance = F.balanceSeries({ baseBurn: (g.target && g.target.base_burn) || 0, nowMin: mins, sessions: sess, eaten, planned });
+    balance.target_end = g.target ? Math.round(g.target.kcal - (g.target.base_burn || 0) - (g.target.ride_kcal || 0)) : null;
+  } catch (e) { balance = null; }
   return {
     date, today: date === tz.todayKey(),
     fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
@@ -477,7 +487,7 @@ async function dayReport(date) {
     actual: Object.assign(actual, { meals: meals.length }), entries,
     drinks: dk.ids, drink_count: dk.count, drink_food_count: dk.food_count, drinks_ml: dk.ml,
     stale_readings: staleOf(doc.entries).stale.length, stale_key: (staleOf(doc.entries).latest || {}).id || null,
-    hydration, energy, supps,
+    hydration, energy, supps, balance,
     compliance: { overall, band: F.band(overall), macros: macro, guidelines: guide, due },
     micros: micro ? Object.assign(micro, { suggest: microSuggest, supplements_available: MI.TABLE.supplements.map(x => ({ key: x.key, name: x.name, note: x.note })) }) : null,
     suggestion: date === tz.todayKey() ? nextUp(Object.assign({}, g, { meals: rows }), entries, actual, macro, nowHM0) : null,

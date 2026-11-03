@@ -48,6 +48,15 @@ ok('mealPlan: a lift is not a ride: no before meal, no on-the-bike slot, lunch a
   assert.strictEqual(both.filter(m => m.slot === 'on the bike').length, 1);
   assert.strictEqual(both.find(m => m.slot === 'on the bike').time, '16:00');
 });
+ok('balanceSeries: burn runs through the day, a ride burns over its minutes, food is a step, the plan after now', () => {
+  const b = F.balanceSeries({ baseBurn: 2400, nowMin: 360, sessions: [{ start: 420, end: 480, kcal: 600, name: 'ride' }],
+    eaten: [{ min: 300, kcal: 200, label: 'shake' }], planned: [{ min: 540, kcal: 700, label: 'breakfast' }, { min: 200, kcal: 999, label: 'missed slot' }] });
+  assert.strictEqual(b.points[0].kcal, 0);
+  assert.strictEqual(b.now, Math.round(200 - 2400 / 1440 * 360));                 // 200 eaten, 6 h of base burn
+  assert.strictEqual(b.end, Math.round(200 + 700 - 2400 - 600));                 // a past open slot is not counted as eaten
+  assert.ok(b.points.find(p => p.m === 480).kcal < b.points.find(p => p.m === 420).kcal - 600);
+  assert.strictEqual(b.points.find(p => p.m === 375).projected, true);
+});
 ok('workoutKcal: Strava kcal when done, TSS estimate when planned', () => {
   assert.strictEqual(F.workoutKcal([{ kcal: 500 }, { tss: 100 }], 175), 500 + 630);
 });

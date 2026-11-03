@@ -754,5 +754,24 @@ function drinksOf(entries, modelDrinks) {
   return { ids: rows.map(r => r.id), count: rows.length, food_count: rows.filter(r => r.food).length, ml: rows.reduce((a, r) => a + r.ml, 0), rows };
 }
 
-module.exports = { burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+
+// Live energy, the way Hexis draws it: calories in minus calories out since midnight. The day's base burn
+// (resting plus everyday movement) runs evenly through the 24 hours, each session's burn is spread over its
+// minutes, food lands as a step at the time it was eaten. Before now the line is what happened; after now it
+// is the plan: the open meals at their times and the sessions still ahead. Every 15 minutes.
+function balanceSeries(o) {
+  const per = (o.baseBurn || 0) / 1440, nowMin = o.nowMin == null ? 1440 : o.nowMin;
+  const sessions = (o.sessions || []).filter(x => x.start != null && x.end > x.start);
+  const food = (o.eaten || []).map(x => Object.assign({ projected: false }, x)).concat((o.planned || []).filter(x => x.min >= nowMin).map(x => Object.assign({ projected: true }, x)));
+  const burnTo = m => per * m + sessions.reduce((a, x) => a + x.kcal * Math.max(0, Math.min(1, (m - x.start) / (x.end - x.start))), 0);
+  const inTo = m => food.filter(x => x.min <= m).reduce((a, x) => a + (x.kcal || 0), 0);
+  const at = m => Math.round(inTo(m) - burnTo(m));
+  const points = [];
+  for (let m = 0; m <= 1440; m += 15) points.push({ m, kcal: at(m), projected: m > nowMin });
+  return { points, now: at(Math.min(nowMin, 1440)), end: at(1440), now_min: nowMin,
+    meals: food.map(x => ({ min: x.min, kcal: x.kcal, label: x.label, logged: !x.projected, at: at(x.min) })),
+    sessions: sessions.map(x => ({ start: x.start, end: x.end, kcal: Math.round(x.kcal), name: x.name })) };
+}
+
+module.exports = { balanceSeries, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
