@@ -57,6 +57,7 @@ A web page can talk to a trainer and a heart-rate strap over Bluetooth with **We
 ### During the ride (one screen, head-unit look)
 - **Big fields:** power, with its target; heart rate, with its zone colour; cadence; the time left in the interval; and the time left overall.
 - **The power to follow (added 3 Nov):** the main chart. Target watts as blocks coloured by zone, the watts to hold written on each, a now line, and the next interval's countdown. Two minutes behind (your power, 3 s average, drawn in white over the target) and ten minutes ahead on the PC; one and five on a phone. The start screen shows the whole workout the same way.
+- **The goal circle (added 3 Nov):** fills as the session's one goal is met, the same goal the Calendar grades: a Zone 1 ride, the planned minutes at heart rate 116 or under (up to 10% at 117 or above passes); VO2 40/20s, 8 to 12 minutes above 152 (full at 8). Zone 3 starts at 139 (VT2). Anything else, the planned time ridden.
 - **Profile strip:** the whole workout, a cursor at now, and the next interval named in advance ("Next: 40/20 × 8 at 230 W in 0:30").
 - **ERG:** the trainer holds the target watts. Controls:
   - **Bias:** ±5% intensity, for a hard day or a fresh day.
