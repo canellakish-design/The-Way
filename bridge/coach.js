@@ -124,9 +124,11 @@ async function runJob(id, who) {
     // the Messages API, called directly as the rest of the bridge does
     const create = async (body, ms) => {
       const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms || 300000);
+      const payload = JSON.stringify(body); console.log('[coach] model call', payload.length, 'bytes');
       const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', signal: ac.signal,
         headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'anthropic-beta': 'server-side-fallback-2026-07-01', 'Content-Type': 'application/json' },
-        body: JSON.stringify(body) });
+        body: payload });
+      console.log('[coach] model status', r.status);
       const j = await r.json().finally(() => clearTimeout(timer));
       if (!r.ok) throw new Error('coach ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
       return j;
