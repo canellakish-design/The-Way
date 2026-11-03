@@ -210,3 +210,42 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 .ch-src{margin:6px 0 0 18px; font-size:13px; overflow-wrap:anywhere}
 .ch-steps{display:flex; flex-direction:column; gap:3px}
 .ch-step{font-family:var(--mono); font-size:11px; color:var(--muted); overflow-wrap:anywhere} .ch-now{color:var(--amber)}
+
+/* ================= DAY: the first screen (tighten, Nov 2) =================
+   A compact chain, so the next thing due shows on the first screen under it: smaller numbers, one
+   line of today under each, tighter wraps. Units are short words, sized to fit at 390 px. */
+.hufit{height:58px; margin-bottom:6px}
+.hufit .fn{font-size:30px}
+.hufit .fspark{height:42px}
+.hchain .score.clink, .hchain .score.clink:active{padding:6px 7px 6px; gap:2px}
+.hchain .cnum{font-size:27px}
+.hchain .cnum.long{font-size:22px}
+.hchain .cweek{font-size:9px; letter-spacing:0}
+.hchain .ck{font-size:9px; letter-spacing:1px}
+.hchain .ctw{-webkit-line-clamp:1; font-size:9.5px}
+.hchain .ctn{font-size:15px}
+.hchain .ctn.long{font-size:13px}
+.hchain .cgrid .carrow i{top:36px}
+.hchain .cgrid .carrow.cwrap{height:12px; margin:2px 0}
+.hchain .cgrid .carrow.cwrap .whead{bottom:-5px; width:11px; height:11px}
+.hchain .cverdict{padding:6px 9px}
+.hchain .cvw{font-size:15px}
+/* "Next:" under the chain: the next row of the schedule and what to eat before it; tap to go to the row */
+.daynext{display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:baseline; gap:8px; margin:8px 0 2px; padding:8px 10px;
+  border:1px solid var(--line); border-left:3px solid var(--green); background:var(--paper); color:var(--ink); text-decoration:none}
+.daynext[hidden]{display:none}
+.daynext .hu-lab{color:var(--green)}
+.daynext .dn{font-weight:600; font-size:14.5px; line-height:1.3; min-width:0; overflow-wrap:anywhere}
+.daynext .dnt{font-weight:400; color:var(--muted); font-size:13px}
+.daynext .dgo{font-family:var(--num); font-size:20px; color:var(--muted); line-height:1}
+/* the Lift strip: a day the calendar leaves empty shows a dash, the suggestion small and dim under it */
+#liftPage .lday .lsug{font-family:var(--mono); font-size:9px; color:var(--muted); line-height:1; white-space:nowrap}
+#liftPage .lday.sug{border-style:dashed}
+#liftPage .lday b{font-size:14px; white-space:normal; text-align:center; overflow-wrap:anywhere}
+
+/* ================= the link pages (links.js) =================
+   the page as it last stood, shown at once while the answers come: dimmed, and not tappable until fresh */
+.ln-page.ln-stale,#ridePage.ln-stale{opacity:.6; pointer-events:none}
+.ln-page.ln-stale::before,#ridePage.ln-stale::before{content:"updating…"; display:block; font-family:var(--mono); font-size:10px; letter-spacing:1.2px; text-transform:uppercase; color:var(--muted); margin-bottom:4px}
+.ln-top.ln-one{grid-template-columns:1fr}
+.ln-page .hy-net{margin-left:4px; font-family:var(--mono); font-size:10px; color:var(--amber)}

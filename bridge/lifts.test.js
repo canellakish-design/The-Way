@@ -82,4 +82,36 @@ ok('periodization: 27 weeks in three blocks with deloads; weights climb from the
   assert.strictEqual(c2.lb, 165);
   assert.strictEqual(P2.week_now, 1);
 });
+ok('the week\'s count: one rule for the Day box and the Lift page, "1 of 1 due" on day one, "of 5" after the first week', () => {
+  const s = (date, template) => ({ date, template, exercises: [] });
+  const day1 = L.weekCount([s('2026-11-02', 'push')], '2026-11-02');
+  assert.strictEqual(day1.sessions, 1); assert.strictEqual(day1.of, 1); assert.strictEqual(day1.first_week, true); assert.strictEqual(day1.word, '1 of 1 due');
+  const day3 = L.weekCount([s('2026-11-02', 'push')], '2026-11-04');
+  assert.strictEqual(day3.of, 3); assert.strictEqual(day3.word, '1 of 3 due');
+  const wk2 = L.weekCount([s('2026-11-02', 'push'), s('2026-11-09', 'pull'), s('2026-11-10', 'pump')], '2026-11-10');
+  assert.strictEqual(wk2.first_week, false); assert.strictEqual(wk2.of, 5); assert.strictEqual(wk2.word, '1 of 5');   // Nov 2 has left the seven days assert.strictEqual(wk2.pumps, 1); assert.strictEqual(wk2.week_no, 2);
+  const none = L.weekCount([], '2026-11-02');
+  assert.strictEqual(none.started, false); assert.strictEqual(none.word, '0 of 5');
+});
+ok('a calendar name to its session: the two upper days by their bracket, Pull by its short name', () => {
+  assert.strictEqual(L.templateOf('Push'), 'push');
+  assert.strictEqual(L.templateOf('Pull'), 'pull');
+  assert.strictEqual(L.templateOf('Pull and calves'), 'pull');
+  assert.strictEqual(L.templateOf('Upper body and core (Upper 2)'), 'upper-2');
+  assert.strictEqual(L.templateOf('Upper body and core (Upper 1)'), 'upper-1');
+  assert.strictEqual(L.templateOf('Legs'), 'legs');
+  assert.strictEqual(L.templateOf('Zone 1, 60 min'), null);
+});
+ok('the strip mirrors the calendar: a day with Push done and Pull planned keeps both; Pull is not placed again; an empty day is only a suggestion', () => {
+  const days = ['2026-11-02', '2026-11-03', '2026-11-04', '2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08'].map(date => ({ date, ride: null, coaching_min: 0, long_coaching: false }));
+  days[0].locks = ['push', 'pull']; days[0].locked = 'push';
+  days[3].locks = ['legs']; days[3].locked = 'legs';
+  const w = L.placeWeek(days, { done: { '2026-11-02': 'push' } });
+  assert.strictEqual(w[0].lift, 'push'); assert.deepStrictEqual(w[0].lifts, ['push', 'pull']); assert.strictEqual(w[0].on_calendar, true);
+  assert.strictEqual(w.filter(x => x.lift === 'pull').length, 0, 'pull is held on Monday, not placed on another day');
+  assert.strictEqual(w.filter(x => x.lift === 'push').length, 1);
+  assert.strictEqual(w[3].lift, 'legs'); assert.strictEqual(w[3].suggested, false);
+  for (const x of w.filter(x => x.lift && !x.on_calendar)) assert.strictEqual(x.suggested, true);
+  assert.ok(w.some(x => x.suggested), 'the rest are suggestions');
+});
 console.log(n + ' passed');

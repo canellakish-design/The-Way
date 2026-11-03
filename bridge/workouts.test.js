@@ -119,4 +119,51 @@ ok('a lift saved on the Lift page answers its planned lift; a ride never does', 
   assert.strictEqual(liftMatches({ name: 'Zone 1, 60 min', sport: 'Ride' }, saved, 1), false);
   assert.strictEqual(liftMatches({ name: 'Push', sport: 'WeightTraining' }, [], 1), false);
 });
+
+const W2 = require('./workouts');
+ok('a run logged after the fact (advisor, 9:30p, "ran 30 minutes at noon") is done and carries the logged grade, ride or none', () => {
+  const run = { date: '2026-11-02', time: '12:00', sport: 'Run', name: 'Treadmill run', steps: [{ kind: 'step', label: 'Run', dur_s: 1800, target: { type: 'free' } }], created: tz.zonedToUTC(2026, 11, 2, 21, 30).toISOString() };
+  assert.strictEqual(pastNow(run, '2026-11-02'), true);
+  const m = W2.markLogged(run);
+  assert.strictEqual(m.logged, true); assert.strictEqual(m.compliance.band, 'green'); assert.strictEqual(m.compliance.pct, 100); assert.ok(/logged by hand/.test(m.compliance.basis));
+  // a grade it already has is kept (saved on the Lift page)
+  assert.ok(/Lift page/.test(W2.markLogged(Object.assign({}, run, { compliance: { pct: 100, band: 'green', basis: 'saved on the Lift page' } })).compliance.basis));
+  // planned that morning for noon, saved before it: a plan, not a log
+  assert.strictEqual(pastNow(Object.assign({}, run, { created: tz.zonedToUTC(2026, 11, 2, 9, 0).toISOString() }), '2026-11-02'), false);
+});
+
+ok('an untimed copy of a timed session with the same name on the same day counts once', () => {
+  const w = (id, name, time, sport, date) => ({ id, name, time, sport: sport || 'WeightTraining', date: date || '2026-11-02', metrics: { duration_s: 3300, tss: 28 } });
+  const kept = W2.dropUntimedCopies([w('a', 'Push', '13:30'), w('b', 'push ', null), w('c', 'Zone 1, 60 min', null, 'Ride'), w('d', 'Push', null, 'WeightTraining', '2026-11-03')]);
+  assert.deepStrictEqual(kept.map(x => x.id), ['a', 'c', 'd']);
+  assert.deepStrictEqual(kept[0].copies, ['b']);
+  // the day's totals then read one 55-minute Push, not 1:50
+  assert.strictEqual(Math.round(kept.filter(x => x.date === '2026-11-02' && x.sport === 'WeightTraining').reduce((s, x) => s + x.metrics.duration_s, 0) / 60), 55);
+  // two timed sessions of one name are two sessions; a ride never folds into a lift of the same name
+  assert.strictEqual(W2.dropUntimedCopies([w('a', 'Push', '07:00'), w('b', 'Push', '17:00')]).length, 2);
+  assert.strictEqual(W2.dropUntimedCopies([w('a', 'Zone 1', '07:00', 'Ride'), w('b', 'Zone 1', null, 'Run')]).length, 2);
+});
+
+ok('times past midnight read as the next morning: 11:00p for 90 minutes ends at 12:30a', () => {
+  assert.strictEqual(W2.fmtMin(23 * 60), '11:00p');
+  assert.strictEqual(W2.fmtMin(23 * 60 + 90), '12:30a');
+  assert.strictEqual(W2.fmtMin(24 * 60), '12:00a');
+  assert.strictEqual(W2.fmtMin(12 * 60 + 30), '12:30p');
+  assert.strictEqual(W2.fmtMin(0), '12:00a');
+});
+
+ok('a library note follows the sport: a road Zone 1 says road and heart rate, a Zwift one trainer and ERG; written notes are left alone', () => {
+  const { LIBRARY, notesFor, ROAD_HEAD } = require('./workout-library');
+  const z60 = LIBRARY.find(t => t.key === 'z1-60');
+  assert.ok(/on the trainer/.test(z60.notes));
+  const road = clean({ name: z60.name, sport: 'Ride', date: '2026-11-04', time: '08:00', notes: z60.notes, steps: z60.steps });
+  assert.ok(road.notes.startsWith(ROAD_HEAD), road.notes.slice(0, 80)); assert.ok(!/trainer|ERG/.test(road.notes.split('\n')[0]));
+  assert.ok(/EAT/.test(road.notes), 'the eating part stays');
+  const back = notesFor(road.notes, 'VirtualRide');
+  assert.ok(/^ZONE 1 on the trainer: ERG/.test(back));
+  assert.strictEqual(notesFor('My own words about the trainer.', 'Ride'), 'My own words about the trainer.');
+  const z90 = LIBRARY.find(t => t.key === 'z1-90');
+  assert.ok(/^ZONE 1 on the road/.test(z90.notes));
+  assert.ok(/^ZONE 1 on the trainer/.test(notesFor(z90.notes, 'VirtualRide')));
+});
 console.log(n + ' passed');

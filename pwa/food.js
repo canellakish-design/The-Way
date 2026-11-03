@@ -114,7 +114,7 @@ function energyHTML(e, opt){
   const ses = (e.sessions||[]).map(s => `<span class="egs"><b style="color:${fuelColL(s.pct)}">${s.pct}%</b> at ${esc(hm12(s.time))} ${esc(s.name)}${s.legs_pct!=null?` <span class="small">· legs ${s.legs_pct}%</span>`:""}${s.slid_from?` <span class="small">· planned ${esc(hm12(s.slid_from))}, not started, so moved to now</span>`:""}</span>`).join(" · ");
   return `<div class="energy" data-m0="${c.m0}" data-m1="${c.m1}">
     ${opt.noHead ? "" : `<div class="egline"><span class="egnow"><b style="color:${fuelColL(e.now.pct)}">${e.now.pct}%</b> fuel now${e.now.arriving_g >= 10 ? ` <span class="small">· ${e.now.arriving_g} g landing</span>` : ""}${e.now.legs_pct!=null?` <span class="small">· legs ${e.now.legs_pct}%</span>`:""}</span>${e.peak?`<span class="small">peak ${esc(hm12(e.peak.time))} · ${e.peak.pct}%</span>`:""}</div>`}
-    ${e.now.arriving_g >= 10 ? `<div class="small">The ${e.now.pct}% is what is in the blood and liver this minute; ${e.now.arriving_g} g of carbs from what you just ate are still in the stomach and land over the next two to three hours, which is the rise ahead of the line.</div>` : ""}
+    ${e.now.arriving_g >= 10 ? `<details class="why"><summary>why it rises ahead</summary><div class="small">The ${e.now.pct}% is what is in the blood and liver this minute; ${e.now.arriving_g} g of carbs from what you just ate are still in the stomach and land over the next two to three hours, which is the rise ahead of the line.</div></details>` : ""}
     ${(e.awaiting||[]).map(a => `<div class="small">${esc(a.name)} planned at ${esc(hm12(a.time))}: taken as ridden on the strength of ${esc(a.evidence)}; Strava's copy of the ride has not landed yet.</div>`).join("")}
     ${c.svg}
     <div class="small egread"></div>
@@ -225,7 +225,7 @@ V.live = async function(){
     const el = document.getElementById("lDay"); if (!el) return;
     if (!day){ el.innerHTML = `<div class="card"><div class="small">bridge unreachable</div></div>`; return; }
     el.innerHTML = `
-      <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy)}</div>
+      <div class="card" id="fEnergy"><h4>Live fuel${isToday?"":" · that day"}</h4>${energyHTML(day.energy, { noLegs: true })}</div>
       <div class="card" id="fHydration"><h4>Live hydration${isToday?"":" · that day"}</h4>${hydrationHTML(day.hydration)}</div>
       <div class="hu-tiles fd-livego"><a class="hu-tile" href="${isToday?"#food":"#food?date="+date}">${ICON.pen}<b>The food log</b><span>meals and grades</span></a>${isToday?`<a class="hu-tile primary" href="#food?snap=snack">${ICON.cam}<b>Snap</b><span>a meal or a drink</span></a>`:""}</div>`;
     wireEnergy(el, day.energy, async ()=>{ await load(); });

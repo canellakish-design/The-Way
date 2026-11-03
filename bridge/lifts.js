@@ -199,6 +199,9 @@ function periodization(templates, sessions, today) {
 // Returns the same days with .lift set to a template key or null, plus why.
 const HARD = /vo2|40\s*\/\s*20|threshold|race|interval/i;
 const LONG_COACHING_MIN = 4 * 60;
+// A day can hold more than one lift (Push saved, Pull put on the calendar the same evening): x.locks is
+// every session on that day, x.locked the first of them. A key held anywhere is not placed again.
+const locksOf = x => x.locks && x.locks.length ? x.locks : x.locked ? [x.locked] : [];
 function placeWeek(days, o) {
   const opts = o || {};
   const d = days.map(x => Object.assign({}, x, { lift: null, why: '' }));
@@ -219,10 +222,10 @@ function placeWeek(days, o) {
     else if (!x.ride) s = 50;
     else if (next) s = 20 - load(next) / 5 - hardPen;
     if (opts.done && opts.done[x.date]) s += 1e3;                      // already lifted legs that day: it stands
-    if (x.locked && x.locked !== 'legs') s = -2e3;
+    if (locksOf(x).length && !locksOf(x).includes('legs')) s = -2e3;
     return s;
   };
-  let legsIdx = d.findIndex(x => x.locked === 'legs'), best = -1e9;   // legs already on the calendar this week: it stands
+  let legsIdx = d.findIndex(x => locksOf(x).includes('legs')), best = -1e9;   // legs already on the calendar this week: it stands
   if (legsIdx < 0) d.forEach((x, i) => { const s = legsScore(x, i); if (s > best) { best = s; legsIdx = i; } });
   if (legsIdx >= 0) {
     const x = d[legsIdx], next = d[legsIdx + 1];
@@ -238,7 +241,7 @@ function placeWeek(days, o) {
   // 3. the other four, in the book's order, with pull kept a day clear of legs when it can be
   const slots = d.map((x, i) => i).filter(i => i !== legsIdx && !free.has(i) && !(d[i].locked && d[i].locked !== 'any'));
   // a session already on the calendar this week is placed where it is, not again somewhere else
-  const four = ['push', 'pull', 'upper-1', 'upper-2'].filter(k => !d.some(x => x.locked === k));
+  const four = ['push', 'pull', 'upper-1', 'upper-2'].filter(k => !d.some(x => locksOf(x).includes(k)));
   const perms = permutations(four);
   let bestP = null, bestS = 1e9;
   for (const p of perms) {
@@ -253,6 +256,8 @@ function placeWeek(days, o) {
   }
   (bestP || four).forEach((k, j) => { const i = slots[j]; if (i != null) { d[i].lift = k; d[i].why = d[i].ride ? `with the ride (${d[i].ride.name})` : d[i].long_coaching ? 'a coaching day, no ride' : 'a day off the bike'; } });
   for (const x of d) if (x.locked && x.locked !== 'any') { x.lift = x.locked; x.why = opts.done && opts.done[x.date] ? 'logged' : 'on the calendar'; }
+  // what the calendar holds, and what is only a suggestion for a day the calendar leaves empty
+  for (const x of d) { const L = locksOf(x).filter(k => k !== 'any'); x.lifts = L; x.on_calendar = L.length > 0; x.suggested = !!x.lift && !x.on_calendar; }
   return d;
 }
 function permutations(a) { if (a.length <= 1) return [a]; const out = []; a.forEach((x, i) => { for (const p of permutations(a.slice(0, i).concat(a.slice(i + 1)))) out.push([x].concat(p)); }); return out; }
@@ -293,6 +298,36 @@ async function weekDays(n) {
   return days;
 }
 
+// The week's count, one rule for the Day page's Lift box (chain.js) and the Lift page: the five
+// sessions logged in the last seven days against five; in the plan's first week, against the
+// sessions due since it started ("1 of 1 due" on day one, five a week from day seven). The pump is extra.
+function weekCount(sessions, today) {
+  const from = tz.shiftKey(today, -6);
+  const wk = (sessions || []).filter(x => x.date >= from && x.date <= today);
+  const five = wk.filter(x => x.template !== 'pump');
+  const first = (sessions || []).filter(x => TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
+  const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
+  const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
+  const expected = !first ? 0 : dayN < 7 ? Math.min(5, Math.ceil(5 * dayN / 7)) : 5;
+  const firstWeek = !!first && expected > 0 && expected < 5;
+  const of = firstWeek ? expected : 5;
+  return { sessions: five.length, pumps: wk.length - five.length, target: 5, expected, of, first_week: firstWeek, started: !!first, first,
+    week_no: weekNo, deload: weekNo > 0 && weekNo % 9 === 0, word: `${five.length} of ${of}${firstWeek ? ' due' : ''}` };
+}
+// A calendar entry's name to its session: "Upper body and core (Upper 2)" by its bracket, "Pull" by its
+// short name, "Pull and calves" by its full name. The two upper days share a name, so the bracket goes first.
+function templateOf(name) {
+  const n = String(name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!n) return null;
+  const T = TEMPLATES;
+  const hit = T.find(t => t.short && n.includes('(' + t.short.toLowerCase() + ')'))
+    || T.find(t => n === t.key || n === String(t.short || '').toLowerCase() || n === t.name.toLowerCase())
+    || T.find(t => t.short && n.startsWith(t.short.toLowerCase()))
+    || T.find(t => n.startsWith(t.name.toLowerCase()));
+  return hit ? hit.key : null;
+}
+const isLiftEntry = w => /weight|lift|strength/i.test(String(w.sport || '')) || (!/ride|run|walk|hike/i.test(String(w.sport || '')) && !!templateOf(w.name));
+
 async function report() {
   const d = await db();
   const sessions = d.sessions.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.at).localeCompare(String(b.at)));
@@ -304,48 +339,43 @@ async function report() {
   // the week: what was lifted already this week holds its day; the rest is placed
   const today = tz.todayKey();
   const days = await weekDays(7);
-  const doneByDate = {};
-  for (const s of sessions) if (s.date >= today && s.template !== 'pump') doneByDate[s.date] = s.template;
-  for (const x of days) if (doneByDate[x.date]) x.locked = doneByDate[x.date];
-  // a lift already on the calendar (planned, not yet done) holds its day too
+  // the strip mirrors the calendar: every lift saved on a day, then every lift the calendar holds that day
+  const doneByDate = {}, locks = {};
+  const add = (date, k) => { if (!k) return; const a = locks[date] = locks[date] || []; if (!a.includes(k)) a.push(k); };
+  for (const s of sessions) if (s.date >= today && s.template !== 'pump') { doneByDate[s.date] = doneByDate[s.date] || s.template; add(s.date, s.template); }
   try {
     const { calendar } = require('./workouts');
     const cal = await calendar(days[0].date, days[days.length - 1].date);
-    for (const day of cal.days || []) {
-      const x = days.find(y => y.date === day.date); if (!x || x.locked) continue;
-      const w = (day.planned || []).find(w => /weight/i.test(w.sport || ''));
-      if (!w) continue;
-      const t = ALL.find(t => t.key !== 'pump' && (new RegExp('^' + t.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(w.name) || (t.short && new RegExp('\\(' + t.short + '\\)', 'i').test(w.name))));
-      if (t) x.locked = t.key;
-    }
+    for (const day of cal.days || []) for (const w of (day.planned || []).filter(isLiftEntry)) add(day.date, templateOf(w.name));
   } catch (e) { /* the placement stands on its own */ }
+  for (const x of days) if (locks[x.date]) { x.locks = locks[x.date]; x.locked = x.locks[0]; }
   const week = placeWeek(days, { done: doneByDate }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
   // the pump fits any day but legs and the day before it
   week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = x.lift !== 'legs' && !(next && next.lift === 'legs'); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); });
-  // next: today's, if not done; else the next placed day
-  const todayX = week.find(x => x.date === today);
-  const nextX = todayX && todayX.lift && !todayX.done ? todayX : week.find(x => x.lift && !x.done && x.date > today) || null;
+  // each day's sessions still to do (a day can hold a done Push and a planned Pull)
+  for (const x of week) { x.done_keys = sessions.filter(s => s.date === x.date && s.template !== 'pump').map(s => s.template);
+    x.open = (x.lifts && x.lifts.length ? x.lifts : x.lift ? [x.lift] : []).filter(k => !x.done_keys.includes(k)); }
+  // next: today's, if not done; else the next day that holds one
+  const nextX = week.find(x => x.date >= today && x.open.length) || null;
   // strength over time: the best estimated one-rep max in each session, per exercise
   const history = {};
   for (const s of sessions) for (const e of s.exercises || []) {
     const best = Math.max(0, ...(e.sets || []).map(x => e1rm(x.lb, x.reps) || 0));
     if (best) (history[e.name] = history[e.name] || []).push({ date: s.date, e1rm: best, top_lb: Math.max(...e.sets.map(x => x.lb || 0)) });
   }
-  const weekCount = sessions.filter(s => s.date >= tz.shiftKey(today, -6) && s.template !== 'pump').length;
-  const pumpCount = sessions.filter(s => s.date >= tz.shiftKey(today, -6) && s.template === 'pump').length;
+  const wc = weekCount(sessions, today);
   const last = sessions[sessions.length - 1] || null;
   // eight weeks on, one off: counted from the first session of this plan
-  const first = sessions.find(s => TEMPLATES.some(t => t.key === s.template));
-  const weekNo = first ? Math.floor((Date.parse(today) - Date.parse(first.date)) / (7 * 864e5)) + 1 : 1;
-  const deload = weekNo % 9 === 0;
+  const weekNo = wc.week_no || 1;
+  const deload = wc.deload;
   const plan = periodization(TEMPLATES, sessions, today);
-  return { templates, next: nextX ? nextX.lift : 'push', next_date: nextX ? nextX.date : null, week, plan: 'Bigger Leaner Stronger, five days', periodization: plan,
+  return { templates, next: nextX ? nextX.open[0] : 'push', next_date: nextX ? nextX.date : null, week, plan: 'Bigger Leaner Stronger, five days', periodization: plan,
     week_no: weekNo, deload, deload_note: deload ? 'Deload week: the same lifts, half the hard sets, two reps shy of the top of the range. The weights stay.' : null,
     last: last ? { date: last.date, template: last.template, name: nameOf(last.template) } : null,
     sessions: sessions.slice(-15).reverse().map(s => ({ id: s.id, date: s.date, template: s.template, name: nameOf(s.template),
       notes: s.notes || '', volume_lb: (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0),
       exercises: (s.exercises || []).map(e => ({ name: e.name, sets: e.sets })) })),
-    history, this_week: weekCount, target_per_week: 5, pumps_this_week: pumpCount,
+    history, this_week: wc.sessions, target_per_week: 5, pumps_this_week: wc.pumps, count: wc,
     rules: ['Legs the day before a day off the bike or a long coaching day, or on a long coaching day.', 'No lift on the two biggest riding days.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.'] };
 }
 
@@ -397,4 +427,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
+module.exports = { attach, weekCount, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
