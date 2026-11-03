@@ -62,7 +62,7 @@
         const st = live.querySelector(".ch-steps");
         if (job && st) st.innerHTML = (job.steps || []).slice(-8).map(s => `<div class="ch-step">${esc(s)}</div>`).join("") + (job.status === "running" || job.status === "queued" ? `<div class="ch-step ch-now">thinking · ${Math.round((Date.now() - t0) / 1000)} s</div>` : "");
         if (job && job.status === "done"){
-          live.innerHTML = turnHTML(job.text, job.say, job.answer, job.sources, "just now");
+          live.innerHTML = turnHTML(job.text, job.say, job.answer, job.sources, "just now" + (job.usage && job.usage.usd != null ? ` · $${job.usage.usd.toFixed(2)}` : ""));
           if (job.say && typeof speak === "function") speak(job.say);
           go.disabled = false; drawNotes(); return;
         }

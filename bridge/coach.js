@@ -143,6 +143,19 @@ async function runJob(id, who) {
     while (messages.length && messages[0].role !== 'user') messages.shift();
     messages.push({ role: 'user', content: job.text });
     let final = null, sources = [];
+    // The system prompt and the tools are the same on every step, so they are cached once per question (the
+    // clock in the prompt is read once, not per step); the conversation so far is cached at its last block, so a
+    // step pays full price only for what the last step added. Without this, every step re-bought the whole context.
+    const sys = [{ type: 'text', text: system(notebook), cache_control: { type: 'ephemeral' } }];
+    const cached = ms => ms.map((m, i) => {
+      if (i !== ms.length - 1) return m;
+      const c = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content.map(b => Object.assign({}, b));
+      if (c.length) c[c.length - 1] = Object.assign({}, c[c.length - 1], { cache_control: { type: 'ephemeral' } });
+      return { role: m.role, content: c };
+    });
+    const tally = { in: 0, cache_read: 0, cache_write: 0, out: 0 };
+    const spend = u => { if (!u) return; tally.in += u.input_tokens || 0; tally.cache_read += u.cache_read_input_tokens || 0; tally.cache_write += u.cache_creation_input_tokens || 0; tally.out += u.output_tokens || 0;
+      job.usage = Object.assign({}, tally, { usd: Math.round((tally.in * 4 + tally.cache_read * 0.4 + tally.cache_write * 5 + tally.out * 20) / 1e6 * 100) / 100 }); };
     const t0 = Date.now(), late = () => Date.now() - t0 > 9 * 60 * 1000;   // the background function stops at fifteen minutes
     for (let hop = 0; hop < 16; hop++) {
       if (late() && hop) { const last = messages[messages.length - 1]; if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is nearly up: answer now from what you have read.' }); }
@@ -154,7 +167,7 @@ async function runJob(id, who) {
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: 'high' },
-        system: system(notebook), tools: TOOLS, messages
+        system: sys, tools: TOOLS, messages: cached(messages)
       }, left); }
       catch (e) {
         clearInterval(hb);
@@ -165,11 +178,12 @@ async function runJob(id, who) {
         if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is up: answer now from what you have read.' });
         else messages.push({ role: 'user', content: 'Time is up: answer now from what you have read so far.' });
         res = await create({ model: MODEL, max_tokens: 8000, fallbacks: 'default', thinking: { type: 'adaptive' }, output_config: { effort: 'medium' },
-          system: system(notebook), tools: TOOLS, tool_choice: { type: 'none' }, messages }, 150000);
+          system: sys, tools: TOOLS, tool_choice: { type: 'none' }, messages: cached(messages) }, 150000);
       }
       clearInterval(hb);
       messages.push({ role: 'assistant', content: res.content });
-      job.debug = (job.debug || []).concat([`step ${hop + 1}: ${res.stop_reason}, ${Math.round((Date.now() - t0) / 1000)} s, ${(res.usage && res.usage.input_tokens) || 0} in / ${(res.usage && res.usage.output_tokens) || 0} out`]);
+      spend(res.usage);
+      job.debug = (job.debug || []).concat([`step ${hop + 1}: ${res.stop_reason}, ${Math.round((Date.now() - t0) / 1000)} s, ${(res.usage && res.usage.input_tokens) || 0} in / ${(res.usage && res.usage.cache_read_input_tokens) || 0} cached / ${(res.usage && res.usage.output_tokens) || 0} out`]);
       for (const b of res.content) {
         if (b.type === 'server_tool_use' && b.name === 'web_search') await step(`searching: ${String((b.input || {}).query || '').slice(0, 90)}`);
         if (b.type === 'server_tool_use' && b.name === 'web_fetch') await step(`reading: ${String((b.input || {}).url || '').slice(0, 90)}`);
