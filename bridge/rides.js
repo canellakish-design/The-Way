@@ -98,7 +98,17 @@ async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
   if (cached && !o.force) return cached;
-  const out = { id: ride.id, date: ride.date, name: ride.name, at: new Date().toISOString(), hr: null, power: null, resp: null, sources: {} };
+  // a ride from The Way's own player is read from its own samples, never from Strava (which never had it)
+  if (ride.source === 'player') {
+    const P = require('./player');
+    const rec = await getJSON(P.rideKey(ride.id), null);
+    if (!rec || !rec.samples) return { id: ride.id, date: ride.date, name: ride.name, hr: null, power: null, resp: null, sources: { hr: 'The Way player: samples not found' } };
+    const a = P.analysisOf(rec.summary || ride, rec.samples, o.ftp || (rec.summary && rec.summary.ftp) || 175);
+    if (ride.intervals_id) a.icu_id = ride.intervals_id;
+    await setJSON(key(ride.id), a).catch(() => {});
+    return a;
+  }
+  const out ={ id: ride.id, date: ride.date, name: ride.name, at: new Date().toISOString(), hr: null, power: null, resp: null, sources: {} };
   // 1. Strava's stream, the full read
   try {
     const s = await require('./strava').apiFetch(`/activities/${ride.id}/streams?keys=time,heartrate,watts&key_by_type=true`);

@@ -229,6 +229,15 @@ async function scan(n) {
   const read = [];
   for (const r of todo) {
     try {
+      // a ride from The Way's own player: its power is in its own samples, one a second
+      if (r.source === 'player') {
+        const rec = await getJSON(require('./player').rideKey(r.id), null);
+        const w = rec && rec.samples && Array.isArray(rec.samples.p) ? rec.samples.p.map(v => v == null ? 0 : v) : [];
+        if (w.length >= 60) { d.rides[String(r.id)] = { id: r.id, date: r.date, name: r.name, minutes: r.minutes, mmp: mmpCurve(w), seconds: w.length }; read.push({ id: r.id, name: r.name, ok: true }); }
+        else read.push({ id: r.id, name: r.name, ok: false, reason: 'no power samples' });
+        d.scanned.push(String(r.id));
+        continue;
+      }
       const s = await require('./strava').apiFetch(`/activities/${r.id}/streams?keys=time,watts&key_by_type=true`);
       const watts = s && s.watts && s.watts.data;
       if (watts && watts.length >= 60) {

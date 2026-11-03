@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="dark">
+<title>The Way · trainer test</title>
+<style>
+  :root{ --paper:#000; --card:#121212; --ink:#F2F1EC; --muted:#A8A69E; --line:#33352F; --green:#7BC48E; --amber:#D8A945; --red:#E58273;
+    --num:"Saira Condensed","Arial Narrow",Arial,sans-serif; --mono:ui-monospace,Menlo,Consolas,monospace; --sans:system-ui,-apple-system,"Segoe UI",sans-serif; }
+  *{box-sizing:border-box} body{margin:0; background:var(--paper); color:var(--ink); font-family:var(--sans); padding:20px max(16px, env(safe-area-inset-left)); max-width:900px; margin:0 auto}
+  h1{font-family:var(--num); font-size:34px; text-transform:uppercase; margin:0 0 4px}
+  .small{color:var(--muted); font-size:14px; line-height:1.45}
+  .row{display:flex; flex-wrap:wrap; gap:8px; margin:14px 0}
+  button{font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:1px; text-transform:uppercase; border:1px solid var(--ink); background:var(--card); color:var(--ink); padding:12px 16px; cursor:pointer}
+  button.primary{background:var(--ink); color:var(--paper)} button:disabled{opacity:.35}
+  .fields{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin:12px 0}
+  .f{background:var(--paper); padding:10px} .f .k{font-family:var(--mono); font-size:10px; letter-spacing:1.4px; color:var(--muted); text-transform:uppercase}
+  .f .n{font-family:var(--num); font-weight:700; font-size:48px; line-height:1}
+  #log{font-family:var(--mono); font-size:12px; background:var(--card); border:1px solid var(--line); padding:10px; height:320px; overflow:auto; white-space:pre-wrap}
+  .ok{color:var(--green)} .bad{color:var(--red)} .warn{color:var(--amber)}
+</style>
+</head>
+<body>
+<h1>Trainer test</h1>
+<div class="small">The first step of the workout player. Open this page in <b>Chrome on the Windows PC</b> next to the KICKR CORE. Close Zwift first: a trainer talks to one app at a time. Then work down the buttons. Everything it finds is sent to The Way at the end, so nothing needs copying.</div>
+<div id="support" class="small"></div>
+
+<div class="row">
+  <button class="primary" id="bTrainer">1 · Connect trainer</button>
+  <button id="bE100" disabled>2 · ERG 100 W</button>
+  <button id="bE150" disabled>3 · ERG 150 W</button>
+  <button id="bOff" disabled>ERG off</button>
+</div>
+<div class="row">
+  <button class="primary" id="bStrap">4 · Connect Tymewear strap</button>
+  <button id="bSend">5 · Send results to The Way</button>
+</div>
+
+<div class="fields">
+  <div class="f"><div class="k">Power</div><div class="n" id="vP">—</div></div>
+  <div class="f"><div class="k">Cadence</div><div class="n" id="vC">—</div></div>
+  <div class="f"><div class="k">Heart rate</div><div class="n" id="vH">—</div></div>
+  <div class="f"><div class="k">ERG target</div><div class="n" id="vT">—</div></div>
+</div>
+<div class="small">Pedal gently once the trainer is connected. With ERG 100 W the watts settle near 100 whatever your cadence; at 150 W they rise. For the strap, wear it and breathe normally for a minute: the log records every value it sends, which is how the breathing channel gets decoded.</div>
+<div id="log"></div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const lines = [], found = { trainer: null, strap: null, services: {}, samples: [] };
+const log = (m, cls) => { const t = new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit" }); lines.push(`${t} ${m}`); const d = document.createElement("div"); d.textContent = `${t} ${m}`; if (cls) d.className = cls; $("log").appendChild(d); $("log").scrollTop = 1e9; };
+const hex = dv => Array.from(new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength)).map(b => b.toString(16).padStart(2, "0")).join(" ");
+
+if (!navigator.bluetooth) $("support").innerHTML = '<span class="bad">This browser has no Web Bluetooth. Use Chrome or Edge on the Windows PC.</span>';
+else $("support").innerHTML = '<span class="ok">Web Bluetooth is available in this browser.</span>';
+
+// ---- FTMS (Fitness Machine Service) on the KICKR CORE ----
+const FTMS = 0x1826, BIKE_DATA = 0x2ad2, CONTROL = 0x2ad9, FEATURES = 0x2acc, CPS = 0x1818, CP_MEAS = 0x2a63, WAHOO = "a026e005-0a7d-4ab3-97fa-f1500f9feb8b";
+let control = null;
+function parseBikeData(dv) {
+  // flags then fields in order; bit 0 clear means instantaneous speed is present
+  const f = dv.getUint16(0, true); let i = 2; const out = {};
+  if (!(f & 1)) { out.speed = dv.getUint16(i, true) / 100; i += 2; }
+  if (f & 2) i += 2;                                        // average speed
+  if (f & 4) { out.cadence = dv.getUint16(i, true) / 2; i += 2; }
+  if (f & 8) i += 2;                                        // average cadence
+  if (f & 16) i += 3;                                       // total distance
+  if (f & 32) i += 2;                                       // resistance level
+  if (f & 64) { out.power = dv.getInt16(i, true); i += 2; }
+  return out;
+}
+$("bTrainer").onclick = async () => {
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [FTMS] }, { namePrefix: "KICKR" }], optionalServices: [FTMS, CPS, WAHOO, "device_information", "battery_service"] });
+    log(`trainer chosen: ${dev.name}`);
+    const gatt = await dev.gatt.connect();
+    const svcs = await gatt.getPrimaryServices();
+    found.trainer = { name: dev.name, services: svcs.map(s => s.uuid) };
+    log(`trainer services: ${svcs.map(s => s.uuid.slice(4, 8)).join(", ")}`);
+    const ftms = svcs.find(s => s.uuid.startsWith("00001826"));
+    if (!ftms) { log("no FTMS on this trainer: the firmware may need an update in the Wahoo app", "bad"); return; }
+    try { const fe = await (await ftms.getCharacteristic(FEATURES)).readValue(); log(`FTMS features: ${hex(fe)}`); found.trainer.features = hex(fe); } catch (e) { log("could not read FTMS features", "warn"); }
+    const data = await ftms.getCharacteristic(BIKE_DATA);
+    await data.startNotifications();
+    data.addEventListener("characteristicvaluechanged", e => { const d = parseBikeData(e.target.value); if (d.power != null) $("vP").textContent = d.power; if (d.cadence != null) $("vC").textContent = Math.round(d.cadence); if (found.samples.length < 400) found.samples.push(Object.assign({ t: Date.now() }, d)); });
+    control = await ftms.getCharacteristic(CONTROL);
+    await control.startNotifications();
+    control.addEventListener("characteristicvaluechanged", e => log(`control answer: ${hex(e.target.value)}`));
+    await control.writeValueWithResponse(new Uint8Array([0x00]));      // request control
+    log("FTMS connected: power and cadence streaming, control requested", "ok");
+    ["bE100", "bE150", "bOff"].forEach(b => $(b).disabled = false);
+    dev.addEventListener("gattserverdisconnected", () => log("trainer disconnected", "warn"));
+  } catch (e) { log(`trainer: ${e.message}`, "bad"); }
+};
+const erg = async w => {
+  if (!control) return;
+  try {
+    if (w == null) { await control.writeValueWithResponse(new Uint8Array([0x08, 0x01])); $("vT").textContent = "off"; log("ERG stopped"); return; }
+    const b = new Uint8Array(3); b[0] = 0x05; new DataView(b.buffer).setInt16(1, w, true);
+    await control.writeValueWithResponse(b); $("vT").textContent = w; log(`ERG set to ${w} W`, "ok"); found.erg = (found.erg || []).concat([{ w, at: Date.now() }]);
+  } catch (e) { log(`ERG: ${e.message}`, "bad"); }
+};
+$("bE100").onclick = () => erg(100); $("bE150").onclick = () => erg(150); $("bOff").onclick = () => erg(null);
+
+// ---- Tymewear strap: heart rate from the standard service, and every other service it offers, logged raw ----
+$("bStrap").onclick = async () => {
+  try {
+    const dev = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: ["heart_rate", "battery_service", "device_information",
+      // services a strap may use for its own data; anything unlisted is invisible to the browser, so cast a wide net
+      "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "0000fff0-0000-1000-8000-00805f9b34fb", "0000ffe0-0000-1000-8000-00805f9b34fb", 0x1814, 0x181c, 0x183e, 0x1810, 0x1816] });
+    log(`strap chosen: ${dev.name}`);
+    const gatt = await dev.gatt.connect();
+    const svcs = await gatt.getPrimaryServices();
+    found.strap = { name: dev.name, services: [] };
+    for (const s of svcs) {
+      const chars = await s.getCharacteristics().catch(() => []);
+      const entry = { uuid: s.uuid, chars: chars.map(c => ({ uuid: c.uuid, props: ["read", "write", "writeWithoutResponse", "notify", "indicate"].filter(k => c.properties[k]) })) };
+      found.strap.services.push(entry);
+      log(`strap service ${s.uuid}: ${chars.length} values`);
+      for (const c of chars) {
+        if (c.properties.notify || c.properties.indicate) {
+          await c.startNotifications().catch(() => {});
+          let n = 0;
+          c.addEventListener("characteristicvaluechanged", e => {
+            const v = e.target.value;
+            if (c.uuid.startsWith("00002a37")) { const f = v.getUint8(0), hr = f & 1 ? v.getUint16(1, true) : v.getUint8(1); $("vH").textContent = hr; }
+            if (n++ < 120) { found.services[c.uuid] = (found.services[c.uuid] || []).concat([[Date.now(), hex(v)]]); if (n <= 3) log(`  ${c.uuid.slice(0, 8)}: ${hex(v)}`); }
+          });
+        } else if (c.properties.read) {
+          const v = await c.readValue().catch(() => null); if (v) { log(`  ${c.uuid.slice(0, 8)} reads ${hex(v)}`); found.services[c.uuid + ":read"] = hex(v); }
+        }
+      }
+    }
+    log("strap connected: wear it and breathe normally for a minute, then press 5", "ok");
+  } catch (e) { log(`strap: ${e.message}`, "bad"); }
+};
+
+// ---- send everything to The Way, so Claude can read it ----
+$("bSend").onclick = async () => {
+  try {
+    const r = await fetch("/.netlify/functions/api/player/spike", { method: "POST", headers: { "Content-Type": "application/json", "x-the-way-app": "1" },
+      body: JSON.stringify({ at: new Date().toISOString(), ua: navigator.userAgent, found, log: lines.slice(-400) }) });
+    log(r.ok ? "sent to The Way: tell Claude it's in" : `send failed: ${r.status}`, r.ok ? "ok" : "bad");
+  } catch (e) { log(`send: ${e.message}`, "bad"); }
+};
+</script>
+</body>
+</html>

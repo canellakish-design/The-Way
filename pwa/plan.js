@@ -135,6 +135,9 @@ V.calendar = async function(){
         ${h?`<div class="pm">${h.zones?`${h.minutes_above_hard} min above ${h.hard_bpm} · zones ${h.zones.z1_min}/${h.zones.z2_min}/${h.zones.z3_min} min (${h.zone_pct.z1}% under VT1)`:"averages only"}${h.estimated?` · ${esc(h.estimated)}`:""}${b?` · breathing ${b.avg}/min avg${b.max?`, ${b.max} max`:""}`:""}${v?` · VE ${v.avg} L/min${v.minutes_above_vt2!=null?`, ${v.minutes_above_vt2} min above VT2`:""}${v.pct_under_vt1!=null?`, ${v.pct_under_vt1}% under VT1`:""}`:""}${!b&&!v&&a&&a.sources&&a.sources.resp?` · ${esc(a.sources.resp)}`:""}</div>`:a&&a.sources?`<div class="pm">${esc(a.sources.hr||"")}${a.sources.whoop?` · ${esc(a.sources.whoop)}`:""}</div>`:""}`;
     };
     const fold = (inner)=> inner ? `<details class="why pdet"><summary>details</summary>${inner}</details>` : "";
+    // a planned ride not yet done, today or ahead: straight into the workout player
+    const rideIt = (w, c, date)=> /weight|lift|strength|^run$|walk|hike/i.test(w.sport||"") || w.logged || (c && c.band==="green") || date < (n => `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`)(new Date()) ? ""
+      : `<a class="rideit" href="#player?id=${encodeURIComponent(w.id)}">Ride it</a>`;
     const word = (c)=> c.zone_over?"Above Z1":c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
     // A ride is drawn once: inside the planned session it was graded against
     // when there is one, on its own when nothing was planned.
@@ -149,7 +152,7 @@ V.calendar = async function(){
       const rides = withRides ? d.done : [];
       rows.push(`<div class="pitem planned hu-stripe ${c?STRIPE[c.band]||"":""}${c?" graded "+c.band:""}">
         <div class="ptop"><a class="pn" href="#workout?id=${encodeURIComponent(w.id)}">${window.kindIcon ? kindIcon(w.name, w.sport) : ""}<span>${esc(w.name)}</span></a>${chip}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div>
-        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""} · ${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS${c&&!w.logged&&!c.zone_over&&!(!d.done.length&&c.band==="red")?` · <b class="${TONE[c.band]||""}">${word(c)}</b>`:""}</span>
+        <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""} · ${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS${c&&!w.logged&&!c.zone_over&&!(!d.done.length&&c.band==="red")?` · <b class="${TONE[c.band]||""}">${word(c)}</b>`:""}${rideIt(w, c, d.date)}</span>
         ${sessBars(w, c, rides)}
         ${rides.map(rideOne).join("")}
         ${fold((c&&c.basis?`<div class="pm">${c.pct}% · ${esc(c.basis)}</div>`:"")+rides.map(rideLines).join(""))}
