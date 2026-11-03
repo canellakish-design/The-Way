@@ -301,14 +301,28 @@ async function weekDays(n) {
 // The week's count, one rule for the Day page's Lift box (chain.js) and the Lift page: the five
 // sessions logged in the last seven days against five; in the plan's first week, against the
 // sessions due since it started ("1 of 1 due" on day one, five a week from day seven). The pump is extra.
-function weekCount(sessions, today) {
+// the lift sessions the plan placed on the calendar between two dates (an untimed copy of a timed one counts once)
+async function placedLiftsBetween(from, to) {
+  const d = await getJSON('plan-workouts', { workouts: {} });
+  const ws = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /weight|lift|strength/i.test(String(w.sport || '')));
+  return new Set(ws.map(w => w.date + '|' + String(w.name || '').toLowerCase().replace(/\s+/g, ' ').trim())).size;
+}
+// the week's count with the first week's due sessions read from the calendar
+async function weekCountPlaced(sessions, today) {
+  const w0 = weekCount(sessions, today);
+  const placed = w0.first && w0.first_week ? await placedLiftsBetween(w0.first, today).catch(() => 0) : 0;
+  return placed ? weekCount(sessions, today, placed) : w0;
+}
+function weekCount(sessions, today, placedDue) {
   const from = tz.shiftKey(today, -6);
   const wk = (sessions || []).filter(x => x.date >= from && x.date <= today);
   const five = wk.filter(x => x.template !== 'pump');
   const first = (sessions || []).filter(x => TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
   const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
   const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
-  const expected = !first ? 0 : dayN < 7 ? Math.min(5, Math.ceil(5 * dayN / 7)) : 5;
+  // in the first week, the sessions due are the ones the plan placed on the calendar from its first day through today;
+  // with nothing placed yet, five a week prorated
+  const expected = !first ? 0 : dayN < 7 ? (placedDue > 0 ? Math.min(5, placedDue) : Math.min(5, Math.ceil(5 * dayN / 7))) : 5;
   const firstWeek = !!first && expected > 0 && expected < 5;
   const of = firstWeek ? expected : 5;
   return { sessions: five.length, pumps: wk.length - five.length, target: 5, expected, of, first_week: firstWeek, started: !!first, first,
@@ -363,7 +377,7 @@ async function report() {
     const best = Math.max(0, ...(e.sets || []).map(x => e1rm(x.lb, x.reps) || 0));
     if (best) (history[e.name] = history[e.name] || []).push({ date: s.date, e1rm: best, top_lb: Math.max(...e.sets.map(x => x.lb || 0)) });
   }
-  const wc = weekCount(sessions, today);
+  const wc = await weekCountPlaced(sessions, today);
   const last = sessions[sessions.length - 1] || null;
   // eight weeks on, one off: counted from the first session of this plan
   const weekNo = wc.week_no || 1;
@@ -427,4 +441,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, weekCount, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
+module.exports = { attach, weekCount, weekCountPlaced, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };

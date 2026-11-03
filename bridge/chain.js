@@ -315,7 +315,7 @@ async function report() {
     const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today && x.template !== 'pump');
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
     // the count is the Lift page's own (lifts.weekCount): the first week judged on the sessions due, a ninth week a deload
-    const c = L.weekCount(d.sessions || [], today);
+    const c = await L.weekCountPlaced(d.sessions || [], today);
     lift = { sessions: c.sessions, pumps: c.pumps, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ }
@@ -388,7 +388,7 @@ async function report() {
       sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: lift.first_week ? `of ${lift.of} due` : `of ${lift.of || 5}`,
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
-      basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions due since it started (five a week from day seven); 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
+      basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions the plan placed from its first day through today; 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
     recovery: (() => {
       const todayScore = recToday ? recToday.score : null;
       const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';
