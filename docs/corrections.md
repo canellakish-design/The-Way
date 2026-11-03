@@ -61,3 +61,6 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 |---|---|---|---|
 | 1 Nov | first run | 13 mismatches | `03729b5`, `7d62306` |
 | 1 Nov | re-run | 14 mismatches, 10 earlier fixes confirmed | `cf035e8` |
+
+## 3 Nov · the VO2 line
+- The VO2 session goal was "8 to 12 min above 152". No ride on record held 152 for more than 18 s (best: Nov 1, max 155), so every VO2 session graded red. Harry set the line at VT2, 139. Tymewear's own VO2max training target is HR 147 and 216 W; the 40/20 "on" blocks at 191 W sit under that.
