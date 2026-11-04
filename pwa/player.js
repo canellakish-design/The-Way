@@ -348,6 +348,7 @@
   async function attachStrap(dev){
     const gatt = await dev.gatt.connect();
     const svcs = await gatt.getPrimaryServices();
+    inventory(dev, svcs, "strap");
     for (const s of svcs){
       const chars = await s.getCharacteristics().catch(() => []);
       for (const c of chars){
@@ -379,9 +380,27 @@
       if (!dev.__wayWatch){ dev.__wayWatch = true; dev.addEventListener("gattserverdisconnected", () => { DEV.breath = null; drawDevices(); note("breathing sensor disconnected"); if (ride && ride.state === "riding") reconnect(dev, attachBreath, "breath"); }); }
     }catch(e){ if (!auto) DEV.chooseNext.breath = true; setDevState("breath", auto ? "not in range yet" : /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); throw e; }
   }
+  async function inventory(dev, svcs, tag){
+    try{
+      const inv = [];
+      for (const s of svcs){
+        const chars = await s.getCharacteristics().catch(() => []);
+        const list = [];
+        for (const c of chars){
+          const props = ["read", "write", "writeWithoutResponse", "notify", "indicate"].filter(k => c.properties[k]);
+          let val = null; if (c.properties.read){ try{ val = hex(await c.readValue()); }catch{} }
+          list.push({ uuid: c.uuid, props, value: val });
+        }
+        inv.push({ uuid: s.uuid, chars: list });
+      }
+      INV[tag] = { name: dev.name || "", services: inv };
+    }catch{}
+  }
+  const INV = {};
   async function attachBreath(dev){
     const gatt = await dev.gatt.connect();
     const svcs = await gatt.getPrimaryServices();
+    inventory(dev, svcs, "breath");
     for (const s of svcs){
       const chars = await s.getCharacteristics().catch(() => []);
       for (const c of chars){
@@ -567,7 +586,7 @@
     const w = rec.workout || {};
     return { summary: { start_ms: rec.id, name: w.name || "Indoor ride", workout_id: w.id || null, ftp: rec.ftp, intervals_event_id: w.intervals_event_id || null, pauses: rec.pauses,
         intervals: rec.intervals.map(x => ({ label: x.label, start_s: x.start_s, dur_s: x.dur_s, target_w: x.target_w })), sim: !!rec.sim },
-      samples: S, fit_base64: FIT.toBase64(fit.bytes), raw: rec.raw || {} };
+      samples: S, fit_base64: FIT.toBase64(fit.bytes), raw: Object.assign({}, rec.raw || {}, { inventory: [[0, JSON.stringify(INV)]] }) };
   }
   async function saveRide(rec){
     ride = rec;
