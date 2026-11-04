@@ -71,11 +71,12 @@ function verdict(links) {
       lift: () => `lifting: ${L.lift.count_word || `${L.lift.sessions} of ${L.lift.target}`} sessions this week.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
     }[first]();
-    text = `Chain breaks at ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
+    // red is a break; amber is a weak link: the chain holds, with a warning on it
+    text = `${links[first].state === 'bad' ? 'Chain breaks at' : 'Chain weak at'} ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
   }
   // a green recovery on a week that asked for little is not credit
   if (L.recovery && L.recovery.state === 'good' && L.work && L.lift && (L.work.state === 'bad' || L.work.state === 'warn') && (L.lift.state === 'bad' || L.lift.state === 'warn')) text += ' Recovery is green because little was asked of it.';
-  return { break_at: first || null, text };
+  return { break_at: first || null, break_state: first ? links[first].state : null, text };
 }
 
 // ---- recovery against the rider's own band ----------------------------------

@@ -1194,7 +1194,7 @@ function paintChain(c){
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }
     if (ck === "plan" && L.from && L.to){ const kk = el.querySelector(".ck > span"), md = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }).split(" ");
       const a = md(L.from), b = md(L.to); if (kk) kk.textContent = `Plan ${a[0]} ${a[1]}–${a[0] === b[0] ? b[1] : b.join(" ")}`; }
-    const brk = c.break_at === ck; el.classList.toggle("brk", brk);
+    const brk = c.break_at === ck; el.classList.toggle("brk", brk); el.classList.toggle("brkwarn", brk && L.state === "warn");
     el.querySelector(".cmark").textContent = brk ? "✕" : "";
     // today, small under the week: its own number, word and colour
     const t = todayCell(ck, L);
@@ -1204,13 +1204,14 @@ function paintChain(c){
       : ck === "food" ? `Macros: ${num} on plan this week · today ${t.num} ${t.word}`
       : `${label}: ${num} ${unit} this week · today ${t.num}${t.word ? ", " + t.word : ""}`;
     // the arrow out of this link: its colour, a cross where the chain breaks or the link is red
+    // a red link cuts the chain (a cross); an amber one is a warning on it (an amber arrow), the chain holds
     for (const ar of document.querySelectorAll(`.carrow[data-k="${ck}"]`)){
       const wrap = ar.classList.contains("cwrap"), cut = L.state === "bad";
-      ar.className = `carrow${wrap ? " cwrap" : ""} ${L.state || "none"}${brk ? " broken" : cut ? " cut" : ""}`;
-      const i = ar.querySelector("i"); if (i) i.innerHTML = brk || cut ? CROSS : (wrap ? "" : ARROW);
+      ar.className = `carrow${wrap ? " cwrap" : ""} ${L.state || "none"}${cut ? (brk ? " broken" : " cut") : ""}`;
+      const i = ar.querySelector("i"); if (i) i.innerHTML = cut ? CROSS : (wrap ? "" : ARROW);
     }
   }
-  const w = document.getElementById("chainWord"); if (w){ w.textContent = String(c.verdict || "").replace(/^Chain breaks at /i, "Breaks at ").split(/\.\s/)[0].replace(/\.$/, ""); w.dataset.tone = c.break_at ? "bad" : c.verdict ? "good" : "none"; }
+  const w = document.getElementById("chainWord"); if (w){ w.textContent = String(c.verdict || "").replace(/^Chain breaks at /i, "Breaks at ").replace(/^Chain weak at /i, "Weak at ").split(/\.\s/)[0].replace(/\.$/, ""); w.dataset.tone = c.break_at ? (c.break_state === "warn" ? "warn" : "bad") : c.verdict ? "good" : "none"; }
   // the header: the week's dates, and today with the day's type
   const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
   const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
