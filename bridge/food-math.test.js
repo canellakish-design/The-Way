@@ -545,3 +545,14 @@ ok('fuel for the work: a prescription per session, the day as the sum of the wor
   const lm = F.mealPlan(low.day, z1, tl);
   assert.ok(lm.find(m => m.slot === 'before').low_carb && /water/i.test(lm.find(m => m.slot === 'on the bike').what));
 });
+
+ok('fuel for the work: a real breakfast before a long ride, and more carbs than planned before it is fuel, not a miss', () => {
+  const long = F.fuelRx([{ name: 'Zone 1, 120 min', sport: 'Ride', time: '10:00', minutes: 120, tss: 77 }], 98, 175, {});
+  assert.ok(long.sessions[0].before.carbs_g >= 59, 'at least 0.6 g/kg before a long ride: ' + long.sessions[0].before.carbs_g);
+  const plan = { slot: 'breakfast', kcal: 700, carbs_g: 59, protein_g: 45, fixed: true, rx: 'long' };
+  const plate = [{ kcal: 810, carbs_g: 81, protein_g: 41, fat_g: 35, assessment: { fits: 'yes', carbs: 'some', protein_source: true, vegetables: true, why: 'Good.' } }];
+  const m = F.mealMatch(plan, plate);
+  assert.strictEqual(m.key, 'green', m.word);
+  const post = F.mealMatch({ slot: 'after', kcal: 700, carbs_g: 55, protein_g: 45, fixed: true, rx: 'long', post_ride: true }, [{ kcal: 900, carbs_g: 110, protein_g: 45, fat_g: 20, assessment: { fits: 'yes', why: 'ok' } }]);
+  assert.notStrictEqual(post.key, 'green', 'the meal after is judged as planned: ' + post.word);
+});

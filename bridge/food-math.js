@@ -77,7 +77,9 @@ function sessionRx(x, kg, ftp, o) {
   // the carbs the work itself asks for: 0.15 g a kJ (a fifth more when it is hard), split around the ride,
   // before 45% and after 75% of it (the after carries recovery too), each held inside the g/kg bands
   const work = kj * CARB_PER_KJ * (hard ? 1.2 : 1);
-  const beforeG = kind === 'low' ? 20 : g(Math.max(25, Math.min(1.0 * w, work * 0.45)));
+  // before a long or a hard ride the plate is a real breakfast: 0.6 g/kg (long) or 0.4 g/kg (hard) at least, 1 g/kg at most
+  const beforeFloor = kind === 'long' ? 0.6 * w : kind === 'hard' ? 0.4 * w : 25;
+  const beforeG = kind === 'low' ? 20 : g(Math.max(beforeFloor, Math.min(1.0 * w, work * 0.45)));
   const afterG = g(Math.max(0.4 * w, Math.min(1.2 * w, work * 0.75)));
   const rx = kind === 'low' ? {
       before: { carbs_g: 20, protein_g: 20, low: true, hours_before: 0.75, words: 'Coffee and a 20 g whey shake; under 20 g of carbs. This is the low ride of the week.' },
@@ -490,6 +492,7 @@ function planSnapshot(row, at) {
   const s = { slot: row.slot, time: row.time, kcal: row.kcal, carbs_g: row.carbs_g || 0, protein_g: row.protein_g || 0, low_carb: !!row.low_carb, what: row.what || '', at: at || null };
   if (row.at_min != null) { s.at_min = row.at_min; s.next_day = true; }
   if (row.covered_by) s.covered_by = row.covered_by;
+  if (row.rx) { s.rx = row.rx; s.fixed = !!row.fixed; s.post_ride = !!row.post_ride; }   // the prescription's slots keep their kind: judged as fuel
   return s;
 }
 
@@ -760,7 +763,10 @@ function mealMatch(plan, logged, ctx) {
     if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
   } else {
     if (plan.kcal > 0) parts.push({ k: 'kcal', off: off(got.kcal, plan.kcal), both: true });
-    if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: off(got.carbs_g, plan.carbs_g), both: true });
+    // before a fuelled ride (a fixed pre-ride plate), carbs over the plan are fuel, not a miss, up to 60% over: they carry into the ride
+    const preRide = plan.rx && plan.rx !== 'low' && !plan.post_ride && plan.fixed;
+    const cOff = off(got.carbs_g, plan.carbs_g);
+    if (plan.carbs_g > 0 || got.carbs_g > 0) parts.push({ k: 'carbs', off: preRide && cOff > 0 ? Math.max(0, cOff - 0.6) : cOff, both: true });
     if (plan.protein_g > 0) parts.push({ k: 'protein', off: off(got.protein_g, plan.protein_g), both: false });
   }
   // protein only counts when short; an overage that rolled into the next slot is not a miss here
