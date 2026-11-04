@@ -39,12 +39,15 @@ async function icuActivityFor(ride) {
   const list = await icuGet(`/athlete/${encodeURIComponent(ATHLETE)}/activities?oldest=${date}&newest=${date}`);
   if (!Array.isArray(list) || !list.length) return null;
   const startMin = ride.time ? (+ride.time.slice(0, 2)) * 60 + (+ride.time.slice(3, 5)) : null;
+  // Two files of one ride can land there: the player's upload and the Garmin's (with the Tymewear field).
+  // Among the ones that start within ten minutes, the one that carries breathing wins; then the nearest.
+  const hasBreath = a => Object.keys(a || {}).some(k => /resp|breath|tidal|ventil/i.test(k) && a[k] != null && a[k] !== 0);
   const near = list.map(a => {
     const t = String(a.start_date_local || '').slice(11, 16);
     const m = /^\d{2}:\d{2}$/.test(t) ? (+t.slice(0, 2)) * 60 + (+t.slice(3, 5)) : null;
     return { a, d: startMin == null || m == null ? 999 : Math.abs(m - startMin) };
-  }).sort((x, y) => x.d - y.d)[0];
-  return near && near.d <= 10 ? near.a : (list.length === 1 ? list[0] : null);
+  }).sort((x, y) => (hasBreath(y.a) - hasBreath(x.a)) || (x.d - y.d)).filter(x => x.d <= 10)[0];
+  return near ? near.a : (list.length === 1 ? list[0] : null);
 }
 
 // Breathing through intervals.icu. Two sources land there: the Tymewear
