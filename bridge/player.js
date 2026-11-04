@@ -186,6 +186,12 @@ function attach(app) {
     try { res.json(await saveRide(req.body)); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 
+  // one ride as stored: the summary, the samples as columns, the intervals, the pauses, and the strap's raw capture
+  app.get('/player/ride/:id', async (req, res) => { if (!auth(req, res)) return;
+    const rec = await getJSON(rideKey(req.params.id), null);
+    if (!rec) return res.status(404).json({ error: 'no such ride' });
+    const raw = rec.raw || {};
+    res.json(Object.assign({}, rec, { raw: req.query.raw === '1' ? raw : undefined, raw_counts: Object.fromEntries(Object.keys(raw).map(k => [k, (raw[k] || []).length])) })); });
   app.get('/player/rides', async (req, res) => { if (!auth(req, res)) return;
     res.json(await getJSON(INDEX, { rides: [] })); });
 
