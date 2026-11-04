@@ -430,7 +430,7 @@ async function report() {
     })()
   };
   const v = verdict(links);
-  return { order: ORDER, links, break_at: v.break_at, verdict: v.text, days: DAYS, read_days: readDays };
+  return { order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays };
 }
 
 function attach(app) {
