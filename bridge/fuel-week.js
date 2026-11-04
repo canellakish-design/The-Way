@@ -19,7 +19,8 @@ async function plannedSessions(from, to) {
   for (const k of Object.keys(days)) out[k] = (days[k] || []).filter(e => e.category === 'training').map(toSession);
   return out;
 }
-const isHardDay = ss => (ss || []).some(s => F.isRideSession(s) && (HARD.test(String(s.name || '')) || (s.minutes || 0) >= 120));
+// a hard day for the train-low guard is a quality session (VO2, threshold, a race); a long Zone 1 ride is fed on its own day
+const isHardDay = ss => (ss || []).some(s => F.isRideSession(s) && HARD.test(String(s.name || '')));
 const eveningSession = ss => (ss || []).some(s => F.isRideSession(s) && F.toMin(s.time) != null && F.toMin(s.time) + (s.minutes || 60) >= 17 * 60);
 
 // the context fuelRx needs for one date: the low rides already used this week (Monday to the day before),

@@ -487,7 +487,7 @@ async function dayReport(date) {
   } catch (e) { balance = null; }
   return {
     date, today: date === tz.todayKey(),
-    fuel_day: g.fuel_day, day: g.day, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
+    fuel_day: g.fuel_day, day: g.day, fuel: g.fuel || null, target: g.target, guidelines: g.guidelines, ride_notes: g.ride_notes, sessions: g.sessions, cue: g.cue, work: g.work,
     // a slot is logged by food, not by the water drunk near it (a bottle with carbs on the bike is the exception); drinks stay in the journal and the hydration curve
     meals: rows,
     actual: Object.assign(actual, { meals: meals.length }), entries,

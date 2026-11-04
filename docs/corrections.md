@@ -67,3 +67,6 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 
 ## 3 Nov · hydration
 - The carry from yesterday pinned at the −1.5 L cap every morning (Nov 1, 2 and 3 all started −1,500), so no day could start clean and every evening read "1.8 L down". Now half of the night's deficit is carried, capped at 750 ml; the day's target includes the carry (one number, not "2.0 of 2.1 L" beside "−1,754"); the 70% post-ride retention applies only after a ride of an hour or more or a hard one.
+
+## 3 Nov · fuel for the work required
+- The food model moved from three day tiers (rest/normal/high by the ride's name) to a prescription per session (Impey 2018), the day's carbs the sum of the work; one train-low ride a week, never on or before a quality session. Spec: docs/fuel-for-the-work.md.
