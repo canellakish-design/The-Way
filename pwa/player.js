@@ -194,7 +194,7 @@
       const tip = `<title>${esc(x.label)}${x.rep ? " " + esc(x.rep) : ""} · ${esc(targetWords(x, o.bias || 0))} · ${clock(x.dur_s)}</title>`;
       if (x.target_w == null){
         blocks += `<rect class="${cls}" x="${xa.toFixed(1)}" y="${hatchY.toFixed(1)}" width="${Math.max(0.5, xb - xa - 1).toFixed(1)}" height="${(T0 + ph - hatchY).toFixed(1)}" fill="url(#pfHatch)">${tip}</rect>`;
-        if (xb - xa >= 46 && xa >= lastLabelEnd && !past){ labels += `<text class="pf-free" x="${(Math.max(xa, X(o.now != null ? Math.max(s, o.now) : s)) + 5).toFixed(1)}" y="${(hatchY - 7).toFixed(1)}">${x.kind === "hr" ? `HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "feel"}</text>`; lastLabelEnd = xa + 60; }
+        if (xb - xa >= 46 && xa >= lastLabelEnd && !past){ labels += `<text class="pf-free" x="${(Math.max(xa, X(o.now != null ? Math.max(s, o.now) : s)) + 5).toFixed(1)}" y="${(hatchY - 7).toFixed(1)}">${x.kind === "hr" ? (x.target_hr && x.target_hr.lo >= 100 ? `HR ${x.target_hr.lo}–${x.target_hr.hi}` : `HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}`) : "feel"}</text>`; lastLabelEnd = xa + 60; }
         return;
       }
       const w0 = x.target_w * bias, w1 = (x.target_w_end != null ? x.target_w_end : x.target_w) * bias;
@@ -773,7 +773,7 @@
     $("fIl").textContent = iv ? `of ${clock(iv.dur_s)}` : "";
     $("fT").textContent = clock(Math.max(0, total - r.wt));
     $("fTr").textContent = `${clock(r.samples.length)} ridden`;
-    $("fE").textContent = !iv || iv.target_w == null ? "Free" : r.erg ? "ERG" : "Off";
+    $("fE").textContent = !iv || (iv.target_w == null && iv.kind !== "hr") ? "Free" : r.erg ? "ERG" : "Off";
     $("fB").textContent = r.bias ? `bias ${r.bias > 0 ? "+" : "−"}${Math.abs(r.bias)}%` : "";
     $("cPause").textContent = r.state === "paused" ? "Resume" : "Pause";
     $("cPause").classList.toggle("primary", r.state === "paused");
