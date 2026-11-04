@@ -377,7 +377,7 @@ function gradeOne(w, rides) {
   const frac = both.every(x => x > 1) ? Math.max(...both) : Math.min(...both);
   const pct = Math.round(100 * frac);
   let band = bandOf(pct);
-  let basis = `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)') + (noStrap ? `; heart rate peaked at ${Math.max(...withHr.map(r => r.analysis.hr.max || 0))}, so the strap was not on: no minutes above ${R.HR.hard} to judge` : '');
+  let basis = `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)') + (noStrap ? `; heart rate peaked at ${Math.max(...withHr.map(r => r.analysis.hr.max || 0))}, which no 40/20 session gives: the recorded heart rate was not the strap's, so there are no minutes above ${R.HR.hard} to judge` : '');
   // A Zone 1 ride is also judged on discipline: the share of it under VT1.
   // Elite logs put a Zone 1 session at 0 to 2% above the ceiling; up to 10%
   // passes here, 10 to 20% is a warning, more is a different ride.
