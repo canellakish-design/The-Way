@@ -104,7 +104,7 @@ function recoveryState(o) {
 }
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 6;   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
+const ROW_V = 7;   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
 // Fuel for a day, as how much of what the plan asked for went in: for each ride, the carbs eaten in the four
 // hours before it against the plan's carbs for that window, the carbs taken on the bike against the plan's
 // bottle, and (once a day, on the first ride) the pre-ride supplements due against those taken: beetroot on a
@@ -121,9 +121,19 @@ function fuelChecks(r) {
   const hard = rides.some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, '')));
   rides.forEach((x, i) => {
     const st = F.toMin(x.time), end = st + (x.minutes || 60), parts = [];
-    const planPre = meals.filter(m => m.slot !== 'on the bike' && F.toMin(m.time) != null && F.toMin(m.time) >= st - 240 && F.toMin(m.time) < st).reduce((a, m) => a + (m.carbs_g || 0), 0);
+    const preMeals = meals.filter(m => m.slot !== 'on the bike' && F.toMin(m.time) != null && F.toMin(m.time) >= st - 240 && F.toMin(m.time) < st);
+    const planPre = preMeals.reduce((a, m) => a + (m.carbs_g || 0), 0);
     const ate = ents.filter(e => F.toMin(e.time) >= st - 240 && F.toMin(e.time) < st).reduce((a, e) => a + (e.carbs_g || 0), 0);
-    if (planPre > 0) parts.push({ kind: 'pre', got_g: Math.round(ate), plan_g: Math.round(planPre), ratio: ate / planPre });
+    // a train-low before is kept low: at or under the plan is the point, over is the miss
+    const lowPre = preMeals.length && preMeals.every(m => m.low_carb);
+    if (planPre > 0) parts.push({ kind: 'pre', got_g: Math.round(ate), plan_g: Math.round(planPre), low: !!lowPre, ratio: lowPre ? (ate <= planPre * 1.25 ? 1 : planPre / ate) : ate / planPre });
+    // the meal after the ride: the carbs within two hours of its end against the plan's, once the window has closed
+    const post = meals.find(m => m.post_ride && Math.abs((m.ride_end || 0) - end) <= 30) || meals.find(m => m.post_ride && F.toMin(m.time) >= end && F.toMin(m.time) <= end + 90);
+    const nowMin = r.date === tz.todayKey() ? (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })() : 24 * 60;
+    if (post && post.carbs_g > 0 && (x.done || x.kept) && nowMin >= end + 120) {
+      const gotAfter = ents.filter(e => F.toMin(e.time) >= end - 5 && F.toMin(e.time) <= end + 120 && e.slot !== 'on the bike').reduce((a, e) => a + (e.carbs_g || 0), 0);
+      parts.push({ kind: 'after', got_g: Math.round(gotAfter), plan_g: post.carbs_g, ratio: gotAfter / post.carbs_g });
+    }
     const bottle = meals.find(m => m.slot === 'on the bike' && F.toMin(m.time) != null && Math.abs(F.toMin(m.time) - st) <= 30);
     if (bottle && bottle.carbs_g > 0) {
       const got = ents.filter(e => F.toMin(e.time) >= st - 15 && F.toMin(e.time) <= end + 15 && (e.slot === 'on the bike' || F.toMin(e.time) >= st)).reduce((a, e) => a + (e.carbs_g || 0), 0);

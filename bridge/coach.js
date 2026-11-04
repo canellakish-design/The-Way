@@ -284,7 +284,7 @@ function attach(app) {
     const ride = rides.find(r => r.id === rid) || { id: rid, name: String((req.body || {}).name || 'the ride') };
     const graded = (ride.planned || []).map(p => `${p.name}: ${p.band}${p.pct != null ? ` ${p.pct}%` : ''} (${p.basis})`).join('; ');
     const text = `DEBRIEF the ride "${ride.name}" (${tz.todayKey()}${ride.time ? ' ' + tz.hm12(ride.time) : ''}, ride id ${rid}). Read /rides/${rid}/analysis, /calendar?from=${tz.todayKey()}&to=${tz.todayKey()} (the plan it was graded against), /food/today and /fuel/ahead.
-The site's own grade of it, which you repeat as it stands and never contradict: ${graded || 'not graded against a plan'}. The lines the site uses: Zone 1 is heart rate 116 and under; the VO2 line is 139 (VT2); there is no other heart-rate line. Use only numbers from the pages.
+The site's own grade of it, which you repeat as it stands and never contradict: ${graded || 'not graded against a plan'}. The lines the site uses: Zone 1 is heart rate 116 and under; the VO2 line is 139 (VT2); there is no other heart-rate line. Use only numbers from the pages. The ride's fuel prescription is in /food/today under sessions[].rx (grams before, on the bike and within two hours after; a low before means under 20 g on purpose): judge what he ate against it, not against a rule of your own.
 Then answer in exactly this shape:
 SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time. It must agree with the grade above.
 **The ride**: at most three short lines, each a number from the pages (minutes, the zone split against the plan, heart rate against the goal, power). Encouragement where it is earned; one concrete improvement where it is not, said once.

@@ -175,6 +175,7 @@ V.calendar = async function(){
     html += `<div class="card pday hu-stripe ${dc?STRIPE[dc.band]||"":""}${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}" id="pday-${d.date}">
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?` <span class="ptoday">today</span>`:""}</h4>${verdict}</div>
       ${sub?`<div class="pdaysub">${sub}</div>`:""}
+      ${d.fuel ? `<div class="pfuel"><span class="hu-chip ${d.fuel.level==="high"?"hu-hold":d.fuel.level==="low"?"hu-water":d.fuel.level==="moderate"?"hu-go":"hu-dim"}">${d.fuel.carbs_g} g · ${d.fuel.per_kg} g/kg</span><span class="pfuel-w">${esc(d.fuel.label)}${d.fuel.sleep_low?" · sleep low":""}</span>${(d.fuel.sessions||[]).filter(s=>s.kind!=="lift").map(s=>`<span class="pfuel-s">${s.low?"low before":s.before_g+" g before"} · ${s.during_g?s.during_g+" g on the bike":"water"} · ${s.after_g} g after</span>`).join("")}</div>` : ""}
       ${rows.join("") || `<div class="small pempty">Rest</div>`}
       ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;

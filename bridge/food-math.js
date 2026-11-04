@@ -25,7 +25,7 @@ const FAT_FLOOR_PER_KG = 0.7;      // hormones and absorption: never below this
 // Carbohydrate floors by day, in a deficit (the ACSM tiers assume energy
 // balance and are ceilings here; Hexis-style rest days run ~1.5 g/kg).
 const CARB_FLOOR_PER_KG = { rest: 1.5, normal: 2.0, high: 3.0 };
-const LABEL = { high: 'higher carb day', normal: 'normal day', rest: 'rest day' };
+const LABEL = { high: 'higher carb day', normal: 'normal day', rest: 'rest day', low: 'train-low day' };
 
 function bmr(p) { return Math.round(10 * p.kg + 6.25 * p.cm - 5 * p.age + 5); }
 function baseBurn(p) { return Math.round(bmr(p) * p.activity); }
@@ -43,6 +43,83 @@ function fuelDay(sessions) {
   if (hard) return 'high';
   if (s.some(x => (x.minutes || 0) >= 30 || (x.tss || 0) >= 20)) return 'normal';
   return 'rest';
+}
+
+// ---- fuel for the work required (Impey 2018): a prescription per session ----
+// Carbohydrate availability is set for each session by what it demands, and the
+// day's carbs are the sum of the work, not a tier picked by the day's name.
+//   low    a Zone 1 ride under 90 min, in the morning: coffee and whey before (under 20 g), water on the
+//          bike, protein and modest carbs after. At most TRAIN_LOW_PER_WEEK a week, never on a hard day
+//          or the day before one (Marquet 2016: sleep-low works in blocks, with the hard work fuelled).
+//   light  a Zone 1 ride under two hours: 0.5 g/kg before, 30 g an hour, 1 g/kg in the two hours after.
+//   long   two hours and up: 1 g/kg before, 60 g an hour, 1.2 g/kg after.
+//   hard   VO2, threshold, a race: 1 g/kg before, the 50 g bottle, 1.2 g/kg after ("recover-high").
+//   lift   30 g protein before, 40 g after; its carbs follow the day's riding.
+// The day: 1.5 g/kg as the floor plus 0.15 g for every kJ of riding (a 600 kJ Zone 1 ride adds about
+// 90 g), capped at 6 g/kg. Burke 2011 gives the bands; Hector & Phillips 2018 the protein in a deficit.
+const TRAIN_LOW_PER_WEEK = 1;
+const CARB_BASE_PER_KG = 1.5, CARB_PER_KJ = 0.15, CARB_MAX_PER_KG = 6;
+const HARD_RX = /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i;
+const RX_LABEL = { rest: 'rest day', low: 'train-low day', moderate: 'moderate carb day', high: 'higher carb day' };
+function sessionRx(x, kg, ftp, o) {
+  o = o || {};
+  const w = kg > 40 ? kg : PROFILE.kg;
+  const name = String(x.name || '');
+  if (!isRideSession(x)) return { kind: 'lift', name, time: x.time || null, minutes: x.minutes || null, kj: 0, work_carbs_g: 0,
+    before: { carbs_g: null, protein_g: 30, low: false, words: '30 g protein before it' }, during: { carbs_g: 0, g_per_h: 0, words: 'Water' },
+    after: { carbs_g: null, protein_g: 40, within_min: 120, words: '40 g protein after; the carbs follow the riding' } };
+  const mins = x.minutes || 60;
+  const kj = Math.round(x.kcal || (x.tss ? x.tss * (ftp || 175) * 0.036 : mins * 2.2 * (ftp || 175) / 175 * 3));   // kcal on a bike ≈ kJ; no TSS: ~2.2 kcal/min at FTP 175
+  const hard = HARD_RX.test(name);
+  let kind = hard ? 'hard' : mins >= 120 ? 'long' : mins >= 90 ? 'light' : (o.allow_low ? 'low' : 'light');
+  const ob = onBike(mins, hard);
+  const g = v => Math.round(v);
+  // the carbs the work itself asks for: 0.15 g a kJ (a fifth more when it is hard), split around the ride,
+  // before 45% and after 75% of it (the after carries recovery too), each held inside the g/kg bands
+  const work = kj * CARB_PER_KJ * (hard ? 1.2 : 1);
+  const beforeG = kind === 'low' ? 20 : g(Math.max(25, Math.min(1.0 * w, work * 0.45)));
+  const afterG = g(Math.max(0.4 * w, Math.min(1.2 * w, work * 0.75)));
+  const rx = kind === 'low' ? {
+      before: { carbs_g: 20, protein_g: 20, low: true, hours_before: 0.75, words: 'Coffee and a 20 g whey shake; under 20 g of carbs. This is the low ride of the week.' },
+      during: { carbs_g: 0, g_per_h: 0, words: 'Water only.' },
+      after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs.` } }
+    : kind === 'light' ? {
+      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 1.5, words: `About ${beforeG} g carbs with 30 g protein, 1 to 2 hours before.` },
+      during: { carbs_g: ob.carbs, g_per_h: mins >= 75 ? 30 : 0, words: ob.what },
+      after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs.` } }
+    : kind === 'long' ? {
+      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, whey.` },
+      during: { carbs_g: ob.carbs, g_per_h: 60, words: ob.what },
+      after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs; starch at dinner too.` } }
+    : {
+      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, whey.` },
+      during: { carbs_g: ob.carbs, g_per_h: 50, words: ob.what },
+      after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs. Recover high.` } };
+  // what the session adds to the day's carbs: its windows (a low ride's before is not carbs)
+  return Object.assign({ kind, name, time: x.time || null, minutes: mins, kj, hard, work_carbs_g: (kind === 'low' ? 0 : rx.before.carbs_g) + (rx.during.carbs_g || 0) + rx.after.carbs_g }, rx);
+}
+// ctx: { hard_tomorrow, low_used_week, evening_yesterday }
+function fuelRx(sessions, kg, ftp, ctx) {
+  ctx = ctx || {};
+  const w = kg > 40 ? kg : PROFILE.kg;
+  const list = (sessions || []).slice().sort((a, b) => (toMin(a.time) == null ? 1e9 : toMin(a.time)) - (toMin(b.time) == null ? 1e9 : toMin(b.time)));
+  const rides = list.filter(isRideSession);
+  const hardToday = rides.some(x => HARD_RX.test(String(x.name || '')) || (x.minutes || 0) >= 120);
+  let lowUsed = ctx.low_used_week || 0, lowTaken = false;
+  const out = list.map(x => {
+    const allow = isRideSession(x) && !lowTaken && !hardToday && !ctx.hard_tomorrow && lowUsed < TRAIN_LOW_PER_WEEK
+      && (x.minutes || 60) < 90 && !HARD_RX.test(String(x.name || '')) && (toMin(x.time) == null || toMin(x.time) < 12 * 60);
+    const r = sessionRx(x, w, ftp, { allow_low: allow });
+    if (r.kind === 'low') { lowTaken = true; lowUsed++; }
+    return r;
+  });
+  const work = out.reduce((a, r) => a + (r.work_carbs_g || 0), 0);
+  const carbs_g = Math.round(Math.min(CARB_MAX_PER_KG * w, CARB_BASE_PER_KG * w + work));
+  const level = !rides.length ? 'rest' : hardToday ? 'high' : lowTaken ? 'low' : 'moderate';
+  const lowRide = out.find(r => r.kind === 'low');
+  const sleep_low = !!(lowRide && ctx.evening_yesterday && toMin(lowRide.time) != null && toMin(lowRide.time) < 10 * 60);
+  return { sessions: out, carbs_g, per_kg: Math.round(carbs_g / w * 10) / 10, level, label: RX_LABEL[level], train_low: lowTaken, sleep_low, low_used_week: lowUsed,
+    day: level === 'high' ? 'high' : level === 'rest' ? 'rest' : 'normal' };
 }
 
 // Riding energy for a day: Strava's number when the ride is done, an estimate
@@ -81,7 +158,14 @@ function targets(day, kcalFromRiding, opts) {
   let carbs_g = Math.round((kcal - protein_g * 4 - fat_floor * 9) / 4);
   let fat_g = fat_floor;
   if (carbs_g > carb_ceiling) { fat_g = Math.round((kcal - protein_g * 4 - carb_ceiling * 4) / 9); carbs_g = carb_ceiling; }
-  return { kcal, carbs_g, protein_g, fat_g, fuel_day: LABEL[day] || LABEL.normal, day,
+  // fuel for the work required: when the sessions' prescriptions give the carbs, they are the carbs (between the
+  // floor and 6 g/kg), fat takes what is left of the calories down to its floor, and past that the deficit gives
+  if (o.rx && Number.isFinite(o.rx.carbs_g)) {
+    carbs_g = Math.max(Math.round(p.kg * CARB_BASE_PER_KG), Math.min(Math.round(p.kg * CARB_MAX_PER_KG), Math.round(o.rx.carbs_g)));
+    fat_g = Math.round((kcal - protein_g * 4 - carbs_g * 4) / 9);
+    if (fat_g < fat_floor) { const need = protein_g * 4 + carbs_g * 4 + fat_floor * 9; trimmed += need - kcal; kcal = Math.round(need / 10) * 10; fat_g = fat_floor; }
+  }
+  return { kcal, carbs_g, protein_g, fat_g, fuel_day: o.rx && o.rx.label ? o.rx.label : (LABEL[day] || LABEL.normal), day, rx: o.rx || null,
     base_burn: baseBurn(p), ride_kcal: Math.round(kcalFromRiding || 0), deficit: kcal - burn,
     deficit_trimmed: trimmed ? Math.round(trimmed) : 0, kg: p.kg,
     per_kg: { carbs: Math.round(carbs_g / p.kg * 10) / 10, protein: Math.round(protein_g / p.kg * 10) / 10 } };
@@ -99,8 +183,12 @@ function guidelines(day, opts) {
     g.push({ key: 'carbs', text: 'Higher carb day: carbs at every meal.' });
     g.push({ key: 'pre', text: 'Carb breakfast 2 to 3 hours before the ride: oats and fruit.' });
     g.push({ key: 'post', text: 'A real meal within 2 hours of the ride: 45 g protein and carbs.' });
+  } else if (day === 'normal' && o.rx && o.rx.train_low) {
+    g.push({ key: 'pre', text: 'Train-low day: coffee and whey before the ride, under 20 g of carbs; water on the bike.' });
+    g.push({ key: 'carbs', text: 'Carbs after the ride and at the main meals later; none before it.' });
+    g.push({ key: 'post', text: 'Protein and carbs within 2 hours of the ride: recover high.' });
   } else if (day === 'normal') {
-    g.push({ key: 'pre', text: 'Zone 1 day: low carb breakfast before the ride, under 20 g of carbs, 30 g protein.' });
+    g.push({ key: 'pre', text: 'Zone 1 day: light carbs with protein 1 to 2 hours before the ride.' });
     g.push({ key: 'carbs', text: 'Starch at the meals the plan marks (after the ride, and the main meals later); protein first before the ride.' });
     g.push({ key: 'post', text: 'Protein and carbs within 2 hours of the ride.' });
   } else {
@@ -113,7 +201,7 @@ function guidelines(day, opts) {
 
 // What to eat right now, from where the clock sits against the day's riding.
 // sessions carry start_at (planned, when timed) and end_at (done).
-function cue(day, sessions, nowIso) {
+function cue(day, sessions, nowIso, rx) {
   const now = new Date(nowIso || Date.now()).getTime();
   const s = sessions || [];
   const done = s.filter(x => x.done && x.end_at).map(x => ({ x, dt: (now - new Date(x.end_at).getTime()) / 6e4 }))
@@ -129,7 +217,8 @@ function cue(day, sessions, nowIso) {
     const early = toMin(next.x.time) != null && toMin(next.x.time) < 7 * 60 + 30;
     if (next.dt <= 180) return { key: 'pre', text: early
       ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or rice cakes 45 minutes before, breakfast after.`
-                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a 20 g whey shake, then go. Zone 1 needs no carbs before it; the protein protects the muscle. Breakfast after.`)
+                        : rx && rx.train_low ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a 20 g whey shake, then go: the low ride of the week. Breakfast after.`
+                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or a small bowl with whey, then go. Breakfast after.`)
       : toMin(next.x.time) != null && toMin(next.x.time) >= 11 * 60
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: something light with protein now, Greek yogurt, a whey shake or a small rice bowl. Nothing heavy.`
       : day === 'high'
@@ -316,8 +405,23 @@ function mealPlan(day, sessions, target) {
       out.push(snackAfter);
     }
   }
-  // the bottles are eaten too: the day's target holds them, so the meals share what is left (a day ends on its plan)
-  { const extra = out.filter(m => m.extra), rest = out.filter(m => !m.extra);
+  // fuel for the work required: the ride's own slots take the session's prescription (the grams before, in the
+  // bottle and after), and are then fixed; the other meals share what is left of the day
+  if (t.rx && Array.isArray(t.rx.sessions)) {
+    const rxOf = st => t.rx.sessions.find(r => r.kind !== 'lift' && toMin(r.time) === st) || null;
+    const firstRx = rxOf(start);
+    if (firstRx) {
+      const pre = out.filter(m => !m.extra && !m.post_ride && mmin(m) < start && mmin(m) >= start - 240).sort((a, b) => mmin(b) - mmin(a))[0];
+      const earlyBite = pre && mmin(pre) >= start - 60 && !firstRx.before.low;
+      const preG = pre ? (earlyBite ? Math.min(30, firstRx.before.carbs_g) : firstRx.before.carbs_g) : 0;
+      if (pre) { pre.carbs_g = preG; pre.low_carb = !!firstRx.before.low; pre.fixed = true; pre.rx = firstRx.kind; if (firstRx.before.low) pre.what = `${firstRx.before.words} Breakfast after the ride.`; }
+      const post = out.find(m => m.post_ride && m.ride_end === end);
+      if (post) { post.carbs_g = firstRx.after.carbs_g + (pre ? firstRx.before.carbs_g - preG : 0); post.protein_g = firstRx.after.protein_g; post.fixed = true; post.rx = firstRx.kind; post.what = firstRx.after.words; }
+    }
+    for (const m of out) if (m.slot === 'on the bike') { const r = rxOf(toMin(m.time)); if (r) { m.carbs_g = r.during.carbs_g; m.kcal = r.during.carbs_g * 4; m.what = r.during.words; m.rx = r.kind; } }
+  }
+  // the bottles and the fixed slots are eaten too: the day's target holds them, so the meals share what is left (a day ends on its plan)
+  { const extra = out.filter(m => m.extra || m.fixed), rest = out.filter(m => !m.extra && !m.fixed);
     const eK = extra.reduce((a, m) => a + (m.kcal || 0), 0), eC = extra.reduce((a, m) => a + (m.carbs_g || 0), 0);
     const rK = rest.reduce((a, m) => a + (m.kcal || 0), 0), rC = rest.reduce((a, m) => a + (m.carbs_g || 0), 0);
     if (eK > 0 && rK > 0 && t.kcal) { const f = Math.max(0.5, (t.kcal - eK) / rK), fc = rC > 0 && t.carbs_g ? Math.max(0.5, (t.carbs_g - eC) / rC) : 1;
@@ -785,5 +889,5 @@ function balanceSeries(o) {
     sessions: sessions.map(x => ({ start: x.start, end: x.end, kcal: Math.round(x.kcal), name: x.name })) };
 }
 
-module.exports = { balanceSeries, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { balanceSeries, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };

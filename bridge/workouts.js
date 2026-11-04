@@ -500,6 +500,8 @@ async function calendar(from, to, o) {
       totals, compliance: dayCompliance(graded, totals, k < today, done.length) });
     if (days.length > 62) break;
   }
+  // fuel for the work required: each day's carbs from its sessions, the week's train-low rule applied in order
+  try { const wf = await require('./fuel-week').weekFuel(from, to, st.ftp); for (const d of days) d.fuel = wf[d.date] || null; } catch (e) { /* the days stand without it */ }
   return { from, to, today, settings: st, days,
     sources: { intervals: { configured: icuR.configured, error: icuR.error || null },
                strava: { connected: doneR.connected, reason: doneR.reason || null } } };
@@ -530,7 +532,7 @@ async function plannedDays(from, to) {
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
-      workout_id: w.id, sport: w.sport || null, synced: !!(w.sync && w.sync.state === 'synced'),
+      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'),
       ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
     });
   }

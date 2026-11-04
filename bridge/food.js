@@ -272,18 +272,24 @@ async function bodyKg() {
 
 async function guidelinesFor(date) {
   const { sessions, ftp, work, burn } = await sessionsFor(date);
-  const day = F.fuelDay(sessions);
   const [{ deficit, why }, kg] = await Promise.all([deficitFor(date), bodyKg()]);
-  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, deficit });
+  // fuel for the work required: the sessions' prescriptions set the carbs and the shape of the day
+  let rx = null;
+  try { const FW = require('./fuel-week'); rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, await FW.contextFor(date, kg || F.PROFILE.kg, ftp)); } catch (e) { rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, {}); }
+  const day = rx.day;
+  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, deficit, rx });
   if (why) t.deficit_note = why;
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
-  return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day, { deficit: t.deficit !== 0 }), ride_notes: rideNotes, work,
-    cue: today ? F.cue(day, sessions) : null,
+  const rxOf = s => rx.sessions.find(r => r.name === s.name && r.time === (s.time || null)) || null;
+  return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day, { deficit: t.deficit !== 0, rx }), ride_notes: rideNotes, work,
+    fuel: { level: rx.level, label: rx.label, carbs_g: rx.carbs_g, per_kg: rx.per_kg, train_low: rx.train_low, sleep_low: rx.sleep_low },
+    cue: today ? F.cue(day, sessions, null, rx) : null,
     meals: F.mealPlan(day, sessions, t),
-    sessions: sessions.map(s => ({ name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
-      slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null })) };
+    sessions: sessions.map(s => { const r = rxOf(s); return { name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
+      slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null,
+      rx: r ? { kind: r.kind, before_g: r.before.carbs_g, low: !!r.before.low, during_g: r.during.carbs_g, g_per_h: r.during.g_per_h, after_g: r.after.carbs_g, after_protein_g: r.after.protein_g, words: { before: r.before.words, during: r.during.words, after: r.after.words } } : null }; }) };
 }
 
 // ---- the photo -> the model -> an entry ----
@@ -1008,4 +1014,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, recheckDay, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };
+module.exports = { attach, dayReport, recheckDay, bodyKg, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };

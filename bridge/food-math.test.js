@@ -127,8 +127,10 @@ ok('cue: follows the next scheduled session and the post-ride window', () => {
   const z1 = [{ name: 'Zone 1, 60 min', start_at: at(9), time: '09:00' }];
   assert.ok(/low carb breakfast/i.test(F.cue('normal', z1, at(7)).text));
   const dawn = [{ name: 'Zone 1, 45 min', start_at: at(6), time: '06:00' }];
-  assert.ok(/coffee and a 20 g whey/i.test(F.cue('normal', dawn, at(4)).text));
-  assert.ok(F.guidelines('normal').some(g => /low carb breakfast/i.test(g.text)));
+  assert.ok(/coffee and a 20 g whey/i.test(F.cue('normal', dawn, at(4), { train_low: true }).text));
+  assert.ok(/banana|small bowl/i.test(F.cue('normal', dawn, at(4)).text));
+  assert.ok(F.guidelines('normal').some(g => /light carbs with protein/i.test(g.text)))
+  assert.ok(F.guidelines('normal', { rx: { train_low: true } }).some(g => /train-low day/i.test(g.text)));
   assert.strictEqual(F.cue('rest', [], at(13)).key, 'rest');
 });
 
@@ -512,3 +514,34 @@ ok('#4 one drinks list: Hydration lists it, Food counts it, drank is its sum', (
   assert.strictEqual(d.rows.find(r => r.id === 'b').net_ml, -280);
 });
 console.log(n + ' passed');
+
+ok('fuel for the work: a prescription per session, the day as the sum of the work, one low ride a week and never before a hard day', () => {
+  const vo2 = [{ name: 'VO2 40/20s', sport: 'VirtualRide', time: '07:00', minutes: 51, tss: 61 }];
+  const r = F.fuelRx(vo2, 98, 175, {});
+  assert.strictEqual(r.level, 'high'); assert.strictEqual(r.day, 'high');
+  assert.strictEqual(r.sessions[0].kind, 'hard'); assert.strictEqual(r.sessions[0].during.carbs_g, 50);
+  assert.ok(r.per_kg >= 2.5 && r.per_kg <= 3.5, 'a VO2 day near 3 g/kg: ' + r.per_kg);
+  const z1 = [{ name: 'Z1 trainer 60 min', sport: 'VirtualRide', time: '07:00', minutes: 60, tss: 30 }];
+  const low = F.fuelRx(z1, 98, 175, {});
+  assert.strictEqual(low.level, 'low'); assert.ok(low.train_low); assert.strictEqual(low.sessions[0].before.carbs_g, 20); assert.ok(low.sessions[0].before.low);
+  assert.strictEqual(low.sessions[0].during.carbs_g, 0); assert.ok(low.per_kg < 2.2, 'a low day under 2.2 g/kg: ' + low.per_kg);
+  // the low ride is used up for the week, or tomorrow is hard: the same ride is light
+  assert.strictEqual(F.fuelRx(z1, 98, 175, { low_used_week: 1 }).sessions[0].kind, 'light');
+  assert.strictEqual(F.fuelRx(z1, 98, 175, { hard_tomorrow: true }).sessions[0].kind, 'light');
+  // a long ride is fed whole; a rest day is the floor; a lift alone is a rest day for carbs
+  const long = F.fuelRx([{ name: 'Zone 1, 150 min', sport: 'Ride', time: '09:45', minutes: 150, tss: 95 }], 98, 175, {});
+  assert.strictEqual(long.sessions[0].kind, 'long'); assert.strictEqual(long.sessions[0].during.carbs_g, 150); assert.ok(long.per_kg >= 3.5, long.per_kg);
+  assert.strictEqual(F.fuelRx([], 98, 175, {}).per_kg, 1.5);
+  assert.strictEqual(F.fuelRx([{ name: 'Pull', sport: 'WeightTraining', time: '09:30', minutes: 55 }], 98, 175, {}).level, 'rest');
+  // the targets take the prescription's carbs; the meals carry the windows and still add up to the day
+  const t = F.targets(r.day, F.workoutKcal(vo2, 175), { kg: 98, rx: r });
+  assert.strictEqual(t.carbs_g, r.carbs_g); assert.strictEqual(t.fuel_day, 'higher carb day');
+  const meals = F.mealPlan(r.day, vo2, t);
+  const before = meals.find(m => m.slot === 'before'), post = meals.find(m => m.post_ride);
+  assert.ok(before.fixed && before.carbs_g <= 30, 'an early bite holds 30 g at most: ' + before.carbs_g);
+  assert.ok(post.fixed && post.carbs_g >= r.sessions[0].after.carbs_g, 'the rest of the before carbs land after: ' + post.carbs_g);
+  assert.ok(Math.abs(meals.reduce((a, m) => a + m.carbs_g, 0) - t.carbs_g) <= 10, 'the day adds up');
+  const tl = F.targets(low.day, F.workoutKcal(z1, 175), { kg: 98, rx: low });
+  const lm = F.mealPlan(low.day, z1, tl);
+  assert.ok(lm.find(m => m.slot === 'before').low_carb && /water/i.test(lm.find(m => m.slot === 'on the bike').what));
+});
