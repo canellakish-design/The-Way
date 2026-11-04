@@ -235,7 +235,7 @@
     let brLayer = "";
     if (o.breath && o.breath.length > 1){
       const YB = v => T0 + ph - Math.max(0, Math.min(1, (v - 10) / 50)) * ph;
-      const pts = o.breath.filter(p => p[0] >= from).map((p, i, arr) => `${i && p[0] - arr[i - 1][0] > 2 ? "M" : i ? "L" : "M"}${X(p[0]).toFixed(1)},${YB(p[1]).toFixed(1)}`);
+      const pts = o.breath.filter(p => p[0] >= from).map((p, i, arr) => `${i && p[0] - arr[i - 1][0] > 10 ? "M" : i ? "L" : "M"}${X(p[0]).toFixed(1)},${YB(p[1]).toFixed(1)}`);
       brLayer = `<path class="pf-br" d="${pts.join("")}"/><text class="pf-ax pf-brl" x="${W - R0 - 4}" y="${T0 - 14}" text-anchor="end">breaths/min 10–60</text>`;
     }
     const ftpY = Y(ftp).toFixed(1);
@@ -475,13 +475,16 @@
     const reads = [];
     for (let k = 0; k < b.length; k++){ reads.push([`${uuid}:u8@${k}`, b[k]]); if (k + 1 < b.length){ const v = b[k] | (b[k + 1] << 8); reads.push([`${uuid}:u16@${k}/10`, v / 10], [`${uuid}:u16@${k}/100`, v / 100]); } }
     if (BR.layout){ const r = reads.find(x => x[0] === BR.layout); if (r && r[1] >= 8 && r[1] <= 70){ (ride.breath = ride.breath || []).push([ride.wt, Math.round(r[1] * 10) / 10]); } return; }
-    for (const [key, v] of reads){
+    // single bytes first, then two-byte layouts; a layout passes when sixty readings sit in 8 to 70, take at least four
+    // values, do not climb like a counter, and move smoothly (breathing changes a few a minute, not twenty)
+    const order = reads.slice().sort((a, b) => (a[0].includes("u16") ? 1 : 0) - (b[0].includes("u16") ? 1 : 0));
+    for (const [key, v] of order){
       const c = BR.cand[key] = BR.cand[key] || { vals: [] };
       c.vals.push(v); if (c.vals.length > 60) c.vals.shift();
       if (c.vals.length < 60) continue;
       const ok = c.vals.every(x => x >= 8 && x <= 70), distinct = new Set(c.vals.map(x => Math.round(x))).size;
-      let mono = 0; for (let i = 1; i < c.vals.length; i++) if (c.vals[i] > c.vals[i - 1]) mono++;
-      if (ok && distinct >= 4 && mono < 50){ BR.layout = key; note(`breathing decoded from the strap (${key.split(":").pop()})`); break; }
+      let mono = 0, jumps = 0; for (let i = 1; i < c.vals.length; i++){ if (c.vals[i] > c.vals[i - 1]) mono++; if (Math.abs(c.vals[i] - c.vals[i - 1]) > 6) jumps++; }
+      if (ok && distinct >= 4 && mono < 50 && jumps <= 3){ BR.layout = key; note(`breathing decoded from the strap (${key.split(":").pop()})`); break; }
     }
   }
   function keepRaw(uuid, h){
