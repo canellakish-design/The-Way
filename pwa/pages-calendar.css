@@ -29,6 +29,10 @@
 .pdayhead h4{margin:0; color:var(--ink); font-size:11.5px}
 .pdayhead .ptoday{color:var(--green); margin-left:4px}
 .pdaysub{font-family:var(--mono); font-size:11px; color:var(--muted); font-variant-numeric:tabular-nums}
+/* fuel for the work: the day's carbs and each ride's windows */
+.pfuel{display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:4px 0 8px}
+.pfuel-w{font-family:var(--mono); font-size:10.5px; letter-spacing:.6px; text-transform:uppercase; color:var(--muted)}
+.pfuel-s{flex-basis:100%; font-family:var(--mono); font-size:11px; color:var(--muted)}
 
 /* ---------- session cards: black, a stripe, a fixed right-hand chip ---------- */
 .pday .pitem,.pday .pitem.planned,.pday .pitem.done,.pday .pitem.icu,
