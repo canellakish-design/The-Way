@@ -74,7 +74,10 @@ async function sessionFor(id) {
   const m = W.metrics(W.normItems(w.steps || []), st);
   let fuel = [];
   try { const g = await require('./food').guidelinesFor(w.date); fuel = fuelSlots(g.meals, w.time); } catch (e) { fuel = []; }
-  return { date: w.date, settings: st,
+  let thresholds = { vt1_hr: 117, vt2_hr: 139, max_hr: 162, source: 'the planning numbers' };
+  try { const f = await getJSON('fitness', {}); const t = f.test || {};
+    if (Number.isFinite(Number(t.vt2_hr))) thresholds = { vt1_hr: Number.isFinite(Number(t.vt1_hr)) ? Math.round(Number(t.vt1_hr)) : 117, vt2_hr: Math.round(Number(t.vt2_hr)), max_hr: 162, source: `the ramp test${t.date ? ' of ' + t.date : ''}` }; } catch (e) { /* the defaults */ }
+  return { date: w.date, settings: st, thresholds,
     workout: { id: w.id, name: w.name, date: w.date, time: w.time || null, sport: w.sport, notes: w.notes || '',
       duration_s: m.duration_s, tss: m.tss, np_w: m.np_w, intervals_event_id: (w.sync && w.sync.intervals_event_id) || null },
     intervals, fuel,
@@ -186,6 +189,12 @@ function attach(app) {
     try { res.json(await saveRide(req.body)); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 
+  // one ride as stored: the summary, the samples as columns, the intervals, the pauses, and the strap's raw capture
+  app.get('/player/ride/:id', async (req, res) => { if (!auth(req, res)) return;
+    const rec = await getJSON(rideKey(req.params.id), null);
+    if (!rec) return res.status(404).json({ error: 'no such ride' });
+    const raw = rec.raw || {};
+    res.json(Object.assign({}, rec, { raw: req.query.raw === '1' ? raw : undefined, raw_counts: Object.fromEntries(Object.keys(raw).map(k => [k, (raw[k] || []).length])) })); });
   app.get('/player/rides', async (req, res) => { if (!auth(req, res)) return;
     res.json(await getJSON(INDEX, { rides: [] })); });
 

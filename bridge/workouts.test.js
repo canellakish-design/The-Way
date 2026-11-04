@@ -55,7 +55,10 @@ ok('gradeOne: a VO2 session is graded by minutes above 139 when the heart rate w
   const ride = { minutes: 50, tss: 60, analysis: { hr: { max: 155, minutes_above_hard: 9.5, zones: {}, zone_pct: {} } } };
   assert.strictEqual(gradeOne(vo2, [ride]).compliance.band, 'green');
   assert.ok(/above 139/.test(gradeOne(vo2, [ride]).compliance.basis));
-  assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60, analysis: { hr: { max: 150, minutes_above_hard: 3, zones: {}, zone_pct: {} } } }]).compliance.band, 'red');
+  // the work done but the heart-rate goal missed: amber, with the minutes named; the work not done: red on the work
+  const missed = gradeOne(vo2, [{ minutes: 50, tss: 60, analysis: { hr: { max: 150, minutes_above_hard: 3, zones: {}, zone_pct: {} } } }]).compliance;
+  assert.strictEqual(missed.band, 'yellow'); assert.ok(/3 min above 139/.test(missed.basis), missed.basis);
+  assert.strictEqual(gradeOne(vo2, [{ minutes: 20, tss: 22, analysis: { hr: { max: 150, minutes_above_hard: 3, zones: {}, zone_pct: {} } } }]).compliance.band, 'red');
   // no heart rate read yet: time and load, as for any session
   assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60 }]).compliance.band, 'green');
   // a trace that never passed 130 is a strap not paired: time and load, and the basis says so

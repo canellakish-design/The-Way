@@ -54,6 +54,18 @@ body:has(.pl-ride) #micBtn{display:none}
 .pl-fields .pl-pw,.pl-fields .pl-mode{grid-column:1 / -1}
 .pl-fields .pl-pw .n{font-size:96px}
 .pl-fields .hu-field .u{font-size:11px}
+/* the five heart-rate zones beside the number: Z5 on top, the trained one outlined, a pointer riding the heart rate */
+.pl-hrrow{display:flex; align-items:stretch; gap:10px; min-width:0}
+.pl-zones{position:relative; display:flex; flex-direction:column; width:104px; min-height:92px; flex:none; margin:4px 0 2px 0; padding-right:14px}
+.pz{flex:1; display:flex; align-items:center; gap:5px; padding:0 6px; border:1px solid transparent; opacity:.55; font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--ink); overflow:hidden; white-space:nowrap}
+.pz b{font-family:var(--num); font-size:12px; letter-spacing:0}
+.pz i{font-style:normal; margin-left:auto; opacity:.8; display:none}
+.pz1{background:#2a4a60} .pz2{background:#2f5a3f} .pz3{background:#5f6a2c} .pz4{background:#6e5420} .pz5{background:#6b2f2a}
+.pz.in{opacity:1}
+.pz.want{opacity:1; border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
+.pz-ptr{position:absolute; right:0; font-size:12px; line-height:1; color:var(--ink); transition:top .4s}
+.pz-ptr[hidden]{display:none}
+.pz-ptr.on{color:var(--green)} .pz-ptr.under{color:var(--water)} .pz-ptr.over{color:var(--red)}
 .pl-next{font-family:var(--mono); font-size:13px; letter-spacing:.3px; line-height:1.4; padding:8px 10px; background:var(--card); border-left:3px solid var(--line)}
 .pl-next b{color:var(--ink)}
 .pl-next.soon{border-left-color:var(--amber); color:var(--amber)}
@@ -88,6 +100,7 @@ body:has(.pl-ride) #micBtn{display:none}
   .pl-fields .hu-field .n{font-size:64px}
   .pl-fields .hu-field .k{font-size:12px} .pl-fields .hu-field .u{font-size:13px}
   .pl-prof.pl-small{height:110px}
+  .pl-zones{width:160px; min-height:120px} .pz{font-size:10px} .pz b{font-size:14px} .pz i{display:inline}
   .pl-next{font-size:16px}
   .pl-ctl button{padding:14px 20px; font-size:14px}
 }
