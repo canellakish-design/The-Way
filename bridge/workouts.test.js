@@ -60,7 +60,7 @@ ok('gradeOne: a VO2 session is graded by minutes above 139 when the heart rate w
   assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60 }]).compliance.band, 'green');
   // a trace that never passed 130 is a strap not paired: time and load, and the basis says so
   const noStrap = gradeOne(vo2, [{ minutes: 49, tss: 61, analysis: { hr: { max: 122, minutes_above_hard: 0, zones: {}, zone_pct: {} } } }]).compliance;
-  assert.strictEqual(noStrap.band, 'green'); assert.ok(/strap was not on/.test(noStrap.basis), noStrap.basis);
+  assert.strictEqual(noStrap.band, 'green'); assert.ok(/was not the strap's/.test(noStrap.basis), noStrap.basis);
 });
 
 ok('hrLoad: an hour at threshold is 100; easy hours score far less', () => {
