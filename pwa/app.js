@@ -1195,7 +1195,7 @@ function paintChain(c){
     if (ck === "plan" && L.from && L.to){ const kk = el.querySelector(".ck > span"), md = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }).split(" ");
       const a = md(L.from), b = md(L.to); if (kk) kk.textContent = `Plan ${a[0]} ${a[1]}–${a[0] === b[0] ? b[1] : b.join(" ")}`; }
     const brk = c.break_at === ck; el.classList.toggle("brk", brk); el.classList.toggle("brkwarn", brk && L.state === "warn");
-    el.querySelector(".cmark").textContent = brk ? "✕" : "";
+    const mk = el.querySelector(".cmark"); mk.textContent = brk ? (L.state === "warn" ? "!" : "✕") : ""; mk.classList.toggle("warn", brk && L.state === "warn");
     // today, small under the week: its own number, word and colour
     const t = todayCell(ck, L);
     const tn = el.querySelector(".ctn"); tn.textContent = t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || (t.num === "—" ? "var(--muted)" : "var(--ink)");
