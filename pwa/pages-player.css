@@ -124,6 +124,13 @@ body:has(.pl-ride) #micBtn{display:none}
 .pf .pf-now{stroke:var(--ink); stroke-width:2}
 .pf .pf-ride{fill:none; stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
 .pf .pf-dot{fill:var(--ink); stroke:#0b0c0a; stroke-width:2}
+.pf .pf-hr{fill:none; stroke:var(--red); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.pf .pf-hrdot{fill:var(--red); stroke:#0b0c0a; stroke-width:2}
+.pf .pf-hrax{fill:var(--red)}
+.pf .pf-vo2{stroke:var(--red); stroke-width:1; stroke-dasharray:4 4; opacity:.8}
+.pf .pf-vo2l{fill:var(--red)}
+.pf .pf-br{fill:none; stroke:#5FB8FF; stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; paint-order:stroke; filter:drop-shadow(0 0 2px #0b0c0a)}
+.pf .pf-brl{fill:#5FB8FF}
 .pf .pf-w{fill:var(--ink); font-family:var(--num); font-weight:700; font-size:18px}
 .pf .pf-w.now{font-size:24px}
 .pf .pf-in{fill:var(--ink); font-family:var(--mono); font-size:11px}

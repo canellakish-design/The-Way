@@ -161,7 +161,7 @@
   function followSVG(ivs, ftp, o){
     o = o || {};
     const W = Math.max(280, Math.round(o.w || 800)), H = Math.max(140, Math.round(o.h || 240));
-    const L0 = 40, R0 = 10, T0 = 30, B0 = 22, pw = W - L0 - R0, ph = H - T0 - B0;
+    const L0 = 40, R0 = o.hr ? 36 : 10, T0 = 30, B0 = 22, pw = W - L0 - R0, ph = H - T0 - B0;
     const bias = 1 + (o.bias || 0) / 100;
     const total = ivs.reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0) || 1;
     const from = o.from != null ? o.from : 0, to = o.to != null ? o.to : total, len = Math.max(1, to - from);
@@ -219,6 +219,25 @@
       if (isNext && xb - xa >= 52) labels += `<text class="pf-in" x="${(xa + 4).toFixed(1)}" y="${(T0 + ph - 6).toFixed(1)}">in ${clock(s - o.now)}</text>`;
       lastLabelEnd = lx + tw + 4;
     });
+    // heart rate: a red 3 s average on a right-hand axis from 80 to 170 bpm, with the VO2 line at 147
+    const HR_LO = 80, HR_HI = 170, YH = v => T0 + ph - Math.max(0, Math.min(1, (v - HR_LO) / (HR_HI - HR_LO))) * ph;
+    let hrLayer = "";
+    if (o.hr){
+      for (let v = HR_LO; v <= HR_HI; v += 20) hrLayer += `<text class="pf-ax pf-hrax" x="${W - R0 + 6}" y="${(YH(v) + 4).toFixed(1)}" text-anchor="start">${v}</text>`;
+      hrLayer += `<line class="pf-vo2" x1="${L0}" x2="${W - R0}" y1="${YH(147).toFixed(1)}" y2="${YH(147).toFixed(1)}"/><text class="pf-ax pf-vo2l" x="${L0 + 4}" y="${(YH(147) - 4).toFixed(1)}">VO2 147</text>`;
+      const avg3 = (tr, i) => { const lo = Math.max(0, i - 2); let s = 0, n = 0; for (let j = lo; j <= i; j++) if (tr[j][1] != null && tr[j][0] - tr[i][0] > -4){ s += tr[j][1]; n++; } return n ? s / n : null; };
+      const pts = [];
+      for (let i = 0; i < o.hr.length; i++){ const v = avg3(o.hr, i); if (v == null || o.hr[i][0] < from) continue; pts.push(`${i && o.hr[i][0] - o.hr[i - 1][0] > 2 ? "M" : pts.length ? "L" : "M"}${X(o.hr[i][0]).toFixed(1)},${YH(v).toFixed(1)}`); }
+      if (pts.length > 1) hrLayer += `<path class="pf-hr" d="${pts.join("")}"/>`;
+      if (o.hrNow != null) hrLayer += `<circle class="pf-hrdot" cx="${X(o.now).toFixed(1)}" cy="${YH(o.hrNow).toFixed(1)}" r="4"/>`;
+    }
+    // breathing: a blue line on its own scale, 10 to 60 breaths a minute, only once the values decode
+    let brLayer = "";
+    if (o.breath && o.breath.length > 1){
+      const YB = v => T0 + ph - Math.max(0, Math.min(1, (v - 10) / 50)) * ph;
+      const pts = o.breath.filter(p => p[0] >= from).map((p, i, arr) => `${i && p[0] - arr[i - 1][0] > 2 ? "M" : i ? "L" : "M"}${X(p[0]).toFixed(1)},${YB(p[1]).toFixed(1)}`);
+      brLayer = `<path class="pf-br" d="${pts.join("")}"/><text class="pf-ax pf-brl" x="${W - R0 - 4}" y="${T0 - 14}" text-anchor="end">breaths/min 10–60</text>`;
+    }
     const ftpY = Y(ftp).toFixed(1);
     const ftpLine = `<line class="pf-ftp" x1="${L0}" x2="${W - R0}" y1="${ftpY}" y2="${ftpY}"/><text class="pf-ax pf-ftpl" x="${W - R0 - 2}" y="${(+ftpY - 4).toFixed(1)}" text-anchor="end">FTP ${ftp}</text>`;
     // what you rode: 3 s average, white over the target
@@ -239,18 +258,19 @@
       if (o.power != null) now += `<circle class="pf-dot" cx="${nx}" cy="${Y(o.power).toFixed(1)}" r="5"/>`;
       if (o.paused) now += `<text class="pf-paused" x="${(L0 + pw / 2).toFixed(1)}" y="${(T0 + ph / 2).toFixed(1)}" text-anchor="middle">PAUSED</text>`;
     }
-    return `<svg class="pf" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label || "The power to follow")}"><defs><pattern id="pfHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#1b1d1a"/><rect width="3" height="8" fill="#3a3d36"/></pattern></defs>${g}${blocks}${ftpLine}${now}${line}${labels}</svg>`;
+    return `<svg class="pf" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label || "The power to follow")}"><defs><pattern id="pfHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#1b1d1a"/><rect width="3" height="8" fill="#3a3d36"/></pattern></defs>${g}${blocks}${ftpLine}${now}${line}${hrLayer}${brLayer}${labels}</svg>`;
   }
   // the ride's window: two minutes behind, ten ahead on the PC; one behind, five ahead on a phone
   function drawFollow(){
     const box = document.getElementById("plFollow"); if (!box || !ride) return;
     const w = box.clientWidth, h = box.clientHeight || 240, small = w < 600;
     const back = small ? 60 : 120, ahead = small ? 300 : 600, wt = ride.wt;
-    const trace = [];
-    for (let i = ride.samples.length - 1; i >= 0; i--){ const a = ride.samples[i]; if (a[8] == null || a[8] < wt - back - 4) break; trace.push([a[8], a[1]]); }
-    trace.reverse();
-    const fresh = now() - L.bikeAt <= 3000;
-    box.innerHTML = followSVG(ride.intervals, ride.ftp, { w, h, from: wt - back, to: wt + ahead, now: wt, bias: ride.bias, trace, power: fresh ? L.power : null, paused: ride.state === "paused", label: "The power to follow: target watts ahead, your power behind" });
+    const trace = [], hr = [];
+    for (let i = ride.samples.length - 1; i >= 0; i--){ const a = ride.samples[i]; if (a[8] == null || a[8] < wt - back - 4) break; trace.push([a[8], a[1]]); if (a[3] != null) hr.push([a[8], a[3]]); }
+    trace.reverse(); hr.reverse();
+    const breath = (ride.breath || []).filter(p => p[0] >= wt - back - 4);
+    const fresh = now() - L.bikeAt <= 3000, hrFresh = now() - L.hrAt <= 3000;
+    box.innerHTML = followSVG(ride.intervals, ride.ftp, { w, h, from: wt - back, to: wt + ahead, now: wt, bias: ride.bias, trace, power: fresh ? L.power : null, hr, hrNow: hrFresh ? L.hr : null, breath: breath.length > 1 ? breath : null, paused: ride.state === "paused", label: "The power to follow: target watts ahead, your power behind" });
   }
   function drawWhole(S){
     const box = document.getElementById("plWhole"); if (!box) return;
@@ -264,7 +284,7 @@
   //   Zone 1: the planned minutes at heart rate 116 or under (117 is VT1); up to 10% of the ride at 117 or above still passes.
   //   VO2 40/20s: 8 to 12 minutes above 139 (VT2, Harry's VO2 line); the circle is full at 8, and past 12 is more than the session asks.
   //   Anything else: the planned time, ridden.
-  const VT1 = 117, VT2 = 139, HR_HARD = VT2;
+  const VT1 = 117, VT2 = 139, HR_HARD = 147;   // the player's VO2 score counts minutes above 147, Tymewear's VO2max heart rate
   function goalOf(w, ivs){
     const name = String(w && w.name || ""), plannedS = (ivs || []).reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
     if (/vo2|40\s*\/\s*20/i.test(name)) return { kind: "vo2", target_min: 8, hi_min: 12, words: `8 to 12 min above ${HR_HARD}` };
@@ -445,8 +465,28 @@
     drawDevices();
   }
   // A value from the strap's own (non-standard) channels, kept as sent while riding: the breathing lives in one of them.
+  // Breaths per minute from the strap's raw packets. The layout is not known, so every byte position is tried
+  // as a value (one byte, or two bytes little-endian divided by 10 or 100) and a position is accepted only once
+  // sixty of its readings in a row sit between 8 and 70 and move (not a constant, not a counter). Until a layout
+  // passes, no breathing is drawn or kept: a wrong decoding would be worse than none.
+  const BR = { cand: {}, layout: null };
+  function breathDecode(uuid, h){
+    const b = []; for (let i = 0; i < h.length; i += 2) b.push(parseInt(h.slice(i, i + 2), 16));
+    const reads = [];
+    for (let k = 0; k < b.length; k++){ reads.push([`${uuid}:u8@${k}`, b[k]]); if (k + 1 < b.length){ const v = b[k] | (b[k + 1] << 8); reads.push([`${uuid}:u16@${k}/10`, v / 10], [`${uuid}:u16@${k}/100`, v / 100]); } }
+    if (BR.layout){ const r = reads.find(x => x[0] === BR.layout); if (r && r[1] >= 8 && r[1] <= 70){ (ride.breath = ride.breath || []).push([ride.wt, Math.round(r[1] * 10) / 10]); } return; }
+    for (const [key, v] of reads){
+      const c = BR.cand[key] = BR.cand[key] || { vals: [] };
+      c.vals.push(v); if (c.vals.length > 60) c.vals.shift();
+      if (c.vals.length < 60) continue;
+      const ok = c.vals.every(x => x >= 8 && x <= 70), distinct = new Set(c.vals.map(x => Math.round(x))).size;
+      let mono = 0; for (let i = 1; i < c.vals.length; i++) if (c.vals[i] > c.vals[i - 1]) mono++;
+      if (ok && distinct >= 4 && mono < 50){ BR.layout = key; note(`breathing decoded from the strap (${key.split(":").pop()})`); break; }
+    }
+  }
   function keepRaw(uuid, h){
     if (!ride || ride.state !== "riding") return;
+    if (/breath:|sim-breathing/.test(uuid) || !uuid.startsWith("0000")) breathDecode(uuid, h);
     const raw = ride.raw || (ride.raw = {});
     const all = ride.rawCount || 0;
     if (all >= RAW_CAP_ALL || (raw[uuid] && raw[uuid].length >= RAW_CAP_EACH)) return;
@@ -489,7 +529,8 @@
     if (iv && iv.kind === "hr") SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.04;   // a slower heart, so the seeking has to wait for it
     L.power = Math.max(0, p); L.cadence = 86 + Math.round(Math.random() * 6); L.speed = Math.round(3.6 * Math.cbrt(Math.max(1, p) / 0.24) * 100) / 100; L.bikeAt = ts;
     SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.06; L.hr = Math.round(SIM.hr); L.hrAt = ts;
-    if (++SIM.t % 3 === 0) keepRaw("sim-breathing", (SIM.t & 0xff).toString(16).padStart(2, "0") + "0a1b");
+    // a made-up breathing packet: a counter byte (never breathing), then breaths a minute that follow the power
+    if (++SIM.t % 3 === 0) keepRaw("sim-breathing", (SIM.t & 0xff).toString(16).padStart(2, "0") + Math.max(8, Math.min(70, Math.round(14 + p / 12 + (Math.random() - 0.5) * 3))).toString(16).padStart(2, "0") + "1b");
   }
 
   // ---------- the ride ----------
@@ -557,7 +598,7 @@
   }
   // what goes into IndexedDB: everything needed to finish and save the ride later
   const recordOf = r => ({ id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
-    wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName, breath: DEV.breathName } });
+    wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, breath: r.breath || [], breath_layout: BR.layout || null, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName, breath: DEV.breathName } });
 
   // one recorded second: the moment's numbers, then the workout clock moves on
   function stepSecond(ts){
