@@ -149,7 +149,7 @@
     p.hidden = false; p.style.top = `calc(${((idx + 1 - frac) / 5 * 100).toFixed(1)}% - 0.5em)`;
     p.className = `pz-ptr${want && zin.z === want.z ? " on" : want && zin.z < want.z ? " under" : want ? " over" : ""}`;
   }
-  const targetWords = (x, bias) => !x ? "" : x.target_w != null ? `${Math.round(x.target_w * (1 + bias / 100))}${x.target_w_end != null ? "→" + Math.round(x.target_w_end * (1 + bias / 100)) : ""} W` : x.kind === "hr" ? `hold HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "ride by feel";
+  const targetWords = (x, bias) => !x ? "" : x.target_w != null ? `${Math.round(x.target_w * (1 + bias / 100))}${x.target_w_end != null ? "→" + Math.round(x.target_w_end * (1 + bias / 100)) : ""} W` : x.kind === "hr" ? (x.target_hr && x.target_hr.lo >= 100 ? `HR ${x.target_hr.lo}–${x.target_hr.hi}, the trainer finds the watts` : `hold HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}`) : "ride by feel";
 
   // ---------- the power to follow: target watts over time, what you're riding drawn over it ----------
   // One axis, watts. Each interval is a block at its target (ramps slope), coloured by zone; the number on a block is
@@ -486,6 +486,7 @@
     const iv = cur();
     const tgt = targetNow();
     let p = tgt != null && ergActive(iv) ? tgt + Math.round((Math.random() - 0.5) * 8) : 125 + Math.round(Math.sin(ts / 9000) * 12);
+    if (iv && iv.kind === "hr") SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.04;   // a slower heart, so the seeking has to wait for it
     L.power = Math.max(0, p); L.cadence = 86 + Math.round(Math.random() * 6); L.speed = Math.round(3.6 * Math.cbrt(Math.max(1, p) / 0.24) * 100) / 100; L.bikeAt = ts;
     SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.06; L.hr = Math.round(SIM.hr); L.hrAt = ts;
     if (++SIM.t % 3 === 0) keepRaw("sim-breathing", (SIM.t & 0xff).toString(16).padStart(2, "0") + "0a1b");
@@ -496,9 +497,34 @@
   const totalOf = r => r.intervals.reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
   function idxAt(r, wt){ for (let k = 0; k < r.intervals.length; k++){ const x = r.intervals[k]; if (wt >= x.start_s && wt < x.start_s + x.dur_s) return k; } return r.intervals.length; }
   const cur = () => ride ? ride.intervals[idxAt(ride, ride.wt)] || null : null;
-  const ergActive = iv => !!(ride && ride.erg && iv && iv.target_w != null);
+  const ergActive = iv => !!(ride && ride.erg && iv && (iv.target_w != null || iv.kind === "hr"));
+  // A heart-rate interval (target_hr, no watts) is ridden in ERG at watts the heart rate chooses: the first one
+  // starts from a seed (threshold power for a VO2 band, 60% of FTP for Zone 1) and every 20 s the watts move
+  // 8 W toward the band, 12 W in the first minute of the first such interval; the watts found carry into the next
+  // heart-rate interval, so the first effort calibrates and the rest ride what it learned. Bounded to half and
+  // 1.3 times the seed, so a dropped strap can never run the trainer away.
+  const seekSeed = (iv, ftp) => iv.target_hr && iv.target_hr.lo >= 130 ? Math.round(ftp * 1.17) : iv.target_hr && iv.target_hr.hi <= HR_Z1 ? Math.round(ftp * 0.6) : Math.round(ftp * 0.85);
+  function seekWatts(iv){
+    if (!ride.seek || ride.seek.k !== idxAt(ride, ride.wt)){ const seed = seekSeed(iv, ride.ftp); const w = ride.seekW != null ? ride.seekW : seed; ride.seek = { k: idxAt(ride, ride.wt), seed, w, first: ride.seekW == null, steps: 0 }; }
+    return ride.seek.w;
+  }
+  function seekStep(iv){
+    const s = ride.seek; if (!s || !iv || iv.kind !== "hr") return;
+    const into = ride.wt - iv.start_s;
+    // the first effort searches from 20 s in; a later one rides what was learned and waits 75 s for the heart to catch up from the rest before it moves
+    if (into < (s.first ? 20 : 75) || into % 20 !== 0) return;
+    const hr = now() - L.hrAt <= 3000 ? L.hr : null; if (hr == null) return;
+    const lo = iv.target_hr.lo, hi = iv.target_hr.hi, big = s.first && into <= 60 ? 12 : 8;
+    let w = s.w;
+    if (hr < lo) w += big; else if (hr > hi) w -= 8;
+    w = Math.max(Math.round(s.seed * 0.5), Math.min(Math.round(s.seed * 1.3), w));
+    if (w !== s.w){ s.w = w; s.steps++; ride.seekW = w; syncErg(); }
+    else if (hr >= lo && hr <= hi) ride.seekW = w;
+  }
   function targetNow(){
-    const iv = cur(); if (!iv || iv.target_w == null) return null;
+    const iv = cur(); if (!iv) return null;
+    if (iv.kind === "hr") return Math.max(0, Math.round(seekWatts(iv) * (1 + ride.bias / 100)));
+    if (iv.target_w == null) return null;
     const f = iv.target_w_end != null ? (ride.wt - iv.start_s) / iv.dur_s : 0;
     const w = iv.target_w + ((iv.target_w_end != null ? iv.target_w_end : iv.target_w) - iv.target_w) * f;
     return Math.max(0, Math.round(w * (1 + ride.bias / 100)));
@@ -541,6 +567,7 @@
     const fresh = at => ts - at <= 3000;
     r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
     r.wt += 1;
+    if (iv && iv.kind === "hr") seekStep(iv);
     const k2 = idxAt(r, r.wt);
     const left = iv ? iv.start_s + iv.dur_s - r.wt : null;
     if (iv && left === 3 && r.intervals[k + 1]) beep(880, 0.15);
@@ -734,7 +761,7 @@
     $("plPos").textContent = r.state === "paused" ? "Paused" : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
     $("plLbl").textContent = iv ? iv.label + (iv.rep ? " · " + iv.rep : "") : "Ride on, or End to save";
     $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
-    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `HR ≤ ${iv.target_hr ? iv.target_hr.hi : HR_Z1}` : "";
+    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
     $("fH").className = "n " + (hr == null ? "hu-dim" : hr <= HR_Z1 ? "hu-go" : hr <= HR_Z2 ? "hu-hold" : "hu-stop");
