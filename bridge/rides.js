@@ -58,11 +58,13 @@ async function breathingFrom(icuActivity, thresholds) {
   if (!icuActivity) return { resp: null, ve: null, source: 'no intervals.icu activity matched' };
   const t = thresholds || {};
   const fields = Object.keys(icuActivity).filter(k => /resp|breath|tidal|ventil/i.test(k));
-  let resp = null, ve = null, streamTypes = [];
+  let resp = null, ve = null, streamTypes = [], hrStream = null;
   try {
     const streams = await icuGet(`/activity/${encodeURIComponent(icuActivity.id)}/streams.json?types=respiration,tidal_volume_min,tidal_volume,heartrate`);
     const list = Array.isArray(streams) ? streams : (streams && Array.isArray(streams.streams) ? streams.streams : []);
     const byType = {}; for (const x of list) byType[String(x.type || x.name || '')] = x;
+    const h = byType.heartrate || list.find(x => /heart/i.test(String(x.type || x.name || '')));
+    if (h && Array.isArray(h.data) && h.data.some(v => v > 30)) hrStream = h.data;
     const r = byType.respiration || list.find(x => /resp|breath/i.test(String(x.type || x.name || '')));
     if (r && Array.isArray(r.data)) { streamTypes.push(r.type || r.name); resp = R.respSummary(r.data); }
     const v = byType.tidal_volume_min || list.find(x => /minute_volume|tidal_volume_min|ventil/i.test(String(x.type || x.name || '')));
@@ -74,7 +76,7 @@ async function breathingFrom(icuActivity, thresholds) {
   }
   return { resp, ve, source: (resp || ve) ? `intervals.icu stream${streamTypes.length > 1 ? 's' : ''} ${streamTypes.join(', ')} (Garmin${ve ? ' + Tymewear' : ''})`
     : (fields.length ? `intervals.icu has ${fields.join(', ')} but no value` : 'no breathing on this ride: pair the Tymewear data field on the Garmin'),
-    icu_id: icuActivity.id };
+    icu_id: icuActivity.id, hr_stream: hrStream };
 }
 
 // The Garmin without a strap records no heart rate, but the WHOOP on the
@@ -97,7 +99,8 @@ async function whoopWorkoutFor(ride) {
 async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
-  if (cached && !o.force) return cached;
+  const suspect = cached && cached.hr && cached.hr.max != null && cached.hr.max < 130 && /Strava/.test(String(cached.sources && cached.sources.hr || '')) && !cached.hr_checked_icu;
+  if (cached && !o.force && !suspect) return cached;
   // a ride from The Way's own player is read from its own samples, never from Strava (which never had it)
   if (ride.source === 'player') {
     const P = require('./player');
@@ -131,6 +134,14 @@ async function analyze(ride, opts) {
     try { const f = await getJSON('fitness', {}); thresholds = f.test ? { vt1_ve: f.test.vt1_ve, vt2_ve: f.test.vt2_ve } : {}; } catch (e) { /* none */ }
     const b = await breathingFrom(icuAct, thresholds);
     out.resp = b.resp; out.ve = b.ve; out.sources.resp = b.source; out.icu_id = b.icu_id || null;
+    out.hr_checked_icu = true;
+    // Two recordings of one ride, the Garmin's (with the chest strap) on intervals.icu and Zwift's on Strava: the
+    // heart rate is read from the one that saw the higher peak. A strap that was on reads higher than a source
+    // that was not paired or was stale (3 Nov 2026: Strava's copy peaked at 122 through 40/20s the strap saw whole).
+    if (b.hr_stream) {
+      const icuHr = R.hrSummary(b.hr_stream);
+      if (icuHr && (!out.hr || (icuHr.max || 0) > (out.hr.max || 0))) { out.hr = icuHr; out.sources.hr = 'intervals.icu heart-rate stream (the Garmin, chest strap)'; out.couple = null; }
+    }
     if (!out.hr && icuAct) {
       const avg = Number(icuAct.average_heartrate), max = Number(icuAct.max_heartrate);
       if (avg > 30) { out.hr = { avg: Math.round(avg), max: max > 30 ? Math.round(max) : null, seconds: null, minutes_above_hard: null, hard_bpm: R.HR.hard, zones: null, zone_pct: null, estimated: 'intervals.icu averages only' }; out.sources.hr = 'intervals.icu average heart rate (Garmin)'; }
