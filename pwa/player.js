@@ -118,6 +118,37 @@
     const cursor = o.cursor != null ? `<rect x="0" y="0" width="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" height="${H}" class="pl-done"/><line class="pl-cur" x1="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" x2="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" y1="0" y2="${H}"/>` : "";
     return `<svg class="pl-prof${o.cls ? " " + o.cls : ""}" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Workout profile"><defs><pattern id="plHatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="#1b1d1a"/><rect width="3" height="8" fill="#3a3d36"/></pattern></defs>${blocks}${ftpLine}${cursor}</svg>`;
   }
+  // The five heart-rate zones on the ride screen, from LTHR 139 (the site's %LT bands): a stack of five bands, the
+  // one the interval trains outlined, and a pointer that rides up and down with the heart rate.
+  // Five zones from the two thresholds, the way a ventilatory model lays them out: Z1 and Z2 below VT1 (the cut
+  // at 90% of it), Z3 and Z4 between VT1 and VT2 (cut halfway), Z5 above VT2. The thresholds come with the session
+  // (the ramp test's, else 117 and 139), so when the breathing data moves them the zones move with them.
+  let HR_ZONES = [];
+  function setZones(t){
+    const vt1 = t && t.vt1_hr || 117, vt2 = t && t.vt2_hr || 139, max = t && t.max_hr || 162, mid = Math.round((vt1 + vt2) / 2), low = Math.round(vt1 * 0.9);
+    HR_ZONES = [{ z: 1, name: "Recovery", lo: 0, hi: low }, { z: 2, name: "Aerobic", lo: low, hi: vt1 }, { z: 3, name: "Tempo", lo: vt1, hi: mid }, { z: 4, name: "Threshold", lo: mid, hi: vt2 }, { z: 5, name: "VO2", lo: vt2, hi: max }];
+  }
+  setZones(null);
+  const hrZoneOf = hr => hr == null ? null : HR_ZONES.find(z => hr < z.hi) || HR_ZONES[4];
+  // the zone an interval trains: a heart-rate target by its ceiling, a power target by % of FTP (Coggan's bands)
+  const wantZone = (iv, ftp) => { if (!iv) return null;
+    if (iv.kind === "hr") return hrZoneOf(iv.target_hr ? iv.target_hr.hi : HR_Z1);
+    if (iv.target_w == null) return null;
+    const f = Math.max(iv.target_w, iv.target_w_end || 0) / ftp;
+    return HR_ZONES[f < 0.55 ? 0 : f < 0.76 ? 1 : f < 0.91 ? 2 : f < 1.06 ? 3 : 4]; };
+  const zonesHTML = () => `<div class="pl-zones" id="plZones" aria-hidden="true">${HR_ZONES.slice().reverse().map(z => `<div class="pz pz${z.z}" data-z="${z.z}" title="${z.lo}–${z.hi}"><b>Z${z.z}</b><span>${z.name}</span><i>${z.z === 5 ? `${z.lo}+` : `${z.lo}–${z.hi}`}</i></div>`).join("")}<div class="pz-ptr" id="pzPtr" hidden>▶</div></div>`;
+  function paintZones(hr, iv, ftp){
+    const box = document.getElementById("plZones"); if (!box) return;
+    const want = wantZone(iv, ftp), zin = hrZoneOf(hr);
+    box.querySelectorAll(".pz").forEach(el => { const z = +el.dataset.z; el.classList.toggle("want", !!want && want.z === z); el.classList.toggle("in", !!zin && zin.z === z); });
+    const p = document.getElementById("pzPtr");
+    if (!p) return;
+    if (hr == null || !zin){ p.hidden = true; return; }
+    // the pointer's height: the zone's band, then where inside it the heart rate sits (clamped to the band)
+    const idx = 5 - zin.z, frac = Math.max(0, Math.min(1, (hr - zin.lo) / (zin.hi - zin.lo)));
+    p.hidden = false; p.style.top = `calc(${((idx + 1 - frac) / 5 * 100).toFixed(1)}% - 0.5em)`;
+    p.className = `pz-ptr${want && zin.z === want.z ? " on" : want && zin.z < want.z ? " under" : want ? " over" : ""}`;
+  }
   const targetWords = (x, bias) => !x ? "" : x.target_w != null ? `${Math.round(x.target_w * (1 + bias / 100))}${x.target_w_end != null ? "→" + Math.round(x.target_w_end * (1 + bias / 100)) : ""} W` : x.kind === "hr" ? `hold HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "ride by feel";
 
   // ---------- the power to follow: target watts over time, what you're riding drawn over it ----------
@@ -529,7 +560,8 @@
   async function begin(S){
     try{ const AC = window.AudioContext || window.webkitAudioContext; if (AC && !audio) audio = new AC(); if (audio && audio.state === "suspended") audio.resume(); }catch{}
     const t0 = now();
-    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, date: keyOf(new Date(t0)),
+    setZones(S.thresholds);
+    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, date: keyOf(new Date(t0)),
       samples: [], pauses: [], wt: 0, bias: 0, erg: true, raw: {}, rawCount: 0, sim: SIM.on };
     drawRide();
     // the count-in: 3, 2, 1
@@ -662,7 +694,7 @@
       <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div></div>
       <div class="hu-fields pl-fields">
         <div class="hu-field big pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
-        <div class="hu-field big pl-hr"><span class="k">Heart rate</span><span class="n" id="fH">—</span><span class="u" id="fHz"></span></div>
+        <div class="hu-field big pl-hr"><span class="k">Heart rate</span><div class="pl-hrrow"><span class="n" id="fH">—</span>${zonesHTML()}</div><span class="u" id="fHz"></span></div>
         <div class="hu-field big pl-il"><span class="k">Interval left</span><span class="n" id="fI">—</span><span class="u" id="fIl"></span></div>
         <div class="hu-field pl-cad"><span class="k">Cadence</span><span class="n" id="fC">—</span><span class="u">rpm</span></div>
         <div class="hu-field pl-tl"><span class="k">Total left</span><span class="n" id="fT">—</span><span class="u" id="fTr"></span></div>
@@ -706,7 +738,9 @@
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
     $("fH").className = "n " + (hr == null ? "hu-dim" : hr <= HR_Z1 ? "hu-go" : hr <= HR_Z2 ? "hu-hold" : "hu-stop");
-    $("fHz").textContent = hr == null ? "" : hr <= HR_Z1 ? "Z1" : hr <= HR_Z2 ? "Z2" : "Z3";
+    { const want = wantZone(iv, r.ftp), zin = hrZoneOf(hr);
+      $("fHz").textContent = (zin ? `Z${zin.z} ${zin.name}` : "") + (want ? `${zin ? " · " : ""}training Z${want.z} ${want.name}` : "");
+      paintZones(hr, iv, r.ftp); }
     $("fC").textContent = fresh(L.bikeAt) && L.cadence != null ? L.cadence : "—";
     $("fI").textContent = iv ? clock(iv.start_s + iv.dur_s - r.wt) : "—";
     $("fIl").textContent = iv ? `of ${clock(iv.dur_s)}` : "";

@@ -361,9 +361,13 @@ function gradeOne(w, rides) {
   // the session is then graded on time and load like any other, and the basis says so.
   const isVo2 = /vo2|40\s*\/\s*20/i.test(String(w.name || ''));
   const hrReal = withHr.filter(r => (r.analysis.hr.max || 0) >= 130);
+  // A VO2 session is done when the work was done (time and load, as any session); the heart-rate goal then
+  // says how well: met is green, missed is amber with the minutes named. Work not done is graded as work not done.
+  let vo2 = null;
   if (isVo2 && hrReal.length) {
     const mins = Math.round(hrReal.reduce((s, r) => s + (r.analysis.hr.minutes_above_hard || 0), 0) * 10) / 10;
-    return Object.assign({}, w, { compliance: R.vo2Grade(mins) });
+    vo2 = R.vo2Grade(mins);
+    if (vo2 && vo2.band === 'green') return Object.assign({}, w, { compliance: vo2 });
   }
   const noStrap = isVo2 && withHr.length && !hrReal.length;
   const doneMin = rides.reduce((s, r) => s + r.minutes, 0);
@@ -395,6 +399,8 @@ function gradeOne(w, rides) {
       basis += `; ${over}% at ${R.HR.vt1} bpm or above${trail ? ' (trail: 20% passes)' : ''}`;
     }
   }
+  if (vo2 && band === 'green') { band = 'yellow'; basis += `; ${vo2.basis}`; }
+  else if (vo2) basis += `; ${vo2.basis}`;
   return Object.assign({}, w, { compliance: { pct, band, over: pct > 120, basis, zone_over: zone } });
 }
 // Every planned session on the day is graded against the day's rides, each
