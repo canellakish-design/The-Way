@@ -19,6 +19,7 @@
   background:var(--paper); border:0; border-radius:0; box-shadow:none; transform:none; text-align:left; color:var(--ink); font:inherit; text-transform:none; letter-spacing:0; position:relative}
 .hchain .score.clink.on{outline:2px solid var(--ink); outline-offset:-2px; transform:none; box-shadow:none}
 .hchain .score.clink.brk{box-shadow:inset 0 0 0 2px var(--red)}
+.hchain .score.clink.brk.brkwarn{box-shadow:inset 0 0 0 2px var(--amber)}
 .hchain .ck{display:flex; justify-content:space-between; gap:4px; font-family:var(--mono); font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); line-height:1.2}
 .hchain .cmark{color:var(--red); font-weight:700; letter-spacing:0}
 .hchain .cval{display:flex; align-items:baseline; gap:4px; min-width:0; white-space:nowrap}
@@ -31,7 +32,7 @@
 .hchain .ctn.long{font-size:15px}
 .hchain .cverdict{grid-column:span 3; border:1px solid var(--line); background:var(--paper); padding:8px 10px 9px; display:flex; flex-direction:column; justify-content:center; gap:4px; min-width:0}
 .hchain .cvw{font-family:var(--num); font-weight:700; font-size:19px; line-height:1.1; text-transform:uppercase; letter-spacing:.2px; color:var(--ink); overflow-wrap:anywhere}
-.hchain .cvw[data-tone="bad"]{color:var(--red)} .hchain .cvw[data-tone="good"]{color:var(--green)}
+.hchain .cvw[data-tone="bad"]{color:var(--red)} .hchain .cvw[data-tone="warn"]{color:var(--amber)} .hchain .cvw[data-tone="good"]{color:var(--green)}
 /* the ribbon: one segment a link, in the link's colour; the broken link dashed red */
 .hchain .chainline{display:grid; grid-template-columns:repeat(10, 1fr); gap:3px; margin:8px 0 2px}
 .hchain .chainline i{display:block; height:6px; background:var(--line)}
