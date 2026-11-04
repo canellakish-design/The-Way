@@ -279,13 +279,16 @@ function attach(app) {
   app.post('/coach/debrief', async (req, res) => { if (!auth(req, res)) return;
     const rid = String((req.body || {}).ride_id || '').trim(); if (!rid) return res.status(400).json({ error: 'ride_id' });
     const have = await getJSON(DEBRIEF_KEY(rid), null);
-    if (have && have.status !== 'error') return res.json({ id: have.job_id, debrief: have });
+    if (have && have.status !== 'error' && !(req.body || {}).again) return res.json({ id: have.job_id, debrief: have });
     const rides = await todayRides().catch(() => []);
     const ride = rides.find(r => r.id === rid) || { id: rid, name: String((req.body || {}).name || 'the ride') };
-    const text = `DEBRIEF the ride "${ride.name}" (${tz.todayKey()}${ride.time ? ' ' + tz.hm12(ride.time) : ''}, ride id ${rid}). Read /rides/${rid}/analysis, /calendar?from=${tz.todayKey()}&to=${tz.todayKey()} (the plan it was graded against), /food/today and /fuel/ahead. Then answer in exactly this shape:
-SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time.
+    const graded = (ride.planned || []).map(p => `${p.name}: ${p.band}${p.pct != null ? ` ${p.pct}%` : ''} (${p.basis})`).join('; ');
+    const text = `DEBRIEF the ride "${ride.name}" (${tz.todayKey()}${ride.time ? ' ' + tz.hm12(ride.time) : ''}, ride id ${rid}). Read /rides/${rid}/analysis, /calendar?from=${tz.todayKey()}&to=${tz.todayKey()} (the plan it was graded against), /food/today and /fuel/ahead.
+The site's own grade of it, which you repeat as it stands and never contradict: ${graded || 'not graded against a plan'}. The lines the site uses: Zone 1 is heart rate 116 and under; the VO2 line is 139 (VT2); there is no other heart-rate line. Use only numbers from the pages.
+Then answer in exactly this shape:
+SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time. It must agree with the grade above.
 **The ride**: at most three short lines, each a number from the pages (minutes, the zone split against the plan, heart rate against the goal, power). Encouragement where it is earned; one concrete improvement where it is not, said once.
-**Next meal**: what to eat now and by when, from today's plan and what is still due (grams of carbs and protein, a real food or two). One line.
+**Next meal**: the next meal on today's plan, by its name and planned time (from /food/today's meal plan), and what to make it (grams of carbs and protein, a real food or two). Never invent a meal or a time the plan does not have. One line.
 No research, no links, nothing else.`;
     const id = await startJob(text, baseOf(req), { kind: 'debrief', ride_id: rid, ride_name: ride.name });
     await setJSON(DEBRIEF_KEY(rid), { job_id: id, status: 'running', ride: { id: rid, name: ride.name, time: ride.time || null }, at: new Date().toISOString() });

@@ -64,3 +64,6 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 
 ## 3 Nov · the VO2 line
 - The VO2 session goal was "8 to 12 min above 152". No ride on record held 152 for more than 18 s (best: Nov 1, max 155), so every VO2 session graded red. Harry set the line at VT2, 139. Tymewear's own VO2max training target is HR 147 and 216 W; the 40/20 "on" blocks at 191 W sit under that.
+
+## 3 Nov · hydration
+- The carry from yesterday pinned at the −1.5 L cap every morning (Nov 1, 2 and 3 all started −1,500), so no day could start clean and every evening read "1.8 L down". Now half of the night's deficit is carried, capped at 750 ml; the day's target includes the carry (one number, not "2.0 of 2.1 L" beside "−1,754"); the 70% post-ride retention applies only after a ride of an hour or more or a hard one.

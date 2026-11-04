@@ -149,7 +149,10 @@ function model(o) {
     sessions.push({ name: s.name, time: s.time, min: m, end_min: m + mins, minutes: mins, done: !!s.done, projected,
       sweat_ml_h: Math.round(rate / 50) * 50, loss_ml: Math.round(rate * mins / 60 / 50) * 50, env });
   }
-  const afterRide = m => sessions.some(s => m >= s.end_min && m <= s.end_min + POST_RIDE_H * 60);
+  // the lower retention of water after a ride (Shirreffs 1996) is about rehydrating a real deficit: it applies after a
+  // ride of an hour or more, or a hard session; a glass after a short spin is kept whole
+  const HARD_NAME = /vo2|40\s*\/\s*20|threshold|interval|race|sweet/i;
+  const afterRide = m => sessions.some(s => (s.minutes >= 60 || HARD_NAME.test(String(s.name || ''))) && m >= s.end_min && m <= s.end_min + POST_RIDE_H * 60);
   const duringRide = m => sessions.some(s => m >= s.min && m < s.end_min);
   const drinks = [];
   const alc = { drinks: 0, net_ml: 0, evening_drinks: 0, evening_net_ml: 0, word: null };
@@ -223,7 +226,7 @@ function model(o) {
   // the day's drinking target: what leaves, less what food brings, so the tile can say how much is left
   const restDay = (SLEEP - WAKE) / 60 * REST_AWAKE_ML_H + (24 - (SLEEP - WAKE) / 60) * REST_ASLEEP_ML_H;
   const sweatDay = sessions.reduce((a, s) => a + s.loss_ml, 0);
-  const target = r50(Math.max(2000, restDay + sweatDay - 600));
+  const target = r50(Math.max(2000, restDay + sweatDay - 600 + Math.max(0, -start)));   // plus what the morning started down
   const drunk = drinks.reduce((a, d) => a + d.ml, 0);
   const nowB = band(nowPt.ml, kg);
   let advice = upcoming.find(s => s.advice) ? upcoming.find(s => s.advice).advice : null;
@@ -272,14 +275,17 @@ function landingNote(ml) {
 // three-day baseline, the two are averaged: the scale sees the whole body,
 // the model only what was logged.
 const NIGHT_ML = 5 * REST_ASLEEP_ML_H;
+const CARRY_CAP_ML = 750;
 // Evening alcohol: its net loss is already in the day's end, and the diuresis runs on for hours
 // after the last one, so each drink after 8 p.m. costs the morning about 100 ml more. The morning
 // after four pints starts further down than the day's end suggests, which is what the body does.
 function carryOver(prevEndMl, scale, prevAlc) {
   const night = prevAlc && prevAlc.evening_drinks > 0 ? { drinks: prevAlc.evening_drinks, word: prevAlc.word || 'drink', drain_ml: Math.round(Math.max(0, prevAlc.evening_net_ml) + NIGHT_DRINK_ML * prevAlc.evening_drinks) } : null;
   const base = prevEndMl == null ? null : prevEndMl - (night ? night.drain_ml : 0);
-  // capped at 1.5 L: a drink that went unlogged must not compound into a permanent red
-  let carry = base == null ? null : Math.max(-1500, Math.min(0, base - NIGHT_ML));
+  // Half of the night's deficit is carried, capped at 750 ml: the kidneys and thirst correct much of a day's
+  // shortfall overnight, and a modelled deficit that was carried whole re-armed every morning at the cap, so a
+  // day could never start clean however much was drunk (3 Nov 2026). The scale, when it has a reading, is the truth.
+  let carry = base == null ? null : Math.max(-CARRY_CAP_ML, Math.min(0, (base - NIGHT_ML) / 2));
   const out = r => night ? Object.assign(r, { night }) : r;
   if (carry == null && !scale) return out({ start_ml: 0, from: 'none' });
   if (scale && scale.today_kg > 40 && scale.baseline_kg > 40) {
@@ -309,4 +315,4 @@ function measured(preKg, postKg, drankMl, minutes) {
   return Math.round(lost * (minutes >= 120 ? 0.9 : 0.95));
 }
 
-module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, alcoholServing, alcoholNet, bedtimeNote, landingNote, DRANK_COUNTS, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML };
+module.exports = { model, sweatRate, sessionEnv, band, calibrate, measured, carryOver, alcoholServing, alcoholNet, bedtimeNote, landingNote, DRANK_COUNTS, toMin, toHM, STEP, BOTTLE_ML, NIGHT_ML, CARRY_CAP_ML };

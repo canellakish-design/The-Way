@@ -357,10 +357,15 @@ function gradeOne(w, rides) {
   // The VO2 session has its own yardstick: minutes above the hard line
   // (94% of max, where heart-rate time stops over-counting on short
   // intervals). When the ride's heart rate has been read, that is the grade.
-  if (/vo2|40\s*\/\s*20/i.test(String(w.name || '')) && withHr.length) {
-    const mins = Math.round(withHr.reduce((s, r) => s + (r.analysis.hr.minutes_above_hard || 0), 0) * 10) / 10;
+  // A heart-rate trace that never passed 130 on a VO2 session is a strap that was not paired, not a soft ride:
+  // the session is then graded on time and load like any other, and the basis says so.
+  const isVo2 = /vo2|40\s*\/\s*20/i.test(String(w.name || ''));
+  const hrReal = withHr.filter(r => (r.analysis.hr.max || 0) >= 130);
+  if (isVo2 && hrReal.length) {
+    const mins = Math.round(hrReal.reduce((s, r) => s + (r.analysis.hr.minutes_above_hard || 0), 0) * 10) / 10;
     return Object.assign({}, w, { compliance: R.vo2Grade(mins) });
   }
+  const noStrap = isVo2 && withHr.length && !hrReal.length;
   const doneMin = rides.reduce((s, r) => s + r.minutes, 0);
   const doneTss = rides.reduce((s, r) => s + (r.tss || 0), 0);
   const tPct = plannedMin ? doneMin / plannedMin : 1;
@@ -372,7 +377,7 @@ function gradeOne(w, rides) {
   const frac = both.every(x => x > 1) ? Math.max(...both) : Math.min(...both);
   const pct = Math.round(100 * frac);
   let band = bandOf(pct);
-  let basis = `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)');
+  let basis = `${Math.round(doneMin)} of ${Math.round(plannedMin)} min` + (lPct != null ? `, ${doneTss} of ${plannedTss} TSS` : ', time only (no power or heart rate)') + (noStrap ? `; heart rate peaked at ${Math.max(...withHr.map(r => r.analysis.hr.max || 0))}, so the strap was not on: no minutes above ${R.HR.hard} to judge` : '');
   // A Zone 1 ride is also judged on discipline: the share of it under VT1.
   // Elite logs put a Zone 1 session at 0 to 2% above the ceiling; up to 10%
   // passes here, 10 to 20% is a warning, more is a different ride.

@@ -52,12 +52,15 @@ ok('gradeOne: TrainingPeaks bands, over-doing counts, Zone 1 discipline', () => 
 
 ok('gradeOne: a VO2 session is graded by minutes above 139 when the heart rate was read', () => {
   const vo2 = { name: 'VO2 max: Zwift 40/20s #1', metrics: { duration_s: 3000, tss: 65 } };
-  const ride = { minutes: 50, tss: 60, analysis: { hr: { minutes_above_hard: 9.5, zones: {}, zone_pct: {} } } };
+  const ride = { minutes: 50, tss: 60, analysis: { hr: { max: 155, minutes_above_hard: 9.5, zones: {}, zone_pct: {} } } };
   assert.strictEqual(gradeOne(vo2, [ride]).compliance.band, 'green');
   assert.ok(/above 139/.test(gradeOne(vo2, [ride]).compliance.basis));
-  assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60, analysis: { hr: { minutes_above_hard: 3, zones: {}, zone_pct: {} } } }]).compliance.band, 'red');
+  assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60, analysis: { hr: { max: 150, minutes_above_hard: 3, zones: {}, zone_pct: {} } } }]).compliance.band, 'red');
   // no heart rate read yet: time and load, as for any session
   assert.strictEqual(gradeOne(vo2, [{ minutes: 50, tss: 60 }]).compliance.band, 'green');
+  // a trace that never passed 130 is a strap not paired: time and load, and the basis says so
+  const noStrap = gradeOne(vo2, [{ minutes: 49, tss: 61, analysis: { hr: { max: 122, minutes_above_hard: 0, zones: {}, zone_pct: {} } } }]).compliance;
+  assert.strictEqual(noStrap.band, 'green'); assert.ok(/strap was not on/.test(noStrap.basis), noStrap.basis);
 });
 
 ok('hrLoad: an hour at threshold is 100; easy hours score far less', () => {

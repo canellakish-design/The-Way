@@ -65,13 +65,15 @@ ok('calibration: three weigh-ins pull halfway, five count in full, clamped', () 
   assert.strictEqual(H.measured(null, 97, 0, 60), null);
 });
 
-ok('carry-over: a deficit at bedtime is still there in the morning, a surplus is not; the scale has a say', () => {
-  assert.deepStrictEqual(H.carryOver(-900, null), { start_ml: -900 - H.NIGHT_ML, from: 'yesterday' });
+ok('carry-over: half a deficit at bedtime is there in the morning, capped at 750; a surplus is not; the scale has a say', () => {
+  assert.deepStrictEqual(H.carryOver(-900, null), { start_ml: Math.round((-900 - H.NIGHT_ML) / 2), from: 'yesterday' });
   assert.strictEqual(H.carryOver(400, null).start_ml, 0);
-  assert.strictEqual(H.carryOver(-4000, null).start_ml, -1500);
+  assert.strictEqual(H.carryOver(-4000, null).start_ml, -750);
+  // the day after a day that ended 1.5 L down starts 750 down, and a clean day after it starts near zero: it does not pin
+  assert.strictEqual(H.carryOver(-1500, null).start_ml, -750); assert.ok(H.carryOver(-200, null).start_ml > -300);
   assert.strictEqual(H.carryOver(null, null).start_ml, 0);
   const both = H.carryOver(-900, { today_kg: 97.6, baseline_kg: 98.2 });
-  assert.strictEqual(both.from, 'both'); assert.ok(both.start_ml < -600 && both.start_ml > -1200, JSON.stringify(both));
+  assert.strictEqual(both.from, 'both'); assert.ok(both.start_ml < -450 && both.start_ml > -1200, JSON.stringify(both));
   const m = H.model({ kg, ftp: 175, now_min: 7 * 60, entries: [], sessions: [], start_ml: -1150 });
   assert.ok(m.series[0].ml <= -1150 && m.series[0].ml > -1160, 'starts from the carried deficit: ' + m.series[0].ml); assert.strictEqual(m.now.band.key, 'yellow');
   assert.ok(/down/.test(m.advice), m.advice);
@@ -90,7 +92,7 @@ ok('alcohol: a pint and a shot are both net losses on the day; four pints after 
   assert.ok(four.alcohol.net_ml <= -700, 'four pints are a net loss on the day: ' + four.alcohol.net_ml);
   assert.strictEqual(after.night.drain_ml, 300, 'and each of the three after eight costs the night 100 ml more');
   const wet = H.carryOver(-600, null), wetAfter = H.carryOver(-600, null, four.alcohol);
-  assert.strictEqual(wetAfter.start_ml, wet.start_ml - 300, `plain ${wet.start_ml} after ${wetAfter.start_ml}`);
+  assert.strictEqual(wetAfter.start_ml, wet.start_ml - 150, `plain ${wet.start_ml} after ${wetAfter.start_ml}`);   // half of the night's 300 is carried
   assert.strictEqual(after.night.drinks, 3);
   const morning = H.model({ kg, ftp: 175, now_min: 7 * 60, sessions: [], entries: [], start_ml: after.start_ml, night: after.night });
   assert.ok(/three pints last night: starting \d\.\d L down/.test(morning.advice), morning.advice);
