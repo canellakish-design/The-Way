@@ -31,7 +31,8 @@ main:has(#plPage){max-width:1200px}
 .pl-steps .pl-iw{font-family:var(--mono); font-size:12px}
 
 /* the devices: one button each, its state under the name */
-.pl-devs{display:grid; grid-template-columns:1fr 1fr; gap:8px}
+.pl-devs{display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px}
+@media (max-width:420px){ .pl-devs{grid-template-columns:1fr 1fr} .pl-devs .pl-dev:nth-child(3){grid-column:1 / -1} }
 .pl-dev{margin:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; min-width:0; padding:10px 12px; box-shadow:none; border-color:var(--line)}
 .pl-dev .pl-devk{font-family:var(--num); font-size:20px; letter-spacing:.4px}
 .pl-dev .pl-devst{font-family:var(--mono); font-size:10.5px; letter-spacing:.6px; color:var(--muted); text-transform:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%}
@@ -45,7 +46,7 @@ body:has(.pl-ride) #micBtn{display:none}
 .pl-top{display:grid; grid-template-columns:minmax(0,1fr) auto; gap:10px; align-items:center}
 .pl-now{display:flex; flex-direction:column; gap:2px; min-width:0}
 .pl-lbl{font-family:var(--num); font-weight:700; font-size:26px; line-height:1.05; text-transform:uppercase; overflow-wrap:anywhere}
-.pl-devs-sm{grid-template-columns:auto auto}
+.pl-devs-sm{grid-template-columns:auto auto auto}
 .pl-devs-sm .pl-dev{padding:6px 9px} .pl-devs-sm .pl-devk{font-size:15px} .pl-devs-sm .pl-devst{max-width:120px}
 .pl-fields{grid-template-columns:1fr 1fr}
 .pl-fields .hu-field.big .n{font-size:64px}
