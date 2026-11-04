@@ -309,7 +309,7 @@
     DEV.chooseNext[kind] = false;
     return navigator.bluetooth.requestDevice(opts);
   }
-  async function connectTrainer(){
+  async function connectTrainer(auto){
     if (SIM.on){ DEV.trainerName = "Simulated trainer"; DEV.control = null; DEV.trainer = { sim: true }; drawDevices(); return; }
     if (!navigator.bluetooth) return;
     setDevState("trainer", "connecting…");
@@ -318,7 +318,7 @@
       await attachTrainer(dev);
       lsSet(LS.trainer, dev.name || "");
       if (!dev.__wayWatch){ dev.__wayWatch = true; dev.addEventListener("gattserverdisconnected", () => { DEV.control = null; DEV.trainer = null; drawDevices(); note("trainer disconnected"); if (ride && ride.state === "riding") reconnect(dev, attachTrainer, "trainer"); }); }
-    }catch(e){ DEV.chooseNext.trainer = true; setDevState("trainer", /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); }
+    }catch(e){ if (!auto) DEV.chooseNext.trainer = true; setDevState("trainer", auto ? "not in range yet" : /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); throw e; }
   }
   async function attachTrainer(dev){
     const gatt = await dev.gatt.connect();
@@ -333,7 +333,7 @@
     drawDevices();
     if (ride && ride.state === "riding"){ await ctl([0x07], "start"); syncErg(true); }
   }
-  async function connectStrap(){
+  async function connectStrap(auto){
     if (SIM.on){ DEV.strapName = "Simulated strap"; DEV.strap = { sim: true }; drawDevices(); return; }
     if (!navigator.bluetooth) return;
     setDevState("strap", "connecting…");
@@ -343,7 +343,7 @@
       await attachStrap(dev);
       lsSet(LS.strap, dev.name || "");
       if (!dev.__wayWatch){ dev.__wayWatch = true; dev.addEventListener("gattserverdisconnected", () => { DEV.strap = null; drawDevices(); note("heart-rate strap disconnected"); if (ride && ride.state === "riding") reconnect(dev, attachStrap, "strap"); }); }
-    }catch(e){ DEV.chooseNext.strap = true; setDevState("strap", /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); }
+    }catch(e){ if (!auto) DEV.chooseNext.strap = true; setDevState("strap", auto ? "not in range yet" : /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); throw e; }
   }
   async function attachStrap(dev){
     const gatt = await dev.gatt.connect();
@@ -372,6 +372,22 @@
     const all = ride.rawCount || 0;
     if (all >= RAW_CAP_ALL || (raw[uuid] && raw[uuid].length >= RAW_CAP_EACH)) return;
     (raw[uuid] = raw[uuid] || []).push([Math.round(now() - ride.id), h]); ride.rawCount = all + 1;
+  }
+  // Chrome remembers a device once it has been chosen (getDevices); from then on the start screen connects to
+  // it by itself whenever it is in range, trying every few seconds for two minutes, no picker. A device never
+  // chosen on this computer still needs its button once.
+  let autoTimer = null;
+  function autoConnect(){
+    clearInterval(autoTimer);
+    if (SIM.on || !navigator.bluetooth || !navigator.bluetooth.getDevices) return;
+    let tries = 0;
+    const go = async () => {
+      if (!alive() || !document.getElementById("plStart") || ++tries > 30){ clearInterval(autoTimer); return; }
+      if (!DEV.trainer && lsGet(LS.trainer) && !DEV.chooseNext.trainer) connectTrainer(true).catch(() => {});
+      if (!DEV.strap && lsGet(LS.strap) && !DEV.chooseNext.strap) connectStrap(true).catch(() => {});
+      if (DEV.trainer && DEV.strap) clearInterval(autoTimer);
+    };
+    go(); autoTimer = setInterval(go, 4000);
   }
   function reconnect(dev, attach, kind){
     let tries = 0;
@@ -553,7 +569,7 @@
   function bindDevices(root){
     root.addEventListener("click", e => {
       const b = e.target.closest("[data-dev]"); if (!b) return;
-      if (b.dataset.dev === "trainer") connectTrainer(); else connectStrap();
+      if (b.dataset.dev === "trainer") connectTrainer().catch(() => {}); else connectStrap().catch(() => {});
     });
   }
   const support = () => SIM.on ? `<div class="pl-warn hu-hold">Simulator: made-up power, heart rate and cadence${CLK.speed > 1 ? `, ${CLK.speed}× time` : ""}. Nothing here is a real ride.</div>`
@@ -744,7 +760,8 @@
     el.innerHTML = (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend);
     const go = document.getElementById("plStart");
     drawWhole(S);
-    if (go) go.onclick = () => { go.disabled = true; begin(S0); };
+    if (go) go.onclick = () => { go.disabled = true; clearInterval(autoTimer); begin(S0); };
+    autoConnect();
   };
 
   window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, DB };
