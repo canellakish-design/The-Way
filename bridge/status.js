@@ -224,6 +224,10 @@ function attach(app) {
   app.get('/status', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await report()); }
     catch (e) { res.status(500).json({ error: e.message }); } });
+  // the 8 a.m. check's record: what WHOOP and the Garmin said, and what the site showed (netlify/functions/morning-check.mjs)
+  app.get('/morning-check', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await getJSON('morning-check', { last: null, runs: [] })); }
+    catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
 module.exports = { attach, report };

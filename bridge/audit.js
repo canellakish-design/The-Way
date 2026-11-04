@@ -112,6 +112,17 @@ async function run(o) {
     }
   } catch (e) { /* no feed: nothing to compare */ }
 
+  // 6. the devices: a WHOOP the site cannot reach is said on the Day, with the fix; the 8 a.m. check's record
+  try {
+    const wh = await getJSON('whoop', {});
+    const items = [];
+    if (wh.tokens && wh.auth_error) items.push(`WHOOP has not synced since ${wh.synced_at ? tz.labelOf ? tz.labelOf(wh.synced_at.slice(0, 10)) : wh.synced_at.slice(0, 10) : 'a while'}: reconnect it on the Recovery box`);
+    const mc = await getJSON('morning-check', { last: null });
+    const ran = mc.last && mc.last.date === today;
+    if (ran && mc.last.whoop && !mc.last.whoop.ok && !items.length) items.push('the 8 a.m. check could not reach WHOOP');
+    checks.push({ key: 'devices', ok: items.length === 0, detail: ran ? `8 a.m. check: ${mc.last.shown && mc.last.shown.score != null ? `${mc.last.shown.source} ${mc.last.shown.score}` : 'no score'}${mc.last.whoop && mc.last.whoop.ok ? `, WHOOP ${mc.last.whoop.recovery}` : ', WHOOP unreachable'}` : 'the 8 a.m. check has not run today', items });
+  } catch (e) { /* nothing to say */ }
+
   const fixed = checks.reduce((a, c) => a + (c.fixed || 0), 0);
   const result = Object.assign({ at: new Date().toISOString(), today, checks, fixed }, wordOf(checks, fixed));
   await setJSON('audit-last', { at: Date.now(), result }).catch(() => {});
