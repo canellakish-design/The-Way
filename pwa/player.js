@@ -14,7 +14,7 @@
   const alive = () => location.hash.split("?")[0] === "#player";
   const params = () => new URLSearchParams(location.hash.split("?")[1] || "");
   const FTMS = 0x1826, BIKE_DATA = 0x2ad2, CONTROL = 0x2ad9, CPS = 0x1818;
-  const LS = { trainer: "way-player-trainer", strap: "way-player-strap" };
+  const LS = { trainer: "way-player-trainer", strap: "way-player-strap", breath: "way-player-breath" };
   const HR_Z1 = 116, HR_Z2 = 138;                       // Zone 1 is 116 and under; VT2 139
   const RAW_CAP_EACH = 4000, RAW_CAP_ALL = 12000;        // raw strap values kept per ride, for decoding breathing later
   const lsGet = k => { try{ return localStorage.getItem(k); }catch{ return null; } };
@@ -277,7 +277,7 @@
 
   // ---------- the devices ----------
   const L = { power: null, cadence: null, speed: null, hr: null, bikeAt: 0, hrAt: 0 };
-  const DEV = { trainer: null, control: null, strap: null, trainerName: null, strapName: null, sent: undefined, chooseNext: { trainer: false, strap: false } };
+  const DEV = { trainer: null, control: null, strap: null, breath: null, trainerName: null, strapName: null, breathName: null, sent: undefined, chooseNext: { trainer: false, strap: false, breath: false } };
   const ctlLog = window.__playerCtl = [];
   let ctlQ = Promise.resolve();
   function ctl(bytes, what){
@@ -365,6 +365,35 @@
     DEV.strap = dev; DEV.strapName = dev.name || "Strap";
     drawDevices();
   }
+  // The Tymewear may show as two Bluetooth devices: the heart-rate one (the standard service) and a second one
+  // for breathing. This slot takes any device at all and keeps everything it sends, raw, for decoding.
+  async function connectBreath(auto){
+    if (SIM.on){ DEV.breathName = "Simulated breathing"; DEV.breath = { sim: true }; drawDevices(); return; }
+    if (!navigator.bluetooth) return;
+    setDevState("breath", "connecting…");
+    try{
+      const dev = await pickDevice("breath", { acceptAllDevices: true, optionalServices: ["heart_rate", "battery_service", "device_information",
+        "6e400001-b5a3-f393-e0a9-e50e24dcca9e", "0000fff0-0000-1000-8000-00805f9b34fb", "0000ffe0-0000-1000-8000-00805f9b34fb", "0000fff1-0000-1000-8000-00805f9b34fb", "0000ffb0-0000-1000-8000-00805f9b34fb", 0x1814, 0x181c, 0x183e, 0x1810, 0x1816, 0x1822] });
+      await attachBreath(dev);
+      lsSet(LS.breath, dev.name || "");
+      if (!dev.__wayWatch){ dev.__wayWatch = true; dev.addEventListener("gattserverdisconnected", () => { DEV.breath = null; drawDevices(); note("breathing sensor disconnected"); if (ride && ride.state === "riding") reconnect(dev, attachBreath, "breath"); }); }
+    }catch(e){ if (!auto) DEV.chooseNext.breath = true; setDevState("breath", auto ? "not in range yet" : /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); throw e; }
+  }
+  async function attachBreath(dev){
+    const gatt = await dev.gatt.connect();
+    const svcs = await gatt.getPrimaryServices();
+    for (const s of svcs){
+      const chars = await s.getCharacteristics().catch(() => []);
+      for (const c of chars){
+        if (!(c.properties.notify || c.properties.indicate)) continue;
+        await c.startNotifications().catch(() => {});
+        if (c.__way) continue; c.__way = true;
+        c.addEventListener("characteristicvaluechanged", e => keepRaw("breath:" + c.uuid, hex(e.target.value)));
+      }
+    }
+    DEV.breath = dev; DEV.breathName = dev.name || "Breathing";
+    drawDevices();
+  }
   // A value from the strap's own (non-standard) channels, kept as sent while riding: the breathing lives in one of them.
   function keepRaw(uuid, h){
     if (!ride || ride.state !== "riding") return;
@@ -385,6 +414,7 @@
       if (!alive() || !document.getElementById("plStart") || ++tries > 30){ clearInterval(autoTimer); return; }
       if (!DEV.trainer && lsGet(LS.trainer) && !DEV.chooseNext.trainer) connectTrainer(true).catch(() => {});
       if (!DEV.strap && lsGet(LS.strap) && !DEV.chooseNext.strap) connectStrap(true).catch(() => {});
+      if (!DEV.breath && lsGet(LS.breath) && !DEV.chooseNext.breath) connectBreath(true).catch(() => {});
       if (DEV.trainer && DEV.strap) clearInterval(autoTimer);
     };
     go(); autoTimer = setInterval(go, 4000);
@@ -392,7 +422,7 @@
   function reconnect(dev, attach, kind){
     let tries = 0;
     const go = async () => {
-      if (!ride || ride.state === "ended" || (kind === "trainer" ? DEV.trainer : DEV.strap)) return;
+      if (!ride || ride.state === "ended" || (kind === "trainer" ? DEV.trainer : kind === "breath" ? DEV.breath : DEV.strap)) return;
       tries++;
       try{ await attach(dev); note(`${kind === "trainer" ? "trainer" : "strap"} back`); }
       catch(e){ if (tries < 20) setTimeout(go, 3000); }
@@ -451,7 +481,7 @@
   }
   // what goes into IndexedDB: everything needed to finish and save the ride later
   const recordOf = r => ({ id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
-    wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName } });
+    wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName, breath: DEV.breathName } });
 
   // one recorded second: the moment's numbers, then the workout clock moves on
   function stepSecond(ts){
@@ -561,15 +591,15 @@
   function note(msg){ const el = document.getElementById("plNote"); if (el){ el.textContent = msg; el.hidden = false; clearTimeout(note.t); note.t = setTimeout(() => { el.hidden = true; }, 8000); } }
   function setDevState(kind, text){ const el = document.querySelector(`[data-dev="${kind}"] .pl-devst`); if (el) el.textContent = text; }
   function devHTML(kind){
-    const on = kind === "trainer" ? !!DEV.trainer : !!DEV.strap, name = kind === "trainer" ? DEV.trainerName : DEV.strapName, saved = lsGet(LS[kind]);
-    const label = kind === "trainer" ? "trainer" : "heart-rate strap";
-    return `<button class="pl-dev${on ? " on" : ""}" data-dev="${kind}"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}><span class="pl-devk">${on ? "✓ " : ""}${kind === "trainer" ? "Trainer" : "Heart rate"}</span><span class="pl-devst">${on ? esc(name) : saved ? `connect ${esc(saved)}` : `connect ${label}`}</span></button>`;
+    const on = kind === "trainer" ? !!DEV.trainer : kind === "breath" ? !!DEV.breath : !!DEV.strap, name = kind === "trainer" ? DEV.trainerName : kind === "breath" ? DEV.breathName : DEV.strapName, saved = lsGet(LS[kind]);
+    const label = kind === "trainer" ? "trainer" : kind === "breath" ? "breathing sensor" : "heart-rate strap";
+    return `<button class="pl-dev${on ? " on" : ""}" data-dev="${kind}"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}><span class="pl-devk">${on ? "✓ " : ""}${kind === "trainer" ? "Trainer" : kind === "breath" ? "Breathing" : "Heart rate"}</span><span class="pl-devst">${on ? esc(name) : saved ? `connect ${esc(saved)}` : `connect ${label}`}</span></button>`;
   }
-  function drawDevices(){ document.querySelectorAll(".pl-devs").forEach(el => { el.innerHTML = devHTML("trainer") + devHTML("strap"); }); const st = document.getElementById("plStart"); if (st) st.textContent = DEV.trainer ? "Start" : "Start without the trainer"; }
+  function drawDevices(){ document.querySelectorAll(".pl-devs").forEach(el => { el.innerHTML = devHTML("trainer") + devHTML("strap") + devHTML("breath"); }); const st = document.getElementById("plStart"); if (st) st.textContent = DEV.trainer ? "Start" : "Start without the trainer"; }
   function bindDevices(root){
     root.addEventListener("click", e => {
       const b = e.target.closest("[data-dev]"); if (!b) return;
-      if (b.dataset.dev === "trainer") connectTrainer().catch(() => {}); else connectStrap().catch(() => {});
+      if (b.dataset.dev === "trainer") connectTrainer().catch(() => {}); else if (b.dataset.dev === "breath") connectBreath().catch(() => {}); else connectStrap().catch(() => {});
     });
   }
   const support = () => SIM.on ? `<div class="pl-warn hu-hold">Simulator: made-up power, heart rate and cadence${CLK.speed > 1 ? `, ${CLK.speed}× time` : ""}. Nothing here is a real ride.</div>`
@@ -595,7 +625,7 @@
       </div>
       ${fuel}
       <div class="pl-sec">
-        <div class="pl-devs">${devHTML("trainer")}${devHTML("strap")}</div>
+        <div class="pl-devs">${devHTML("trainer")}${devHTML("strap")}${devHTML("breath")}</div>
         <button class="primary pl-go" id="plStart"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}>${DEV.trainer ? "Start" : "Start without the trainer"}</button>
         <div class="small pl-hint">End always saves the ride.</div>
       </div>
