@@ -208,10 +208,10 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", flags:"Flags", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
   const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   // one way back: a page with a parent goes to its parent (the title still goes home), the rest to the Day
-  if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
+  if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a><a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
   { const t = document.querySelector("header h1"); if (t && !t.dataset.home){ t.dataset.home = "1"; t.style.cursor = "pointer"; t.onclick = ()=>{ location.hash = "#today"; }; } }
   (V[h] || V.settings)();
 }

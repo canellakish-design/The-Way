@@ -196,6 +196,7 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 
 /* ================= COACH (#coach) ================= */
 .navback.coachlink{border-color:var(--green); color:var(--green)}
+.navback.playerlink{border-color:var(--water); color:var(--water)}
 .ch-ask{display:flex; flex-direction:column; gap:8px; margin:10px 0 4px}
 /* the coach's debrief of today's ride, on the Day under "Next" */
 .daycoach{display:flex; flex-direction:column; gap:12px; border-left:3px solid var(--green)}
