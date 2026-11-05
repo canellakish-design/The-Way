@@ -218,7 +218,9 @@ function attach(app) {
           headers: { 'Content-Type': 'application/json', 'x-api-key': KEY,
                      'anthropic-version': '2023-06-01' },
           body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 500,
-            system: systemPrompt(mode, t.yesterday, persona), tools: TOOLS, messages })
+            // the system prompt and the tools are the same on every hop, so they are read from the cache after the first
+            system: [{ type: 'text', text: systemPrompt(mode, t.yesterday, persona), cache_control: { type: 'ephemeral' } }],
+            tools: TOOLS, messages })
         });
         const d = await r.json();
         if (d.error) throw new Error(d.error.message);
