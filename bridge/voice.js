@@ -136,14 +136,13 @@ async function context() {
   return lines.join('\n');
 }
 
-function promptFor(text, ctx, continuing) {
-  return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 55 and training through a slow weight loss. You know the whole plan below (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. ${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'} Turn what he said into actions, and write one spoken reply.
+// The standing part of the prompt, the same on every utterance, kept in a cached system block (docs/api-spend.md):
+// who he is, how the app works, the action types and the reply rules. The day's state and his words follow.
+function systemText() {
+  return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 55 and training through a slow weight loss. You know the whole plan, sent with each message (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. Turn what he said into actions, and write one spoken reply.
 
 How the app works (the architecture, the models and their rules, the standing rules):
 ${require('./advisor-brief')}
-
-Where the day stands:
-${ctx}
 
 Action types:
 - meal: something eaten. text = the plate in his words (keep every food and any weights); meal = which meal if he said or it is obvious from the time, else "".
@@ -166,8 +165,15 @@ Fill every field: "" or 0 where it does not apply.
 
 The reply, spoken aloud, plain and friendly, to him as "you" (never "he" or "his"), no lists, no numbers he did not ask for:
 - For logged things: one short sentence confirming them (under 20 words).
-- For a question: advise. Pick one option and say the one reason that decides it, from the numbers above (what the next session needs, the calories and macros still due, fuel and water on board, the rules of the day, the weather, the calendar). Under 45 words. If two options are truly equal, say so and pick the simpler one. Never say "it depends" without then deciding. Coffee with whole milk adds about 3 g fat and 40 kcal over skim; a scoop of Tailwind is 25 g carbs (the plan's bottle on a hard day is two scoops, 50 g); a scoop of whey 25 g protein. Prefer the choice that serves the next session, then the day's deficit.
-- Times in 12-hour form (3:30p, never 15:30).
+- For a question: advise. Pick one option and say the one reason that decides it, from the day's numbers (what the next session needs, the calories and macros still due, fuel and water on board, the rules of the day, the weather, the calendar). Under 45 words. If two options are truly equal, say so and pick the simpler one. Never say "it depends" without then deciding. Coffee with whole milk adds about 3 g fat and 40 kcal over skim; a scoop of Tailwind is 25 g carbs (the plan's bottle on a hard day is two scoops, 50 g); a scoop of whey 25 g protein. Prefer the choice that serves the next session, then the day's deficit.
+- Times in 12-hour form (3:30p, never 15:30).`;
+}
+
+function promptFor(text, ctx, continuing) {
+  return `${continuing ? 'This is a conversation: the turns above are what he said and what you answered. Answer the latest thing he said in that light. If he is answering a question you asked, or choosing between options you gave, act on it now.' : 'He spoke one or more things.'}
+
+Where the day stands:
+${ctx}
 
 He said: "${text}"`;
 }
@@ -189,9 +195,11 @@ async function understand(text, history, extra) {
     headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
     body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
+      system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
       messages: turns.concat([{ role: 'user', content: promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0) }]) })
   });
   const j = await r.json();
+  if (j.usage) console.log('voice usage', JSON.stringify(j.usage));
   if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
   const block = (j.content || []).find(c => c.type === 'text');
   if (!block) throw new Error('no answer');
