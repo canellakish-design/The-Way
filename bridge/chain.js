@@ -235,12 +235,13 @@ async function report() {
     const Rd = require('./rides');
     work.credit_min = 0; work.hr_min = 0; work.hr_credit_min = 0;
     for (const day of cal.days || []) {
-      // today's sessions count in the plan once their start has passed (an untimed one from 9 p.m.): the week's
-      // ratio at dawn is the week so far, not the day he has not had the chance to ride yet
+      // today's sessions count in the plan once their planned end has passed (an untimed one from 9 p.m.): the
+      // week's ratio at dawn, or mid-ride, is the week so far, not the session he is still on or has not reached
       const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
-      const started = x => day.date !== today || (x.time ? require('./food-math').toMin(x.time) <= nowM : nowM >= 21 * 60);
-      const planned = (day.planned || []).filter(w => !isWeight(w) && started(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
-        + (day.intervals || []).filter(e => !isWeight(e) && started(e)).reduce((a, e) => a + (e.minutes || 0), 0);
+      const minsOf = x => x.metrics ? Math.round((x.metrics.duration_s || 0) / 60) : (x.minutes || 0);
+      const over = x => day.date !== today || (x.time ? require('./food-math').toMin(x.time) + minsOf(x) <= nowM : nowM >= 21 * 60);
+      const planned = (day.planned || []).filter(w => !isWeight(w) && over(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
+        + (day.intervals || []).filter(e => !isWeight(e) && over(e)).reduce((a, e) => a + (e.minutes || 0), 0);
       const hardDay = (day.planned || []).concat(day.intervals || []).some(w => HARD.test(String(w.name || '')));
       let done = 0, credit = 0;
       for (const r of (day.done || []).filter(r => !isWeight(r))) {
