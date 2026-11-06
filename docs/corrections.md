@@ -73,3 +73,6 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 
 ## 6 Nov · a Zone 1 floor
 - Zone 1 had a ceiling only (116; up to 10% of a ride at 117 or above passed), so a ride spent coasting or stopped graded the same as one ridden at 110. Harry asked for a floor as well. It is 100 bpm (ride-math `HR.z1_floor`): a Zone 1 ride passes with up to a quarter of it under 100 (a third on a trail), is a warning past that and a different ride past 40% (50 on a trail). The ride analysis carries the share under the floor (`zone_pct.under`); rides analysed earlier have none and are judged on the ceiling alone. The player counts the minutes at 100 to 116 and shows both shares; the Edge field shows the band; the briefs say 100 to 116.
+
+## 6 Nov · rest days
+- "When I have all three classes, those should be my rest days." The three sections (World History I, E, F and G) come through Google Calendar; a day carrying all three is a rest day (bridge/classes.js, the pattern and the count in schedule-classes.json). A session cannot be placed on one (the add and move routes refuse it unless told to force), the lift placer skips it, the Calendar marks the day, and the briefs carry the rule. Thu Nov 12 had a trainer hour on it; it moved to Fri Nov 13.

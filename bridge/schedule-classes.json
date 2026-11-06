@@ -8,5 +8,10 @@
     "Thu": [],
     "Fri": []
   },
-  "no_class_dates": []
+  "no_class_dates": [],
+  "rest_day": {
+    "classes": 3,
+    "match": "World History",
+    "note": "A day with all the sections is a rest day (Harry, 6 Nov 2026): the Google events of the day matching this are counted."
+  }
 }
