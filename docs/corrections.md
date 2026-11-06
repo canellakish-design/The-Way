@@ -76,3 +76,8 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 
 ## 6 Nov · rest days
 - "When I have all three classes, those should be my rest days." The three sections (World History I, E, F and G) come through Google Calendar; a day carrying all three is a rest day (bridge/classes.js, the pattern and the count in schedule-classes.json). A session cannot be placed on one (the add and move routes refuse it unless told to force), the lift placer skips it, the Calendar marks the day, and the briefs carry the rule. Thu Nov 12 had a trainer hour on it; it moved to Fri Nov 13.
+
+## 6 Nov · three scoring fixes (the review)
+- **Ride link:** today's planned minutes counted in the week's ratio at dawn, so it read 26% before the day could be ridden. A session on today counts once its start has passed (an untimed one from 9 p.m.).
+- **Recovery:** three models could disagree on one morning (the tile on the watch's score, the chain on the week's HRV against a 60-day band, the Day's guide on seven days against 28). One model now (bridge/recovery.js): the week against the band feeds the chain's link, the tile's week word and the Day's advice; the watch's morning number stays as the day's line on the published bands (67 green, 34 amber), the same floor everywhere.
+- **Fuel:** a ride's parts were a plain mean, so a missed beetroot cost as much as a ride with no carbs. Weighted now: the bottle 0.4, the food before 0.3, the meal after 0.2, the supplements 0.1 (chain-days rows re-read, ROW_V 8).
