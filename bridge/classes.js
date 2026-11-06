@@ -57,12 +57,13 @@ function restReason(dateStr, events) {
   if (n < REST.classes) return null;
   return `${['', 'one', 'two', 'three', 'four', 'five'][n] || n} classes`;
 }
-// the rest days between two dates, from the Google events as last synced: { date: reason }
+// the rest days between two dates, from every source the schedule reads (the classes come through the
+// school's calendar feed, not only Google; calendar.js merges them): { date: reason }
 async function restDaysBetween(from, to) {
-  const { getJSON } = require('./storage');
   const tz = require('./tz');
-  const d = await getJSON('gcal', null);
-  const events = (d && d.events) || [];
+  let events = [];
+  try { events = await require('./calendar').eventsBetween(from, to); }
+  catch (e) { const d = await require('./storage').getJSON('gcal', null); events = (d && d.events) || []; }
   const out = {};
   for (let k = from, i = 0; k <= to && i < 120; k = tz.shiftKey(k, 1), i++) { const r = restReason(k, events); if (r) out[k] = r; }
   return out;

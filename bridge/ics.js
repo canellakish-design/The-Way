@@ -269,10 +269,18 @@ async function fetchAll(fromKey, toKey, force) {
   const list = await feedsAsync();
   if (!list.length) return { configured: false, events: [], feeds: [] };
   const cache = await getJSON('ics-cache', null);
-  if (!force && cache && cache.from === fromKey && cache.to === toKey
+  // The cache holds a wide window (a week back, four weeks ahead at least) and any range inside it is
+  // served from it: the Day asks for one window, the lifts for another, the rest-day rule for a third,
+  // and each used to fetch the feeds again because the window was not the one cached.
+  const dayOf = e => e.allDay ? String(e.start).slice(0, 10) : tz.keyOf(new Date(e.start));
+  const inRange = evs => (evs || []).filter(e => { const k = dayOf(e); return k >= fromKey && k <= toKey; });
+  if (!force && cache && cache.from <= fromKey && cache.to >= toKey
       && Date.now() - cache.at < TTL_MS) {
-    return { configured: true, events: cache.events, feeds: cache.feeds, cached: true };
+    return { configured: true, events: inRange(cache.events), feeds: cache.feeds, cached: true };
   }
+  const today = tz.todayKey();
+  const wfrom = fromKey < tz.shiftKey(today, -7) ? fromKey : tz.shiftKey(today, -7);
+  const wto = toKey > tz.shiftKey(today, 28) ? toKey : tz.shiftKey(today, 28);
   const events = [], report = [];
   for (const f of list) {
     try {
@@ -280,7 +288,7 @@ async function fetchAll(fromKey, toKey, force) {
       if (!r.ok) throw new Error('HTTP ' + r.status);
       const text = await r.text();
       if (!/BEGIN:VCALENDAR/i.test(text)) throw new Error('not an iCal feed (no VCALENDAR)');
-      const evs = eventsFromFeed(text, f.name, fromKey, toKey);
+      const evs = eventsFromFeed(text, f.name, wfrom, wto);
       events.push(...evs);
       report.push({ name: f.name || 'calendar', events: evs.length, ok: true });
     } catch (e) {
@@ -289,9 +297,9 @@ async function fetchAll(fromKey, toKey, force) {
       console.error('[ics]', f.name || f.url.slice(0, 40), e.message);
     }
   }
-  await setJSON('ics-cache', { from: fromKey, to: toKey, events, feeds: report, at: Date.now() })
+  await setJSON('ics-cache', { from: wfrom, to: wto, events, feeds: report, at: Date.now() })
     .catch(() => {});
-  return { configured: true, events, feeds: report, cached: false };
+  return { configured: true, events: inRange(events), feeds: report, cached: false };
 }
 
 function attach(app) {
