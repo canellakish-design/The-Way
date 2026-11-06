@@ -40,7 +40,7 @@ function stateOf(key, v) {
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
     case 'fuel': return v >= 0.9 && v <= 1.1 ? 'good' : v >= 0.75 && v <= 1.25 ? 'warn' : 'bad';   // 100% is the plan: under or over both count
     case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
-    case 'recovery': return v >= 67 ? 'good' : v >= 50 ? 'warn' : 'bad';
+    case 'recovery': return v >= 67 ? 'good' : v >= 34 ? 'warn' : 'bad';   // the published bands, the same as the tile's
     case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
     case 'plan': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';     // a pound a week down is the pace; 0.8 allows for the scale
   }
@@ -79,39 +79,21 @@ function verdict(links) {
   return { break_at: first || null, break_state: first ? links[first].state : null, text };
 }
 
-// ---- recovery against the rider's own band ----------------------------------
-// The week's HRV (the mean of ln rMSSD over the last seven nights) against a
-// 60-day baseline of the same, with a step of half the baseline's night-to-
-// night spread (the smallest worthwhile change, Plews and Buchheit). Inside
-// or above the band is green; one step under is a dip; two steps under, or
-// one step under with the resting heart rate up and short sleep, is red.
-// Fewer than fourteen nights and there is no band yet. The baseline moves
-// with the rider, so green keeps meaning normal for the rider he is now.
-const mean = xs => xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
-const sd = xs => { if (xs.length < 2) return null; const m = mean(xs); return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / (xs.length - 1)); };
-function recoveryState(o) {
-  const n = (o.hrv_week || []).length + (o.hrv_base || []).length;
-  if (n < 14 || (o.hrv_week || []).length < 3 || (o.hrv_base || []).length < 7) return { state: 'none', steps: null, pct: null, why: `${n} nights so far; a band needs fourteen` };
-  const lw = mean(o.hrv_week.map(Math.log)), lb = mean(o.hrv_base.map(Math.log)), s = Math.max(0.03, (sd(o.hrv_base.map(Math.log)) || 0.08) * 0.5);
-  const steps = (lw - lb) / s, pct = Math.round((Math.exp(lw - lb) - 1) * 100);
-  const rhrUp = o.rhr_week != null && o.rhr_base != null && o.rhr_sd != null && o.rhr_week > o.rhr_base + Math.max(0.8, 0.5 * o.rhr_sd);
-  const shortSleep = o.sleep_week != null && o.sleep_week < 6.25;
-  let state, why;
-  if (steps <= -2) { state = 'bad'; why = `HRV ${pct}% under your band, two steps down`; }
-  else if (steps <= -1 && rhrUp && shortSleep) { state = 'bad'; why = `HRV ${pct}% under your band with resting HR up and short sleep`; }
-  else if (steps <= -1) { state = 'warn'; why = `HRV ${pct}% under your band: a dip`; }
-  else { state = 'good'; why = steps >= 1 ? `HRV ${pct > 0 ? '+' : ''}${pct}% above your band` : `HRV inside your band (${pct > 0 ? '+' : ''}${pct}%)`; }
-  return { state, steps: Math.round(steps * 10) / 10, pct, rhr_up: !!rhrUp, why };
-}
+// ---- recovery against the rider's own band: recovery.js, the one model the whole site reads ----
+const { recoveryState, mean, sd } = require('./recovery');
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 7;   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
+const ROW_V = 8;   // 8: the weighted fuel mean   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
 // Fuel for a day, as how much of what the plan asked for went in: for each ride, the carbs eaten in the four
 // hours before it against the plan's carbs for that window, the carbs taken on the bike against the plan's
 // bottle, and (once a day, on the first ride) the pre-ride supplements due against those taken: beetroot on a
 // ride day, bicarbonate before a hard one. Each part is a ratio, so under the plan reads below 100% and over it
-// reads above. A ride's score is the mean of its parts; the week's is the mean of its rides. Lifts and runs are not fuel checks.
+// reads above. A ride's score is the weighted mean of its parts (FUEL_WEIGHT); the week's is the mean of its rides. Lifts and runs are not fuel checks.
 const NOT_RIDE = /lift|weight|strength|push|pull|upper|legs|pump|\brun\b|treadmill/i;
+// A ride's fuel score weighs its parts as a coach would: the bottle most, the food before it next, the meal
+// after, then the pre-ride supplements; a missed beetroot is not the same miss as a ride with no carbs.
+const FUEL_WEIGHT = { bottle: 0.4, pre: 0.3, after: 0.2, supp: 0.1 };
+const fuelMean = parts => { const w = parts.reduce((a, p) => a + (FUEL_WEIGHT[p.kind] || 0.1), 0); return w ? parts.reduce((a, p) => a + p.ratio * (FUEL_WEIGHT[p.kind] || 0.1), 0) / w : null; };
 function fuelChecks(r) {
   const F = require('./food-math');
   const out = [];
@@ -146,7 +128,7 @@ function fuelChecks(r) {
       parts.push({ kind: 'supp', got: taken, due: due.length, keys: due, ratio: taken / due.length });
     }
     if (!parts.length) return;
-    const ratio = parts.reduce((a, p) => a + p.ratio, 0) / parts.length;
+    const ratio = fuelMean(parts);
     out.push({ kind: 'ride', name: x.name, time: x.time, ratio: Math.round(ratio * 100) / 100, pct: Math.round(ratio * 100), parts,
       ok: ratio >= 0.9 && ratio <= 1.1, near: ratio >= 0.75 && ratio <= 1.25 });
   });
@@ -219,7 +201,7 @@ async function report() {
     // today counts the rides whose fuelling has begun (from four hours before the start): one further off has had no chance yet
     const nowT = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
     // a ride not yet started is scored on what is due so far: the food before it and the supplements, not the bottle
-    const soFar = c => { const parts = (c.parts || []).filter(p => p.kind !== 'bottle'); if (!parts.length) return null; const ratio = parts.reduce((a, p) => a + p.ratio, 0) / parts.length;
+    const soFar = c => { const parts = (c.parts || []).filter(p => p.kind !== 'bottle'); if (!parts.length) return null; const ratio = fuelMean(parts);
       return Object.assign({}, c, { parts, ratio: Math.round(ratio * 100) / 100, pct: Math.round(ratio * 100), ok: ratio >= 0.9 && ratio <= 1.1, near: ratio >= 0.75 && ratio <= 1.25, so_far: true }); };
     todayRow = { fuel: fuelChecks(r).filter(c => require('./food-math').toMin(c.time) - 240 <= nowT).map(c => require('./food-math').toMin(c.time) > nowT ? soFar(c) : c).filter(Boolean), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
@@ -234,35 +216,10 @@ async function report() {
 
   // sleep and recovery: the Garmin's mornings through intervals.icu
   let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
+  // one recovery model for the whole site (recovery.js): the same band the Day's tile and advice read
   tasks.push((async () => { try {
-    const iv = require('./intervals');
-    if (iv.configured()) {
-      const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
-      const all = await require('./wellness').overlay(w.days || []);   // a morning entered by hand wins for its date
-      const weekFrom = dates[0], baseFrom = tz.shiftKey(today, -60);
-      // HRV and resting HR from the current watch only: a new device starts its own band
-      const DV = require('./devices'), since = DV.WEARABLE_SINCE, mine = d => d.date >= since;
-      const hrvWeek = all.filter(d => mine(d) && d.date >= weekFrom && d.hrv > 0).map(d => d.hrv);
-      const hrvBase = all.filter(d => mine(d) && d.date >= baseFrom && d.date < weekFrom && d.hrv > 0).map(d => d.hrv);
-      const rhrW = all.filter(d => mine(d) && d.date >= weekFrom && d.rhr > 0).map(d => d.rhr), rhrB = all.filter(d => mine(d) && d.date >= baseFrom && d.date < weekFrom && d.rhr > 0).map(d => d.rhr);
-      const sleepW = all.filter(d => d.date >= weekFrom && d.sleep_h >= 2.5).map(d => d.sleep_h);
-      band = recoveryState({ hrv_week: hrvWeek, hrv_base: hrvBase, rhr_week: mean(rhrW), rhr_base: mean(rhrB), rhr_sd: sd(rhrB), sleep_week: mean(sleepW) });
-      if (band.state === 'none' && since > baseFrom) band.why = `a new watch (${DV.WEARABLE}) since ${tz.labelOf ? tz.labelOf(since) : since}: ${hrvWeek.length + hrvBase.length} of 14 nights before its own band is set; until then each morning reads on its own`;
-      hrvWeekMs = hrvWeek.length ? Math.round(mean(hrvWeek)) : null; hrvBaseMs = hrvBase.length ? Math.round(mean(hrvBase)) : null; rhrWeek = rhrW.length ? Math.round(mean(rhrW)) : null;
-      const M = require('./scores-math');
-      for (const d of all) {
-        if (d.date < dates[0]) continue;
-        // a night under two and a half hours is the watch off the wrist, not a night: kept in the list, left out of the mean
-        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5, manual: d.manual || null });
-        let score = d.readiness;
-        if (score == null && (d.hrv != null || d.sleep_h != null)) {
-          const hist = all.filter(x => x.date < d.date && x.hrv != null && x.date >= require('./devices').WEARABLE_SINCE).slice(-30).map(x => x.hrv);
-          const b = M.vsBaseline ? M.vsBaseline(d.hrv, hist) : { delta_pct: 0 };
-          score = Math.max(10, Math.min(100, Math.round(60 + ((b && b.delta_pct) || 0) * 1.2 + ((d.sleep_h || 7) - 7) * 8)));
-        }
-        if (score != null) recs.push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null, manual: d.manual || null });
-      }
-    }
+    const R = await require('./recovery').weekBand(today, dates[0]);
+    nights = R.nights; recs = R.recs; band = R.band; hrvWeekMs = R.hrv_week_ms; hrvBaseMs = R.hrv_base_ms; rhrWeek = R.rhr_week;
   } catch (e) { nights = []; recs = []; } })());
   // work: minutes done against minutes planned over the week
   let work = { planned_min: 0, done_min: 0, days: [] }, liftsPlanned = 0;
@@ -278,8 +235,12 @@ async function report() {
     const Rd = require('./rides');
     work.credit_min = 0; work.hr_min = 0; work.hr_credit_min = 0;
     for (const day of cal.days || []) {
-      const planned = (day.planned || []).filter(w => !isWeight(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
-        + (day.intervals || []).filter(e => !isWeight(e)).reduce((a, e) => a + (e.minutes || 0), 0);
+      // today's sessions count in the plan once their start has passed (an untimed one from 9 p.m.): the week's
+      // ratio at dawn is the week so far, not the day he has not had the chance to ride yet
+      const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
+      const started = x => day.date !== today || (x.time ? require('./food-math').toMin(x.time) <= nowM : nowM >= 21 * 60);
+      const planned = (day.planned || []).filter(w => !isWeight(w) && started(w)).reduce((a, w) => a + Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), 0)
+        + (day.intervals || []).filter(e => !isWeight(e) && started(e)).reduce((a, e) => a + (e.minutes || 0), 0);
       const hardDay = (day.planned || []).concat(day.intervals || []).some(w => HARD.test(String(w.name || '')));
       let done = 0, credit = 0;
       for (const r of (day.done || []).filter(r => !isWeight(r))) {

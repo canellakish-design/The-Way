@@ -2007,7 +2007,8 @@ V.today = async function(){
       const hrv = r.hrv_delta_pct != null ? `HRV ${sgn(Math.round(r.hrv_delta_pct))}%` : r.hrv != null ? `HRV ${Math.round(r.hrv)}` : "";
       if (src.source === "garmin"){
         // the Garmin's morning, through intervals.icu: a day old at most by construction
-        paintTile("recovery", r.score, r.band.word, r.band.tone, `${hrv ? hrv + " · " : ""}Garmin${/estimated/.test(src.basis||"") ? ", estimated" : ""}`);
+        // the morning's number on the watch's bands; the week against the HRV band (the one model, recovery.js) beside it
+        paintTile("recovery", r.score, r.band.word, r.band.tone, `${hrv ? hrv + " · " : ""}Garmin${/estimated/.test(src.basis||"") ? ", estimated" : ""}${r.week && r.week.state !== "none" ? " · week " + r.week.word : ""}`);
       } else {
         // Yesterday's score with a dead token is not today's recovery: say so on the box.
         const w = d.sources && d.sources.whoop || {};

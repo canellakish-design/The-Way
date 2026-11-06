@@ -97,6 +97,15 @@ async function build() {
     } catch (e) { /* the baseline log is a nicety */ }
   }
   const out = M.scores({ loads, from, to: today, today, shiftKey: tz.shiftKey, whoop: garmin || whoop, wellness });
+  // one recovery model (recovery.js): the week against the rider's own HRV band, the same the chain's Recovery link
+  // reads, feeds the Day's advice (guide) and sits beside the watch's morning number on the tile
+  try {
+    const R = require('./recovery');
+    const wk = await R.weekBand(today);
+    out.recovery.week = { state: wk.band.state, why: wk.band.why, steps: wk.band.steps, pct: wk.band.pct, hrv_week_ms: wk.hrv_week_ms, hrv_base_ms: wk.hrv_base_ms, rhr_week: wk.rhr_week,
+      nights: wk.nights_on_record || 0, word: wk.band.state === 'good' ? 'in your band' : wk.band.state === 'warn' ? 'a dip' : wk.band.state === 'bad' ? 'below your band' : 'band not set' };
+    out.recovery.guide = R.guideFromBand(wk.band, wk.nights_on_record || 0);
+  } catch (e) { /* the tile stands on the morning's number */ }
   return Object.assign(out, {
     settings: { ftp: st.ftp, lthr: st.lthr },
     sources: {

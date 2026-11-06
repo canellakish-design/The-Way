@@ -14,7 +14,7 @@ ok('states: one rule a link', () => {
 ok('verdict: the first link from the left that is off is the break; all good and flat blames the target', () => {
   const L = { sleep: { week: 7.4, state: 'good' }, food: { week: 71, state: 'warn', days_on: 3, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, water: { week: 90, state: 'good' }, work: { week: 95, state: 'good', done_min: 300, planned_min: 315 }, lift: { week: 80, state: 'good', sessions: 4, target: 5 }, recovery: { week: 72, state: 'good' }, weight: { week: 0.2, state: 'warn' } };
   const v = C.verdict(L);
-  assert.strictEqual(v.break_at, 'food'); assert.ok(/breaks at macros: on plan 3 of 7/.test(v.text), v.text); assert.ok(/Weight flat/.test(v.text), v.text);
+  assert.strictEqual(v.break_at, 'food'); assert.ok(/weak at macros: on plan 3 of 7/.test(v.text), v.text);   // amber is a weak link, red a break assert.ok(/Weight flat/.test(v.text), v.text);
   const all = Object.assign({}, L, { food: { week: 88, state: 'good', days_on: 6, days_logged: 7 } });
   const v2 = C.verdict(all);
   assert.strictEqual(v2.break_at, null); assert.ok(/calorie target is the suspect/.test(v2.text), v2.text);
@@ -95,7 +95,8 @@ ok('fuel: a ride scores what went in against the plan (before, on the bike, supp
   assert.strictEqual(p.pre.got_g, 27); assert.strictEqual(p.pre.plan_g, 35);
   assert.strictEqual(p.bottle.got_g, 50);
   assert.strictEqual(p.supp.due, 2); assert.strictEqual(p.supp.got, 1);          // a hard session wants bicarbonate too
-  assert.strictEqual(c[0].pct, Math.round((27 / 35 + 1 + 0.5) / 3 * 100));
+  // the parts weigh as a coach would: the bottle 0.4, the food before 0.3, the meal after 0.2, the supplements 0.1
+  assert.strictEqual(c[0].pct, Math.round(((27 / 35) * 0.3 + 1 * 0.4 + 0.5 * 0.1) / 0.8 * 100));
   const over = C.fuelChecks(Object.assign({}, r, { entries: r.entries.concat([{ time: '06:00', carbs_g: 60, kcal: 240 }, { supplement: true, key: 'sodium_bicarb', time: '05:30' }]) }));
   assert.ok(over[0].pct > 100, over[0].pct);
   assert.strictEqual(C.stateOf('fuel', 1.0), 'good'); assert.strictEqual(C.stateOf('fuel', 1.3), 'bad'); assert.strictEqual(C.stateOf('fuel', 0.8), 'warn');
