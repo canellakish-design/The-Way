@@ -70,3 +70,6 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 
 ## 3 Nov · fuel for the work required
 - The food model moved from three day tiers (rest/normal/high by the ride's name) to a prescription per session (Impey 2018), the day's carbs the sum of the work; one train-low ride a week, never on or before a quality session. Spec: docs/fuel-for-the-work.md.
+
+## 6 Nov · a Zone 1 floor
+- Zone 1 had a ceiling only (116; up to 10% of a ride at 117 or above passed), so a ride spent coasting or stopped graded the same as one ridden at 110. Harry asked for a floor as well. It is 100 bpm (ride-math `HR.z1_floor`): a Zone 1 ride passes with up to a quarter of it under 100 (a third on a trail), is a warning past that and a different ride past 40% (50 on a trail). The ride analysis carries the share under the floor (`zone_pct.under`); rides analysed earlier have none and are judged on the ceiling alone. The player counts the minutes at 100 to 116 and shows both shares; the Edge field shows the band; the briefs say 100 to 116.

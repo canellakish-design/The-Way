@@ -11,7 +11,8 @@
 // at VT2 (3 Nov 2026): 152 (94% of max) was never reached for more than
 // seconds in any ride on record, so a goal there graded every session red.
 // Target minutes stay Harry's 8 to 12.
-const HR = { vt1: 117, vt2: 139, hard: 139, max: 162 };
+// z1_floor: a Zone 1 ride is work, not a stroll; the share of it under this line counts against it (Harry, 6 Nov 2026)
+const HR = { vt1: 117, vt2: 139, hard: 139, max: 162, z1_floor: 100 };
 const VO2_TARGET = { lo: 8, hi: 12 };
 
 const r1 = x => Math.round(x * 10) / 10;
@@ -21,18 +22,20 @@ function hrSummary(hr, thresholds) {
   const t = Object.assign({}, HR, thresholds || {});
   const xs = (hr || []).map(Number).filter(v => v > 30 && v < 230);
   if (!xs.length) return null;
-  let z1 = 0, z2 = 0, z3 = 0, hard = 0, sum = 0, max = 0;
+  let z1 = 0, z2 = 0, z3 = 0, hard = 0, under = 0, sum = 0, max = 0;
   for (const v of xs) {
     sum += v; if (v > max) max = v;
     if (v < t.vt1) z1++; else if (v < t.vt2) z2++; else z3++;
     if (v > t.hard) hard++;
+    if (v < t.z1_floor) under++;
   }
   return {
     avg: Math.round(sum / xs.length), max,
     seconds: xs.length,
     minutes_above_hard: r1(hard / 60), hard_bpm: t.hard,
-    zones: { z1_min: r1(z1 / 60), z2_min: r1(z2 / 60), z3_min: r1(z3 / 60) },
-    zone_pct: { z1: Math.round(z1 / xs.length * 100), z2: Math.round(z2 / xs.length * 100), z3: Math.round(z3 / xs.length * 100) }
+    zones: { z1_min: r1(z1 / 60), z2_min: r1(z2 / 60), z3_min: r1(z3 / 60), under_min: r1(under / 60) },
+    // under: the share below the Zone 1 floor (within z1, which counts everything under VT1)
+    zone_pct: { z1: Math.round(z1 / xs.length * 100), z2: Math.round(z2 / xs.length * 100), z3: Math.round(z3 / xs.length * 100), under: Math.round(under / xs.length * 100) }, floor_bpm: t.z1_floor
   };
 }
 
@@ -55,14 +58,16 @@ function hrSummaryFromZones(z, avg, max, maxHr) {
   const below = zone[0] + zone[1] + zone[2] + zone[3] * z3Lo;
   const mid = zone[3] * (1 - z3Lo) + zone[4] * z4Lo;
   const above = zone[4] * (1 - z4Lo) + zone[5];
+  // under the Zone 1 floor: whole zones below it, plus the share of the zone it falls in
+  let under = 0; for (let i = 0; i < 5; i++) { const lo = i ? cuts[i - 1] : 0, hi = cuts[i]; under += HR.z1_floor >= hi ? zone[i] : HR.z1_floor <= lo ? 0 : zone[i] * (HR.z1_floor - lo) / (hi - lo); }
   const m = x => r1(x / 60000);
   return {
     avg: avg != null ? Math.round(avg) : null, max: max != null ? Math.round(max) : null,
     seconds: Math.round(total / 1000),
     // the VO2 line is VT2, so the minutes above it are the minutes above VT2
     minutes_above_hard: m(above), hard_bpm: HR.hard,
-    zones: { z1_min: m(below), z2_min: m(mid), z3_min: m(above) },
-    zone_pct: { z1: Math.round(below / total * 100), z2: Math.round(mid / total * 100), z3: Math.round(above / total * 100) },
+    zones: { z1_min: m(below), z2_min: m(mid), z3_min: m(above), under_min: m(under) },
+    zone_pct: { z1: Math.round(below / total * 100), z2: Math.round(mid / total * 100), z3: Math.round(above / total * 100), under: Math.round(under / total * 100) }, floor_bpm: HR.z1_floor,
     estimated: 'from WHOOP zone times, not a stream'
   };
 }
