@@ -44,4 +44,28 @@ function configured() {
   return Object.values(TABLE.week || {}).some(rows => (rows || []).length > 0);
 }
 
-module.exports = { classesForDate, configured, TABLE };
+// A day with all the sections is a rest day (Harry, 6 Nov 2026). The classes come through Google
+// Calendar; the day's events matching rest_day.match in schedule-classes.json are counted, and at
+// rest_day.classes of them the day is a rest day: no ride, no lift (workouts.js refuses to place one
+// there, lifts.js skips it, the Calendar marks it).
+const REST = Object.assign({ classes: 3, match: '' }, TABLE.rest_day || {});
+function restReason(dateStr, events) {
+  if (!REST.match || !(REST.classes > 0)) return null;
+  const re = new RegExp(REST.match, 'i');
+  const tz = require('./tz');
+  const n = (events || []).filter(e => e && !e.allDay && re.test(String(e.summary || '')) && tz.keyOf(new Date(e.start)) === dateStr).length;
+  if (n < REST.classes) return null;
+  return `${['', 'one', 'two', 'three', 'four', 'five'][n] || n} classes`;
+}
+// the rest days between two dates, from the Google events as last synced: { date: reason }
+async function restDaysBetween(from, to) {
+  const { getJSON } = require('./storage');
+  const tz = require('./tz');
+  const d = await getJSON('gcal', null);
+  const events = (d && d.events) || [];
+  const out = {};
+  for (let k = from, i = 0; k <= to && i < 120; k = tz.shiftKey(k, 1), i++) { const r = restReason(k, events); if (r) out[k] = r; }
+  return out;
+}
+
+module.exports = { classesForDate, configured, restReason, restDaysBetween, TABLE };

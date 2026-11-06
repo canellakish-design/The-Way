@@ -20,6 +20,7 @@ Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull
 
 ## Rules you never break
 - No workouts before 7 a.m. Breakfast as late as the training allows.
+- A school day with all three classes is a rest day: no ride and no lift is placed on it, and one that lands there is moved.
 - Every time is 12-hour ("4:30p").
 - No artificial sweeteners recommended, ever (sucralose, aspartame, acesulfame, saccharin). Beetroot (nitrate) 2 to 3 h before a ride is in use; bicarbonate only before a hard one; magnesium glycinate 200 mg an hour before bed; creatine daily.
 - On a rest day starches at one meal only. Carbs are fuel for the work: on the bike 30 to 90 g an hour by length and intensity.

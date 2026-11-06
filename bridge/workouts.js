@@ -519,6 +519,8 @@ async function calendar(from, to, o) {
   }
   // fuel for the work required: each day's carbs from its sessions, the week's train-low rule applied in order
   try { const wf = await require('./fuel-week').weekFuel(from, to, st.ftp); for (const d of days) d.fuel = wf[d.date] || null; } catch (e) { /* the days stand without it */ }
+  // a day with all three classes is a rest day (classes.js): the Calendar says so, and the placers keep off it
+  try { const rest = await require('./classes').restDaysBetween(from, to); for (const d of days) d.rest = rest[d.date] || null; } catch (e) { /* unmarked */ }
   return { from, to, today, settings: st, days,
     sources: { intervals: { configured: icuR.configured, error: icuR.error || null },
                strava: { connected: doneR.connected, reason: doneR.reason || null } } };
@@ -656,7 +658,7 @@ function attach(app) {
 
   app.post('/workouts', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db();
-    let w; try { w = clean(req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+    let w; try { w = clean(req.body); await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
     if ((req.body || {}).send) w = await syncOne(w, st);
     d.workouts[w.id] = w; await save(d);
     res.json(withMetrics(w, st)); });
@@ -664,7 +666,7 @@ function attach(app) {
   app.put('/workouts/:id', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db(); const prev = d.workouts[req.params.id];
     if (!prev) return res.status(404).json({ error: 'no such workout' });
-    let w; try { w = clean(req.body, prev); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+    let w; try { w = clean(req.body, prev); if (w.date !== prev.date) await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
     // A workout already on the Garmin is changed there too, or it is marked
     // as out of date — never silently left different.
     if ((req.body || {}).send || (prev.sync && prev.sync.state === 'synced')) {
@@ -689,9 +691,17 @@ function attach(app) {
 }
 
 // Create a planned workout from a plain body (the voice route uses this).
+// A day with all three classes is a rest day (Harry, 6 Nov 2026): a session is not placed on one unless he
+// says so (force in the body). Checked when a session is added and when one is moved to another day.
+async function restCheck(w, body) {
+  if ((body || {}).force) return;
+  const rest = (await require('./classes').restDaysBetween(w.date, w.date).catch(() => ({})))[w.date];
+  if (rest) { const e = new Error(`${tz.dayShort(w.date)} is a rest day (${rest}). Pick another day, or send force to place it there anyway.`); e.status = 400; throw e; }
+}
 async function create(body) {
   const st = await settings(); const d = await db();
   const w = clean(body);
+  await restCheck(w, body);
   d.workouts[w.id] = w; await save(d);
   return withMetrics(w, st);
 }
@@ -702,6 +712,7 @@ async function update(id, body) {
   const st = await settings(); const d = await db(); const prev = d.workouts[id];
   if (!prev) return null;
   let w = clean(body, prev);
+  if (w.date !== prev.date) await restCheck(w, body);
   if (prev.sync && prev.sync.state === 'synced') {
     if (prev.date !== w.date) await unsyncOne(prev);
     w = await syncOne(w, st);

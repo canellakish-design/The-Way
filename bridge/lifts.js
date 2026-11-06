@@ -223,6 +223,7 @@ function placeWeek(days, o) {
     else if (next) s = 20 - load(next) / 5 - hardPen;
     if (opts.done && opts.done[x.date]) s += 1e3;                      // already lifted legs that day: it stands
     if (locksOf(x).length && !locksOf(x).includes('legs')) s = -2e3;
+    if (x.rest && !(opts.done && opts.done[x.date])) s = -3e3;       // a rest day (all three classes): nothing is placed on it
     return s;
   };
   let legsIdx = d.findIndex(x => locksOf(x).includes('legs')), best = -1e9;   // legs already on the calendar this week: it stands
@@ -235,9 +236,11 @@ function placeWeek(days, o) {
       : !x.ride ? 'a day off the bike' : 'the lightest riding ahead of it';
   }
   // 2. the two lift-free days: the two biggest riding days left
-  const rest = d.map((x, i) => ({ x, i })).filter(p => p.i !== legsIdx && !p.x.locked).sort((a, b) => load(b.x) - load(a.x));
-  const free = new Set(rest.slice(0, Math.max(0, n - 5)).map(p => p.i));
-  for (const i of free) d[i].why = d[i].ride ? `no lift: one of the two biggest riding days (${d[i].ride.name})` : 'no lift: a rest day';
+  //    (a rest day, all three classes, is lift-free before any of them; a week with more rest days than free days holds fewer lifts)
+  const restDays = d.map((x, i) => ({ x, i })).filter(p => p.i !== legsIdx && p.x.rest && !(opts.done && opts.done[p.x.date]) && !locksOf(p.x).length);
+  const rest = d.map((x, i) => ({ x, i })).filter(p => p.i !== legsIdx && !p.x.locked && !restDays.includes(p)).sort((a, b) => load(b.x) - load(a.x));
+  const free = new Set(restDays.map(p => p.i).concat(rest.slice(0, Math.max(0, n - 5 - restDays.length)).map(p => p.i)));
+  for (const i of free) d[i].why = d[i].rest ? `no lift: a rest day (${d[i].rest})` : d[i].ride ? `no lift: one of the two biggest riding days (${d[i].ride.name})` : 'no lift: a rest day';
   // 3. the other four, in the book's order, with pull kept a day clear of legs when it can be
   const slots = d.map((x, i) => i).filter(i => i !== legsIdx && !free.has(i) && !(d[i].locked && d[i].locked !== 'any'));
   // a session already on the calendar this week is placed where it is, not again somewhere else
@@ -264,16 +267,17 @@ function permutations(a) { if (a.length <= 1) return [a]; const out = []; a.forE
 
 // The week from today: each day's planned ride (the plan here and in
 // intervals.icu, or the ride done), coaching minutes from the calendar.
-async function weekDays(n) {
-  const today = tz.todayKey();
+async function weekDays(n, from0) {
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(from0 || '') ? from0 : tz.todayKey();   // the week from today, or from a day asked for
   const from = today, to = tz.shiftKey(today, (n || 7) - 1);
   const days = [];
-  for (let i = 0; i < (n || 7); i++) days.push({ date: tz.shiftKey(today, i), ride: null, coaching_min: 0, long_coaching: false });
+  for (let i = 0; i < (n || 7); i++) days.push({ date: tz.shiftKey(today, i), ride: null, coaching_min: 0, long_coaching: false, rest: null });
   try {
     const { calendar } = require('./workouts');
     const cal = await calendar(from, to);
     for (const day of cal.days || []) {
       const x = days.find(y => y.date === day.date); if (!x) continue;
+      x.rest = day.rest || null;   // a day with all three classes: no lift goes on it
       const rides = (day.planned || []).filter(w => !/weight|lift|strength/i.test(w.sport || '') && !/^lift|^push$|^pull|^upper|^legs$/i.test(w.name || '')).map(w => ({ name: w.name, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), tss: w.metrics ? w.metrics.tss : 0 }))
         .concat((day.intervals || []).filter(e => !/weight|lift|strength/i.test(e.type || '')).map(e => ({ name: e.name, minutes: e.minutes, tss: e.tss })))
         .concat((day.done || []).filter(r => !/weight|lift|strength/i.test(r.type || '')).map(r => ({ name: r.name, minutes: r.minutes, tss: r.tss, done: true })));
@@ -342,7 +346,7 @@ function templateOf(name) {
 }
 const isLiftEntry = w => /weight|lift|strength/i.test(String(w.sport || '')) || (!/ride|run|walk|hike/i.test(String(w.sport || '')) && !!templateOf(w.name));
 
-async function report() {
+async function report(from) {
   const d = await db();
   const sessions = d.sessions.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.at).localeCompare(String(b.at)));
   const lastOf = {};
@@ -352,7 +356,7 @@ async function report() {
     exercises: t.exercises.map(e => Object.assign({}, e, { last: lastOf[e.name] || null, target: target(e, lastOf[e.name]) })) }));
   // the week: what was lifted already this week holds its day; the rest is placed
   const today = tz.todayKey();
-  const days = await weekDays(7);
+  const days = await weekDays(7, from);   // the week from today, or the week from a day asked for (the placer, for a week ahead)
   // the strip mirrors the calendar: every lift saved on a day, then every lift the calendar holds that day
   const doneByDate = {}, locks = {};
   const add = (date, k) => { if (!k) return; const a = locks[date] = locks[date] || []; if (!a.includes(k)) a.push(k); };
@@ -414,20 +418,22 @@ async function save(body) {
 // skipping a day that already has a lift planned. time: "HH:MM", default 07:00.
 async function scheduleWeek(body) {
   const time = /^\d{2}:\d{2}$/.test((body || {}).time || '') ? body.time : '07:00';
-  const r = await report();
+  const r = await report(/^\d{4}-\d{2}-\d{2}$/.test((body || {}).from || '') ? body.from : undefined);
   const { create, calendar } = require('./workouts');
   const cal = await calendar(r.week[0].date, r.week[r.week.length - 1].date).catch(() => ({ days: [] }));
-  const added = [], kept = [];
+  const added = [], kept = [], skipped = [];
   for (const x of r.week) {
     if (!x.lift || x.done) continue;
     const day = (cal.days || []).find(dd => dd.date === x.date);
+    // a day with all three classes is a rest day: no lift goes on it
+    if (day && day.rest) { skipped.push({ date: x.date, why: day.rest }); continue; }
     const has = day && (day.planned || []).some(w => /weight/i.test(w.sport || '') || /^(push|pull|upper|legs)/i.test(w.name || ''));
     if (has) { kept.push(x.date); continue; }
     const t = TEMPLATES.find(tt => tt.key === x.lift);
     const w = await create({ name: t.name === 'Upper body and core' ? `${t.name} (${t.short})` : t.name, sport: 'WeightTraining', date: x.date, time, notes: `Log it on the Lift tab. ${x.why}.`, steps: [{ kind: 'step', label: 'Lift', dur_s: t.minutes * 60, target: { type: 'free' } }] });
     added.push({ date: x.date, name: t.name, id: w && w.id });
   }
-  return { ok: true, added, kept, time };
+  return { ok: true, added, kept, skipped, time };
 }
 
 function attach(app) {
