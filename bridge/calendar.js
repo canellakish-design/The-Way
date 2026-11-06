@@ -558,7 +558,7 @@ async function eventsBetween(firstKey, lastKey) {
   const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
   const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
   const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
-  return liveEvents.concat(applyOverrides(snapEvents, d.overrides));
+  return require('./classes').applySpecialSchedules(liveEvents.concat(applyOverrides(snapEvents, d.overrides)));
 }
 
 async function scheduleReport(q) {
@@ -611,7 +611,8 @@ async function scheduleReport(q) {
           account: 'snapshot:' + e.calendar,
           category: classify(e.summary, d.manual, calDefault) };
       });
-      const days = scheduleDays(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), n, iv.days, back);
+      // a special schedule on the Upper School calendar re-times that day's classes (classes.js)
+      const days = scheduleDays(require('./classes').applySpecialSchedules(liveEvents.concat(applyOverrides(snapEvents, d.overrides))), n, iv.days, back);
       // The supplements, as rows tied to the day's rides: beetroot before the
       // first ride, bicarbonate before a hard one, magnesium in the evening.
       // Derived, never stored, so they follow a ride that moves and never

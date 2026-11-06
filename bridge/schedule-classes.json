@@ -13,5 +13,14 @@
     "classes": 3,
     "match": "World History",
     "note": "A day with all the sections is a rest day (Harry, 6 Nov 2026): the Google events of the day matching this are counted."
+  },
+  "periods": {
+    "note": "the regular day: when each period starts, in minutes from midnight (8:30, 10:25, 12:50, 2:05); a special schedule names periods, and a class is matched to its period by its regular start",
+    "starts": [
+      510,
+      625,
+      770,
+      845
+    ]
   }
 }

@@ -1652,6 +1652,1076 @@
    "start": "2026-12-23T17:30:00-05:00",
    "end": "2026-12-23T19:00:00-05:00",
    "uid": "snapshot:U16 G MARYLAND UNITED ECNL:2026-12-23T17:30:00-05:00:Practice"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Spirit Week",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-02",
+   "end": "2026-11-07",
+   "uid": "snapshot:Upper School:2026-11-02:Spirit Week"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Drama Student Production (7:30pm)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-06",
+   "end": "2026-11-07",
+   "uid": "snapshot:Upper School:2026-11-06:Fall Drama Student Production (7:30pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 3",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-06",
+   "end": "2026-11-07",
+   "uid": "snapshot:Upper School:2026-11-06:Day 3"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Special Schedule: Spirit Parade and Pep Rally",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-06",
+   "end": "2026-11-07",
+   "uid": "snapshot:Upper School:2026-11-06:Special Schedule: Spirit Parade and Pep Rally",
+   "description": "Spirit Parade and Pep Rally (Friday, November 6 - Day 3 - Orange and Black Day) \n\n\n8:15        Advisory\n\n8:30 - 9:30    Period 1 (60 min)\n\n9:35 - 10:55       Period 2 (80 min)\n\n10:55        Brief Community Time\n\n11:15 - 12:00    Period 3 (45 min)\n\n12:05        Lunch\n\n12:45 - 1:30    Period 4 (45 min)\n\n1:30        Transition to Parade and Pep Rally\n\n1:45 - 3:00    Parade and Pep Rally\n\n3:30       Regular buses depart\n\n5:30          Late buses depart"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Spirit Parade & Pep Rally",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-06T18:45:00Z",
+   "end": "2026-11-06T20:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-06T18:45:00Z:Spirit Parade & Pep Rally"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Bi-Weekly Reports Due",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-06T21:00:00Z",
+   "end": "2026-11-06T22:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-06T21:00:00Z:Bi-Weekly Reports Due"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "SATs (McDonogh is NOT a Test Site)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-07",
+   "end": "2026-11-08",
+   "uid": "snapshot:Upper School:2026-11-07:SATs (McDonogh is NOT a Test Site)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "McDonogh v. Gilman Football Game",
+   "location": "Gilman School",
+   "allDay": false,
+   "start": "2026-11-07T19:00:00Z",
+   "end": "2026-11-07T21:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-07T19:00:00Z:McDonogh v. Gilman Football Game"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 4",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-09",
+   "end": "2026-11-10",
+   "uid": "snapshot:Upper School:2026-11-09:Day 4"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Special Schedule: Faculty Professional Development (Two-Hour Delay)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-09",
+   "end": "2026-11-10",
+   "uid": "snapshot:Upper School:2026-11-09:Special Schedule: Faculty Professional Development (Two-Hour Delay)",
+   "description": "All-School PLC and Two-Hour Weather-Related Delay Schedule\n\n\n8:00 - 10:00    PLC/Weather-Related Delay\n\n10:15         Advisory\n\n10:30 - 11:20     Period 1 (50 min)\n\n11:25 - 12:35        Period 2 (70 min)\n\n12:35        Lunch    \n\n1:30 - 2:20    Period 3 (50 min)\n\n2:25 - 3:15    Period 4 (50 min)\n\n3:15                     End of Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Conference Scheduler opens to Families at 9:00 am (for November 24 and 25)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-09",
+   "end": "2026-11-10",
+   "uid": "snapshot:Upper School:2026-11-09:Conference Scheduler opens to Families at 9:00 am (for November 24 and 25)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Boys Winter Sports Begin",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-09",
+   "end": "2026-11-10",
+   "uid": "snapshot:Upper School:2026-11-09:US Boys Winter Sports Begin"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Girls Winter Sports Begin ",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-09",
+   "end": "2026-11-10",
+   "uid": "snapshot:Upper School:2026-11-09:US Girls Winter Sports Begin "
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 5",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-10",
+   "end": "2026-11-11",
+   "uid": "snapshot:Upper School:2026-11-10:Day 5"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Casual Dress (See Note for Details)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-10",
+   "end": "2026-11-11",
+   "uid": "snapshot:Upper School:2026-11-10:Casual Dress (See Note for Details)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-10",
+   "end": "2026-11-11",
+   "uid": "snapshot:Upper School:2026-11-10: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Special Schedule: Junior-Senior Flag Football Game",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-10",
+   "end": "2026-11-11",
+   "uid": "snapshot:Upper School:2026-11-10:Special Schedule: Junior-Senior Flag Football Game",
+   "description": "Jr/Sr Flag Football Game (Tuesday, November 10 - Day 5 - Casual Dress)\n\n\n\n8:15            Advisory\n\n\n\n8:30 - 9:40       Period 1 (70 min)\n\n\n\n9:45 - 11:25        Period 2 (100 min) \n\n\n\n11:30            Community Time (Students may not go to lunch until 12:05p because of MS lunch.)\n\n\n\n12:05            Lunch\n\n\n\n12:50            Period 3 (70 min)\n\n\n\n2:05            Period 4 (70 min)\n\n\n\n4:00            Regular buses depart\n\n\n\n6:15            Late buses depart"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Junior-Senior Flag Football Game",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-10T16:30:00Z",
+   "end": "2026-11-10T17:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-10T16:30:00Z:Junior-Senior Flag Football Game"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 6",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-11",
+   "end": "2026-11-12",
+   "uid": "snapshot:Upper School:2026-11-11:Day 6"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Upper School Book Fair",
+   "location": "Kiplinger Library",
+   "allDay": true,
+   "start": "2026-11-11",
+   "end": "2026-11-13",
+   "uid": "snapshot:Upper School:2026-11-11:Upper School Book Fair"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Office Hours",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-11T14:45:00Z",
+   "end": "2026-11-11T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-11T14:45:00Z:Office Hours"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Athletics Signing Day",
+   "location": "Edwards Memorial Court",
+   "allDay": false,
+   "start": "2026-11-11T20:30:00Z",
+   "end": "2026-11-11T20:45:00Z",
+   "uid": "snapshot:Upper School:2026-11-11T20:30:00Z:Athletics Signing Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 7",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-12",
+   "end": "2026-11-13",
+   "uid": "snapshot:Upper School:2026-11-12:Day 7"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "CCO G11 Webinar: Admission Q&A (7-8pm)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-12",
+   "end": "2026-11-13",
+   "uid": "snapshot:Upper School:2026-11-12:CCO G11 Webinar: Admission Q&A (7-8pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Clubs (Service/GGM & Special Interests)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-12T14:45:00Z",
+   "end": "2026-11-12T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-12T14:45:00Z:Clubs (Service/GGM & Special Interests)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Peer Ed Meeting (Klein)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-12T17:25:00Z",
+   "end": "2026-11-12T17:45:00Z",
+   "uid": "snapshot:Upper School:2026-11-12T17:25:00Z:Peer Ed Meeting (Klein)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 1",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-13",
+   "end": "2026-11-14",
+   "uid": "snapshot:Upper School:2026-11-13:Day 1"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-13",
+   "end": "2026-11-14",
+   "uid": "snapshot:Upper School:2026-11-13: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Boarder Move-Out",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-13",
+   "end": "2026-11-14",
+   "uid": "snapshot:Upper School:2026-11-13:Fall Boarder Move-Out"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Assembly",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-13T14:45:00Z",
+   "end": "2026-11-13T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-13T14:45:00Z:Assembly"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Dance Concert (7pm)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-14",
+   "end": "2026-11-15",
+   "uid": "snapshot:Upper School:2026-11-14:Dance Concert (7pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Dance Concert",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-15T00:00:00Z",
+   "end": "2026-11-15T02:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-15T00:00:00Z:Dance Concert"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Winter Boarder Move-In",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-15",
+   "end": "2026-11-16",
+   "uid": "snapshot:Upper School:2026-11-15:Winter Boarder Move-In"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Dance Concert (2pm)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-15",
+   "end": "2026-11-16",
+   "uid": "snapshot:Upper School:2026-11-15:Dance Concert (2pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Dance Concert",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-15T19:00:00Z",
+   "end": "2026-11-15T21:00:00Z",
+   "uid": "snapshot:Upper School:2026-11-15T19:00:00Z:Dance Concert"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 2",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-16",
+   "end": "2026-11-17",
+   "uid": "snapshot:Upper School:2026-11-16:Day 2"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-16",
+   "end": "2026-11-17",
+   "uid": "snapshot:Upper School:2026-11-16: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Peer Ed attending LS Morning Meeting",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-16T13:30:00Z",
+   "end": "2026-11-16T13:50:00Z",
+   "uid": "snapshot:Upper School:2026-11-16T13:30:00Z:Peer Ed attending LS Morning Meeting"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Advisory Time",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-16T14:45:00Z",
+   "end": "2026-11-16T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-16T14:45:00Z:Advisory Time"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 3",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-17",
+   "end": "2026-11-18",
+   "uid": "snapshot:Upper School:2026-11-17:Day 3"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Clubs (Arts, Awareness/E&I & Educational)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-17T14:45:00Z",
+   "end": "2026-11-17T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-17T14:45:00Z:Clubs (Arts, Awareness/E&I & Educational)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 4",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-18",
+   "end": "2026-11-19",
+   "uid": "snapshot:Upper School:2026-11-18:Day 4"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Community Time",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-18T14:45:00Z",
+   "end": "2026-11-18T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-18T14:45:00Z:Community Time"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Conference Scheduler Closes at 9am and scheduled will be sent in the afternoon",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-19",
+   "end": "2026-11-20",
+   "uid": "snapshot:Upper School:2026-11-19:Conference Scheduler Closes at 9am and scheduled will be sent in the afternoon"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-19",
+   "end": "2026-11-20",
+   "uid": "snapshot:Upper School:2026-11-19: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 5",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-19",
+   "end": "2026-11-20",
+   "uid": "snapshot:Upper School:2026-11-19:Day 5"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Faculty Meeting",
+   "location": "Klein Lyceum",
+   "allDay": false,
+   "start": "2026-11-19T14:45:00Z",
+   "end": "2026-11-19T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-19T14:45:00Z:US Faculty Meeting"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Class Time (G9+G10: Horn, G12 Meeting: 1873)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-19T14:45:00Z",
+   "end": "2026-11-19T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-19T14:45:00Z:Class Time (G9+G10: Horn, G12 Meeting: 1873)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 6",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-20",
+   "end": "2026-11-21",
+   "uid": "snapshot:Upper School:2026-11-20:Day 6"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Office Hours",
+   "location": null,
+   "allDay": false,
+   "start": "2026-11-20T14:45:00Z",
+   "end": "2026-11-20T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-11-20T14:45:00Z:Office Hours"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Virtual Student-Parent-Teacher Conferences (No Classes)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-23",
+   "end": "2026-11-24",
+   "uid": "snapshot:Upper School:2026-11-23:Virtual Student-Parent-Teacher Conferences (No Classes)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Virtual Student-Parent-Teacher Conferences til Noon (No Classes)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-24",
+   "end": "2026-11-25",
+   "uid": "snapshot:Upper School:2026-11-24:Virtual Student-Parent-Teacher Conferences til Noon (No Classes)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Break Begins (Early Dismissal at Noon)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-24",
+   "end": "2026-11-25",
+   "uid": "snapshot:Upper School:2026-11-24:Fall Break Begins (Early Dismissal at Noon)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Break (School Closed)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-25",
+   "end": "2026-11-28",
+   "uid": "snapshot:Upper School:2026-11-25:Fall Break (School Closed)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Faculty Professional Day (No Classes)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-11-30",
+   "end": "2026-12-01",
+   "uid": "snapshot:Upper School:2026-11-30:Faculty Professional Day (No Classes)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Classes Resume",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-01",
+   "end": "2026-12-02",
+   "uid": "snapshot:Upper School:2026-12-01:Classes Resume"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-01",
+   "end": "2026-12-02",
+   "uid": "snapshot:Upper School:2026-12-01: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 7",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-01",
+   "end": "2026-12-02",
+   "uid": "snapshot:Upper School:2026-12-01:Day 7"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Clubs (Service/GGM & Special Interests)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-01T14:45:00Z",
+   "end": "2026-12-01T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-01T14:45:00Z:Clubs (Service/GGM & Special Interests)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "MS/US Used Uniform Sale",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-01T17:00:00Z",
+   "end": "2026-12-01T19:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-01T17:00:00Z:MS/US Used Uniform Sale"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 1",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-02",
+   "end": "2026-12-03",
+   "uid": "snapshot:Upper School:2026-12-02:Day 1"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Assembly",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-02T14:45:00Z",
+   "end": "2026-12-02T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-02T14:45:00Z:Assembly"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Peer Ed Meeting",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-02T17:25:00Z",
+   "end": "2026-12-02T17:45:00Z",
+   "uid": "snapshot:Upper School:2026-12-02T17:25:00Z:Peer Ed Meeting"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Athletics Signing Day",
+   "location": "Edwards Memorial Court",
+   "allDay": false,
+   "start": "2026-12-02T20:30:00Z",
+   "end": "2026-12-02T20:45:00Z",
+   "uid": "snapshot:Upper School:2026-12-02T20:30:00Z:Athletics Signing Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-03",
+   "end": "2026-12-04",
+   "uid": "snapshot:Upper School:2026-12-03: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 2",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-03",
+   "end": "2026-12-04",
+   "uid": "snapshot:Upper School:2026-12-03:Day 2"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Community Time (Special Switch)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-03T14:45:00Z",
+   "end": "2026-12-03T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-03T14:45:00Z:Community Time (Special Switch)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 3",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-04",
+   "end": "2026-12-05",
+   "uid": "snapshot:Upper School:2026-12-04:Day 3"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Clubs (Arts, Awareness/E&I & Educational)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-04T14:45:00Z",
+   "end": "2026-12-04T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-04T14:45:00Z:Clubs (Arts, Awareness/E&I & Educational)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Bi-Weekly Reports Due",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-04T21:00:00Z",
+   "end": "2026-12-04T22:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-04T21:00:00Z:Bi-Weekly Reports Due"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "SATs (McDonogh is a Test Site)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-05",
+   "end": "2026-12-06",
+   "uid": "snapshot:Upper School:2026-12-05:SATs (McDonogh is a Test Site)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Concert Band and Jazz Bands Concert (7pm)",
+   "location": "Horn Theatre",
+   "allDay": true,
+   "start": "2026-12-07",
+   "end": "2026-12-08",
+   "uid": "snapshot:Upper School:2026-12-07:US Concert Band and Jazz Bands Concert (7pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 4",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-07",
+   "end": "2026-12-08",
+   "uid": "snapshot:Upper School:2026-12-07:Day 4"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-07",
+   "end": "2026-12-08",
+   "uid": "snapshot:Upper School:2026-12-07: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Advisory Time (Special Switch)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-07T14:45:00Z",
+   "end": "2026-12-07T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-07T14:45:00Z:Advisory Time (Special Switch)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 5",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-08",
+   "end": "2026-12-09",
+   "uid": "snapshot:Upper School:2026-12-08:Day 5"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-08",
+   "end": "2026-12-09",
+   "uid": "snapshot:Upper School:2026-12-08: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Faculty Meeting",
+   "location": "Klein Lyceum",
+   "allDay": false,
+   "start": "2026-12-08T14:45:00Z",
+   "end": "2026-12-08T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-08T14:45:00Z:US Faculty Meeting"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Class Time(G12: Horn)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-08T14:45:00Z",
+   "end": "2026-12-08T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-08T14:45:00Z:Class Time(G12: Horn)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 6",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-09",
+   "end": "2026-12-10",
+   "uid": "snapshot:Upper School:2026-12-09:Day 6"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Last Day for Graded Work Blocks A, B, C",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-09",
+   "end": "2026-12-10",
+   "uid": "snapshot:Upper School:2026-12-09:Last Day for Graded Work Blocks A, B, C"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Office Hours",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-09T14:45:00Z",
+   "end": "2026-12-09T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-09T14:45:00Z:Office Hours"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 7",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-10",
+   "end": "2026-12-11",
+   "uid": "snapshot:Upper School:2026-12-10:Day 7"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Admissions Upper School Visit Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-10",
+   "end": "2026-12-11",
+   "uid": "snapshot:Upper School:2026-12-10: Admissions Upper School Visit Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Last Day for Graded Work Blocks D, E, F, G",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-10",
+   "end": "2026-12-11",
+   "uid": "snapshot:Upper School:2026-12-10:Last Day for Graded Work Blocks D, E, F, G"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": " Peer Ed attending LS Morning Meeting",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-10T13:30:00Z",
+   "end": "2026-12-10T13:50:00Z",
+   "uid": "snapshot:Upper School:2026-12-10T13:30:00Z: Peer Ed attending LS Morning Meeting"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Clubs (Service/GGM & Special Interests)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-10T14:45:00Z",
+   "end": "2026-12-10T15:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-10T14:45:00Z:Clubs (Service/GGM & Special Interests)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 1",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-11",
+   "end": "2026-12-12",
+   "uid": "snapshot:Upper School:2026-12-11:Day 1"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Grading System Opens",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-11",
+   "end": "2026-12-12",
+   "uid": "snapshot:Upper School:2026-12-11:Fall Grading System Opens"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Review Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-11",
+   "end": "2026-12-12",
+   "uid": "snapshot:Upper School:2026-12-11:Review Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Special Schedule: All School Holiday Assembly",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-11",
+   "end": "2026-12-12",
+   "uid": "snapshot:Upper School:2026-12-11:Special Schedule: All School Holiday Assembly",
+   "description": "All-School Holiday Assembly (Friday, December 11 - Day 1 - Festive Holiday Dress)\n\n\n\n8:15         Advisory\n\n\n\n8:30 - 9:35    Office Hours (65 min)         \n\n\n\n9:35        Process to the Memorial Field House\n\n\n\n9:45 - 11:00    Holiday Assembly\n\n\n\n11:10 - 12:15    Period 2 (65 min) (Block B)            \n\n\n\n12:15          Lunch \n\n\n\n12:50 - 2:00      Period 3 (70 min)  (Block C)\n\n\n\n2:05 - 3:15      Period 4 (70 min)  (Block D)\n\n\n\n3:15         End of Day\n\n\n\n3:30         Regular buses depart\n\n\n\n5:30         Late buses depart"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "All School Holiday Assembly",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-11T14:45:00Z",
+   "end": "2026-12-11T16:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-11T14:45:00Z:All School Holiday Assembly"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "US Winter Choral Concert  (7pm)",
+   "location": "Horn Theatre",
+   "allDay": true,
+   "start": "2026-12-12",
+   "end": "2026-12-13",
+   "uid": "snapshot:Upper School:2026-12-12:US Winter Choral Concert  (7pm)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "ACTs (McDonogh is NOT a Test Site)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-12",
+   "end": "2026-12-13",
+   "uid": "snapshot:Upper School:2026-12-12:ACTs (McDonogh is NOT a Test Site)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Special Schedule: Assessment Review Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-14",
+   "end": "2026-12-15",
+   "uid": "snapshot:Upper School:2026-12-14:Special Schedule: Assessment Review Day",
+   "description": "Fall Assessments Review Day for Blocks E, F, G, and A (Monday, December 14 - Day 2 )\n\n\n\n8:15-8:25    Advisory\n\n\n\n8:30-9:50    Period 1 (80 min) (Block E)\n\n\n\n9:55-10:40    Office Hours (45 min)\n\n\n\n10:45-12:05    Period 2 (80 min) (Block F)\n\n\n\n12:05-12:45    Lunch (45 min)\n\n\n\n12:50-2:00    Period 3 (70 min) (Block G)\n\n\n\n2:05-3:15    Period 4 (70 min) (Block A)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Day 2",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-14",
+   "end": "2026-12-15",
+   "uid": "snapshot:Upper School:2026-12-14:Day 2"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Review Day",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-14",
+   "end": "2026-12-15",
+   "uid": "snapshot:Upper School:2026-12-14:Review Day"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Office Hours",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-14T14:55:00Z",
+   "end": "2026-12-14T15:40:00Z",
+   "uid": "snapshot:Upper School:2026-12-14T14:55:00Z:Office Hours"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Office Hours",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-14T19:25:00Z",
+   "end": "2026-12-14T20:15:00Z",
+   "uid": "snapshot:Upper School:2026-12-14T19:25:00Z:Office Hours"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Skip Day 3",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-15",
+   "end": "2026-12-16",
+   "uid": "snapshot:Upper School:2026-12-15:Skip Day 3"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "A Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-15T13:30:00Z",
+   "end": "2026-12-15T15:30:00Z",
+   "uid": "snapshot:Upper School:2026-12-15T13:30:00Z:A Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Pets on Wheels",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-15T16:00:00Z",
+   "end": "2026-12-15T18:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-15T16:00:00Z:Pets on Wheels"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Upper School Lunch",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-15T17:05:00Z",
+   "end": "2026-12-15T17:55:00Z",
+   "uid": "snapshot:Upper School:2026-12-15T17:05:00Z:Upper School Lunch"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "B Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-15T18:00:00Z",
+   "end": "2026-12-15T20:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-15T18:00:00Z:B Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Skip Day 4",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-16",
+   "end": "2026-12-17",
+   "uid": "snapshot:Upper School:2026-12-16:Skip Day 4"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "C Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-16T13:30:00Z",
+   "end": "2026-12-16T15:30:00Z",
+   "uid": "snapshot:Upper School:2026-12-16T13:30:00Z:C Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Upper School Lunch",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-16T17:05:00Z",
+   "end": "2026-12-16T17:55:00Z",
+   "uid": "snapshot:Upper School:2026-12-16T17:05:00Z:Upper School Lunch"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "D Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-16T18:00:00Z",
+   "end": "2026-12-16T20:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-16T18:00:00Z:D Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Skip Day 5",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-17",
+   "end": "2026-12-18",
+   "uid": "snapshot:Upper School:2026-12-17:Skip Day 5"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "E Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-17T13:30:00Z",
+   "end": "2026-12-17T15:30:00Z",
+   "uid": "snapshot:Upper School:2026-12-17T13:30:00Z:E Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Upper School Lunch",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-17T17:05:00Z",
+   "end": "2026-12-17T17:55:00Z",
+   "uid": "snapshot:Upper School:2026-12-17T17:05:00Z:Upper School Lunch"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "F Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-17T18:00:00Z",
+   "end": "2026-12-17T20:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-17T18:00:00Z:F Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Winter Break Begins (Early Dismissal at Noon)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-18",
+   "end": "2026-12-19",
+   "uid": "snapshot:Upper School:2026-12-18:Winter Break Begins (Early Dismissal at Noon)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Skip Day 6",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-18",
+   "end": "2026-12-19",
+   "uid": "snapshot:Upper School:2026-12-18:Skip Day 6"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Fall Term Ends",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-18",
+   "end": "2026-12-19",
+   "uid": "snapshot:Upper School:2026-12-18:Fall Term Ends"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "G Block Assessment",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-18T13:30:00Z",
+   "end": "2026-12-18T15:30:00Z",
+   "uid": "snapshot:Upper School:2026-12-18T13:30:00Z:G Block Assessment"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Regular buses depart (No late buses)",
+   "location": null,
+   "allDay": false,
+   "start": "2026-12-18T17:00:00Z",
+   "end": "2026-12-18T17:00:00Z",
+   "uid": "snapshot:Upper School:2026-12-18T17:00:00Z:Regular buses depart (No late buses)"
+  },
+  {
+   "calendar": "Upper School",
+   "summary": "Winter Break (School Closed)",
+   "location": null,
+   "allDay": true,
+   "start": "2026-12-19",
+   "end": "2027-01-04",
+   "uid": "snapshot:Upper School:2026-12-19:Winter Break (School Closed)"
   }
- ]
+ ],
+ "refreshed": {
+  "Upper School": "2026-11-06"
+ }
 }

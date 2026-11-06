@@ -46,5 +46,26 @@ const events = [
     const same = await W.update(forced.id, { time: '08:00' });   // a change that keeps the day is not a placement
     assert.strictEqual(same.time, '08:00');
   });
+  await ok('a special schedule re-times the day\'s classes by period, and drops a class whose period does not meet', () => {
+    const desc = 'Spirit Parade and Pep Rally (Friday, November 6 - Day 3)\n8:15 Advisory\n8:30 - 9:30 Period 1 (60 min)\n9:35 - 10:55 Period 2 (80 min)\n11:15 - 12:00 Period 3 (45 min)\n12:05 Lunch\n12:45 - 1:30 Period 4 (45 min)\n1:45 - 3:00 Parade and Pep Rally';
+    const p = C.specialPeriods(desc);
+    assert.deepStrictEqual(p[4], { start_min: 12 * 60 + 45, end_min: 13 * 60 + 30 }); assert.deepStrictEqual(p[1], { start_min: 510, end_min: 570 });
+    const special = { summary: 'Special Schedule: Spirit Parade and Pep Rally', allDay: true, start: '2026-11-06', end: '2026-11-07', description: desc, calendar: 'Upper School' };
+    const period4 = cls('2026-11-06', '14:05', 'E1');                 // the regular Period 4 block
+    const period3 = cls('2026-11-06', '12:50', 'F');                  // a Period 3 class: it meets at 11:15 on the special day
+    const other = cls('2026-11-05', '14:05', 'G');                    // another day: untouched
+    const outEv = C.applySpecialSchedules([special, period4, period3, other, { summary: 'Practice', start: at('2026-11-06', '20:30'), end: at('2026-11-06', '22:00'), allDay: false }]);
+    const e1 = outEv.find(e => e.summary.includes('E1')), f = outEv.find(e => e.summary.includes('Sec. F'));
+    assert.strictEqual(tz.minutesOf(new Date(e1.start)), 12 * 60 + 45); assert.strictEqual(tz.minutesOf(new Date(e1.end)), 13 * 60 + 30); assert.strictEqual(e1.period, 4); assert.strictEqual(e1.special, 'Spirit Parade and Pep Rally');
+    assert.strictEqual(tz.minutesOf(new Date(f.start)), 11 * 60 + 15); assert.strictEqual(f.period, 3);
+    assert.strictEqual(tz.minutesOf(new Date(outEv.find(e => e.summary.includes('Sec. G')).start)), 14 * 60 + 5);
+    assert.strictEqual(outEv.length, 5);
+    // a schedule with only three periods drops the fourth's class
+    const three = Object.assign({}, special, { description: '8:30 - 10:00 Period 1\n10:15 - 11:45 Period 2\n12:30 - 2:00 Period 3' });
+    assert.strictEqual(C.applySpecialSchedules([three, period4]).length, 1);
+    // the other spelling on the school's notes: a start and a length, no end
+    const flag = C.specialPeriods('8:15 Advisory\n8:30 - 9:40 Period 1 (70 min)\n9:45 - 11:25 Period 2 (100 min)\n12:05 Lunch\n12:50 Period 3 (70 min)\n2:05 Period 4 (70 min)\n4:00 Regular buses depart');
+    assert.deepStrictEqual(flag[3], { start_min: 12 * 60 + 50, end_min: 14 * 60 }); assert.deepStrictEqual(flag[4], { start_min: 14 * 60 + 5, end_min: 15 * 60 + 15 }); assert.deepStrictEqual(flag[2], { start_min: 585, end_min: 685 });
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
