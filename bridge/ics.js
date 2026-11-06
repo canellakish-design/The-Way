@@ -230,6 +230,7 @@ function eventsFromFeed(text, feedName, fromKey, toKey) {
     if (!dtstart) continue;
     const dtend = ev.props.DTEND && parseDT(ev.props.DTEND);
     const summary = unescape(ev.props.SUMMARY && ev.props.SUMMARY.value) || '(untitled)';
+    const description = unescape(ev.props.DESCRIPTION && ev.props.DESCRIPTION.value) || null;   // a special schedule's period times live here
     const location = unescape(ev.props.LOCATION && ev.props.LOCATION.value) || null;
     const status = ev.props.STATUS && String(ev.props.STATUS.value).toUpperCase();
     if (status === 'CANCELLED') continue;
@@ -243,7 +244,7 @@ function eventsFromFeed(text, feedName, fromKey, toKey) {
         if (!isOverride && rule && overrides.has(uid + '@' + key)) continue;
         const span = Math.max(1, Math.round((Date.parse(endKey) - Date.parse(dtstart.key)) / 864e5));
         out.push({ summary, location, calendar, allDay: true,
-          start: key, end: tz.shiftKey(key, span), uid });
+          start: key, end: tz.shiftKey(key, span), uid, description });
       }
       continue;
     }
@@ -257,7 +258,7 @@ function eventsFromFeed(text, feedName, fromKey, toKey) {
       // reapply the original wall-clock time on the occurrence's own date
       const start = tz.zonedToUTC(y, mo, d, p.h, p.mi);
       out.push({ summary, location, calendar, allDay: false,
-        start: start.toISOString(), end: new Date(start.getTime() + durMs).toISOString(), uid });
+        start: start.toISOString(), end: new Date(start.getTime() + durMs).toISOString(), uid, description });
     }
   }
   return out;

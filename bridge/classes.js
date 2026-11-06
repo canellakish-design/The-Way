@@ -69,4 +69,51 @@ async function restDaysBetween(from, to) {
   return out;
 }
 
-module.exports = { classesForDate, configured, restReason, restDaysBetween, TABLE };
+// A special schedule (an all-day "Special Schedule: …" event on the Upper School calendar whose description
+// lists lines like "8:30 - 9:30 Period 1") re-times the day's classes: each class is matched to its period by
+// its regular start (schedule-classes.json periods.starts) and moved to the period's time that day; a period
+// that does not meet that day drops its class. Times in the description have no a.m./p.m.: a school day,
+// so an hour under 7 is afternoon.
+const PERIODS = (TABLE.periods && TABLE.periods.starts) || [];
+function specialPeriods(description) {
+  // two spellings on the school's notes: "12:45 - 1:30 Period 4 (45 min)" and "12:50 Period 3 (70 min)"
+  const out = {}; let m;
+  const min = (h, mm) => { h = +h; if (h < 7) h += 12; return h * 60 + (+mm); };
+  const re = /(\d{1,2}):(\d{2})\s*(?:[-–]\s*(\d{1,2}):(\d{2}))?\s*Period\s*(\d+)(?:\s*\((\d+)\s*min\))?/gi;
+  while ((m = re.exec(String(description || '')))) {
+    const start = min(m[1], m[2]);
+    const end = m[3] ? min(m[3], m[4]) : m[6] ? start + (+m[6]) : null;
+    if (end != null) out[+m[5]] = { start_min: start, end_min: end };
+  }
+  return Object.keys(out).length ? out : null;
+}
+function applySpecialSchedules(events) {
+  if (!PERIODS.length || !REST.match) return events;
+  const tz = require('./tz');
+  const re = new RegExp(REST.match, 'i');
+  const specials = {};
+  for (const e of events || []) {
+    if (!e || !e.allDay || !/^special schedule/i.test(String(e.summary || '')) || !e.description) continue;
+    const p = specialPeriods(e.description);
+    if (p) specials[String(e.start).slice(0, 10)] = { periods: p, name: String(e.summary).replace(/^special schedule:?\s*/i, '').trim() };
+  }
+  if (!Object.keys(specials).length) return events;
+  const out = [];
+  for (const e of events) {
+    if (!e || e.allDay || !re.test(String(e.summary || ''))) { out.push(e); continue; }
+    const day = tz.keyOf(new Date(e.start)), sp = specials[day];
+    if (!sp) { out.push(e); continue; }
+    const startMin = tz.minutesOf(new Date(e.start));
+    let idx = -1, best = 31;
+    PERIODS.forEach((s, i) => { const d = Math.abs(s - startMin); if (d < best) { best = d; idx = i; } });
+    if (idx < 0) { out.push(e); continue; }
+    const p = sp.periods[idx + 1];
+    if (!p) continue;   // that period does not meet on the special day
+    const [y, mo, d] = day.split('-').map(Number);
+    out.push(Object.assign({}, e, { start: tz.zonedToUTC(y, mo, d, Math.floor(p.start_min / 60), p.start_min % 60).toISOString(),
+      end: tz.zonedToUTC(y, mo, d, Math.floor(p.end_min / 60), p.end_min % 60).toISOString(), special: sp.name, period: idx + 1 }));
+  }
+  return out;
+}
+
+module.exports = { classesForDate, configured, restReason, restDaysBetween, specialPeriods, applySpecialSchedules, TABLE };
