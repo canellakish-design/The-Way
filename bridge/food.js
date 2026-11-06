@@ -919,6 +919,32 @@ function attach(app) {
       const doc = await dayDoc(date);
       const e = doc.entries.find(x => x.id === req.params.id);
       if (!e) return res.status(404).json({ error: 'no such entry' });
+      // The entry belongs to another day: a drink logged after midnight is last night's. It moves whole, with its
+      // numbers and its sentence; a meal is re-slotted into that day's plan at the time given (or its own).
+      if (isDate(b.to_date) && b.to_date !== date) {
+        doc.entries.splice(doc.entries.indexOf(e), 1);
+        for (const x of doc.entries) if (x.why_as_of) delete x.why_as_of;
+        await setJSON(dayKey(date), doc);
+        const to = b.to_date, tdoc = await dayDoc(to);
+        e.date = to; if (/^\d{2}:\d{2}$/.test(b.time || '')) e.time = b.time;
+        e.corrected = true; e.moved_from = date;
+        if (!e.supplement && !e.drink_only) {
+          const gl = await guidelinesFor(to);
+          const st = await dayState(to, gl);
+          const rows = await rowsFor(to, gl, st.entries);
+          const pick = chooseSlot(rows, e.time, MEAL_WORDS.includes(e.meal) ? e.meal : null, st.entries);
+          e.slot = pick.slot; e.slot_fixed = true;
+          e.plan = F.planSnapshot(rows.find(r => r.slot === e.slot) || null, e.time) || e.plan || null;
+        }
+        for (const x of tdoc.entries) if (x.why_as_of) delete x.why_as_of;
+        tdoc.entries.push(e); tdoc.entries.sort((x, y) => String(x.time).localeCompare(String(y.time)));
+        await setJSON(dayKey(to), tdoc);
+        const led = await getJSON('fuel-log', { meals: [] });
+        const m = led.meals.find(x => x.food_id === e.id);
+        if (m) { const [y, mo, d] = to.split('-').map(Number), [h, mi] = String(e.time || '12:00').split(':').map(Number);
+          m.logged_at = tz.zonedToUTC(y, mo, d, h, mi).toISOString(); await setJSON('fuel-log', led); }
+        return res.json({ ok: true, entry: e, day: await dayReport(to), from: await dayReport(date) });
+      }
       if (b.plan && typeof b.plan === 'object' && b.plan.kcal != null) e.plan = { slot: String(b.plan.slot || e.slot || ''), kcal: Math.round(+b.plan.kcal), carbs_g: Math.round(+b.plan.carbs_g || 0), protein_g: Math.round(+b.plan.protein_g || 0), low_carb: !!b.plan.low_carb, what: String(b.plan.what || '').slice(0, 200), at: String(b.plan.at || e.time || '') };
       const onlyKcal = b.kcal != null && Number.isFinite(Number(b.kcal)) && ['carbs_g', 'protein_g', 'fat_g'].every(k => b[k] == null || Number(b[k]) === Number(e[k]));
       if (onlyKcal && e.kcal > 0) { const f = Number(b.kcal) / e.kcal; for (const k of ['carbs_g', 'protein_g', 'fat_g']) e[k] = Math.max(0, Math.round((e[k] || 0) * f)); }   // the plate got bigger or smaller, not a different plate
