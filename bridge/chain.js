@@ -336,7 +336,10 @@ async function report() {
   const rxWeek = S.weekOf(suppRows);
   let creatineStart = null;
   try {
-    for (let i = 20; i >= 0; i--) { const k = tz.shiftKey(today, -i); const doc = await getJSON('food-' + k, null); if (doc && (doc.entries || []).some(e => e && e.supplement && e.key === 'creatine')) { creatineStart = k; break; } }
+    // the three weeks read together, not one after another (the week's docs are already in hand from the rows above)
+    const keys = Array.from({ length: 21 }, (_, i) => tz.shiftKey(today, -(20 - i)));
+    const docs = await Promise.all(keys.map(k => getJSON('food-' + k, null).catch(() => null)));
+    for (let i = 0; i < keys.length; i++) { const doc = docs[i]; if (doc && (doc.entries || []).some(e => e && e.supplement && e.key === 'creatine')) { creatineStart = keys[i]; break; } }
   } catch (e) { creatineStart = null; }
   const creatineDays = creatineStart ? Math.round((Date.parse(today) - Date.parse(creatineStart)) / 864e5) + 1 : null;
   const rxToday = todayRow && todayRow.rx ? todayRow.rx : null;

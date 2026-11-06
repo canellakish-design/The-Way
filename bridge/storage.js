@@ -1,6 +1,16 @@
 // Storage layer: Netlify Blobs in production, local JSON files on the PC.
 const fs = require('fs');
 const path = require('path');
+const { AsyncLocalStorage } = require('async_hooks');
+
+// One request reads a key once. A page load fans out into a dozen bridge calls, and each of them walks
+// the same blobs several times over (the settings, the plan, the Strava and intervals.icu caches, the
+// week's journal), each read a round trip of 50 to 100 ms done one after another. Inside a scope (one
+// GET request, see app.js) the first read of a key is kept and every later read is served from it, as a
+// copy, so a caller that changes what it got changes nothing for the next. A write updates the copy.
+const scope = new AsyncLocalStorage();
+const withScope = fn => scope.run(new Map(), fn);
+const clone = v => v == null ? v : (typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v)));
 
 const ON_NETLIFY = !!(process.env.NETLIFY || process.env.NETLIFY_BLOBS_CONTEXT ||
                       process.env.AWS_LAMBDA_FUNCTION_NAME);
@@ -32,21 +42,30 @@ function store(name) {
 function file(key) { return path.join(__dirname, key + '.json'); }
 
 async function getJSON(key, fallback) {
+  const memo = scope.getStore();
+  if (memo && memo.has(key)) { const v = memo.get(key); return v == null ? fallback : clone(v); }
+  const v = await readJSON(key);
+  if (memo) memo.set(key, v == null ? null : clone(v));
+  return v == null ? fallback : v;
+}
+async function readJSON(key) {
   if (ON_NETLIFY) {
     try {
       const s = await store();
       let v = await s.get(key, { type: 'json' });
       if (v == null && SANDBOX) v = await (await store(MAIN)).get(key, { type: 'json' });
-      return v == null ? fallback : v;
+      return v;
     } catch (e) {
       console.error('[storage] getJSON failed:', e.message);
-      return fallback;
+      return null;
     }
   }
   try { return JSON.parse(fs.readFileSync(file(key), 'utf8')); }
-  catch { return fallback; }
+  catch { return null; }
 }
 async function setJSON(key, val) {
+  const memo = scope.getStore();
+  if (memo) memo.set(key, clone(val));
   if (ON_NETLIFY) {
     const s = await store();
     await s.setJSON(key, val);
@@ -55,4 +74,4 @@ async function setJSON(key, val) {
   }
   fs.writeFileSync(file(key), JSON.stringify(val, null, 2));
 }
-module.exports = { getJSON, setJSON, ON_NETLIFY, SANDBOX };
+module.exports = { getJSON, setJSON, withScope, ON_NETLIFY, SANDBOX };

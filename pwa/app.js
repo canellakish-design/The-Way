@@ -2186,7 +2186,18 @@ V.today = async function(){
   let scoresLoading = true;
   const refreshScores = async ()=>{
     scoresLoading = true;
-    const get = (path, set) => { const once = () => bridge(path).then(v => { set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
+    // The last answer paints at once (kept on the phone), so the Day shows its numbers while the bridge is
+    // asked again; each fresh answer replaces it and is kept for next time.
+    const LAST = "way-last:";
+    const last = p => { try { return JSON.parse(localStorage.getItem(LAST + p)); } catch { return null; } };
+    const keep = (p, v) => { try { if (v && !v.error) localStorage.setItem(LAST + p, JSON.stringify(v)); } catch {} };
+    const get = (path, set) => { const once = () => bridge(path).then(v => { keep(path, v); set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
+    if (!scoresData && !chainData) {
+      const s0 = last("/scores"), c0 = last("/compliance"), f0 = last("/food/today"), k0 = last("/chain");
+      if (s0) scoresData = s0; if (c0) complianceData = c0; if (f0) { foodData = f0; HUB.food = f0; }
+      if (k0) { chainData = k0; try { paintChain(k0); } catch {} }
+      if (s0 || k0) { try { drawScores(); } catch {} }
+    }
     weekCal = null; loadCoach();
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
@@ -2391,8 +2402,25 @@ V.today = async function(){
     el.textContent = "updated " + h + ":" + mm + ap;
   };
 
+  // the last schedule paints at once from the phone's copy while the bridge is asked again (as the scores do)
+  const LASTD = "way-last:";
+  const lastD = p => { try { return JSON.parse(localStorage.getItem(LASTD + p)); } catch { return null; } };
+  const keepD = (p, v) => { try { if (v && !v.error) localStorage.setItem(LASTD + p, JSON.stringify(v)); } catch {} };
+  const applyDay = (s, plan, wx, fresh) => {
+    if (wx && wx.days) WX = wx.days;
+    const days = s.days || [];
+    const ti = Number.isInteger(s.today_index) ? s.today_index
+      : Math.max(0, days.findIndex(d=>d.today));
+    cached = { days, plan, recommendation: s.recommendation, todayIndex: ti,
+      macros: days[ti] ? days[ti].macros : null,
+      timezone: (s.sources && s.sources.timezone) || cached.timezone,
+      dateKey: (days[ti] && days[ti].date) || localDateKey() };
+    repaint();
+    if (fresh) stamp();
+  };
   const loadDay = async ()=>{
     try{
+      if (!cached.days.length) { const s0 = lastD("/schedule?days=15&back=7"); if (s0 && s0.days) { try { applyDay(s0, lastD("/plan") || {for_today:false}, lastD("/weather/outlook"), false); } catch {} } }
       // A week either side, so stepping back to yesterday (or forward) is
       // instant and needs no second round trip.
       const [s, plan, wx] = await Promise.all([
@@ -2400,16 +2428,8 @@ V.today = async function(){
         bridge("/plan").catch(()=>({for_today:false})),
         bridge("/weather/outlook").catch(()=>null)
       ]);
-      if (wx && wx.days) WX = wx.days;
-      const days = s.days || [];
-      const ti = Number.isInteger(s.today_index) ? s.today_index
-        : Math.max(0, days.findIndex(d=>d.today));
-      cached = { days, plan, recommendation: s.recommendation, todayIndex: ti,
-        macros: days[ti] ? days[ti].macros : null,
-        timezone: (s.sources && s.sources.timezone) || cached.timezone,
-        dateKey: (days[ti] && days[ti].date) || localDateKey() };
-      repaint();
-      stamp();
+      keepD("/schedule?days=15&back=7", s); keepD("/plan", plan); keepD("/weather/outlook", wx);
+      applyDay(s, plan, wx, true);
 
       // Say plainly which lanes are actually feeding this page.
       const src = s.sources || {};
