@@ -131,6 +131,11 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 /* DAY: the fitness field at the top (CTL), one row, a link to Ride */
 .hufit{display:grid; grid-template-columns:auto minmax(0,1fr); gap:12px; align-items:center; height:70px; padding:8px 10px; margin:0 0 10px; border:1px solid var(--line); border-left:3px solid var(--line); background:var(--paper); color:var(--ink); text-decoration:none; min-width:0; overflow:hidden}
 .hufit:active{background:#0d0e0c}
+/* the card's colour says how the fitness is going: matte green building, matte yellow holding, matte red losing it or too fast */
+.hufit.fit-green{background:#1b2d22; border-color:#2f5a3e}
+.hufit.fit-yellow{background:#2e2a16; border-color:#5a5128}
+.hufit.fit-red{background:#2f1b1b; border-color:#5f3030}
+.hufit.fit-green:active{background:#172619} .hufit.fit-yellow:active{background:#262212} .hufit.fit-red:active{background:#271616}
 .hufit .fl{display:flex; flex-direction:column; gap:3px; min-width:0}
 .hufit .fk{font-family:var(--mono); font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted); white-space:nowrap}
 .hufit .fv{display:flex; align-items:center; gap:9px; min-width:0}
