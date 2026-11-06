@@ -1807,6 +1807,10 @@ V.today = async function(){
   const paintFit = (t, why)=>{
     const el = document.getElementById("fitField"); if (!el) return;
     const n = el.querySelector(".fn"), d = el.querySelector(".fd"), w = el.querySelector(".fw");
+    // the card's colour says how the fitness is going: matte green building, yellow holding, red losing it or ramping too fast
+    const tone = t && t.ramp ? t.ramp.tone : null;
+    el.classList.remove("fit-green", "fit-yellow", "fit-red");
+    if (tone === "good") el.classList.add("fit-green"); else if (tone === "neutral") el.classList.add("fit-yellow"); else if (tone === "warn" || tone === "bad") el.classList.add("fit-red");
     if (!t){ n.textContent = "—"; n.style.color = "var(--muted)"; d.textContent = why || ""; d.style.color = "var(--muted)"; w.textContent = ""; return; }
     n.textContent = t.ctl; n.style.color = "var(--ink)";
     d.textContent = t.ramp ? `${sgn(t.ramp_7d)}/wk` : `${t.tss_7d} TSS/wk`; d.style.color = t.ramp ? toneC(t.ramp.tone) : "var(--muted)";
