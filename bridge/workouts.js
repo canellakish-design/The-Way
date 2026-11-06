@@ -238,7 +238,8 @@ function playerRideAsDone(x, st) {
   let tss = null, basis = null;
   if (watts) { const IF = watts / ftp; tss = Math.round(secs / 3600 * IF * IF * 100); basis = x.np_w ? 'power' : 'average power'; }
   else if (x.avg_hr) { tss = Math.round(hrLoad(secs, x.avg_hr, Object.assign({ hr_rest: 55, lthr: 139 }, st || {}))); basis = 'heart rate (TRIMP)'; }
-  return { id: x.id, date: x.date, time: x.time, name: x.name || 'Indoor ride', type: 'VirtualRide', minutes: Math.round(secs / 60),
+  // a ride the Edge's data field recorded (garmin.js) sits in the same store and is read the same way; it was outdoors
+  return { id: x.id, date: x.date, time: x.time, name: x.name || (x.device ? 'Garmin ride' : 'Indoor ride'), type: x.device ? 'Ride' : 'VirtualRide', minutes: Math.round(secs / 60),
     miles: x.distance_m ? Math.round(x.distance_m / 1609.34 * 10) / 10 : null, device_watts: true,
     avg_w: x.avg_w != null ? Math.round(x.avg_w) : null, np_w: x.np_w != null ? Math.round(x.np_w) : null, max_w: x.max_w != null ? x.max_w : null,
     avg_hr: x.avg_hr != null ? Math.round(x.avg_hr) : null, max_hr: x.max_hr != null ? x.max_hr : null,
