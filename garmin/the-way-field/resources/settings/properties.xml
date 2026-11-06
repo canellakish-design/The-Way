@@ -1,0 +1,4 @@
+<properties xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <!-- where the ride goes: the live site, or the copy for a test ride -->
+    <property id="bridge" type="string">https://thewayforward.netlify.app</property>
+</properties>

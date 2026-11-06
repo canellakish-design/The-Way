@@ -206,4 +206,4 @@ function attach(app) {
   });
   app.get('/player/spike', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('player-spike', { runs: [] })); });
 }
-module.exports = { attach, expand, fuelSlots, summarize, analysisOf, cleanSamples, saveRide, uploadFit, ridesBetween, rideKey, INDEX };
+module.exports = { attach, expand, fuelSlots, summarize, analysisOf, cleanSamples, saveRide, uploadFit, ridesBetween, sessionFor, rideKey, INDEX };

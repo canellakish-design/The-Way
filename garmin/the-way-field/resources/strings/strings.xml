@@ -1,0 +1,5 @@
+<resources xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://developer.garmin.com/downloads/connect-iq/resources.xsd">
+    <string id="AppName">The Way</string>
+    <string id="BridgeTitle">The Way's address</string>
+    <string id="BridgePrompt">https://thewayforward.netlify.app (or the copy's address)</string>
+</resources>
