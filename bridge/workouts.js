@@ -398,6 +398,16 @@ function gradeOne(w, rides) {
       // the zone names the grade only when the time was there; a short ride is called short, its zone noted in the basis
       if (zb !== 'green' && (band === 'green' || (band === 'yellow' && zb === 'red'))) { if (band === 'green') zone = over; band = zb; }
       basis += `; ${over}% at ${R.HR.vt1} bpm or above${trail ? ' (trail: 20% passes)' : ''}`;
+      // and a floor: a Zone 1 ride is work, not a stroll. The share under 100 bpm (stops, descents, coasting) passes to
+      // a quarter of the ride, a third on a trail; past that it is a warning, and past 40% (50 on a trail) a different ride.
+      // Rides analysed before the floor existed carry no share under it and are judged on the ceiling alone.
+      if (withHr.every(r => r.analysis.hr.zone_pct.under != null)) {
+        const low = withHr.reduce((s, r) => s + (r.analysis.hr.zone_pct.under / 100) * (r.analysis.hr.seconds || 0), 0);
+        const lowPct = secs ? Math.round(low / secs * 100) : 0;
+        const lb = lowPct <= (trail ? 35 : 25) ? 'green' : lowPct <= (trail ? 50 : 40) ? 'yellow' : 'red';
+        if (lb !== 'green' && (band === 'green' || (band === 'yellow' && lb === 'red'))) { if (band === 'green') zone = zone == null ? -lowPct : zone; band = lb; }
+        basis += `; ${lowPct}% under ${R.HR.z1_floor} bpm${lowPct > (trail ? 35 : 25) ? ' (the floor: 25% passes' + (trail ? ', 35 on a trail)' : ')') : ''}`;
+      }
     }
   }
   if (vo2 && band === 'green') { band = 'yellow'; basis += `; ${vo2.basis}`; }

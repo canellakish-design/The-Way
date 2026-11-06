@@ -67,7 +67,11 @@ async function sessionToday() {
   const s = await P.sessionFor('today');
   const vt2 = s.thresholds && s.thresholds.vt2_hr ? s.thresholds.vt2_hr : 139;
   if (!s.workout) return { name: null, workout_id: null, vt2_hr: vt2, steps: [] };
-  const steps = (s.intervals || []).map(x => [x.start_s, x.dur_s, x.target_w || 0, x.target_hr ? x.target_hr.lo : 0, x.target_hr ? x.target_hr.hi : 0]);
+  // a Zone 1 ride's free steps carry the zone's band (100 to 116), so the field shows the floor and the ceiling
+  const R = require('./ride-math');
+  const z1 = /zone\s*1|\bz1\b/i.test(String(s.workout.name || ''));
+  const steps = (s.intervals || []).map(x => [x.start_s, x.dur_s, x.target_w || 0,
+    x.target_hr ? x.target_hr.lo : (z1 && x.kind === 'free' ? R.HR.z1_floor : 0), x.target_hr ? x.target_hr.hi : (z1 && x.kind === 'free' ? R.HR.vt1 - 1 : 0)]);
   return { name: s.workout.name, workout_id: s.workout.id, time: s.workout.time, vt2_hr: vt2, steps };
 }
 

@@ -14,8 +14,11 @@ ok('hrSummary: average, max, minutes above 139, Seiler zones', () => {
   const hard = R.hrSummary(Array(300).fill(155));
   assert.strictEqual(hard.minutes_above_hard, 5);
   assert.strictEqual(R.hrSummary(Array(300).fill(135)).minutes_above_hard, 0);
-  assert.deepStrictEqual(s.zones, { z1_min: 10, z2_min: 5, z3_min: 4 });
+  assert.deepStrictEqual(s.zones, { z1_min: 10, z2_min: 5, z3_min: 4, under_min: 0 });
   assert.strictEqual(s.zone_pct.z1, 53);
+  // the Zone 1 floor: the share under 100 bpm is carried alongside (it is inside z1, which is everything under VT1)
+  const stroll = R.hrSummary([].concat(Array(180).fill(90), Array(420).fill(110)));
+  assert.strictEqual(stroll.zone_pct.under, 30); assert.strictEqual(stroll.zones.under_min, 3); assert.strictEqual(stroll.zone_pct.z1, 100); assert.strictEqual(stroll.floor_bpm, 100);
   assert.strictEqual(R.hrSummary([]), null);
 });
 

@@ -1954,9 +1954,9 @@ V.today = async function(){
     // The HRV-guided rule the trials used, once it has its 14 nights: below
     // the band two days running is rest; below it once is easy, same volume.
     if (g.state === "low2") return "Rest day. HRV has sat below your band two days running; that is the signal the trials rested on.";
-    if (g.state === "low") return "Easy day: Zone 1 at 116 or under, full volume. HRV is below your band; swap the hard session, keep the hours.";
+    if (g.state === "low") return "Easy day: Zone 1 at 100 to 116, full volume. HRV is below your band; swap the hard session, keep the hours.";
     if ((r.band && r.band.key === "red") || (strava && f.form && f.form.key === "overreached"))
-      return "Easy day: Zone 1 at 116 or under, or off. The body is asking, not the plan.";
+      return "Easy day: Zone 1 at 100 to 116, or off. The body is asking, not the plan.";
     if (strava && f.monotony && f.monotony.band === "high" && f.tsb < -10)
       return "Vary the week: seven same-sized days carry more strain than the load says. Make one of them long and one of them nothing.";
     if (r.band && r.band.key === "yellow" && strava && f.tsb < -10 && g.state !== "ok" && g.state !== "high")

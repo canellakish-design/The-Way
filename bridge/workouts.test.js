@@ -40,6 +40,16 @@ ok('gradeOne: TrainingPeaks bands, over-doing counts, Zone 1 discipline', () => 
   assert.strictEqual(gradeOne(z1, [hot]).compliance.band, 'red');
   const ok1 = { minutes: 60, tss: 40, analysis: { hr: { seconds: 3600, zones: {}, zone_pct: { z1: 94, z2: 6, z3: 0 }, minutes_above_hard: 0 } } };
   assert.strictEqual(gradeOne(z1, [ok1]).compliance.band, 'green');
+  // the floor: a Zone 1 ride is work, not a stroll. A third of it under 100 bpm is a warning, half is a different ride;
+  // a ride analysed before the floor existed (no share under it) is judged on the ceiling alone
+  const stroll = { minutes: 60, tss: 40, analysis: { hr: { seconds: 3600, zones: {}, zone_pct: { z1: 94, z2: 6, z3: 0, under: 33 }, minutes_above_hard: 0 } } };
+  const g2 = gradeOne(z1, [stroll]).compliance;
+  assert.strictEqual(g2.band, 'yellow'); assert.ok(/33% under 100 bpm/.test(g2.basis));
+  assert.strictEqual(gradeOne(z1, [{ minutes: 60, tss: 40, analysis: { hr: { seconds: 3600, zones: {}, zone_pct: { z1: 94, z2: 6, z3: 0, under: 55 }, minutes_above_hard: 0 } } }]).compliance.band, 'red');
+  assert.strictEqual(gradeOne(z1, [{ minutes: 60, tss: 40, analysis: { hr: { seconds: 3600, zones: {}, zone_pct: { z1: 94, z2: 6, z3: 0, under: 20 }, minutes_above_hard: 0 } } }]).compliance.band, 'green');
+  // on a trail the stops and descents get more room: a third under the floor still passes
+  const mtb = { name: 'Zone 1 mountain bike handling, 60 min', metrics: { duration_s: 3600, tss: 40 } };
+  assert.strictEqual(gradeOne(mtb, [stroll]).compliance.band, 'green');
   assert.strictEqual(dayCompliance([], { planned_min: 0 }, true, 1).band, 'extra');
   assert.strictEqual(dayCompliance([], { planned_min: 0 }, true, 0), null);
   // the plan lives in intervals.icu: the day's totals grade it

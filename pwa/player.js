@@ -15,7 +15,7 @@
   const params = () => new URLSearchParams(location.hash.split("?")[1] || "");
   const FTMS = 0x1826, BIKE_DATA = 0x2ad2, CONTROL = 0x2ad9, CPS = 0x1818;
   const LS = { trainer: "way-player-trainer", strap: "way-player-strap", breath: "way-player-breath" };
-  const HR_Z1 = 116, HR_Z2 = 138;                       // Zone 1 is 116 and under; VT2 139
+  const HR_Z1 = 116, HR_Z2 = 138, HR_Z1_LO = 100;        // Zone 1 is 100 to 116 (a floor as well as a ceiling); VT2 139
   const RAW_CAP_EACH = 4000, RAW_CAP_ALL = 12000;        // raw strap values kept per ride, for decoding breathing later
   const lsGet = k => { try{ return localStorage.getItem(k); }catch{ return null; } };
   const lsSet = (k, v) => { try{ localStorage.setItem(k, v); }catch{} };
@@ -281,20 +281,21 @@
 
   // ---------- the goal circle: it fills as the session's one goal is met ----------
   // The plan has two rides, and each has one goal, the same one the Calendar grades it on (bridge/workouts.js):
-  //   Zone 1: the planned minutes at heart rate 116 or under (117 is VT1); up to 10% of the ride at 117 or above still passes.
+  //   Zone 1: the planned minutes at heart rate 100 to 116 (117 is VT1); up to 10% of the ride at 117 or above still passes,
+  //           and up to 25% under 100 (the floor: a Zone 1 ride is work, not a stroll).
   //   VO2 40/20s: 8 to 12 minutes above 139 (VT2, Harry's VO2 line); the circle is full at 8, and past 12 is more than the session asks.
   //   Anything else: the planned time, ridden.
   const VT1 = 117, VT2 = 139, HR_HARD = 147;   // the player's VO2 score counts minutes above 147, Tymewear's VO2max heart rate
   function goalOf(w, ivs){
     const name = String(w && w.name || ""), plannedS = (ivs || []).reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
     if (/vo2|40\s*\/\s*20/i.test(name)) return { kind: "vo2", target_min: 8, hi_min: 12, words: `8 to 12 min above ${HR_HARD}` };
-    if (/zone\s*1|\bz1\b/i.test(name)) return { kind: "z1", target_min: Math.round(plannedS / 60), words: `${Math.round(plannedS / 60)} min at ${HR_Z1} or under` };
+    if (/zone\s*1|\bz1\b/i.test(name)) return { kind: "z1", target_min: Math.round(plannedS / 60), words: `${Math.round(plannedS / 60)} min at ${HR_Z1_LO} to ${HR_Z1}` };
     if (!w || !w.id) return null;                         // a free ride has no goal
     return { kind: "time", target_min: Math.round(plannedS / 60), words: `${Math.round(plannedS / 60)} min ridden` };
   }
   function goalNow(g, samples){
-    let n = 0, under = 0, hard = 0, z3 = 0, hrN = 0;
-    for (const a of samples || []){ n++; const h = a[3]; if (h == null || h < 30) continue; hrN++; if (h < VT1) under++; if (h > HR_HARD) hard++; if (h >= VT2) z3++; }
+    let n = 0, under = 0, low = 0, hard = 0, z3 = 0, hrN = 0;
+    for (const a of samples || []){ n++; const h = a[3]; if (h == null || h < 30) continue; hrN++; if (h < VT1 && h >= HR_Z1_LO) under++; if (h < HR_Z1_LO) low++; if (h > HR_HARD) hard++; if (h >= VT2) z3++; }
     const m = s => Math.floor(s / 60);
     if (g.kind === "vo2"){
       const v = hard / 60, met = v >= g.target_min, past = v > g.hi_min;
@@ -302,9 +303,11 @@
         sub: past ? `past ${g.hi_min}: more than the session asks` : met ? `up to ${g.hi_min} min` : hrN ? "" : "waiting for heart rate", met };
     }
     if (g.kind === "z1"){
-      const over = hrN ? Math.round((hrN - under) / hrN * 100) : 0, met = under / 60 >= g.target_min;
-      return { frac: g.target_min ? Math.min(1, under / 60 / g.target_min) : 0, big: m(under), of: `of ${g.target_min} min`, lab: `at ${HR_Z1} or under`, band: over > 20 ? "stop" : over > 10 ? "hold" : met ? "go" : "run",
-        sub: !hrN ? "waiting for heart rate" : `${over}% at ${VT1} or above · ${over > 10 ? "over the 10% limit" : "limit 10%"}`, met };
+      // the minutes in the band count; the share over the ceiling and the share under the floor each have a limit
+      const over = hrN ? Math.round((hrN - under - low) / hrN * 100) : 0, lowPct = hrN ? Math.round(low / hrN * 100) : 0, met = under / 60 >= g.target_min;
+      const band = over > 20 || lowPct > 40 ? "stop" : over > 10 || lowPct > 25 ? "hold" : met ? "go" : "run";
+      return { frac: g.target_min ? Math.min(1, under / 60 / g.target_min) : 0, big: m(under), of: `of ${g.target_min} min`, lab: `at ${HR_Z1_LO} to ${HR_Z1}`, band,
+        sub: !hrN ? "waiting for heart rate" : `${over}% at ${VT1} or above${over > 10 ? " (limit 10%)" : ""} · ${lowPct}% under ${HR_Z1_LO}${lowPct > 25 ? " (limit 25%)" : ""}`, met };
     }
     const met = n / 60 >= g.target_min;
     return { frac: g.target_min ? Math.min(1, n / 60 / g.target_min) : 0, big: m(n), of: `of ${g.target_min} min`, lab: "ridden", band: met ? "go" : "run", sub: met ? "goal met" : "", met };

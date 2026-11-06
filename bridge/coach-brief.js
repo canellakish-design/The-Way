@@ -9,7 +9,7 @@ Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull
 
 ## What the season is for
 1. Lose about a pound a week without losing power: a deficit near 450 kcal on most days, none on a red recovery morning.
-2. A Zone 1 aerobic base (heart rate 116 and under is Zone 1), with one VO2 session (40/20s) and long easy rides, building fitness (CTL) steadily.
+2. A Zone 1 aerobic base (heart rate 100 to 116 is Zone 1: under 100 is not training, over 116 is not Zone 1), with one VO2 session (40/20s) and long easy rides, building fitness (CTL) steadily.
 3. Keep the chain unbroken: plan, sleep, water, food, micros, lift, fuel, ride, recovery, weight. The first broken link is where to work. Sleep has been the break: about 5 to 6 h a night against a 7 h line.
 4. Five lifts a week, protein near 1.9 g/kg (about 187 g) across the day, 45 g at main meals, 25 g within the hour after a lift.
 
