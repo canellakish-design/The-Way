@@ -200,13 +200,16 @@ async function report() {
   const store = await getJSON('chain-days', { days: {} });
   store.dirty = false;
   // food and water: today live, past days from the store (a couple read fresh per call)
-  let fresh = 0; const rows = {};
+  // The sections below are independent (the journal, the watch, the calendar three ways, the lifts), and each
+  // waits on its own reads; they run together and the report is assembled once all are in.
+  const tasks = [];
+  let fresh = 0; const rows = {}; let todayRow = null;
+  tasks.push((async () => {
   for (const d of past) {
     if (store.days[d] && store.days[d].v === ROW_V) { rows[d] = store.days[d]; continue; }
     if (fresh >= NEW_PER_CALL) continue;
     try { rows[d] = await pastDay(d, store); fresh++; } catch (e) { /* that day stays unread */ }
   }
-  let todayRow = null;
   try {
     const food = require('./food');
     const r = await food.dayReport(today);
@@ -227,13 +230,11 @@ async function report() {
       micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
   } catch (e) { todayRow = null; }
   if (store.dirty) { delete store.dirty; for (const k of Object.keys(store.days)) if (k < tz.shiftKey(today, -45)) delete store.days[k]; await setJSON('chain-days', store).catch(() => {}); }
-  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
-  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayRow && todayRow.water != null ? [todayRow.water] : []);
-  const readDays = past.filter(d => rows[d]).length + 1;
+  })());
 
   // sleep and recovery: the Garmin's mornings through intervals.icu
   let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
-  try {
+  tasks.push((async () => { try {
     const iv = require('./intervals');
     if (iv.configured()) {
       const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
@@ -262,11 +263,11 @@ async function report() {
         if (score != null) recs.push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null, manual: d.manual || null });
       }
     }
-  } catch (e) { nights = []; recs = []; }
+  } catch (e) { nights = []; recs = []; } })());
   // work: minutes done against minutes planned over the week
   let work = { planned_min: 0, done_min: 0, days: [] }, liftsPlanned = 0;
   const planAhead = { ride_min: 0, rides: 0, untimed: 0, lifts: 0, days: [] };
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const cal = await calendar(dates[0], today);
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
@@ -292,9 +293,9 @@ async function report() {
       done += logged; credit += logged;
       work.planned_min += planned; work.done_min += done; work.credit_min += Math.round(credit); work.days.push({ date: day.date, planned_min: planned, done_min: done, credit_min: Math.round(credit) });
     }
-  } catch (e) { work = { planned_min: 0, done_min: 0, credit_min: 0, days: [] }; }
+  } catch (e) { work = { planned_min: 0, done_min: 0, credit_min: 0, days: [] }; } })());
   // lifts already on the calendar for the week ahead (the first week's word, before a session is logged)
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const ahead = await calendar(today, tz.shiftKey(today, 6));
     for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
@@ -308,19 +309,19 @@ async function report() {
       planAhead.days.push({ date: day.date, rides, lifts, ride_min: rides.reduce((a, r) => a + r.minutes, 0) });
       planAhead.ride_min += rides.reduce((a, r) => a + r.minutes, 0); planAhead.rides += rides.length; planAhead.untimed += rides.filter(r => !r.time).length; planAhead.lifts += lifts.length;
     }
-  } catch (e) { /* none counted */ }
+  } catch (e) { /* none counted */ } })());
   // the morning after a hard day: a low reading is expected, and says so
   let hardYesterday = null;
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const cal = await calendar(tz.shiftKey(today, -1), tz.shiftKey(today, -1));
     const d0 = (cal.days || [])[0];
     const hard = d0 ? (d0.done || []).find(r => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(r.name || '').replace(/intervals\.?\s*icu/ig, '')) || (r.tss || 0) >= 60 || (r.minutes || 0) >= 120) : null;
     hardYesterday = hard ? hard.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 30) : null;
-  } catch (e) { hardYesterday = null; }
+  } catch (e) { hardYesterday = null; } })());
   // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
   let lift = { sessions: 0, pumps: 0, target: 5, of: 5, word: '0 of 5', today: [], week: [] };
-  try {
+  tasks.push((async () => { try {
     const d = await getJSON('lifts', { sessions: [] });
     const L = require('./lifts');
     const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today && x.template !== 'pump');
@@ -329,7 +330,11 @@ async function report() {
     const c = await L.weekCountPlaced(d.sessions || [], today);
     lift = { sessions: c.sessions, pumps: c.pumps, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
-  } catch (e) { /* no lifts yet */ }
+  } catch (e) { /* no lifts yet */ } })());
+  await Promise.all(tasks);
+  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
+  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayRow && todayRow.water != null ? [todayRow.water] : []);
+  const readDays = past.filter(d => rows[d]).length + 1;
   // the supplements over the week, and when creatine began (its water on the scale)
   const S = require('./supps');
   const suppRows = past.map(d => rows[d]).filter(Boolean).concat(todayRow ? [todayRow] : []);
