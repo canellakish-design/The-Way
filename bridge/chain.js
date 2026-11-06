@@ -200,13 +200,16 @@ async function report() {
   const store = await getJSON('chain-days', { days: {} });
   store.dirty = false;
   // food and water: today live, past days from the store (a couple read fresh per call)
-  let fresh = 0; const rows = {};
+  // The sections below are independent (the journal, the watch, the calendar three ways, the lifts), and each
+  // waits on its own reads; they run together and the report is assembled once all are in.
+  const tasks = [];
+  let fresh = 0; const rows = {}; let todayRow = null;
+  tasks.push((async () => {
   for (const d of past) {
     if (store.days[d] && store.days[d].v === ROW_V) { rows[d] = store.days[d]; continue; }
     if (fresh >= NEW_PER_CALL) continue;
     try { rows[d] = await pastDay(d, store); fresh++; } catch (e) { /* that day stays unread */ }
   }
-  let todayRow = null;
   try {
     const food = require('./food');
     const r = await food.dayReport(today);
@@ -227,24 +230,11 @@ async function report() {
       micros: r.micros ? { score: r.micros.score, word: r.micros.band && r.micros.band.word, gaps: (r.micros.gaps || []).map(g => g.label) } : null };
   } catch (e) { todayRow = null; }
   if (store.dirty) { delete store.dirty; for (const k of Object.keys(store.days)) if (k < tz.shiftKey(today, -45)) delete store.days[k]; await setJSON('chain-days', store).catch(() => {}); }
-  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
-  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayRow && todayRow.water != null ? [todayRow.water] : []);
-  const readDays = past.filter(d => rows[d]).length + 1;
+  })());
 
   // sleep and recovery: the Garmin's mornings through intervals.icu
   let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
-  // the week before this one, for the trend on the Day's boxes: the same seven days a week earlier
-  const prevFrom = tz.shiftKey(today, -13), prevDates = []; for (let i = 13; i >= 7; i--) prevDates.push(tz.shiftKey(today, -i));
-  // days the store missed (or holds in an older shape) are read fresh, a couple per call, like the week's own
-  let freshPrev = 0;
-  for (const d of prevDates) {
-    if (store.days[d] && store.days[d].v === ROW_V) continue;
-    if (freshPrev >= NEW_PER_CALL) break;
-    try { await pastDay(d, store); freshPrev++; } catch (e) { /* that day stays unread */ }
-  }
-  const prevRows = prevDates.map(d => store.days[d]).filter(x => x && x.v === ROW_V);
-  const prevNights = [], prevRecs = [];
-  try {
+  tasks.push((async () => { try {
     const iv = require('./intervals');
     if (iv.configured()) {
       const w = await iv.wellnessRange(tz.shiftKey(today, -60), today);
@@ -261,24 +251,23 @@ async function report() {
       hrvWeekMs = hrvWeek.length ? Math.round(mean(hrvWeek)) : null; hrvBaseMs = hrvBase.length ? Math.round(mean(hrvBase)) : null; rhrWeek = rhrW.length ? Math.round(mean(rhrW)) : null;
       const M = require('./scores-math');
       for (const d of all) {
-        const inPrev = d.date >= prevFrom && d.date < dates[0];
-        if (d.date < dates[0] && !inPrev) continue;
+        if (d.date < dates[0]) continue;
         // a night under two and a half hours is the watch off the wrist, not a night: kept in the list, left out of the mean
-        if (d.sleep_h != null) (inPrev ? prevNights : nights).push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5, manual: d.manual || null });
+        if (d.sleep_h != null) nights.push({ date: d.date, hours: d.sleep_h, score: d.sleep_score, counted: d.sleep_h >= 2.5, manual: d.manual || null });
         let score = d.readiness;
         if (score == null && (d.hrv != null || d.sleep_h != null)) {
           const hist = all.filter(x => x.date < d.date && x.hrv != null && x.date >= require('./devices').WEARABLE_SINCE).slice(-30).map(x => x.hrv);
           const b = M.vsBaseline ? M.vsBaseline(d.hrv, hist) : { delta_pct: 0 };
           score = Math.max(10, Math.min(100, Math.round(60 + ((b && b.delta_pct) || 0) * 1.2 + ((d.sleep_h || 7) - 7) * 8)));
         }
-        if (score != null) (inPrev ? prevRecs : recs).push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null, manual: d.manual || null });
+        if (score != null) recs.push({ date: d.date, score, hrv: d.hrv, estimated: d.readiness == null, manual: d.manual || null });
       }
     }
-  } catch (e) { nights = []; recs = []; }
+  } catch (e) { nights = []; recs = []; } })());
   // work: minutes done against minutes planned over the week
   let work = { planned_min: 0, done_min: 0, days: [] }, liftsPlanned = 0;
   const planAhead = { ride_min: 0, rides: 0, untimed: 0, lifts: 0, days: [] };
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const cal = await calendar(dates[0], today);
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
@@ -304,9 +293,9 @@ async function report() {
       done += logged; credit += logged;
       work.planned_min += planned; work.done_min += done; work.credit_min += Math.round(credit); work.days.push({ date: day.date, planned_min: planned, done_min: done, credit_min: Math.round(credit) });
     }
-  } catch (e) { work = { planned_min: 0, done_min: 0, credit_min: 0, days: [] }; }
+  } catch (e) { work = { planned_min: 0, done_min: 0, credit_min: 0, days: [] }; } })());
   // lifts already on the calendar for the week ahead (the first week's word, before a session is logged)
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const ahead = await calendar(today, tz.shiftKey(today, 6));
     for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
@@ -320,19 +309,19 @@ async function report() {
       planAhead.days.push({ date: day.date, rides, lifts, ride_min: rides.reduce((a, r) => a + r.minutes, 0) });
       planAhead.ride_min += rides.reduce((a, r) => a + r.minutes, 0); planAhead.rides += rides.length; planAhead.untimed += rides.filter(r => !r.time).length; planAhead.lifts += lifts.length;
     }
-  } catch (e) { /* none counted */ }
+  } catch (e) { /* none counted */ } })());
   // the morning after a hard day: a low reading is expected, and says so
   let hardYesterday = null;
-  try {
+  tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const cal = await calendar(tz.shiftKey(today, -1), tz.shiftKey(today, -1));
     const d0 = (cal.days || [])[0];
     const hard = d0 ? (d0.done || []).find(r => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(r.name || '').replace(/intervals\.?\s*icu/ig, '')) || (r.tss || 0) >= 60 || (r.minutes || 0) >= 120) : null;
     hardYesterday = hard ? hard.name.replace(/^Zwift - Intervals icu: /i, '').slice(0, 30) : null;
-  } catch (e) { hardYesterday = null; }
+  } catch (e) { hardYesterday = null; } })());
   // lift: sessions logged this week against the plan's five (the Lift tab's store, read directly)
   let lift = { sessions: 0, pumps: 0, target: 5, of: 5, word: '0 of 5', today: [], week: [] };
-  try {
+  tasks.push((async () => { try {
     const d = await getJSON('lifts', { sessions: [] });
     const L = require('./lifts');
     const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today && x.template !== 'pump');
@@ -341,7 +330,11 @@ async function report() {
     const c = await L.weekCountPlaced(d.sessions || [], today);
     lift = { sessions: c.sessions, pumps: c.pumps, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
-  } catch (e) { /* no lifts yet */ }
+  } catch (e) { /* no lifts yet */ } })());
+  await Promise.all(tasks);
+  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
+  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayRow && todayRow.water != null ? [todayRow.water] : []);
+  const readDays = past.filter(d => rows[d]).length + 1;
   // the supplements over the week, and when creatine began (its water on the scale)
   const S = require('./supps');
   const suppRows = past.map(d => rows[d]).filter(Boolean).concat(todayRow ? [todayRow] : []);
@@ -366,19 +359,6 @@ async function report() {
   const notSynced = nights.length && nights[nights.length - 1].date !== today;
   const foodWeek = r0(avg(foodDays)), waterWeek = r0(avg(waterDays));
   const recWeek = r0(avg(recs.map(r => r.score))), recToday = recs.length && recs[recs.length - 1].date === today ? recs[recs.length - 1] : null;
-  // the trend: this week's number against the week before, and whether that is better. Higher is better on every link
-  // but fuel, where 100 is the plan and better is closer to it. Only when both weeks have enough days to mean something.
-  const prev = {
-    sleep: prevNights.filter(n => n.counted).length >= 3 ? r1(avg(prevNights.filter(n => n.counted).map(n => n.hours))) : null,
-    recovery: prevRecs.length >= 3 ? r0(avg(prevRecs.map(r => r.score))) : null,
-    food: prevRows.filter(x => x.logged && x.food != null).length >= 3 ? r0(avg(prevRows.filter(x => x.logged && x.food != null).map(x => x.food))) : null,
-    water: prevRows.filter(x => x.water != null).length >= 3 ? r0(avg(prevRows.filter(x => x.water != null).map(x => x.water))) : null,
-    fuel: (() => { const s = fuelScore(prevRows.flatMap(x => x.fuel || [])); return s == null ? null : Math.round(s * 100); })()
-  };
-  const trendOf = (k, week) => { const p = prev[k]; if (p == null || week == null) return null;
-    const delta = k === 'sleep' ? Math.round((week - p) * 10) / 10 : Math.round(week - p);
-    const better = k === 'fuel' ? Math.abs(100 - week) < Math.abs(100 - p) : delta > 0;
-    return { prev: p, delta, better }; };
   const workRatio = work.planned_min > 0 ? (work.credit_min != null ? work.credit_min : work.done_min) / work.planned_min : (work.done_min > 0 ? 1 : null);
   const links = {
     plan: (() => {
@@ -393,21 +373,21 @@ async function report() {
         unit: 'placed', from: today, to: tz.shiftKey(today, 6), week_label: planWeekLabel(today),
         basis: `how much of the seven days ahead (${planWeekLabel(today)}) is placed on the calendar, not how much of it is done (that is the Calendar's "done of plan"): minutes of riding against ${PLAN_RIDE_MIN} (half the mark), five lifts placed (three tenths), and every ride given a start time (two tenths); 80 green, 50 amber` };
     })(),
-    sleep: { week: sleepWeek, trend: trendOf('sleep', sleepWeek), state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
+    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday ? (rxToday.magnesium_last_night ? ' · Mg ✓' : ' · Mg —') : ''}`, unit: 'h a night', nights: nights.slice(-7),
       rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
     // The Macros box shows what the Food page prints at its top, read from the same day report on every
     // call: today's kcal against the day's target, and protein against its target. (The compliance
     // average stays for the chain's verdict, but it is not on the box: its macro half bottoms out at 0
     // once a macro is far past what is due, so on a day already over it did not move with a log.)
-    food: Object.assign({ week: foodWeek, trend: trendOf('food', foodWeek), state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'kcal', micros: todayRow ? todayRow.micros : null, basis: `the box is today's kcal and protein against the day's targets, the numbers at the top of the Food page; the chain's verdict uses the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
+    food: Object.assign({ week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'kcal', micros: todayRow ? todayRow.micros : null, basis: `the box is today's kcal and protein against the day's targets, the numbers at the top of the Food page; the chain's verdict uses the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
       macrosToday(todayRow && todayRow.macros)),
     micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
-    water: { week: waterWeek, trend: trendOf('water', waterWeek), state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
+    water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
     fuel: (() => {
       const all = past.flatMap(d => (rows[d] && rows[d].fuel) || []).concat(todayRow ? (todayRow.fuel || []) : []);
       const score = fuelScore(all), todays = todayRow ? fuelScore(todayRow.fuel || []) : null;
       const fn = todayRow && todayRow.fuel_now;
-      return { week: score == null ? null : Math.round(score * 100), trend: trendOf('fuel', score == null ? null : Math.round(score * 100)), state: stateOf('fuel', score), rides: all.filter(c => c.kind === 'ride').length, list: all.slice(-12),
+      return { week: score == null ? null : Math.round(score * 100), state: stateOf('fuel', score), rides: all.filter(c => c.kind === 'ride').length, list: all.slice(-12),
         ok: all.filter(c => c.ok).length, checks: all.length,
         rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb, today: rxLine('fuel') || null },
         today: todays != null ? Math.round(todays * 100) : null,
@@ -438,7 +418,7 @@ async function report() {
       const interim = band.state === 'none' && recWeek != null;
       const interimState = interim ? (recWeek >= 67 ? 'good' : recWeek >= 34 ? 'warn' : 'bad') : null;
       const state = interim ? (dayBand === 'bad' ? 'bad' : interimState) : band.state === 'none' ? 'none' : dayBand === 'bad' ? 'bad' : band.state;
-      return { week: interim ? recWeek : band.pct, week_kind: interim ? 'score' : 'band', trend: interim ? trendOf('recovery', recWeek) : null, state, week_state: band.state, steps: band.steps, why: band.why, hrv_week_ms: hrvWeekMs, hrv_base_ms: hrvBaseMs, rhr_week: rhrWeek, rhr_up: band.rhr_up,
+      return { week: interim ? recWeek : band.pct, week_kind: interim ? 'score' : 'band', state, week_state: band.state, steps: band.steps, why: band.why, hrv_week_ms: hrvWeekMs, hrv_base_ms: hrvBaseMs, rhr_week: rhrWeek, rhr_up: band.rhr_up,
         score_week: recWeek, today: todayScore, today_band: dayBand, today_word: dip ? `dip after ${hardYesterday} · normal` : dayBand === 'bad' ? 'red morning: easy day' : (recToday && recToday.estimated ? 'estimated' : null),
         hard_yesterday: hardYesterday, days: recs.slice(-7), unit: interim ? 'avg' : 'vs band',
         basis: interim ? `the week's morning recovery scores averaged (67 and up green, 34 to 66 amber) while the new watch builds its HRV band (${band.why || 'fourteen nights needed'}); the morning line is the day's readiness`

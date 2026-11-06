@@ -43,10 +43,11 @@ function file(key) { return path.join(__dirname, key + '.json'); }
 
 async function getJSON(key, fallback) {
   const memo = scope.getStore();
-  if (memo && memo.has(key)) { const v = memo.get(key); return v == null ? fallback : clone(v); }
-  const v = await readJSON(key);
-  if (memo) memo.set(key, v == null ? null : clone(v));
-  return v == null ? fallback : v;
+  if (!memo) { const v = await readJSON(key); return v == null ? fallback : v; }
+  // the read in flight is shared too: two places asking for the same key at the same moment make one round trip
+  if (!memo.has(key)) memo.set(key, readJSON(key).then(v => (v == null ? null : clone(v))));
+  const v = await memo.get(key);
+  return v == null ? fallback : clone(v);
 }
 async function readJSON(key) {
   if (ON_NETLIFY) {
@@ -65,7 +66,7 @@ async function readJSON(key) {
 }
 async function setJSON(key, val) {
   const memo = scope.getStore();
-  if (memo) memo.set(key, clone(val));
+  if (memo) memo.set(key, Promise.resolve(clone(val)));
   if (ON_NETLIFY) {
     const s = await store();
     await s.setJSON(key, val);
