@@ -3,9 +3,11 @@
 const express = require('express');
 const path = require('path');
 require('./sandbox');   // the copy of the site never writes outside itself
-const { ON_NETLIFY, SANDBOX } = require('./storage');
+const { ON_NETLIFY, SANDBOX, withScope } = require('./storage');
 const app = express();
 app.use(express.json({ limit: '15mb' }));
+// a page read (GET) reads each blob once, however many places ask for it (storage.js)
+app.use((req, res, next) => (req.method === 'GET' ? withScope(next) : next()));
 app.get('/sandbox', (req, res) => res.json({ sandbox: !!SANDBOX }));
 require('./fuel-log').attach(app);
 require('./plan').attach(app);
