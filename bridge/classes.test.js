@@ -27,8 +27,8 @@ const events = [
     assert.strictEqual(C.restReason('2026-11-11', events), null);
     assert.strictEqual(C.restReason('2026-11-13', events), null);
   });
-  await ok('the rest days between two dates come from the synced Google events', async () => {
-    mem['gcal'] = { accounts: [], events };
+  await ok('the rest days between two dates come from every source the schedule reads', async () => {
+    require('./calendar').eventsBetween = async () => events;   // the merged sources, stood in for
     const r = await C.restDaysBetween('2026-11-09', '2026-11-15');
     assert.deepStrictEqual(r, { '2026-11-12': 'three classes' });
   });

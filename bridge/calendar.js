@@ -545,6 +545,22 @@ async function removeEvent(id) {
 
 // The schedule for n days from today (back days before): every event with its
 // edit key, the planned sessions, the day's macros. The route and the voice both use it.
+// Every event between two days from all the schedule's sources, merged as scheduleReport merges them:
+// Google as last synced (no sync here), the calendar feeds, the app's own events, the snapshot for days
+// no live source reached. For readers that need the day's events without the whole report (the
+// rest-day rule in classes.js).
+async function eventsBetween(firstKey, lastKey) {
+  const d = await db();
+  const icsMod = require('./ics');
+  const ics = await icsMod.fetchAll(firstKey, lastKey).catch(() => ({ events: [] }));
+  const icsEvents = (ics.events || []).map(e => ({ ...e, category: classify(e.summary, d.manual, calendarCategory(e.calendar)) }));
+  const localEvents = (d.local_events || []).map(e => ({ ...e, category: classify(e.summary, d.manual, null) }));
+  const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
+  const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
+  const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
+  return liveEvents.concat(applyOverrides(snapEvents, d.overrides));
+}
+
 async function scheduleReport(q) {
       const n = Math.min(21, Math.max(1, parseInt(q.days, 10) || 7));
       const back = Math.min(7, Math.max(0, parseInt(q.back, 10) || 0));
@@ -810,5 +826,5 @@ function attach(app) {
         ...recommendToday(day, rec, w ? w.remaining : null) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday,
+module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
   trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };
