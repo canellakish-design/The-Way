@@ -103,7 +103,53 @@
     return a;
   }
 
-  const api = { LINES, COLOURS, KEYS, LABELS, PLANNING_FTP, bucketOf, stepBucket, segmentsOf, planFromSteps, planOf, actualFromSamples, linesOf };
+  // ---- drawing (the browser's pages; the bridge never calls these) ----
+  // Colour means bucket and nothing else: the fills are solid in the bucket's colour, the structure is
+  // mid-grey, the plan and due lines and every number are ink. The bucket being ridden now is lit: a thick
+  // outline in its own colour and a solid label tab (dark text on blue and amber, white on red). Position
+  // (LOW, HIGH, PEAK left to right) and the labels carry the meaning too, never colour alone.
+  const TAB_INK = { low: '#000000', high: '#000000', peak: '#FFFFFF' };
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function clock(sec) {
+    const s = Math.max(0, Math.round(num(sec) || 0)), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    return h ? `${h}:${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}` : `${m}:${String(r).padStart(2, '0')}`;
+  }
+  const mins = sec => `${Math.round((num(sec) || 0) / 60)}`;
+  // The player's three bars. o: { plan: {low,high,peak} | null, actual: {low,high,peak}, due: {..} | null,
+  // lit: 0 | 1 | 2 | null, colours, elapsed (seconds ridden, the shared scale when there is no plan) }
+  function barsHTML(o) {
+    const C = Object.assign({}, COLOURS, o.colours || {}), plan = o.plan && (o.plan.low + o.plan.high + o.plan.peak) > 0 ? o.plan : null;
+    const act = o.actual || { low: 0, high: 0, peak: 0 }, due = plan ? (o.due || null) : null;
+    const planTotal = plan ? plan.low + plan.high + plan.peak : 0, ridden = Math.max(1, num(o.elapsed) || (act.low + act.high + act.peak) || 1);
+    return `<div class="bk${plan ? '' : ' bk-free'}" role="group" aria-label="Buckets">` + KEYS.map((k, i) => {
+      const a = act[k] || 0, p = plan ? plan[k] || 0 : 0, lit = o.lit === i;
+      // a planned bucket fills against its plan; an unplanned one (and every bucket with no plan) against the ride so far
+      const scale = plan ? (p > 0 ? p : planTotal) : ridden;
+      const fill = Math.max(0, Math.min(1, a / scale)), d = due && p > 0 ? Math.max(0, Math.min(1, (due[k] || 0) / p)) : null;
+      const of = !plan ? '' : p > 0 ? `of ${clock(p)}` : 'not planned';
+      return `<div class="bk-col${lit ? ' lit' : ''}" style="--c:${C[k]};--ct:${TAB_INK[k]}" aria-label="${LABELS[k]} ${clock(a)}${plan ? ' ' + of : ''}${lit ? ', riding now' : ''}">
+        <div class="bk-tab">${LABELS[k]}</div>
+        <div class="bk-bar"><div class="bk-fill" style="height:${(fill * 100).toFixed(1)}%"></div>${d != null ? `<div class="bk-due" style="bottom:${(d * 100).toFixed(1)}%"></div>` : ''}</div>
+        <div class="bk-num">${clock(a)}</div><div class="bk-of">${esc(of)}${plan && p > 0 && a > p ? ` · +${clock(a - p)}` : ''}</div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+  // The Day's and the Calendar's three small bars. o: { plan, actual (after a ride) | null, colours }.
+  // Planned only: each bar's length is its share of the plan, minutes beside it. After a ride: the bar is
+  // the ride's minutes in that bucket, the ink tick is the plan's, and the words say both.
+  function miniHTML(o) {
+    const C = Object.assign({}, COLOURS, o.colours || {}), plan = o.plan || null, act = o.actual || null;
+    const tot = k => (plan ? plan[k] || 0 : 0), got = k => (act ? act[k] || 0 : 0);
+    const max = Math.max(1, ...KEYS.map(k => Math.max(tot(k), got(k))));
+    if (!KEYS.some(k => tot(k) || got(k))) return '';
+    return `<div class="bkm" role="group" aria-label="Buckets${act ? ', ridden against the plan' : ', planned'}">` + KEYS.map(k => {
+      const p = tot(k), a = got(k), len = act ? a : p;
+      const words = act ? (plan ? `${mins(a)} of ${mins(p)} min` : `${mins(a)} min`) : `${mins(p)} min`;
+      return `<div class="bkm-row"><span class="bkm-k">${LABELS[k]}</span><span class="bkm-track"><span class="bkm-fill" style="width:${(len / max * 100).toFixed(1)}%;background:${C[k]}"></span>${act && plan && p > 0 ? `<span class="bkm-tick" style="left:${(p / max * 100).toFixed(1)}%"></span>` : ''}</span><span class="bkm-v">${words}</span></div>`;
+    }).join('') + `</div>`;
+  }
+
+  const api = { LINES, COLOURS, KEYS, LABELS, PLANNING_FTP, bucketOf, stepBucket, segmentsOf, planFromSteps, planOf, actualFromSamples, linesOf, clock, barsHTML, miniHTML };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.Buckets = api;
 })(typeof window !== 'undefined' ? window : this);
