@@ -47,6 +47,7 @@ require('./signature').attach(app);
 require('./lifts').attach(app);
 require('./strava').attach(app);
 require('./garmin').attach(app);
+require('./thresholds').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);
 require('./agent').attach(app);

@@ -99,7 +99,10 @@
     intervals: [{ label: "Free ride", start_s: 0, dur_s: 4 * 3600, target_w: null, target_w_end: null, target_hr: null, kind: "free", rep: null }] });
 
   // ---------- the profile: a block per interval, its height the target watts ----------
-  const ZC = f => f < 0.56 ? "var(--water)" : f < 0.76 ? "var(--green)" : f < 0.91 ? "#B9D27A" : f < 1.06 ? "var(--amber)" : "var(--red)";
+  // the profile's blocks wear their bucket's colour (pwa/buckets.js): colour means bucket and nothing else
+  const BKS = { lines: null, colours: null };
+  const BK = () => window.Buckets;
+  const ZCw = w => { const b = BK().bucketOf({ w: Math.round(w) }, BKS.lines); return b == null ? "#8A8A86" : Object.assign({}, BK().COLOURS, BKS.colours || {})[BK().KEYS[b]]; };
   function profileSVG(ivs, ftp, o){
     o = o || {};
     const W = 1000, H = o.h || 120, total = ivs.reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0) || 1;
@@ -112,7 +115,7 @@
         return `<rect x="${x0.toFixed(1)}" y="${yy.toFixed(1)}" width="${Math.max(0.6, x1 - x0 - 0.6).toFixed(1)}" height="${(H - yy).toFixed(1)}" fill="url(#plHatch)"><title>${esc(x.label)} · ${x.kind === "hr" ? `hold HR ≤ ${x.target_hr ? x.target_hr.hi : HR_Z1}` : "ride by feel"} · ${clock(x.dur_s)}</title></rect>`;
       }
       const a = x.target_w, b = x.target_w_end != null ? x.target_w_end : a;
-      return `<polygon points="${x0.toFixed(1)},${H} ${x0.toFixed(1)},${y(a).toFixed(1)} ${Math.max(x0 + 0.6, x1 - 0.6).toFixed(1)},${y(b).toFixed(1)} ${Math.max(x0 + 0.6, x1 - 0.6).toFixed(1)},${H}" fill="${ZC(Math.max(a, b) / ftp)}"><title>${esc(x.label)} · ${a}${b !== a ? "→" + b : ""} W · ${clock(x.dur_s)}</title></polygon>`;
+      return `<polygon points="${x0.toFixed(1)},${H} ${x0.toFixed(1)},${y(a).toFixed(1)} ${Math.max(x0 + 0.6, x1 - 0.6).toFixed(1)},${y(b).toFixed(1)} ${Math.max(x0 + 0.6, x1 - 0.6).toFixed(1)},${H}" fill="${ZCw(Math.max(a, b))}"><title>${esc(x.label)} · ${a}${b !== a ? "→" + b : ""} W · ${clock(x.dur_s)}</title></polygon>`;
     }).join("");
     const ftpLine = `<line x1="0" x2="${W}" y1="${y(ftp).toFixed(1)}" y2="${y(ftp).toFixed(1)}" class="pl-ftp"/>`;
     const cursor = o.cursor != null ? `<rect x="0" y="0" width="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" height="${H}" class="pl-done"/><line class="pl-cur" x1="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" x2="${(Math.min(1, o.cursor / total) * W).toFixed(1)}" y1="0" y2="${H}"/>` : "";
@@ -200,7 +203,7 @@
       const w0 = x.target_w * bias, w1 = (x.target_w_end != null ? x.target_w_end : x.target_w) * bias;
       const at = t => w0 + (w1 - w0) * (t - s) / Math.max(1, x.dur_s);
       const ya = Y(at(a)), yb = Y(at(b)), xe = Math.max(xa + 0.5, xb - 1);
-      const col = ZC(Math.max(w0, w1) / bias / ftp);
+      const col = ZCw(Math.max(w0, w1) / bias);
       blocks += `<g class="${cls}">${tip}<polygon points="${xa.toFixed(1)},${T0 + ph} ${xa.toFixed(1)},${ya.toFixed(1)} ${xe.toFixed(1)},${yb.toFixed(1)} ${xe.toFixed(1)},${T0 + ph}" fill="${col}" class="pf-fill"/><line x1="${xa.toFixed(1)}" y1="${ya.toFixed(1)}" x2="${xe.toFixed(1)}" y2="${yb.toFixed(1)}" stroke="${col}" class="pf-edge"/></g>`;
       // the watts to hold, on the block, where there is room; the next interval also says when it starts
       if (past) return;
@@ -631,12 +634,25 @@
   }
   function startTimer(){ clearInterval(timer); timer = setInterval(pump, Math.max(40, Math.round(250 / CLK.speed))); }
 
+  // the plan in buckets from the session's intervals and lines, and the ride's seconds in each, kept as it goes
+  function bucketsFor(r, S){
+    const lines = (S && S.lines) || BKS.lines || null, colours = Object.assign({}, BK().COLOURS, (S && S.colours) || BKS.colours || {});
+    const plan = BK().planFromSteps(r.intervals, r.ftp, lines);
+    return { lines, colours, plan, actual: { low: 0, high: 0, peak: 0 }, n: 0 };
+  }
+  function bucketsNow(r){
+    if (!r.bk) r.bk = bucketsFor(r, null);
+    const b = r.bk;
+    for (; b.n < r.samples.length; b.n++){ const a = r.samples[b.n]; const k = BK().bucketOf({ w: a[1], hr: a[3] }, b.lines); if (k != null) b.actual[BK().KEYS[k]]++; }
+    return b;
+  }
   async function begin(S){
     try{ const AC = window.AudioContext || window.webkitAudioContext; if (AC && !audio) audio = new AC(); if (audio && audio.state === "suspended") audio.resume(); }catch{}
     const t0 = now();
     setZones(S.thresholds);
     ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, date: keyOf(new Date(t0)),
       samples: [], pauses: [], wt: 0, bias: 0, erg: true, raw: {}, rawCount: 0, sim: SIM.on };
+    ride.bk = bucketsFor(ride, S);
     drawRide();
     // the count-in: 3, 2, 1
     const ov = document.getElementById("plCount");
@@ -765,22 +781,27 @@
     try{ window.scrollTo(0, 0); }catch{}
     el.innerHTML = `<div class="pl-ride">
       <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}${devHTML("breath")}</div></div>
-      <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div></div>
-      <div class="hu-fields pl-fields">
-        <div class="hu-field big pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
-        <div class="hu-field big pl-hr"><span class="k">Heart rate</span><div class="pl-hrrow"><span class="n" id="fH">—</span>${zonesHTML()}</div><span class="u" id="fHz"></span></div>
-        <div class="hu-field big pl-il"><span class="k">Interval left</span><span class="n" id="fI">—</span><span class="u" id="fIl"></span></div>
-        <div class="hu-field pl-cad"><span class="k">Cadence</span><span class="n" id="fC">—</span><span class="u">rpm</span></div>
-        <div class="hu-field pl-tl"><span class="k">Total left</span><span class="n" id="fT">—</span><span class="u" id="fTr"></span></div>
-        <div class="hu-field pl-mode"><span class="k">Trainer</span><span class="n" id="fE">ERG</span><span class="u" id="fB"></span></div>
+      <div class="pl-bkbox" id="plBk"></div>
+      <div class="pl-big">
+        <div class="pl-bn"><span class="k">Time</span><span class="n" id="fT0">0:00</span><span class="u" id="fIl"></span></div>
+        <div class="pl-bn pl-hr"><span class="k">Heart rate</span><div class="pl-hrrow"><span class="pl-hrbar" id="fHb" aria-hidden="true"></span><span class="n" id="fH">—</span></div><span class="u" id="fHz"></span></div>
+        <div class="pl-bn pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
       </div>
-      <div class="pl-strip" id="plStrip">${profileSVG(ride.intervals, ftp, { h: 90, cursor: ride.wt, cls: "pl-small" })}</div>
       <div class="pl-next" id="plNext"></div>
       <div class="pl-ctl">
         <button id="cPause">Pause</button><button id="cSkip">Skip interval</button>
         <button id="cBm" aria-label="Bias minus 5 percent">−5%</button><button id="cBp" aria-label="Bias plus 5 percent">+5%</button>
         <button id="cErg">ERG off</button><button id="cEnd" class="pl-end">End</button>
       </div>
+      <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div></div>
+      <div class="hu-fields pl-fields">
+        <div class="hu-field pl-il"><span class="k">Interval left</span><span class="n" id="fI">—</span><span class="u" id="fIo"></span></div>
+        <div class="hu-field pl-tl"><span class="k">Total left</span><span class="n" id="fT">—</span><span class="u" id="fTr"></span></div>
+        <div class="hu-field pl-cad"><span class="k">Cadence</span><span class="n" id="fC">—</span><span class="u">rpm</span></div>
+        <div class="hu-field pl-mode"><span class="k">Trainer</span><span class="n" id="fE">ERG</span><span class="u" id="fB"></span></div>
+        <div class="hu-field pl-zone"><span class="k">Heart-rate zone</span>${zonesHTML()}</div>
+      </div>
+      <div class="pl-strip" id="plStrip">${profileSVG(ride.intervals, ftp, { h: 90, cursor: ride.wt, cls: "pl-small" })}</div>
       <div class="pl-confirm" id="plConfirm" hidden><div><b>End the ride and save it?</b><div class="small">It goes to The Way and to intervals.icu. Nothing is thrown away.</div></div><button class="primary" id="cSave">Save the ride</button><button id="cBack">Keep riding</button></div>
       <div class="pl-note small" id="plNote" hidden></div>
       <div class="pl-count" id="plCount" hidden></div>
@@ -811,13 +832,20 @@
     $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
-    $("fH").className = "n " + (hr == null ? "hu-dim" : hr <= HR_Z1 ? "hu-go" : hr <= HR_Z2 ? "hu-hold" : "hu-stop");
+    $("fH").className = "n";   // numbers are ink; the heart rate's bucket is the bar beside it
+    { const bk = bucketsNow(r), hb = hr != null ? BK().bucketOf({ hr }, bk.lines) : null;
+      $("fHb").style.background = hb == null ? "transparent" : bk.colours[BK().KEYS[hb]];
+      $("fHb").style.borderColor = hb == null ? "#8A8A86" : bk.colours[BK().KEYS[hb]];
+      const pw = fresh(L.bikeAt) ? L.power : null, lit = r.state === "riding" ? BK().bucketOf({ w: pw, hr }, bk.lines) : null;
+      $("plBk").innerHTML = BK().barsHTML({ plan: bk.plan.planned ? bk.plan : null, actual: bk.actual, due: bk.plan.planned ? bk.plan.dueAt(r.wt) : null, lit, colours: bk.colours, elapsed: r.samples.length }); }
     { const want = wantZone(iv, r.ftp), zin = hrZoneOf(hr);
       $("fHz").textContent = (zin ? `Z${zin.z} ${zin.name}` : "") + (want ? `${zin ? " · " : ""}training Z${want.z} ${want.name}` : "");
       paintZones(hr, iv, r.ftp); }
     $("fC").textContent = fresh(L.bikeAt) && L.cadence != null ? L.cadence : "—";
     $("fI").textContent = iv ? clock(iv.start_s + iv.dur_s - r.wt) : "—";
-    $("fIl").textContent = iv ? `of ${clock(iv.dur_s)}` : "";
+    $("fIo").textContent = iv ? `of ${clock(iv.dur_s)}` : "";
+    $("fT0").textContent = clock(r.samples.length);
+    $("fIl").textContent = iv ? `${clock(iv.start_s + iv.dur_s - r.wt)} left` : "";
     $("fT").textContent = clock(Math.max(0, total - r.wt));
     $("fTr").textContent = `${clock(r.samples.length)} ridden`;
     $("fE").textContent = !iv || (iv.target_w == null && iv.kind !== "hr") ? "Free" : r.erg ? "ERG" : "Off";
@@ -852,9 +880,12 @@
         <div class="hu-field"><span class="k">Power</span><span class="n">${s.avg_w != null ? s.avg_w : "—"}<small> W</small></span><span class="u">${s.np_w ? `NP ${s.np_w} W · ` : ""}${s.tss != null ? `${s.tss} TSS` : ""}</span></div>
         <div class="hu-field"><span class="k">Heart rate</span><span class="n">${s.avg_hr != null ? s.avg_hr : "—"}</span><span class="u">${s.max_hr ? `max ${s.max_hr}` : "no strap"}</span></div>
       </div>` : "";
-    el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-go" : r.stored ? "hu-hold" : "hu-stop"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
+    el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-dim" : "hu-ink"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
       <div class="pl-result ${ok ? "ok" : "bad"}">${line}</div>
       ${fields}
+      ${!r.empty && rec.samples && rec.samples.length ? (() => { const lines = (rec.bk && rec.bk.lines) || BKS.lines, plan = BK().planFromSteps(rec.intervals || [], rec.ftp || 175, lines);
+          const act = BK().actualFromSamples(rec.samples.map(a => ({ w: a[1], hr: a[3] })), lines);
+          return `<div class="pl-bkres"><span class="hu-lab">Buckets${plan.planned ? ", ridden against the plan" : ""}</span>${BK().miniHTML({ plan: plan.planned ? plan : null, actual: act, colours: (rec.bk && rec.bk.colours) || BKS.colours })}</div>`; })() : ""}
       ${!r.empty && goalOf(rec.workout, rec.intervals) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(rec.workout, rec.intervals), rec.samples, 120)}</div>` : ""}
       <div class="pl-ctl">${ok ? "" : `<button class="primary" id="cRetry">Retry</button>`}${lastFit && lastFit.id === rec.id ? `<button id="cFit">Download the FIT file</button>` : ""}<a class="btn" href="#today">‹ Day</a><a class="btn" href="#calendar">Calendar</a></div>
       <div class="pl-note small" id="plNote" hidden></div>`;
@@ -909,9 +940,10 @@
     let S = null, err = null;
     try{ S = await loadSession(id || "today"); }catch(e){ err = e; }
     if (!alive()) return;
-    if (S && !S.workout && !id){ S = Object.assign(FREE_RIDE(S.settings && S.settings.ftp || 175), { none: true, choices: S.choices }); }
+    if (S && !S.workout && !id){ S = Object.assign(FREE_RIDE(S.settings && S.settings.ftp || 175), { none: true, choices: S.choices, lines: S.lines, colours: S.colours }); }
     if (!S){ const pend = await pendingHTML(null); el.innerHTML = `${pend}<div class="pl-ttl"><h2 class="pl-h">Workout player</h2></div><div class="small">Couldn't load the workout: ${esc(String(err && err.message || "").replace(/^bridge \d+ — /, "").slice(0, 200))}. <a href="#calendar">Pick one on the Calendar</a>.</div>`; return; }
     S0 = S;
+    BKS.lines = S.lines || null; BKS.colours = S.colours || null;
     const pend = await pendingHTML(S);
     if (!alive()) return;
     el.innerHTML = (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend);

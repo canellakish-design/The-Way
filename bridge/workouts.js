@@ -488,8 +488,15 @@ async function calendar(from, to, o) {
   for (const r of doneR.rides) {
     try {
       const c = await getJSON('ride-v3-' + String(r.id).replace(/\D/g, ''), null);
-      if (c) r.analysis = { hr: c.hr, resp: c.resp, ve: c.ve || null, sources: c.sources };
-      else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, ve: a.ve || null, sources: a.sources }; }
+      if (c) r.analysis = { hr: c.hr, resp: c.resp, ve: c.ve || null, sources: c.sources, buckets: c.buckets || null };
+      else if (fresh < 2) { fresh++; const a = await require('./rides').analyze(r); r.analysis = { hr: a.hr, resp: a.resp, ve: a.ve || null, sources: a.sources, buckets: a.buckets || null }; }
+      // a ride read before the buckets existed: the player's filled at once, a Strava ride of the last two weeks
+      // on the same budget of two reads a call (one streams call each), so the Day fills in without leaning on Strava
+      const RD = require('./rides');
+      if (r.analysis && !r.analysis.buckets && RD.isBucketRide(r) && (r.source === 'player' || (fresh < 2 && r.date >= tz.shiftKey(today, -14)))) {
+        if (r.source !== 'player') fresh++;
+        r.analysis.buckets = await RD.ensureBuckets(r).catch(() => null);
+      }
     } catch (e) { /* unread stays unread */ }
   }
   const ridesByDate = {};
@@ -519,6 +526,23 @@ async function calendar(from, to, o) {
   }
   // fuel for the work required: each day's carbs from its sessions, the week's train-low rule applied in order
   try { const wf = await require('./fuel-week').weekFuel(from, to, st.ftp); for (const d of days) d.fuel = wf[d.date] || null; } catch (e) { /* the days stand without it */ }
+  // the magic buckets (buckets.js): each planned ride's plan in seconds per bucket on the lines of its day, and
+  // each ride its seconds per bucket beside the planned ride it answers (the nearest start, as the grade pairs them)
+  try {
+    const BK = require('./buckets'), toM = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
+    const linesBy = {};
+    for (const d of days) {
+      const L = linesBy[d.date] || (linesBy[d.date] = BK.pick(await BK.currentLines(d.date)));
+      const rides = (d.planned || []).filter(isRideSport);
+      for (const w of rides) { const pl = BK.planFromSteps(w.steps || [], st.ftp || BK.PLANNING_FTP, L); w.buckets_plan = pl.planned ? BK.planOf(pl) : null; }
+      for (const r of d.done || []) {
+        r.buckets = r.analysis && r.analysis.buckets ? r.analysis.buckets : null;
+        let best = null, bd = Infinity;
+        for (const w of rides) { const a = toM(w.time), b = toM(r.time), dd = a == null || b == null ? 600 : Math.abs(a - b); if (dd < bd) { bd = dd; best = w; } }
+        r.plan_wid = best ? best.id : null;
+      }
+    }
+  } catch (e) { /* the days stand without buckets */ }
   // a day with all three classes is a rest day (classes.js): the Calendar says so, and the placers keep off it
   try { const rest = await require('./classes').restDaysBetween(from, to); for (const d of days) d.rest = rest[d.date] || null; } catch (e) { /* unmarked */ }
   return { from, to, today, settings: st, days,

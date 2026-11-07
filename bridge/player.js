@@ -65,7 +65,7 @@ async function sessionFor(id) {
     // today's next ride: the first whose end has not passed, else the day's last
     const p = tz.parts(new Date()), now = p.h * 60 + p.mi;
     w = todays.find(x => toMin(x.time) == null || toMin(x.time) + Math.round(W.metrics(x.steps || [], st).duration_s / 60) > now) || todays[todays.length - 1] || null;
-    if (!w) return { workout: null, settings: st, choices: [], date: today };
+    if (!w) { const BK = require('./buckets'); const L = await BK.currentLines(today); return { workout: null, settings: st, choices: [], date: today, lines: BK.pick(L), colours: Object.assign({}, BK.COLOURS), buckets_plan: null }; }
   } else {
     w = all.find(x => x.id === id);
     if (!w) { const e = new Error('no such workout'); e.status = 404; throw e; }
@@ -74,10 +74,19 @@ async function sessionFor(id) {
   const m = W.metrics(W.normItems(w.steps || []), st);
   let fuel = [];
   try { const g = await require('./food').guidelinesFor(w.date); fuel = fuelSlots(g.meals, w.time); } catch (e) { fuel = []; }
-  let thresholds = { vt1_hr: 117, vt2_hr: 139, max_hr: 162, source: 'the planning numbers' };
-  try { const f = await getJSON('fitness', {}); const t = f.test || {};
-    if (Number.isFinite(Number(t.vt2_hr))) thresholds = { vt1_hr: Number.isFinite(Number(t.vt1_hr)) ? Math.round(Number(t.vt1_hr)) : 117, vt2_hr: Math.round(Number(t.vt2_hr)), max_hr: 162, source: `the ramp test${t.date ? ' of ' + t.date : ''}` }; } catch (e) { /* the defaults */ }
-  return { date: w.date, settings: st, thresholds,
+  // the lines: the thresholds store (a Tymewear test entered by hand, bridge/thresholds.js) when it holds one;
+  // else a ramp test on the fitness page; else Tymewear's of 14 Aug 2026, the store's defaults
+  const BK = require('./buckets');
+  const L = await BK.currentLines(w.date);
+  let thresholds = { vt1_hr: L.vt1_hr, vt2_hr: L.vt2_hr, vt1_w: L.vt1_w, vt2_w: L.vt2_w, max_hr: 162, source: `${L.source || 'Tymewear'}${L.date ? ' of ' + L.date : ''}` };
+  try {
+    const stored = ((await require('./thresholds').all()).history || []).length > 0;
+    const f = await getJSON('fitness', {}); const t = f.test || {};
+    if (!stored && Number.isFinite(Number(t.vt2_hr))) thresholds = Object.assign({}, thresholds, { vt1_hr: Number.isFinite(Number(t.vt1_hr)) ? Math.round(Number(t.vt1_hr)) : thresholds.vt1_hr, vt2_hr: Math.round(Number(t.vt2_hr)), source: `the ramp test${t.date ? ' of ' + t.date : ''}` });
+  } catch (e) { /* the store's lines */ }
+  // the buckets: the lines as the session runs them, the colours, and the plan in seconds per bucket
+  const bk = BK.sessionBuckets(intervals, Object.assign({}, L, { vt1_hr: thresholds.vt1_hr, vt2_hr: thresholds.vt2_hr }), st.ftp);
+  return { date: w.date, settings: st, thresholds, lines: bk.lines, colours: bk.colours, buckets_plan: bk.buckets_plan,
     workout: { id: w.id, name: w.name, date: w.date, time: w.time || null, sport: w.sport, notes: w.notes || '',
       duration_s: m.duration_s, tss: m.tss, np_w: m.np_w, intervals_event_id: (w.sync && w.sync.intervals_event_id) || null },
     intervals, fuel,

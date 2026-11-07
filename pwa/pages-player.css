@@ -36,7 +36,7 @@ main:has(#plPage){max-width:1200px}
 .pl-dev{margin:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; text-align:left; min-width:0; padding:10px 12px; box-shadow:none; border-color:var(--line)}
 .pl-dev .pl-devk{font-family:var(--num); font-size:20px; letter-spacing:.4px}
 .pl-dev .pl-devst{font-family:var(--mono); font-size:10.5px; letter-spacing:.6px; color:var(--muted); text-transform:none; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%}
-.pl-dev.on{border-color:var(--green)} .pl-dev.on .pl-devk{color:var(--green)}
+.pl-dev.on{border-color:var(--ink)} .pl-dev.on .pl-devk{color:var(--ink)}   /* connected: ink, not a colour (colour means bucket) */
 .pl-go{width:100%; margin:4px 0 0; padding:16px; font-size:16px}
 .pl-go:disabled{opacity:.35}
 
@@ -51,7 +51,7 @@ body:has(.pl-ride) #micBtn{display:none}
 .pl-fields{grid-template-columns:1fr 1fr}
 .pl-fields .hu-field.big .n{font-size:64px}
 .pl-fields .hu-field .n{font-size:40px}
-.pl-fields .pl-pw,.pl-fields .pl-mode{grid-column:1 / -1}
+.pl-fields .pl-pw{grid-column:1 / -1}
 .pl-fields .pl-pw .n{font-size:96px}
 .pl-fields .hu-field .u{font-size:11px}
 /* the five heart-rate zones beside the number: Z5 on top, the trained one outlined, a pointer riding the heart rate */
@@ -60,27 +60,27 @@ body:has(.pl-ride) #micBtn{display:none}
 .pz{flex:1; display:flex; align-items:center; gap:5px; padding:0 6px; border:1px solid transparent; opacity:.55; font-family:var(--mono); font-size:9px; letter-spacing:.6px; text-transform:uppercase; color:var(--ink); overflow:hidden; white-space:nowrap}
 .pz b{font-family:var(--num); font-size:12px; letter-spacing:0}
 .pz i{font-style:normal; margin-left:auto; opacity:.8; display:none}
-.pz1{background:#2a4a60} .pz2{background:#2f5a3f} .pz3{background:#5f6a2c} .pz4{background:#6e5420} .pz5{background:#6b2f2a}
+.pz1,.pz2,.pz3,.pz4,.pz5{background:#1c1d1a}   /* greys: colour means bucket */
 .pz.in{opacity:1}
 .pz.want{opacity:1; border-color:var(--ink); box-shadow:inset 0 0 0 1px var(--ink)}
 .pz-ptr{position:absolute; right:0; font-size:12px; line-height:1; color:var(--ink); transition:top .4s}
 .pz-ptr[hidden]{display:none}
-.pz-ptr.on{color:var(--green)} .pz-ptr.under{color:var(--water)} .pz-ptr.over{color:var(--red)}
+.pz-ptr.on,.pz-ptr.under,.pz-ptr.over{color:var(--ink)}
 .pl-next{font-family:var(--mono); font-size:13px; letter-spacing:.3px; line-height:1.4; padding:8px 10px; background:var(--card); border-left:3px solid var(--line)}
 .pl-next b{color:var(--ink)}
-.pl-next.soon{border-left-color:var(--amber); color:var(--amber)}
+.pl-next.soon{border-left-color:var(--ink); color:var(--ink); font-weight:700}
 .pl-ctl{display:flex; flex-wrap:wrap; gap:8px; align-items:center}
 .pl-ctl button,.pl-ctl .btn{margin:0; box-shadow:none; text-decoration:none}
-.pl-ctl .pl-end{border-color:var(--red); color:var(--red); margin-left:auto}
+.pl-ctl .pl-end{border-color:var(--ink); color:var(--ink); border-width:2px; margin-left:auto}
 .pl-confirm{display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:10px; align-items:center; padding:12px; border:1px solid var(--red); background:var(--red-soft)}
 .pl-confirm button{margin:0}
 .pl-confirm[hidden]{display:none}
 .pl-count{position:fixed; inset:0; z-index:50; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.82); font-family:var(--num); font-weight:800; font-size:220px; color:var(--ink)}
 .pl-count[hidden]{display:none}
-.pl-note{font-family:var(--mono); font-size:12px; color:var(--amber)}
+.pl-note{font-family:var(--mono); font-size:12px; color:var(--ink)}
 .pl-pend{display:flex; flex-direction:column; gap:8px; padding:10px 12px; border:1px solid var(--amber); background:var(--amber-soft); font-size:14px}
 .pl-result{font-size:15px; line-height:1.45; border-left:3px solid var(--line); padding:4px 0 4px 10px}
-.pl-result.ok{border-left-color:var(--green)} .pl-result.bad{border-left-color:var(--amber)}
+.pl-result.ok{border-left-color:var(--line)} .pl-result.bad{border-left-color:var(--ink)}
 
 @media (max-width:420px){
   .pl-fuel li{grid-template-columns:1fr; gap:2px}
@@ -124,21 +124,21 @@ body:has(.pl-ride) #micBtn{display:none}
 .pf .pf-now{stroke:var(--ink); stroke-width:2}
 .pf .pf-ride{fill:none; stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
 .pf .pf-dot{fill:var(--ink); stroke:#0b0c0a; stroke-width:2}
-.pf .pf-hr{fill:none; stroke:var(--red); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
-.pf .pf-hrdot{fill:var(--red); stroke:#0b0c0a; stroke-width:2}
-.pf .pf-hrax{fill:var(--red)}
-.pf .pf-vo2{stroke:var(--red); stroke-width:1; stroke-dasharray:4 4; opacity:.8}
-.pf .pf-vo2l{fill:var(--red)}
-.pf .pf-br{fill:none; stroke:#5FB8FF; stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; paint-order:stroke; filter:drop-shadow(0 0 2px #0b0c0a)}
-.pf .pf-brl{fill:#5FB8FF}
+.pf .pf-hr{fill:none; stroke:var(--ink); stroke-width:2; stroke-linejoin:round; stroke-linecap:round}
+.pf .pf-hrdot{fill:var(--ink); stroke:#0b0c0a; stroke-width:2}
+.pf .pf-hrax{fill:var(--muted)}
+.pf .pf-vo2{stroke:var(--ink); stroke-width:1; stroke-dasharray:4 4; opacity:.8}
+.pf .pf-vo2l{fill:var(--muted)}
+.pf .pf-br{fill:none; stroke:#A8A69E; stroke-width:2.5; stroke-linejoin:round; stroke-linecap:round; paint-order:stroke; filter:drop-shadow(0 0 2px #0b0c0a)}
+.pf .pf-brl{fill:#A8A69E}
 .pf .pf-w{fill:var(--ink); font-family:var(--num); font-weight:700; font-size:18px}
 .pf .pf-w.now{font-size:24px}
 .pf .pf-in{fill:var(--ink); font-family:var(--mono); font-size:11px}
 .pf .pf-free{fill:var(--muted); font-family:var(--mono); font-size:11px}
-.pf .pf-paused{fill:var(--amber); font-family:var(--num); font-weight:700; font-size:40px; letter-spacing:2px}
+.pf .pf-paused{fill:var(--ink); font-family:var(--num); font-weight:700; font-size:40px; letter-spacing:2px}
 .pf-key{display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; font-family:var(--mono); font-size:11px; margin-top:-4px}
 .pf-key span{display:inline-block; width:16px; vertical-align:middle}
-.pf-key .pf-k-t{height:3px; background:linear-gradient(90deg,var(--water),var(--green),var(--amber),var(--red))} .pf-key .pf-k-r{height:2px; background:var(--ink)} .pf-key .pf-k-n{width:2px; height:12px; background:var(--ink)}
+.pf-key .pf-k-t{height:3px; background:linear-gradient(90deg,#0099FF 0 33%,#FFAA00 33% 66%,#E00000 66%)} .pf-key .pf-k-r{height:2px; background:var(--ink)} .pf-key .pf-k-n{width:2px; height:12px; background:var(--ink)}
 .pl-fsec{border-top:0; padding-top:4px}
 @media (min-width:900px){ .pf-ride-box{height:300px} .pf-whole{height:260px} .pf .pf-ax{font-size:12px} .pf .pf-w{font-size:20px} .pf .pf-w.now{font-size:30px} }
 
@@ -150,10 +150,10 @@ body:has(.pl-ride) #micBtn{display:none}
 .gr-svg{flex:none; display:block}
 .gr-bg{fill:#121410}
 .gr-half{fill:none; stroke:#2c2f28; stroke-width:1; stroke-dasharray:3 4}
-.gr-fill{fill:var(--water); opacity:.9}
-.gr-fill.gr-go{fill:var(--green)} .gr-fill.gr-hold{fill:var(--amber)} .gr-fill.gr-stop{fill:var(--red)}
+.gr-fill{fill:#8A8A86; opacity:.9}
+.gr-fill.gr-go,.gr-fill.gr-hold,.gr-fill.gr-stop{fill:var(--ink)}
 .gr-rim{fill:none; stroke:#3a3d36; stroke-width:3}
-.gr-rim.gr-go{stroke:var(--green)} .gr-rim.gr-hold{stroke:var(--amber)} .gr-rim.gr-stop{stroke:var(--red)}
+.gr-rim.gr-go,.gr-rim.gr-hold,.gr-rim.gr-stop{stroke:var(--ink)}
 .gr-big,.gr-of{paint-order:stroke; stroke:#0b0c0a; stroke-linejoin:round}
 .gr-big{stroke-width:5px} .gr-of{stroke-width:3px}
 .gr-big{fill:var(--ink); font-family:var(--num); font-weight:700}
@@ -161,7 +161,7 @@ body:has(.pl-ride) #micBtn{display:none}
 .gr-txt{display:flex; flex-direction:column; gap:3px; min-width:0}
 .gr-lab{font-family:var(--num); font-weight:700; font-size:22px; line-height:1.05; text-transform:uppercase}
 .gr-sub{font-family:var(--mono); font-size:11.5px; line-height:1.4}
-.gr.met .hu-lab{color:var(--green)}
+.gr.met .hu-lab{color:var(--ink)}
 .pl-goal-start{margin-top:8px}
 @media (min-width:900px){
   .pl-viz{grid-template-columns:minmax(0,1fr) 230px; row-gap:6px}
@@ -174,3 +174,17 @@ body:has(.pl-ride) #micBtn{display:none}
 /* "Ride it": the way into the player from a planned ride on the Day and the Calendar */
 .rideit{display:inline-block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:var(--paper); background:var(--green); padding:4px 7px; margin-left:8px; text-decoration:none; line-height:1.3; vertical-align:middle; white-space:nowrap; position:relative; z-index:1}
 .pitem .rideit{margin-left:6px}
+
+/* the ride, as on the Edge: the buckets in the top half, time, heart rate and power big in the bottom half;
+   the numbers in ink, the heart rate's bucket as a colour bar beside its number */
+.pl-bkbox .bk{border:0; padding:4px 0 0; background:transparent}
+.pl-big{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px}
+.pl-bn{display:flex; flex-direction:column; gap:2px; min-width:0; padding:8px 10px; background:var(--card); border:1px solid var(--line)}
+.pl-bn .k{font-family:var(--mono); font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted)}
+.pl-bn .n{font-family:var(--num); font-weight:700; font-size:clamp(40px, 12vw, 96px); line-height:.95; color:var(--ink); font-variant-numeric:tabular-nums; white-space:nowrap}
+.pl-bn .u{font-family:var(--mono); font-size:11px; color:var(--muted); min-height:14px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.pl-bn .pl-hrrow{align-items:center; gap:8px}
+.pl-hrbar{flex:none; width:10px; align-self:stretch; min-height:40px; background:transparent; border:1px solid #8A8A86}
+.pl-fields .pl-zone{grid-column:1 / -1}
+.hu-chip.hu-ink{color:var(--ink); border-color:var(--ink)}
+.pl-bkres{display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--card); border:1px solid var(--line)}
