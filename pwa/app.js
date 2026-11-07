@@ -653,11 +653,12 @@ async function drawThresholds(){
   const today = (d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"))(new Date());
   const hist = (t.history || []).slice().reverse();
   el.innerHTML = `<h4>Bucket lines</h4>
-    <ul class="agenda totals thrkey">
-      <li><span class="n">${sw("low")}<b>LOW</b></span><span class="tag">under ${c.vt1_w} W · under ${c.vt1_hr} bpm</span></li>
-      <li><span class="n">${sw("high")}<b>HIGH</b></span><span class="tag">${c.vt1_w}–${c.vt2_w - 1} W · ${c.vt1_hr}–${c.vt2_hr - 1} bpm</span></li>
-      <li><span class="n">${sw("peak")}<b>PEAK</b></span><span class="tag">${c.vt2_w} W and up · ${c.vt2_hr} bpm and up</span></li>
-    </ul>
+    <div class="thrkey" role="table" aria-label="The bucket lines">
+      <span class="thk-h" role="columnheader"></span><span class="thk-h" role="columnheader">watts</span><span class="thk-h" role="columnheader">heart rate</span>
+      <span class="thk-b">${sw("low")}LOW</span><span>under ${c.vt1_w}</span><span>under ${c.vt1_hr}</span>
+      <span class="thk-b">${sw("high")}HIGH</span><span>${c.vt1_w}–${c.vt2_w - 1}</span><span>${c.vt1_hr}–${c.vt2_hr - 1}</span>
+      <span class="thk-b">${sw("peak")}PEAK</span><span>${c.vt2_w} and up</span><span>${c.vt2_hr} and up</span>
+    </div>
     <div class="small">VT1 ${c.vt1_w} W at ${c.vt1_hr} bpm, VT2 ${c.vt2_w} W at ${c.vt2_hr} bpm, from ${esc(c.source || "Tymewear")}, ${esc(window.dayFmt ? dayFmt(c.date) : c.date)}${hist.length ? "" : " (the built-in lines)"}. Power decides when there is a reading; heart rate only without one. The Garmin field, the player, the Day and the Calendar all read these; a change reaches the Edge at its next ride start.</div>
     <details class="why"${hist.length ? "" : " open"}><summary>enter a new test</summary>
       <div class="row2"><span><label>Test date</label><input id="thrD" type="date" value="${today}" max="${today}"></span><span><label>From</label><input id="thrS" type="text" value="Tymewear"></span></div>
