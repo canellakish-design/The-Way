@@ -79,6 +79,15 @@ function syncChip(w){
 }
 
 /* ---------------- the week ---------------- */
+// the magic buckets on a planned ride (pwa/buckets.js): the plan's minutes per bucket; once a ride answers it
+// (the calendar pairs a ride with the planned ride nearest its start), the ride's minutes against that plan
+function bucketsOf(w, d){
+  if (!window.Buckets || !w.buckets_plan) return "";
+  const rs = (d.done || []).filter(r => r.plan_wid === w.id && r.buckets);
+  const actual = rs.length ? rs.reduce((a, r) => ({ low: a.low + (r.buckets.low || 0), high: a.high + (r.buckets.high || 0), peak: a.peak + (r.buckets.peak || 0) }), { low: 0, high: 0, peak: 0 }) : null;
+  return Buckets.miniHTML({ plan: w.buckets_plan, actual });
+}
+
 V.calendar = async function(){
   const p = params(), today = localToday();
   const mon = mondayOf(/^\d{4}-\d{2}-\d{2}$/.test(p.week||"") ? p.week : today);
@@ -154,6 +163,7 @@ V.calendar = async function(){
         <div class="ptop"><a class="pn" href="#workout?id=${encodeURIComponent(w.id)}">${window.kindIcon ? kindIcon(w.name, w.sport) : ""}<span>${esc(w.name)}</span></a>${chip}<button class="pdel" data-delw="${esc(w.id)}" aria-label="Remove">${window.TRASH||"×"}</button></div>
         <span class="pk">${esc(SPORT[w.sport]||w.sport)}${w.time?" · "+esc(hm12(w.time)):""} · ${clock(w.metrics.duration_s)} · ${w.metrics.tss} TSS${c&&!w.logged&&!c.zone_over&&!(!d.done.length&&c.band==="red")?` · <b class="${TONE[c.band]||""}">${word(c)}</b>`:""}${rideIt(w, c, d.date)}</span>
         ${sessBars(w, c, rides)}
+        ${bucketsOf(w, d)}
         ${rides.map(rideOne).join("")}
         ${fold((c&&c.basis?`<div class="pm">${c.pct}% · ${esc(c.basis)}</div>`:"")+rides.map(rideLines).join(""))}
       </div>`);
@@ -166,6 +176,7 @@ V.calendar = async function(){
         <div class="ptop"><span class="pn">${window.kindIcon ? kindIcon(r.name, r.type) : ""}<span>${esc(r.name)}</span></span><span class="hu-chip hu-water">Done</span></div>
         <span class="pk">${r.time?esc(hm12(r.time))+" · ":""}${hm(r.minutes)}${r.tss!=null?" · ~"+r.tss+" TSS":""}${d.planned.length||d.intervals.length?"":" · unplanned"}</span>
         ${rideOne(r)}
+        ${r.buckets && window.Buckets ? Buckets.miniHTML({ plan: null, actual: r.buckets }) : ""}
         ${fold(rideLines(r))}</div>`);
     }
     const dc = d.compliance;
@@ -176,7 +187,7 @@ V.calendar = async function(){
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?` <span class="ptoday">today</span>`:""}</h4>${verdict}</div>
       ${sub?`<div class="pdaysub">${sub}</div>`:""}
       ${d.fuel ? `<div class="pfuel"><span class="hu-chip ${d.fuel.level==="high"?"hu-hold":d.fuel.level==="low"?"hu-water":d.fuel.level==="moderate"?"hu-go":"hu-dim"}">${d.fuel.carbs_g} g · ${d.fuel.per_kg} g/kg</span><span class="pfuel-w">${esc(d.fuel.label)}${d.fuel.sleep_low?" · sleep low":""}</span>${(d.fuel.sessions||[]).filter(s=>s.kind!=="lift").map(s=>`<span class="pfuel-s">${s.low?"low before":s.before_g+" g before"} · ${s.during_g?s.during_g+" g on the bike":"water"} · ${s.after_g} g after</span>`).join("")}</div>` : ""}
-      ${d.rest ? `<div class="small pempty">Rest day · ${esc(d.rest)}</div>` : ""}${rows.join("") || (d.rest ? "" : `<div class="small pempty">Rest</div>`)}
+      ${d.rest && !past ? `<div class="small pempty">Rest day · ${esc(d.rest)}</div>` : ""}${rows.join("") || (d.rest && !past ? "" : `<div class="small pempty">Rest</div>`)}
       ${past ? `` : `<a class="padd" href="#workout?date=${d.date}">+ Plan a workout</a>`}
     </div>`;
   }

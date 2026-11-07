@@ -66,13 +66,14 @@ async function receive(b) {
 async function sessionToday() {
   const s = await P.sessionFor('today');
   const vt2 = s.thresholds && s.thresholds.vt2_hr ? s.thresholds.vt2_hr : 139;
-  if (!s.workout) return { name: null, workout_id: null, vt2_hr: vt2, steps: [] };
-  // a Zone 1 ride's free steps carry the zone's band (100 to 116), so the field shows the floor and the ceiling
-  const R = require('./ride-math');
-  const z1 = /zone\s*1|\bz1\b/i.test(String(s.workout.name || ''));
-  const steps = (s.intervals || []).map(x => [x.start_s, x.dur_s, x.target_w || 0,
-    x.target_hr ? x.target_hr.lo : (z1 && x.kind === 'free' ? R.HR.z1_floor : 0), x.target_hr ? x.target_hr.hi : (z1 && x.kind === 'free' ? R.HR.vt1 - 1 : 0)]);
-  return { name: s.workout.name, workout_id: s.workout.id, time: s.workout.time, vt2_hr: vt2, steps };
+  // the buckets (buckets.js): the lines and colours the field draws with, and the plan in seconds per bucket.
+  // buckets_plan null means no plan (a free ride, or a ride-by-feel session): the bars share the ride time.
+  // The field reads these at each ride start, so a new threshold reaches the Edge with no rebuild.
+  const bk = { lines: s.lines || null, colours: s.colours || null, buckets_plan: s.buckets_plan || null };
+  if (!s.workout) return Object.assign({ name: null, workout_id: null, vt2_hr: vt2, steps: [] }, bk);
+  // each step as [start_s, dur_s, target_w, hr_lo, hr_hi]; a free step is all zeros and fills no bucket
+  const steps = (s.intervals || []).map(x => [x.start_s, x.dur_s, x.target_w || 0, x.target_hr ? x.target_hr.lo : 0, x.target_hr ? x.target_hr.hi : 0]);
+  return Object.assign({ name: s.workout.name, workout_id: s.workout.id, time: s.workout.time, vt2_hr: vt2, steps }, bk);
 }
 
 function attach(app) {

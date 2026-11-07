@@ -641,6 +641,45 @@ V.sleep = async function(){
    heart-rate and power scales (heart rate from the Tymewear ramp test), how
    the thresholds were found, and how the recent riding split across the
    zones. The seven-zone tables fold away underneath. */
+/* ---- the bucket lines: VT1 and VT2 from the latest Tymewear test, dated, editable (bridge/thresholds.js) ----
+   The magic buckets everywhere (the Garmin field at its next ride start, the player, the Day, the Calendar)
+   read these. Tymewear has no API, so a new test is entered here by hand. */
+async function drawThresholds(){
+  const el = document.getElementById("thrCard"); if (!el) return;
+  let t = null;
+  try{ t = await bridge("/thresholds"); }catch(e){ el.innerHTML = `<h4>Bucket lines</h4><div class="small">bridge unreachable — ${esc(e.message)}</div>`; return; }
+  const c = t.current || {}, B = window.Buckets, C = B ? B.COLOURS : {};
+  const sw = k => `<span style="display:inline-block;width:10px;height:10px;background:${C[k]};margin-right:6px;vertical-align:-1px"></span>`;
+  const today = (d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"))(new Date());
+  const hist = (t.history || []).slice().reverse();
+  el.innerHTML = `<h4>Bucket lines</h4>
+    <div class="thrkey" role="table" aria-label="The bucket lines">
+      <span class="thk-h" role="columnheader"></span><span class="thk-h" role="columnheader">watts</span><span class="thk-h" role="columnheader">heart rate</span>
+      <span class="thk-b">${sw("low")}LOW</span><span>under ${c.vt1_w}</span><span>under ${c.vt1_hr}</span>
+      <span class="thk-b">${sw("high")}HIGH</span><span>${c.vt1_w}–${c.vt2_w - 1}</span><span>${c.vt1_hr}–${c.vt2_hr - 1}</span>
+      <span class="thk-b">${sw("peak")}PEAK</span><span>${c.vt2_w} and up</span><span>${c.vt2_hr} and up</span>
+    </div>
+    <div class="small">VT1 ${c.vt1_w} W at ${c.vt1_hr} bpm, VT2 ${c.vt2_w} W at ${c.vt2_hr} bpm, from ${esc(c.source || "Tymewear")}, ${esc(window.dayFmt ? dayFmt(c.date) : c.date)}${hist.length ? "" : " (the built-in lines)"}. Power decides when there is a reading; heart rate only without one. The Garmin field, the player, the Day and the Calendar all read these; a change reaches the Edge at its next ride start.</div>
+    <details class="why"${hist.length ? "" : " open"}><summary>enter a new test</summary>
+      <div class="row2"><span><label>Test date</label><input id="thrD" type="date" value="${today}" max="${today}"></span><span><label>From</label><input id="thrS" type="text" value="Tymewear"></span></div>
+      <div class="row2"><span><label>VT1 watts</label><input id="thrV1w" type="number" inputmode="numeric" value="${c.vt1_w}"></span><span><label>VT1 heart rate</label><input id="thrV1h" type="number" inputmode="numeric" value="${c.vt1_hr}"></span></div>
+      <div class="row2"><span><label>VT2 watts</label><input id="thrV2w" type="number" inputmode="numeric" value="${c.vt2_w}"></span><span><label>VT2 heart rate</label><input id="thrV2h" type="number" inputmode="numeric" value="${c.vt2_hr}"></span></div>
+      <button class="primary" id="thrGo">Save the lines</button> <span class="small" id="thrMsg"></span>
+    </details>
+    ${hist.length ? `<details class="why"><summary>history</summary><ul class="agenda totals">${hist.map(h => `<li><span class="n">${esc(window.dayFmt ? dayFmt(h.date) : h.date)} · ${esc(h.source || "")}</span><span class="tag">VT1 ${h.vt1_w} W / ${h.vt1_hr} · VT2 ${h.vt2_w} W / ${h.vt2_hr} <button class="pdel" data-thrdel="${esc(h.date)}" aria-label="Remove this entry">${window.TRASH || "×"}</button></span></li>`).join("")}</ul></details>` : ""}`;
+  const $ = id => document.getElementById(id), msg = $("thrMsg");
+  $("thrGo").onclick = async () => {
+    const body = { date: $("thrD").value, source: $("thrS").value, vt1_w: +$("thrV1w").value, vt1_hr: +$("thrV1h").value, vt2_w: +$("thrV2w").value, vt2_hr: +$("thrV2h").value };
+    $("thrGo").disabled = true; msg.textContent = "saving…";
+    try{ await bridge("/thresholds", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }); drawThresholds(); }
+    catch(e){ msg.textContent = String(e.message).replace(/^bridge \d+ — /, ""); $("thrGo").disabled = false; }
+  };
+  el.querySelectorAll("[data-thrdel]").forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    try{ await bridge("/thresholds/" + encodeURIComponent(b.dataset.thrdel), { method: "DELETE" }); drawThresholds(); }catch(e){ b.disabled = false; }
+  });
+}
+
 V.zones = async function(){
   view.innerHTML = `<span class="eyebrow"><a href="#ride" style="color:inherit;text-decoration:none">Ride</a> · Zones</span><div id="zonesPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   let z = null;
@@ -739,6 +778,7 @@ V.zones = async function(){
       <span class="tag">${r.p1_min != null ? stack({ z1_pct: Math.round(r.p1_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z2_pct: Math.round(r.p2_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z3_pct: Math.round(r.p3_min/(r.p1_min+r.p2_min+r.p3_min||1)*100), z1_min:r.p1_min, z2_min:r.p2_min, z3_min:r.p3_min }) : ""}</span></li>`;
   const zoneTable = (rows, unit)=> `<ul class="agenda totals">${rows.map(zz=>`<li><span class="n"><b>${zz.zone}</b> ${esc(zz.name)} <span class="small">${esc(zz.pct)}</span></span><span class="tag">${zz.from}${zz.to?"–"+zz.to:"+"} ${unit}</span></li>`).join("")}</ul>`;
   document.getElementById("zonesPage").innerHTML = `
+    <div class="card" id="thrCard"><h4>Bucket lines</h4><div class="small">reading…</div></div>
     <div class="card"><h4>The signature</h4>${sigHTML}</div>
     <div class="card"><h4>The three zones</h4>
       ${scaleHTML}
@@ -780,6 +820,7 @@ V.zones = async function(){
       msg.textContent = "Saved. The zones now hang on it."; V.zones();
     }catch(e){ msg.textContent = e.message; saveBtn.disabled = false; }
   };
+  drawThresholds();
 };
 
 /* ---------------- LIFT ----------------
@@ -1140,7 +1181,7 @@ const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="
 function chainHTML(){
   // three fields a row with an arrow between each, the arrow out of a row's last field wrapping round to the next
   // row; each arrow wears the colour of the link it leaves, a cross where the chain breaks. Weight sits beside the verdict.
-  const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
+  const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctr" hidden></span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
   const arrow = ck => `<span class="carrow" data-k="${ck}" aria-hidden="true"><i>${ARROW}</i></span>`;
   const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));
   const out = rows.map((r, ri) => {
@@ -1186,6 +1227,9 @@ function paintChain(c){
     if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`; }
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
     el.querySelector(".cweek").textContent = unit;
+    // the trend against the week before: a small triangle and the change, green when it is better, red when worse; nothing when it barely moved
+    const tr = L.trend, te = el.querySelector(".ctr"), moved = tr && Math.abs(tr.delta) >= (ck === "sleep" ? 0.3 : 2);
+    if (te){ te.hidden = !moved; if (moved){ te.textContent = `${tr.delta > 0 ? "▲" : "▼"}${Math.abs(tr.delta)}`; te.className = `ctr ${tr.better ? "good" : "bad"}`; } }
     el.dataset.week = state || "none";
     // the Plan box names its own week (the seven days ahead), so it is never read as the chain's week or the Calendar's
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }
@@ -1459,7 +1503,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {}, FUELV = {}, BTS = {};
+let WX = {}, WGRADE = {}, FUELV = {}, BTS = {}, WBK = {};   // WBK: each planned ride's buckets, its plan and what was ridden against it
 // the conditions grade, A+ to F, from the hours a ride covers (scores come from the bridge, weather.js)
 const GLETTERS = [[97,"A+"],[92,"A"],[88,"A−"],[84,"B+"],[79,"B"],[74,"B−"],[69,"C+"],[63,"C"],[57,"C−"],[50,"D+"],[40,"D"],[0,"F"]];
 function condGrade(hours){ const hs = (hours||[]).filter(h => h && h.cscore != null); if (!hs.length) return null;
@@ -1615,7 +1659,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? chip(r.meal.match.key === "green" ? "✓ on plan" : shortWord(r.meal.match), TONE[r.meal.match.key], r.meal.match.word) : chip("logged", "")) : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : chip(state === "past" ? "nothing logged" : "plan", ""))) : null;
     return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}</span>
       <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? `Z1 +${g.zone}%` : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -2213,7 +2257,7 @@ V.today = async function(){
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word || !v.flagged) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; WBK={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.buckets_plan) WBK[w.id]={ plan:w.buckets_plan, actual:null }; for(const x of (day.done||[])) if(x.buckets && x.plan_wid && WBK[x.plan_wid]){ const A=WBK[x.plan_wid].actual||(WBK[x.plan_wid].actual={low:0,high:0,peak:0}); A.low+=x.buckets.low||0; A.high+=x.buckets.high||0; A.peak+=x.buckets.peak||0; } for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
     drawScores();

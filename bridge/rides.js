@@ -99,6 +99,48 @@ async function whoopWorkoutFor(ride) {
   return near && near.d <= 20 ? near.w : null;
 }
 
+// ---- the magic buckets of a ride (buckets.js): its seconds in LOW, HIGH and PEAK on the lines of its day ----
+// rides only (a run or a lift never gets buckets); power decides when there is a meter, heart rate otherwise
+const isBucketRide = r => /^(Ride|VirtualRide|MountainBikeRide|GravelRide)$/.test(String((r && (r.type || r.sport_type)) || 'Ride')) || (r && r.source === 'player');
+async function bucketsOfSamples(ride, S) {
+  if (!isBucketRide(ride) || !S) return null;
+  const BK = require('./buckets'), L = await BK.currentLines(ride.date);
+  return Object.assign(BK.actualFromSamples({ p: S.p || [], h: S.h || [] }, BK.pick(L)), { lines_date: L.date || null });
+}
+// Strava's streams are by recorded second: a gap of more than five seconds is stopped time and counts nowhere
+// (resampling it as zero watts would read a stop as LOW); estimated power (no meter) is not power
+function streamSeconds(time, watts, hr, meter) {
+  const out = [];
+  if (!Array.isArray(time) || !time.length) return out;
+  let i = 0;
+  for (let t = time[0]; t <= time[time.length - 1] && out.length < 12 * 3600; t++) {
+    while (i < time.length - 1 && time[i + 1] <= t) i++;
+    if (t - time[i] > 5) continue;
+    out.push({ w: meter && watts ? watts[i] : null, hr: hr ? hr[i] : null });
+  }
+  return out;
+}
+async function bucketsOfStreams(ride, time, watts, hr) {
+  if (!isBucketRide(ride)) return null;
+  const BK = require('./buckets'), L = await BK.currentLines(ride.date);
+  return Object.assign(BK.actualFromSamples(streamSeconds(time, watts, hr, ride.device_watts !== false), BK.pick(L)), { lines_date: L.date || null });
+}
+// A ride read before the buckets existed has none: the player's from its own samples at once, a Strava ride's
+// from its streams (one call), kept on its cached read so it is done once.
+async function ensureBuckets(ride) {
+  if (!isBucketRide(ride)) return null;
+  const c = await getJSON(key(ride.id), null);
+  if (c && c.buckets) return c.buckets;
+  let b = null;
+  if (ride.source === 'player') { const rec = await getJSON(require('./player').rideKey(ride.id), null); b = rec && rec.samples ? await bucketsOfSamples(ride, rec.samples) : null; }
+  else {
+    const s = await require('./strava').apiFetch(`/activities/${ride.id}/streams?keys=time,heartrate,watts&key_by_type=true`);
+    b = await bucketsOfStreams(ride, s && s.time && s.time.data, s && s.watts && s.watts.data, s && s.heartrate && s.heartrate.data);
+  }
+  if (c && b) await setJSON(key(ride.id), Object.assign(c, { buckets: b })).catch(() => {});
+  return b;
+}
+
 async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
@@ -111,6 +153,7 @@ async function analyze(ride, opts) {
     if (!rec || !rec.samples) return { id: ride.id, date: ride.date, name: ride.name, hr: null, power: null, resp: null, sources: { hr: 'The Way player: samples not found' } };
     const a = P.analysisOf(rec.summary || ride, rec.samples, o.ftp || (rec.summary && rec.summary.ftp) || 175);
     if (ride.intervals_id) a.icu_id = ride.intervals_id;
+    try { a.buckets = await bucketsOfSamples(ride, rec.samples); } catch (e) { /* none */ }
     await setJSON(key(ride.id), a).catch(() => {});
     return a;
   }
@@ -128,6 +171,7 @@ async function analyze(ride, opts) {
     // power and heart rate on the same file: watts a beat, and the drift across the ride
     if (watts && watts.length && hr && hr.length) { out.couple = R.decoupling(Z.resample1Hz(time, watts), Z.resample1Hz(time, hr)); }
     else out.couple = null;
+    try { out.buckets = await bucketsOfStreams(ride, time, watts, hr); } catch (e) { /* none */ }
   } catch (e) { out.sources.hr = 'Strava: ' + e.message; out.error = e.message; }
   // 2. intervals.icu's copy of the Garmin file, for breathing and, failing Strava, heart rate
   let icuAct = null;
@@ -211,4 +255,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, analyze, forWindow, key };
+module.exports = { ensureBuckets, streamSeconds, isBucketRide, attach, analyze, forWindow, key };
