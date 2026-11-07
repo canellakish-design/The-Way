@@ -104,5 +104,36 @@ const EXAMPLE = [step(300, 55, 60), { kind: 'repeat', label: '3 x', count: 3, st
     assert.strictEqual(s.colours.peak, '#E00000'); assert.strictEqual(s.lines.vt2_w, 208); assert.strictEqual(s.lines.source, 'Tymewear');
     assert.strictEqual(B.sessionBuckets([{ dur_s: 3600, target: { type: 'free' } }], B.LINES).buckets_plan, null);
   });
+  await ok('a Strava ride\'s seconds: stopped time counts nowhere, and estimated power is not power', () => {
+    const RD = require('./rides');
+    const s = RD.streamSeconds([0, 1, 2, 10, 11], [250, 250, 0, 100, 100], [150, 150, 150, 110, 110], true);
+    assert.strictEqual(s.length, 10);                                  // 0..7 (a gap of five seconds or less is coasting), then 10, 11; 8 and 9 are stopped
+    assert.deepStrictEqual(B.actualFromSamples(s), { low: 8, high: 0, peak: 2, total: 10 });
+    const noMeter = RD.streamSeconds([0, 1, 2], [300, 300, 300], [120, 120, 120], false);
+    assert.deepStrictEqual(B.actualFromSamples(noMeter), { low: 0, high: 3, peak: 0, total: 3 });   // the heart rate decides
+    assert.strictEqual(RD.isBucketRide({ type: 'Run' }), false); assert.strictEqual(RD.isBucketRide({ type: 'WeightTraining' }), false);
+    assert.strictEqual(RD.isBucketRide({ type: 'VirtualRide' }), true); assert.strictEqual(RD.isBucketRide({ type: 'Ride' }), true);
+  });
+  await ok('the calendar: a planned ride carries its plan, a run none, and a ride its seconds beside the plan it answers', async () => {
+    const tz = require('./tz'), W = require('./workouts'), day = tz.shiftKey(tz.todayKey(), -1);
+    mem['plan-workouts'] = { workouts: {
+      w_vo2: { id: 'w_vo2', date: day, time: '07:00', sport: 'VirtualRide', name: 'VO2 example', steps: EXAMPLE, created: '2026-01-01T00:00:00Z' },
+      w_run: { id: 'w_run', date: day, time: '17:00', sport: 'Run', name: 'Easy run', steps: [step(1800, 60)], created: '2026-01-01T00:00:00Z' } } };
+    const start = tz.zonedToUTC(+day.slice(0, 4), +day.slice(5, 7), +day.slice(8, 10), 7, 2).getTime();
+    const S = { t: [], p: [], c: [], h: [], s: [], tg: [], e: [], i: [] };
+    for (let t = 0; t < 600; t++) { S.t.push(t); S.p.push(t < 300 ? 120 : t < 420 ? 190 : 230); S.c.push(90); S.h.push(130); S.s.push(30); }
+    const sum = P.summarize({ start_ms: start, name: 'VO2 example', ftp: 175, workout_id: 'w_vo2' }, P.cleanSamples(S));
+    mem[P.rideKey(sum.id)] = { summary: sum, samples: P.cleanSamples(S) };
+    mem[P.INDEX] = { rides: [sum] };
+    const cal = await W.calendar(day, day);
+    const d = cal.days[0];
+    const vo2 = d.planned.find(w => w.id === 'w_vo2'), run = d.planned.find(w => w.id === 'w_run');
+    assert.deepStrictEqual(vo2.buckets_plan, { low: 1140, high: 300, peak: 540 });
+    assert.strictEqual(run.buckets_plan, undefined);
+    const r = d.done.find(x => x.source === 'player');
+    assert.ok(r, 'the player ride is on the day');
+    assert.strictEqual(r.plan_wid, 'w_vo2');
+    assert.deepStrictEqual({ low: r.buckets.low, high: r.buckets.high, peak: r.buckets.peak }, { low: 300, high: 120, peak: 180 });
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
