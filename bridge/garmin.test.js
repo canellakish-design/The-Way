@@ -54,5 +54,25 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     let err = null; try { await G.receive({ id: 12, t: [0] }); } catch (e) { err = e; }
     assert.ok(err && err.status === 400);
   });
+  await ok('the session serves the field its lines, colours and plan; a new threshold reaches it with no rebuild', async () => {
+    const tz = require('./tz'), today = tz.todayKey();
+    const step = (dur_s, lo, hi) => ({ kind: 'step', label: '', dur_s, target: { type: 'power', lo, hi: hi == null ? lo : hi }, cadence: null });
+    mem['plan-workouts'] = { workouts: { w_bk: { id: 'w_bk', date: today, time: '23:00', sport: 'VirtualRide', name: 'Bucket test',
+      steps: [step(300, 55, 60), { kind: 'repeat', label: '3 x', count: 3, steps: [step(180, 125, 130), step(180, 55)] }, step(300, 100, 105), step(300, 50)] } } };
+    const s = await G.sessionToday();
+    assert.deepStrictEqual(s.steps.map(x => x[2]), [101, 223, 96, 223, 96, 223, 96, 179, 88]);
+    assert.deepStrictEqual(s.buckets_plan, { low: 1140, high: 300, peak: 540 });
+    assert.deepStrictEqual(s.colours, { low: '#0099FF', high: '#FFAA00', peak: '#E00000' });
+    assert.strictEqual(s.lines.vt1_w, 169); assert.strictEqual(s.lines.vt2_w, 208); assert.strictEqual(s.lines.vt2_hr, 139);
+    await require('./thresholds').set({ date: today, vt1_w: 180, vt2_w: 220, vt1_hr: 118, vt2_hr: 141, source: 'Tymewear' });
+    const s2 = await G.sessionToday();
+    assert.strictEqual(s2.lines.vt1_w, 180); assert.strictEqual(s2.vt2_hr, 141);
+    assert.deepStrictEqual(s2.buckets_plan, { low: 1440, high: 0, peak: 540 });   // 179 W is under the new 180 W VT1: LOW
+    // a ride-by-feel session plans nothing, and its free steps carry no band
+    mem['plan-workouts'] = { workouts: { w_z1: { id: 'w_z1', date: today, time: '23:00', sport: 'VirtualRide', name: 'Zone 1, 120 min', steps: [{ kind: 'step', label: 'Zone 1', dur_s: 7200, target: { type: 'free' } }] } } };
+    const s3 = await G.sessionToday();
+    assert.strictEqual(s3.buckets_plan, null); assert.deepStrictEqual(s3.steps, [[0, 7200, 0, 0, 0]]);
+    await require('./thresholds').remove(today);
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
