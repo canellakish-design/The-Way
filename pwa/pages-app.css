@@ -281,10 +281,13 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 .bk-due{position:absolute; left:-6px; right:-6px; height:0; border-top:3px solid var(--ink)}
 .bk-num{font-family:var(--num); font-weight:700; font-size:30px; line-height:1; text-align:center; color:var(--ink); font-variant-numeric:tabular-nums}
 .bk-of{font-family:var(--mono); font-size:11px; letter-spacing:.3px; color:var(--muted); text-align:center; min-height:14px}
-.bkm{display:grid; gap:4px; margin:6px 0 2px; max-width:420px}
-.bkm-row{display:grid; grid-template-columns:40px minmax(0,1fr) auto; gap:8px; align-items:center}
+.bkm{display:grid; grid-template-columns:34px minmax(40px,1fr) auto; column-gap:6px; row-gap:4px; align-items:center; margin:6px 0 2px; max-width:420px}
+.bkm-row{display:contents}   /* one grid for the three rows, so the tracks line up */
 .bkm-k{font-family:var(--mono); font-size:9.5px; letter-spacing:1.2px; color:var(--muted)}
 .bkm-track{position:relative; height:9px; border:1px solid #5A5A56}
 .bkm-fill{position:absolute; left:0; top:0; bottom:0}
 .bkm-tick{position:absolute; top:-4px; bottom:-4px; width:0; border-left:2px solid var(--ink)}
-.bkm-v{font-family:var(--mono); font-size:10.5px; color:var(--ink); white-space:nowrap; min-width:72px; text-align:right}
+.bkm-v{font-family:var(--mono); font-size:10px; color:var(--ink); white-space:nowrap; text-align:right; font-variant-numeric:tabular-nums}
+.thrkey{display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); column-gap:14px; row-gap:8px; align-items:center; margin:4px 0 10px; font-family:var(--mono); font-size:13px; color:var(--ink)}
+.thrkey .thk-h{font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted)}
+.thrkey .thk-b{font-family:var(--num); font-weight:700; font-size:18px; letter-spacing:.5px; white-space:nowrap}

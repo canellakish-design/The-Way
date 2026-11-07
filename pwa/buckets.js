@@ -144,7 +144,7 @@
     if (!KEYS.some(k => tot(k) || got(k))) return '';
     return `<div class="bkm" role="group" aria-label="Buckets${act ? ', ridden against the plan' : ', planned'}">` + KEYS.map(k => {
       const p = tot(k), a = got(k), len = act ? a : p;
-      const words = act ? (plan ? `${mins(a)} of ${mins(p)} min` : `${mins(a)} min`) : `${mins(p)} min`;
+      const words = act ? (plan ? `${mins(a)} / ${mins(p)} min` : `${mins(a)} min`) : `${mins(p)} min`;
       return `<div class="bkm-row"><span class="bkm-k">${LABELS[k]}</span><span class="bkm-track"><span class="bkm-fill" style="width:${(len / max * 100).toFixed(1)}%;background:${C[k]}"></span>${act && plan && p > 0 ? `<span class="bkm-tick" style="left:${(p / max * 100).toFixed(1)}%"></span>` : ''}</span><span class="bkm-v">${words}</span></div>`;
     }).join('') + `</div>`;
   }
