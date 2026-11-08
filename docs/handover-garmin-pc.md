@@ -1,55 +1,69 @@
-# Handover: Claude on the Zwift Lab PC · put the bucket field on the Edge 1050
+# Handover: Claude on the Zwift Lab PC · make the Garmin field build itself onto the Edge
 
 You are running on Harry's Zwift Lab PC (Windows), in `Documents\The-Way`, the clone of
-`canellakish-design/The-Way`. Harry is nearby for the USB cable and anything that asks for a login.
+`canellakish-design/The-Way`. Harry is nearby for the USB cable and for anything that asks for a login.
+
+**The goal:** a tool on this PC that builds The Way's Garmin data field and puts it on the Edge 1050 with no one
+at the keyboard. When Claude changes the field from anywhere and pushes it to `main`, the PC builds it, copies it
+onto the Edge the next time the Edge is plugged in, and reports what it did to the site, where Claude can read it.
 
 ## What is already true
 - The site is live with the magic buckets. `GET /garmin/session/today` on
-  `https://thewayforward.netlify.app/.netlify/functions/api` hands the field its `lines`, `colours` and
-  `buckets_plan` (null when nothing is planned) at each ride start.
+  `https://thewayforward.netlify.app/.netlify/functions/api` (header `x-the-way-app: 1`) hands the field its
+  `lines`, `colours` and `buckets_plan` (null when nothing is planned) at each ride start.
 - The field's **bucket layout** is in `garmin\the-way-field\source\TheWayField.mc` on this PC, **edited but not
-  committed** (built and simulator-tested on 7 Nov, SDK 9.3.0). The repo on GitHub still has the older layout.
+  committed** (built and simulator-tested on 7 Nov, SDK 9.3.0). GitHub still has the older layout.
   **Do not discard, reset, stash-drop or overwrite this file.**
 - `garmin\the-way-field\BUCKETS-PATCH.md`: the change that makes the field read lines, colours and plan from
   the site, keeping its built-in 169 / 208 / 117 / 139 and colours as the fallback.
-- `scripts\garmin-field.ps1`: pull, build (Release, edge1050), copy to the Edge; `-Commit` first pushes the
-  field's local changes to the branch `garmin-field`. Written without a Windows machine: this is its first run.
-  Fix it if it trips, and commit the fix.
+- `scripts\garmin-field.ps1`, the tool: pull, build (Release, edge1050), copy to the Edge (drive letter or MTP),
+  report to the site (`POST /garmin/build`). `-Commit` first pushes local field changes to the branch
+  `garmin-field`; `-Auto` is the unattended run (builds only when main's field changed, copies only when the Edge
+  is plugged in and lacks the newest build, quiet otherwise, never touches uncommitted work); `-Install`
+  registers the scheduled task. It was written without a Windows machine: **this is its first run, and making
+  it work is part of the job.** Fix what trips and commit the fixes.
+- `GET /garmin/build` on the site lists the PC's last 30 reported runs and `on_edge`, the build last copied.
 
 ## Steps
-1. `git status`: expect `TheWayField.mc` modified. Run `git fetch origin` (not pull yet).
-2. Read `garmin\the-way-field\BUCKETS-PATCH.md` from `origin/main` (`git show origin/main:garmin/the-way-field/BUCKETS-PATCH.md`)
-   and apply it to this PC's `TheWayField.mc`, using the variable names the file already has. When the session
-   carries the `buckets_plan` key, the field must use it and not work out its own plan from `steps`.
-3. Build without touching git or the Edge:
-   `powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -NoPull -NoCopy`
-   (if the script is not on disk yet, take it from `origin/main` first: `git checkout origin/main -- scripts/garmin-field.ps1`).
-   Fix compile errors in place; change only what the compiler asks.
-4. Simulator check (VS Code: Monkey C: Run, edge1050), with the field's `bridge` setting pointed at the copy,
-   `https://deploy-preview-2--thewayforward.netlify.app`: the bars, the lit bucket and the sync line work, and a
-   session with no plan shows no "of" totals and no due line. If you add a test workout on the copy for this,
-   leave it there and tell Harry (removals are his).
-5. `powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -Commit`
-   This pushes the field to the branch `garmin-field`, pulls `main`, builds Release, and copies the .prg to the
-   Edge if it is plugged in. Its last line is JSON; keep it.
-6. If the Edge was not plugged in: ask Harry to plug it in and unlock it, then run the script again with `-NoPull`.
-   The 1050 connects over MTP; the script handles that. If the copy still fails, copy
-   `garmin\the-way-field\bin\TheWayField.prg` into the Edge's `GARMIN\Apps` by hand in Explorer.
-7. Talk Harry through the Edge: ride profile → Data Screens → the one-field page with Connect IQ → The Way
-   (road and indoor profiles). In the Garmin Connect app, The Way's setting `bridge` goes back to the live
-   address, `https://thewayforward.netlify.app`.
-8. Ask Harry before merging `garmin-field` into `main`; then merge and push, so the repo holds the bucket layout.
+1. `git status`: expect `TheWayField.mc` modified. `git fetch origin`, then take the newest tool and patch
+   without touching the field's source:
+   `git checkout origin/main -- scripts/garmin-field.ps1 garmin/the-way-field/BUCKETS-PATCH.md`
+2. Apply `BUCKETS-PATCH.md` to this PC's `TheWayField.mc`, using the names the file already has. When the session
+   carries the `buckets_plan` key, the field uses it and does not work out its own plan from `steps`.
+3. Build only: `powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -NoPull -NoCopy -NoReport`.
+   Fix compile errors in the field (only what the compiler asks) and any error in the script.
+4. Simulator check (VS Code: Monkey C: Run, edge1050), the field's `bridge` setting on the copy,
+   `https://deploy-preview-2--thewayforward.netlify.app`: bars, lit bucket and sync line work; a session with no plan
+   shows no "of" totals and no due line. A test workout added on the copy stays there; tell Harry (removals are his).
+5. Keep the work: `powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -Commit -NoCopy`.
+   Then ask Harry, and on his yes merge the branch `garmin-field` into `main` and push. From here the repo holds the
+   bucket layout, and the unattended run has a clean tree to work from.
+6. The copy, by hand once: Harry plugs in and unlocks the Edge; run the script with no options. Check its JSON says
+   `copied`. If the MTP copy fails, fix the script (Shell.Application paths differ by Windows version: the Edge's
+   top folder may be `Internal Storage` or `Primary`), and only as a last resort copy
+   `garmin\the-way-field\bin\TheWayField.prg` into `GARMIN\Apps` in Explorer.
+7. The unattended run, tested: with the Edge unplugged, `-Auto` prints `nothing to do` and exits 0; make a trivial
+   commit to the field on a scratch branch, point the test at it, or simply run `-Auto` after deleting
+   `garmin\the-way-field\bin\last.json` and check it rebuilds and reports. Undo any scratch change.
+8. Install: `powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -Install`. Confirm the task
+   "The Way - Garmin field" in Task Scheduler, run it once from there, and check `GET /garmin/build` on the site
+   shows the run.
+9. So Claude can also run it on demand from the cloud: Harry opens the Claude desktop app → Settings → Claude Code →
+   Remote Control and adds `Documents\The-Way` (his clicks; tell him exactly where). Keep the app running.
+10. Talk Harry through the Edge once: ride profile → Data Screens → the one-field page with Connect IQ → The Way
+    (road and indoor). In Garmin Connect, The Way's setting `bridge` is the live address,
+    `https://thewayforward.netlify.app`.
 
 ## Done when
-- The new .prg is on the Edge and the field is on a data screen.
-- The branch `garmin-field` is pushed (and merged, once Harry says so).
-- Report: the compile fixes, any script fixes, the script's JSON line, and the simulator result. After Harry's
-  next ride, `https://thewayforward.netlify.app/.netlify/functions/api/garmin/rides` (header `x-the-way-app: 1`)
-  lists it.
+- The new field is on the Edge, on a data screen, and `GET /garmin/build` shows a run with `copied` and `on_edge`.
+- The scheduled task is installed and has reported at least once.
+- The bucket layout is on `main` (after Harry's yes), and every fix to the field or the script is pushed.
+- Report: compile fixes, script fixes, the JSON lines of the runs, the simulator result, and whether Remote
+  Control lists the folder.
 
 ## Rules
 - Never type Harry's passwords or keys; when a login appears, stop and ask him. Never commit the developer key.
-- Change only the field's source and the script. Nothing in `bridge/` or `pwa/`.
+- Change only the field's source and `scripts/garmin-field.ps1`. Nothing in `bridge/` or `pwa/`.
+- Ask Harry before anything lands on `main`.
 - Planning FTP stays 175. A ride on the Edge is always saved, never discarded.
-- Commit messages end with:
-  `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`
+- Commit messages end with: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`

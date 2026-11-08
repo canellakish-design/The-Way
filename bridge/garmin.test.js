@@ -74,5 +74,14 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     assert.strictEqual(s3.buckets_plan, null); assert.deepStrictEqual(s3.steps, [[0, 7200, 0, 0, 0]]);
     await require('./thresholds').remove(today);
   });
+  await ok('the PC\'s build reports: kept, the last 30, and the build on the Edge remembered', async () => {
+    const r = await G.noteBuild({ ok: true, commit: 'abc123', tree: 'tree1', built: true, bytes: 19126, copied: 'Edge 1050 (MTP) GARMIN\\Apps', mode: 'auto', host: 'ZWIFT-LAB' });
+    assert.strictEqual(r.ok, true); assert.strictEqual(r.bytes, 19126);
+    await G.noteBuild({ ok: true, commit: 'def456', tree: 'tree2', built: true, bytes: 19200, copied: null, note: 'the Edge is not plugged in' });
+    const d = mem['garmin-build'];
+    assert.strictEqual(d.runs.length, 2); assert.strictEqual(d.on_edge.commit, 'abc123');   // the newer build did not reach the Edge
+    for (let i = 0; i < 40; i++) await G.noteBuild({ ok: true });
+    assert.strictEqual(mem['garmin-build'].runs.length, 30);
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
