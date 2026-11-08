@@ -163,33 +163,8 @@ async function report() {
     });
   } catch (e) { push({ key: 'ical', name: 'Calendar feeds (iCal)', error: e.message }); }
 
-  // ---- Hexis (pushed in by the morning run) ----
-  try {
-    const m = await getJSON('macros', { days: {} });
-    const keys = Object.keys(m.days || {});
-    const key = tz.todayKey();
-    push({
-      key: 'hexis', name: 'Hexis macros', role: 'the day\'s macro targets',
-      configured: true,                       // nothing to configure — it's an inbox
-      connected: keys.length > 0, has_data: !!m.days[key],
-      detail: m.days[key] ? 'today posted' : keys.length ? `last posted ${keys.sort().pop()}` : 'nothing posted yet',
-      auth_url: null,
-      fix: m.days[key] ? null : 'run the morning Chrome fetch (deploy/hexis-morning-run.md)'
-    });
-  } catch (e) { push({ key: 'hexis', name: 'Hexis macros', error: e.message }); }
-
-  // ---- Alma (pushed in by the sync run) ----
-  try {
-    const i = await getJSON('intake', { days: {} });
-    const keys = Object.keys(i.days || {});
-    push({
-      key: 'alma', name: 'Alma intake', role: 'what was actually eaten, for the compliance score',
-      configured: true, connected: keys.length > 0, has_data: keys.length > 0,
-      detail: keys.length ? `last posted ${keys.sort().pop()}` : 'nothing posted yet — falling back to the app\'s own food log',
-      auth_url: null,
-      fix: keys.length ? null : 'run the Alma sync (deploy/alma-sync.md)'
-    });
-  } catch (e) { push({ key: 'alma', name: 'Alma intake', error: e.message }); }
+  // Hexis and Alma were removed as connections (8 Nov 2026, Harry's call): The Way's own food log and
+  // targets replaced them, so their tiles only ever showed "nothing posted yet".
 
   // ---- classes (a file in the repo) ----
   try {
