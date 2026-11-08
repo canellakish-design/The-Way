@@ -76,14 +76,33 @@ async function sessionToday() {
   return Object.assign({ name: s.workout.name, workout_id: s.workout.id, time: s.workout.time, vt2_hr: vt2, steps }, bk);
 }
 
+// The Zwift Lab PC's build of the field (scripts/garmin-field.ps1) reports here after each run, so Claude can
+// see from anywhere whether the Edge has the newest field: what was built, from which commit, and whether it
+// reached the Edge. The last 30 runs are kept.
+async function noteBuild(b) {
+  const x = b || {};
+  const row = { at: new Date().toISOString(), ok: !!x.ok, commit: x.commit ? String(x.commit).slice(0, 40) : null, tree: x.tree ? String(x.tree).slice(0, 40) : null,
+    built: !!x.built, bytes: Number.isFinite(Number(x.bytes)) ? Number(x.bytes) : null, copied: x.copied ? String(x.copied).slice(0, 120) : null,
+    mode: x.mode ? String(x.mode).slice(0, 20) : null, note: x.note ? String(x.note).slice(0, 300) : null, host: x.host ? String(x.host).slice(0, 60) : null };
+  const d = await getJSON('garmin-build', { runs: [] });
+  d.runs = (d.runs || []).concat([row]).slice(-30);
+  if (row.copied) d.on_edge = { at: row.at, commit: row.commit, tree: row.tree, bytes: row.bytes };
+  await setJSON('garmin-build', d);
+  return row;
+}
+
 function attach(app) {
   const { auth } = require('./fuel-log');
   app.post('/garmin/ride', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await receive(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.get('/garmin/session/today', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await sessionToday()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  app.post('/garmin/build', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json({ ok: true, run: await noteBuild(req.body || {}) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+  app.get('/garmin/build', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await getJSON('garmin-build', { runs: [] })); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/garmin/rides', async (req, res) => { if (!auth(req, res)) return;
     try { const idx = await getJSON(P.INDEX, { rides: [] }); res.json({ rides: (idx.rides || []).filter(x => x.device).slice(-50) }); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, receive, sessionToday, MIN_SECONDS };
+module.exports = { attach, receive, sessionToday, noteBuild, MIN_SECONDS };
