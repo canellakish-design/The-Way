@@ -63,7 +63,43 @@ async function receive(b) {
 
 // The day's session, small enough for the field to hold: the name, the line to count minutes above,
 // and each step as [start_s, dur_s, target_w, hr_lo, hr_hi] (0 where a step has no such target).
+// The next calendar event after now, for the countdown on the field's bottom line ("Zoom: Girls staff  -1:45:12").
+// Timed events only: an all-day marker like "Day 4" is nothing to count down to. The Way's own training
+// events are left out. The events are the schedule's own (calendar.eventsBetween: Google as last synced, the
+// calendar feeds, the app's events, the written-down snapshot, with special school schedules applied), today
+// and tomorrow, so the Edge counts down to what the Day page shows.
+// Returns { start: epoch seconds, title } or null; the field shows "next event: --" for null.
+const TITLE_MAX = 22;
+// Short enough for one line on the Edge: drop bracketed asides when too long ("(CP) World History I (Sec. F2)"
+// reads "World History I"), then cut at the last whole word.
+function shortTitle(s) {
+  let x = String(s || '').replace(/\s+/g, ' ').trim();
+  if (x.length > TITLE_MAX) x = x.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim() || x;
+  if (x.length > TITLE_MAX) { const cut = x.slice(0, TITLE_MAX + 1); const sp = cut.lastIndexOf(' '); x = (sp > 8 ? cut.slice(0, sp) : x.slice(0, TITLE_MAX)).trim(); }
+  return x || 'event';
+}
+function nextEvent(events, nowMs) {
+  const now = nowMs == null ? Date.now() : nowMs;
+  let best = null;
+  for (const e of events || []) {
+    if (!e || e.allDay || !e.start) continue;
+    if (e.category === 'training' || e.workout_id) continue;
+    const t = Date.parse(e.start);
+    if (!Number.isFinite(t) || t <= now) continue;
+    if (!best || t < best.t) best = { t, e };
+  }
+  return best ? { start: Math.floor(best.t / 1000), title: shortTitle(best.e.summary) } : null;
+}
+
 async function sessionToday() {
+  const out = await sessionCore();
+  let ev = [];
+  try { const k = tz.todayKey(); ev = await require('./calendar').eventsBetween(k, tz.shiftKey(k, 1)); } catch (e) { ev = []; }
+  out.next_event = nextEvent(ev);
+  return out;
+}
+
+async function sessionCore() {
   const s = await P.sessionFor('today');
   const vt2 = s.thresholds && s.thresholds.vt2_hr ? s.thresholds.vt2_hr : 139;
   // the buckets (buckets.js): the lines and colours the field draws with, and the plan in seconds per bucket.
@@ -105,4 +141,4 @@ function attach(app) {
     try { const idx = await getJSON(P.INDEX, { rides: [] }); res.json({ rides: (idx.rides || []).filter(x => x.device).slice(-50) }); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, receive, sessionToday, noteBuild, MIN_SECONDS };
+module.exports = { attach, receive, sessionToday, noteBuild, nextEvent, MIN_SECONDS };

@@ -101,6 +101,7 @@ function applySpecialSchedules(events) {
   const out = [];
   for (const e of events) {
     if (!e || e.allDay || !re.test(String(e.summary || ''))) { out.push(e); continue; }
+    if (e.special) { out.push(e); continue; }   // already re-timed: a second pass must not move it again (a delay day's 10:30 class would match Period 2's 10:25)
     const day = tz.keyOf(new Date(e.start)), sp = specials[day];
     if (!sp) { out.push(e); continue; }
     const startMin = tz.minutesOf(new Date(e.start));

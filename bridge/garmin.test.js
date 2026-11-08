@@ -83,5 +83,35 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     for (let i = 0; i < 40; i++) await G.noteBuild({ ok: true });
     assert.strictEqual(mem['garmin-build'].runs.length, 30);
   });
+  await ok('next_event: the soonest timed event after now, never training, never all-day, short title', async () => {
+    const now = Date.parse('2026-11-09T14:00:00Z');
+    const ev = [
+      { summary: 'Day 4', start: '2026-11-09', end: '2026-11-10', allDay: true, category: 'busy' },
+      { summary: 'Earlier meeting', start: '2026-11-09T08:00:00-05:00', allDay: false, category: 'work' },
+      { summary: 'Z1 trainer 60 min', start: '2026-11-09T09:30:00-05:00', allDay: false, category: 'training' },
+      { summary: 'Push', start: '2026-11-09T09:40:00-05:00', allDay: false, category: 'busy', workout_id: 'w_x' },
+      { summary: '(CP) World History I (Sec. G1)', start: '2026-11-09T11:25:00-05:00', allDay: false, category: 'work' },
+      { summary: '(CP) World History I (Sec. F2)', start: '2026-11-09T10:30:00-05:00', allDay: false, category: 'work' },
+    ];
+    const x = G.nextEvent(ev, now);
+    assert.strictEqual(x.start, Date.parse('2026-11-09T10:30:00-05:00') / 1000);
+    assert.strictEqual(x.title, 'World History I');
+    assert.strictEqual(G.nextEvent([{ summary: 'Junior-Senior Flag Football Game', start: '2026-11-10T11:30:00-05:00' }], now).title, 'Junior-Senior Flag');
+    assert.ok(x.title.length <= 22);
+    assert.strictEqual(G.nextEvent([], now), null);
+    assert.strictEqual(G.nextEvent(ev.slice(0, 4), now), null);
+  });
+  await ok('session/today carries next_event from the schedule\'s events, and null without one', async () => {
+    const C = require('./calendar'); const real = C.eventsBetween;
+    C.eventsBetween = async () => [];
+    assert.strictEqual((await G.sessionToday()).next_event, null);
+    const soon = new Date(Date.now() + 3600e3).toISOString();
+    C.eventsBetween = async () => [{ summary: 'Zoom: Girls staff', start: soon, allDay: false, category: 'work' }];
+    const s = await G.sessionToday();
+    assert.deepStrictEqual(s.next_event, { start: Math.floor(Date.parse(soon) / 1000), title: 'Zoom: Girls staff' });
+    C.eventsBetween = async () => { throw new Error('no calendar'); };
+    assert.strictEqual((await G.sessionToday()).next_event, null);   // a dead calendar never breaks the field's session
+    C.eventsBetween = real;
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });

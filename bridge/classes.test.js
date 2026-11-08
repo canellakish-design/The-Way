@@ -63,6 +63,14 @@ const events = [
     // a schedule with only three periods drops the fourth's class
     const three = Object.assign({}, special, { description: '8:30 - 10:00 Period 1\n10:15 - 11:45 Period 2\n12:30 - 2:00 Period 3' });
     assert.strictEqual(C.applySpecialSchedules([three, period4]).length, 1);
+    // a second pass leaves a moved class where it is: on a two-hour-delay day, Period 1 at 10:30 sits within
+    // half an hour of Period 2's regular 10:25 and would otherwise move again to Period 2's time
+    const delay = Object.assign({}, special, { start: '2026-11-09', end: '2026-11-10', description: '10:30 - 11:20 Period 1 (50 min)\n11:25 - 12:35 Period 2 (70 min)\n1:30 - 2:20 Period 3 (50 min)\n2:25 - 3:15 Period 4 (50 min)' });
+    const p1 = cls('2026-11-09', '08:30', 'F2');
+    const once = C.applySpecialSchedules([delay, p1]), twice = C.applySpecialSchedules(once);
+    const f2 = l => l.find(e => e.summary.includes('F2'));
+    assert.strictEqual(tz.minutesOf(new Date(f2(once).start)), 10 * 60 + 30);
+    assert.strictEqual(tz.minutesOf(new Date(f2(twice).start)), 10 * 60 + 30);
     // the other spelling on the school's notes: a start and a length, no end
     const flag = C.specialPeriods('8:15 Advisory\n8:30 - 9:40 Period 1 (70 min)\n9:45 - 11:25 Period 2 (100 min)\n12:05 Lunch\n12:50 Period 3 (70 min)\n2:05 Period 4 (70 min)\n4:00 Regular buses depart');
     assert.deepStrictEqual(flag[3], { start_min: 12 * 60 + 50, end_min: 14 * 60 }); assert.deepStrictEqual(flag[4], { start_min: 14 * 60 + 5, end_min: 15 * 60 + 15 }); assert.deepStrictEqual(flag[2], { start_min: 585, end_min: 685 });
