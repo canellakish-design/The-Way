@@ -45,6 +45,16 @@ function Done($code, [switch]$Quiet) {
   }
   Write-Output $json; exit $code
 }
+# git writes progress to stderr; under "Stop", Windows PowerShell 5.1 makes that a terminating error once output is
+# redirected (a log, the scheduled task). Run git.exe with errors kept as text, and hand back its exit code.
+# (Not named "git": PowerShell names ignore case, so a function called Git would call itself.)
+function Invoke-Git {
+  $old = $ErrorActionPreference; $ErrorActionPreference = "Continue"
+  $lines = & git.exe @args 2>&1 | ForEach-Object { "$_" }
+  $code = $LASTEXITCODE; $ErrorActionPreference = $old
+  foreach ($l in $lines) { if ($l) { Write-Host "  git: $l" } }
+  return $code
+}
 Set-Location $repo
 
 # ---- the scheduled task ----
@@ -63,16 +73,18 @@ $st = git status --porcelain -- garmin/the-way-field
 $dirty = [bool]$st
 if ($Auto -and $dirty) { $res.ok = $true; $res.note = "the field has uncommitted changes on this PC: the unattended run leaves them alone"; Done 0 -Quiet }
 if ($Commit -and $dirty) {
+  # commit on a local branch garmin-field, so this PC's main stays equal to origin/main
   $here = (git rev-parse --abbrev-ref HEAD).Trim()
-  git add -- garmin/the-way-field | Out-Null
-  git commit -m "Garmin field: the layout as built on the Zwift Lab PC" -m "Committed by scripts/garmin-field.ps1." | Out-Null
-  git push origin "HEAD:refs/heads/garmin-field" 2>&1 | Out-Null
-  $res.committed = "pushed to the branch garmin-field from $here"
+  if ($here -ne "garmin-field") { if ((Invoke-Git checkout -B garmin-field) -ne 0) { $res.note = "could not make the branch garmin-field"; Done 1 } }
+  Invoke-Git add -- garmin/the-way-field scripts/garmin-field.ps1 | Out-Null
+  if ((Invoke-Git commit -m "Garmin field: the layout as built on the Zwift Lab PC" -m "Committed by scripts/garmin-field.ps1." -m "Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>") -ne 0) { $res.note = "git commit failed"; Done 1 }
+  if ((Invoke-Git push origin "HEAD:refs/heads/garmin-field") -eq 0) { $res.committed = "pushed to the branch garmin-field (local branch garmin-field, from $here)" }
+  else { $res.committed = "committed on the local branch garmin-field; the push failed (sign in to GitHub and run again)" }
   $dirty = $false
 }
 if (-not $NoPull) {
   if ($dirty) { $res.note = "the field has uncommitted changes: not pulled, built as it is on disk (use -Commit to keep them on a branch)" }
-  else { git pull --ff-only origin main 2>&1 | Out-Null; if ($LASTEXITCODE -eq 0) { $res.pulled = $true } else { $res.note = "git pull failed; built what is on disk" } }
+  else { if ((Invoke-Git pull --ff-only origin main) -eq 0) { $res.pulled = $true } else { $res.note = "git pull failed; built what is on disk" } }
 }
 $res.commit = (git rev-parse --short HEAD).Trim()
 $res.tree = if ($dirty) { "local" } else { (git rev-parse HEAD:garmin/the-way-field).Trim() }
@@ -95,6 +107,16 @@ if ($needBuild) {
   }
   if (-not $sdk) { $res.note = "no Connect IQ SDK found under $ciq (VS Code: Monkey C: Verify Installation)"; Done 2 }
   $monkeyc = Join-Path $sdk "bin\monkeyc.bat"
+  # Java: on PATH, or JAVA_HOME, or the Monkey C extension's own setting (monkeyC.javaPath in VS Code)
+  if (-not (Get-Command java -ErrorAction SilentlyContinue)) {
+    $jh = $env:JAVA_HOME
+    $vsj = Join-Path $env:APPDATA "Code\User\settings.json"
+    if ((-not $jh) -and (Test-Path $vsj)) {
+      $m = Select-String -Path $vsj -Pattern '"monkeyC\.javaPath"\s*:\s*"([^"]+)"' | Select-Object -First 1
+      if ($m) { $jh = $m.Matches[0].Groups[1].Value -replace '\\\\', '\' }
+    }
+    if ($jh -and (Test-Path (Join-Path $jh "bin\java.exe"))) { $env:PATH = (Join-Path $jh "bin") + ";" + $env:PATH }
+  }
   if (-not (Get-Command java -ErrorAction SilentlyContinue)) { $res.note = "Java is not on PATH; the SDK needs it"; Done 2 }
   if (-not $Key) {
     $vs = Join-Path $env:APPDATA "Code\User\settings.json"
@@ -108,8 +130,13 @@ if ($needBuild) {
 
   # ---- 3. build, Release ----
   New-Item -ItemType Directory -Force -Path (Split-Path $out) | Out-Null
-  & $monkeyc -d $Device -f (Join-Path $field "monkey.jungle") -o $out -y $Key -r -w
-  if ($LASTEXITCODE -ne 0 -or -not (Test-Path $out)) { $res.note = "the build failed (the compiler's lines are above)"; Done 1 }
+  # the compiler and Java print warnings on stderr; keep them as text, not as a stopping error
+  if (Test-Path $out) { Remove-Item $out -Force }
+  $ErrorActionPreference = "Continue"
+  & $monkeyc -d $Device -f (Join-Path $field "monkey.jungle") -o $out -y $Key -r -w 2>&1 | ForEach-Object { Write-Host "  monkeyc: $_" }
+  $bc = $LASTEXITCODE
+  $ErrorActionPreference = "Stop"
+  if ($bc -ne 0 -or -not (Test-Path $out)) { $res.note = "the build failed (the compiler's lines are above)"; Done 1 }
   $res.built = $true
   if ($res.tree -ne "local") { $last.built_tree = $res.tree; Save-State }
 }
