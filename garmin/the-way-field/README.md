@@ -45,3 +45,25 @@ monkeyc -d edge1050 -f monkey.jungle -o bin/TheWayField.prg -y developer_key -r 
 - On save (or discard) the last seconds go marked done. The site counts a ride from two minutes.
 - The site's id for the ride is the start time; a batch sent twice adds nothing.
 - The bridge side is `bridge/garmin.js`; the ride can be read back at `GET /player/ride/<id>`.
+
+## Automated: one command on the Zwift Lab PC
+`scripts/garmin-field.ps1` does the whole PC step: pulls `main`, builds the field for the Edge 1050 (Release)
+with the SDK and developer key already on the PC, and copies `TheWayField.prg` onto the Edge if it is
+plugged in (as a drive or over MTP, the way the 1040 and 1050 connect). It never discards local work:
+uncommitted changes to the field are built as they are, or, with `-Commit`, committed and pushed to the branch
+`garmin-field` first. Its last line is one line of JSON saying what it did.
+
+```
+powershell -ExecutionPolicy Bypass -File scripts\garmin-field.ps1 -Commit
+```
+
+For Claude to run it without Harry at the keyboard, Claude has to reach the PC. Either:
+- **Remote Control** (from the cloud session): on the PC, open the Claude desktop app → Settings → Claude Code →
+  Remote Control, and add `Documents\The-Way`. Keep the app running. A Claude Code session can then ask to use
+  that folder and run the script there. (From a cloud session this is not open to every account yet.)
+- **A Claude Code session on the PC itself:** the Claude desktop app's Code tab on `Documents\The-Way`, or
+  `claude` in a terminal there. It runs the script directly.
+
+The first run (one time): apply `BUCKETS-PATCH.md` to the PC's bucket layout, run the script with `-Commit`,
+and merge the branch `garmin-field` into `main`, so the repo holds the bucket layout from then on and later
+field changes can be made from anywhere.
