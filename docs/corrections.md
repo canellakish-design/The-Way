@@ -50,10 +50,24 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 2 Nov | Snack reading cut off mid-word; the day's target 180 kcal and 45 g carbs too high | Readings were cut at 240 characters; the advisor added a second, untimed Push at 8:19p when told the lift was done, and both copies were counted | readings to 420 characters and asked for 35 words; the advisor will not add a lift already on the calendar; an untimed copy of a timed lift counts once | advisor |
 | 3 Nov | Advisor said "you're fuelled for it now" at 5:34a with nothing eaten | The fuel figure (71%) is what is left from yesterday after the night; the advisor read it as having eaten | the advisor is told when nothing is eaten today and never says he is fuelled; it names what to eat before the session | advisor |
 | 3 Nov | Contradictions on the porridge before the VO2: "no real protein, no vegetables" and "heavy on starch" on a pre-ride snack whose plan asked for 0 g protein; the day's meals summed 200 kcal over the target; Fuel today read "no ride yet" with the pre-ride food in | Plate rules applied to fuel slots; the bottle was added on top of the day; today's fuel waited for the ride to start | fuel slots judged on carbs only; meals share the target after the bottle; today's fuel counts from four hours before a ride | disagreement |
+| 5 Nov | The Day still showed yesterday's recovery of 95 on a 44 morning | The WHOOP token has been dead since 29 Oct and the Garmin had no row for the day by 8 a.m.; the morning check said so but nothing filled the gap | his WHOOP numbers entered by hand; reconnecting WHOOP is his | new case |
+| 6 Nov | Hibiscus tea logged at 3:56 a.m. counted on today | A drink logged after midnight is filed on the calendar day; the journal had no way to move an entry to another day | `78831a0` (move to another day), entry moved | new case |
+| 6 Nov | Magnesium logged at 3:54 a.m. counted on today | Same cause | entry moved | new case |
+| 6 Nov | The site took too long to load | A dozen bridge calls behind the Day, each re-reading the same blobs one after another, and nothing on screen until all landed | `6e717a8`, `a1674c4` | new case |
+| 6 Nov | The class schedule was not updated for the special schedule | No live calendar source; the snapshot lacked the Upper School calendar and nothing read a special schedule | `0a956ac` | new case |
+| 6 Nov | Sleep 4.7 h on the site; WHOOP said 5 h 28 | Two devices, two nights: the Garmin's row won with the WHOOP dead | WHOOP's figure entered by hand | disagreement |
+| 6 Nov | "Your rides say you are nearer 205" (FTP), asked how | Claude stated a reconciliation of the ramp test and Tymewear as if the rides showed it; the power curve says 152 on old efforts | answer corrected; FTP stays 175 | my mistake |
+| 8 Nov | "Ride it" still on Saturday's McKeldin ride after he rode it | The button hid only on a green grade | `f10dafd`: hides once a ride answers the session | disagreement |
+| 8 Nov | Saturday's easy trail ride graded "partly 74%" | A session with heart-rate targets but no "Zone 1" in its name is graded on load (29 of 39 TSS), not as an easy ride | open: his call on grading easy rides and the trail floor | disagreement |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
-**3 Nov so far: 2.** 1 disagreement, 1 advisor.
+**3 Nov: 2.** 1 disagreement, 1 advisor.
+**4 Nov:** not logged at the time (the corrections of 3 to 5 Nov are partly in the notes below, not counted).
+**5 Nov: 1.** 1 new case.
+**6 Nov: 6.** 4 new case, 1 disagreement, 1 my mistake.
+**7 Nov: 0** logged.
+**8 Nov so far: 2.** 2 disagreement.
 
 ## Found by the Chrome tests (before Harry saw them)
 
