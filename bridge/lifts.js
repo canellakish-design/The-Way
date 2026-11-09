@@ -306,10 +306,15 @@ async function weekDays(n, from0) {
 // sessions logged in the last seven days against five; in the plan's first week, against the
 // sessions due since it started ("1 of 1 due" on day one, five a week from day seven). The pump is extra.
 // the lift sessions the plan placed on the calendar between two dates (an untimed copy of a timed one counts once)
-async function placedLiftsBetween(from, to) {
+// nowMin: a lift on the last day counts as due only once its planned end has passed (an untimed one from
+// 9 p.m.), so a Push at 12:45 is not "due" at 3 a.m.
+async function placedLiftsBetween(from, to, nowMin) {
   const d = await getJSON('plan-workouts', { workouts: {} });
+  const toMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : null; };
+  const minsOf = w => Math.round((w.steps || []).reduce((a, x) => a + (x.dur_s || 0), 0) / 60) || 60;
+  const due = w => nowMin == null || w.date < to || (toMin(w.time) != null ? toMin(w.time) + minsOf(w) <= nowMin : nowMin >= 21 * 60);
   // a Kettlebell Blast is an extra, like the Pump: never one of the five due
-  const ws = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /weight|lift|strength/i.test(String(w.sport || '')) && !isBlast(w));
+  const ws = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /weight|lift|strength/i.test(String(w.sport || '')) && !isBlast(w) && due(w));
   return new Set(ws.map(w => w.date + '|' + String(w.name || '').toLowerCase().replace(/\s+/g, ' ').trim())).size;
 }
 // Kettlebell Blasts (his at-home extras, on the calendar as WeightTraining, ~30 min) done in the window: a
@@ -329,10 +334,14 @@ async function blastsBetween(from, to) {
 async function weekCountPlaced(sessions, today) {
   const fs = await require('./fresh-start').freshStart();
   const w0 = weekCount(sessions, today, undefined, fs);
-  const [placed, blasts] = await Promise.all([
-    w0.first_count && w0.first_week ? placedLiftsBetween(w0.first_count, today).catch(() => 0) : 0,
+  const nowMin = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
+  const inFirst = w0.first_count && w0.first_week;
+  const [placed, dueNow, blasts] = await Promise.all([
+    inFirst ? placedLiftsBetween(w0.first_count, today).catch(() => 0) : 0,
+    inFirst ? placedLiftsBetween(w0.first_count, today, nowMin).catch(() => 0) : 0,
     blastsBetween(w0.from, today).catch(() => 0)]);
-  const c = placed ? weekCount(sessions, today, placed, fs) : w0;
+  // with lifts on the calendar, the due count is the ones whose time has come (none yet reads "due later", not red)
+  const c = placed ? weekCount(sessions, today, dueNow, fs) : w0;
   return Object.assign(c, { blasts, extras: c.pumps + blasts });
 }
 function weekCount(sessions, today, placedDue, fresh) {
@@ -349,11 +358,12 @@ function weekCount(sessions, today, placedDue, fresh) {
   const dayN = firstCount ? Math.round((Date.parse(today) - Date.parse(firstCount)) / 864e5) + 1 : 0;
   // in the first week, the sessions due are the ones the plan placed on the calendar from its first day through today;
   // with nothing placed yet, five a week prorated
-  const expected = !first ? 0 : dayN < 7 ? (placedDue > 0 ? Math.min(5, placedDue) : Math.min(5, Math.ceil(5 * dayN / 7))) : 5;
-  const firstWeek = !!first && expected > 0 && expected < 5;
+  // placedDue 0 (a number) is lifts placed but none due yet; undefined is nothing placed: five a week prorated
+  const expected = !first ? 0 : dayN < 7 ? (placedDue != null ? Math.min(5, Math.max(placedDue, five.length)) : Math.min(5, Math.ceil(5 * dayN / 7))) : 5;
+  const firstWeek = !!first && dayN < 7 && expected < 5;
   const of = firstWeek ? expected : 5;
   return { from, sessions: five.length, pumps: wk.length - five.length, blasts: 0, target: 5, expected, of, first_week: firstWeek, started: !!first, first, first_count: firstCount, fresh_start: fs,
-    week_no: weekNo, deload: weekNo > 0 && weekNo % 9 === 0, word: `${five.length} of ${of}${firstWeek ? ' due' : ''}` };
+    week_no: weekNo, deload: weekNo > 0 && weekNo % 9 === 0, word: firstWeek && !of ? 'due later' : `${five.length} of ${of}${firstWeek ? ' due' : ''}` };
 }
 // A calendar entry's name to its session: "Upper body and core (Upper 2)" by its bracket, "Pull" by its
 // short name, "Pull and calves" by its full name. The two upper days share a name, so the bracket goes first.

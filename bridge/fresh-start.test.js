@@ -113,6 +113,12 @@ ok('lifts: with the start on the 9th, the 9th reads "1 of 1 due"; the deload cyc
   assert.strictEqual(wed.word, '1 of 3 due');
   const after = L.weekCount(sessions.concat([s('2026-11-16', 'push')]), '2026-11-16', undefined, '2026-11-09');
   assert.strictEqual(after.first_week, false); assert.strictEqual(after.of, 5);
+  // Mon 9 Nov at 3 a.m., the Push at 12:45: placed but not due yet, so "due later", never "0 of 1 due"
+  const early = L.weekCount(sessions.slice(0, 3), '2026-11-09', 0, '2026-11-09');
+  assert.strictEqual(early.word, 'due later'); assert.strictEqual(early.of, 0); assert.strictEqual(early.first_week, true);
+  // done early, before its time: it counts and is due
+  const doneEarly = L.weekCount(sessions, '2026-11-09', 0, '2026-11-09');
+  assert.strictEqual(doneEarly.word, '1 of 1 due');
   // no setting: as before
   const before = L.weekCount(sessions, '2026-11-09');
   assert.strictEqual(before.word, '3 of 5'); assert.strictEqual(before.first_count, '2026-11-02');
