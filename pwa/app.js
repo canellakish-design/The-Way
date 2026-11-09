@@ -1638,7 +1638,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     // read as an appointment, and an empty day looked packed.
     if (r.open) return `<li class="gap ${state}" data-s="${r.start}" data-e="${r.end}"><span class="n">${esc(r.from)}–${esc(r.to)} · ${esc(r.title.replace(/^Open — /, ""))} free</span></li>`;
     const g = r.wid && WGRADE[r.wid];
-    const gradeWord = g ? (g.zone ? `above Z1 ${g.zone}%` : (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "")) : null;
+    const gradeWord = g ? (g.zone ? (g.zone > 0 ? `above Z1 ${g.zone}%` : `below Z1 ${-g.zone}%`) : (g.band === "green" ? (g.logged ? "logged" : "done") : g.over ? "over" : g.band === "yellow" ? "partly" : g.rides ? "short" : "missed") + (g.pct != null && !g.logged ? ` ${g.pct}%` : "")) : null;
     // the row's status, as a stripe on the left and the colour of its chip on the right (never a filled row)
     const TONE = { green: "good", yellow: "warn", red: "bad" }, CHIPC = { good: "hu-go", warn: "hu-hold", bad: "hu-stop" };
     const st = g ? TONE[g.band] : r.meal && r.meal.match ? TONE[r.meal.match.key] : r.rx && r.taken ? "good" : "";
@@ -1658,7 +1658,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
       <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}</span>
-      <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? `Z1 +${g.zone}%` : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
+      <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? (g.zone > 0 ? `Z1 +${g.zone}%` : `Z1 low ${-g.zone}%`) : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
   const foot = open;
@@ -2752,7 +2752,7 @@ function weekRidesHTML(cal, today){
   const toneC = t => t === "good" ? "var(--green)" : t === "warn" ? "var(--amber)" : t === "bad" ? "var(--red)" : "var(--ink)";
   const bandTone = b => b === "green" ? "good" : b === "yellow" ? "warn" : b === "red" ? "bad" : "neutral";
   const isRide = w => !/weight|lift|strength|^run$|virtualrun|trailrun|walk|hike/i.test(String(w.sport || w.type || ""));
-  const wordOf = (c, rides) => c.zone_over ? "above Z1" : c.band === "green" ? (c.pct > 120 ? "over" : "done") : c.band === "yellow" ? "partly" : c.band === "red" ? (rides ? "short" : "missed") : "done";
+  const wordOf = (c, rides) => c.zone_over ? (c.zone_over > 0 ? "above Z1" : "below Z1") : c.band === "green" ? (c.pct > 120 ? "over" : "done") : c.band === "yellow" ? "partly" : c.band === "red" ? (rides ? "short" : "missed") : "done";
   const dlabel = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
   if (!cal) return `<div class="small">reading the week…</div>`;
   let planned = 0, done = 0;
