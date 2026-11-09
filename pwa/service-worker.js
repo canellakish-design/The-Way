@@ -1,6 +1,6 @@
 // The Way — service worker v44. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v218";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v220";   // bumped whenever the shell changes, so a held copy is dropped on activate
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys =>
@@ -24,4 +24,29 @@ self.addEventListener("fetch", e => {
       return r;
     }).catch(() => caches.match(e.request)));
   }
+});
+
+// Reminders (bridge/push.js): each supplement and medicine at its time. "Taken" logs every item in the
+// notification without opening the app; tapping the notification itself (the only choice on an iPhone,
+// where notifications carry no buttons) opens a one-tap "Taken" page.
+const API = "/.netlify/functions/api";
+self.addEventListener("push", e => {
+  let p = {}; try { p = e.data ? e.data.json() : {}; } catch (err) { p = { title: "The Way", body: e.data ? e.data.text() : "" }; }
+  e.waitUntil(self.registration.showNotification(p.title || "The Way", {
+    body: p.body || "", tag: p.tag || "way", renotify: true, requireInteraction: true,
+    icon: "icon-192.png", badge: "icon-192.png",
+    data: { items: p.items || [], url: p.url || "/#today" },
+    actions: (p.items || []).length ? [{ action: "taken", title: "Taken" }] : []
+  }));
+});
+const logItem = it => fetch(API + (it.kind === "med" ? "/meds/taken" : "/food/supplement"), {
+  method: "POST", headers: { "Content-Type": "application/json", "x-the-way-app": "1" }, body: JSON.stringify({ key: it.key }) });
+self.addEventListener("notificationclick", e => {
+  const d = e.notification.data || {}; e.notification.close();
+  if (e.action === "taken"){ e.waitUntil(Promise.all((d.items || []).map(logItem)).catch(() => {})); return; }
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    const url = d.url || "/#today", open = list.find(c => "focus" in c);
+    if (open) return open.focus().then(c => (c && c.navigate) ? c.navigate(url) : c);
+    return self.clients.openWindow(url);
+  }));
 });

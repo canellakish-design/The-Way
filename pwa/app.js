@@ -208,7 +208,7 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
   const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   // one way back: a page with a parent goes to its parent (the title still goes home), the rest to the Day
   if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a><a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
@@ -2695,7 +2695,7 @@ V.today = async function(){
       const ml = e.target.closest("[data-meallog]");
       if (ml){ e.stopPropagation(); e.preventDefault(); location.hash = "#food?log=" + encodeURIComponent(ml.dataset.meallog); return; }
       const rx = e.target.closest("[data-supplog]");
-      if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); bridge("/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog })}).then(()=> view.__syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
+      if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); const med = /^med:/.test(rx.dataset.supplog); bridge(med ? "/meds/taken" : "/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog.replace(/^med:/, "") })}).then(()=> view.__syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
       const b = e.target.closest("[data-delw]"); if (!b) return;
       e.preventDefault();
       if (!confirm("Take this session off the calendar?")) return;
@@ -2889,8 +2889,48 @@ function demoSchedule(){
    Every integration fails in three different places — no credentials, no
    authorization, no data yet — and each needs a different move. The list says
    which, per source, with the link that fixes it. */
+/* The reminder's page (bridge/push.js): a notification tapped on the phone opens here with its items
+   ("#take?items=supp:beetroot,med:bp"); one tap logs them all, or each on its own. */
+const logTaken = it => bridge(it.kind === "med" ? "/meds/taken" : "/food/supplement", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ key: it.key }) });
+V.take = async function(){
+  const q = new URLSearchParams(location.hash.split("?")[1] || "");
+  const items = String(q.get("items") || "").split(",").map(x => { const [kind, key] = x.split(":"); return kind && key ? { kind, key } : null; }).filter(Boolean);
+  view.innerHTML = `<span class="eyebrow">Reminder</span><div class="card" id="takeCard"><div class="small">…</div></div>`;
+  const el = document.getElementById("takeCard");
+  const due = await bridge("/push/due").catch(() => null);
+  const named = items.map(it => Object.assign({}, it, ((due && due.items) || []).find(x => x.kind === it.kind && x.key === it.key) || {}));
+  const draw = () => {
+    const open = named.filter(x => !x.taken);
+    el.innerHTML = `<h4>${open.length ? "Take now" : "All taken"}</h4>
+      <ul class="takelist">${named.map((x, i) => `<li><span>${esc(x.name || x.key)}${x.time ? ` <i>${esc(hm12(x.time))}</i>` : ""}</span>${x.taken ? `<b>✓ taken</b>` : `<button data-i="${i}">Taken</button>`}</li>`).join("")}</ul>
+      ${open.length > 1 ? `<button class="primary" id="takeAll">All taken</button>` : ""}
+      <div class="small" id="takeMsg"></div>`;
+    const one = async x => { await logTaken(x); x.taken = true; };
+    el.querySelectorAll("button[data-i]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await one(named[+b.dataset.i]); draw(); }catch(e){ b.disabled = false; document.getElementById("takeMsg").textContent = e.message; } });
+    const all = document.getElementById("takeAll"); if (all) all.onclick = async ()=>{ all.disabled = true; try{ for (const x of named.filter(y => !y.taken)) await one(x); draw(); }catch(e){ all.disabled = false; document.getElementById("takeMsg").textContent = e.message; } };
+  };
+  draw();
+};
+// Reminders on this phone: Web Push needs the app installed (on an iPhone, Add to Home Screen first)
+const b64ToUint8 = b64 => { const p = "=".repeat((4 - b64.length % 4) % 4), s = atob((b64 + p).replace(/-/g, "+").replace(/_/g, "/")); return Uint8Array.from([...s].map(c => c.charCodeAt(0))); };
+async function pushState(){
+  if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return { ok: false, why: "This browser has no push. On an iPhone, open The Way from its Home Screen icon (Share → Add to Home Screen)." };
+  const reg = await Promise.race([navigator.serviceWorker.ready, new Promise(r => setTimeout(() => r(null), 3000))]);
+  if (!reg) return { ok: false, why: "The app's background worker is not running here. Open The Way from its Home Screen icon and try again." };
+  const sub = await reg.pushManager.getSubscription();
+  return { ok: true, on: !!sub && Notification.permission === "granted", sub, reg, perm: Notification.permission };
+}
+async function pushOn(){
+  const st = await pushState(); if (!st.ok) throw new Error(st.why);
+  const perm = await Notification.requestPermission(); if (perm !== "granted") throw new Error("Notifications are blocked for The Way. Allow them in Settings → Notifications.");
+  const { publicKey } = await bridge("/push/key");
+  const sub = st.sub || await st.reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToUint8(publicKey) });
+  return bridge("/push/subscribe", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ subscription: sub.toJSON() }) });
+}
+
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
+    <div class="card" id="remCard"><h4>Reminders</h4><div class="small">…</div></div>
     <div class="card" id="youCard"><h4>Scores</h4><div class="small">…</div></div>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
 
@@ -2944,6 +2984,20 @@ V.settings = function(){
     };
   };
   drawYou();
+  const drawRem = async ()=>{
+    const el = document.getElementById("remCard"); if (!el) return;
+    const [st, due] = await Promise.all([pushState().catch(e => ({ ok: false, why: e.message })), bridge("/push/due").catch(()=>null)]);
+    const list = ((due && due.items) || []).map(x => `<li><span>${esc(hm12(x.time))} ${esc(x.name)}</span><b>${x.taken ? "✓" : due.sent && due.sent[x.kind + ":" + x.key] ? "sent" : ""}</b></li>`).join("");
+    el.innerHTML = `<h4>Reminders</h4>
+      <div class="small">${!st.ok ? esc(st.why) : st.on ? "On for this phone." : "Off on this phone."}</div>
+      ${list ? `<ul class="takelist">${list}</ul>` : ""}
+      <div class="gbtns">${st.ok && !st.on ? `<button class="primary" id="remOn">Turn on</button>` : ""}${st.ok && st.on ? `<button id="remTest">Send a test</button>` : ""}</div>
+      <div class="small" id="remMsg"></div>`;
+    const m = t => { const x = document.getElementById("remMsg"); if (x) x.textContent = t; };
+    const on = document.getElementById("remOn"); if (on) on.onclick = async ()=>{ on.disabled = true; m("turning on…"); try{ await pushOn(); drawRem(); }catch(e){ on.disabled = false; m(e.message); } };
+    const t = document.getElementById("remTest"); if (t) t.onclick = async ()=>{ t.disabled = true; try{ const r = await bridge("/push/test", { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" }); m(r.sent ? "Sent. It should arrive in a few seconds." : `Not sent${r.errors && r.errors.length ? ": " + r.errors[0] : ""}.`); }catch(e){ m(e.message); } t.disabled = false; };
+  };
+  drawRem();
 
   const drawConnections = async ()=>{
     const el = document.getElementById("conn");

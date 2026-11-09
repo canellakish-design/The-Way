@@ -633,6 +633,16 @@ async function scheduleReport(q) {
             day.events.push({ summary: x.name, detail: x.why, category: 'supplement', source: 'rx', kind: 'supplement', calendar: 'The Way', allDay: false, blocking: false,
               minutes: 10, start_min: sm, end_min: sm + 10, from: fmtMin(sm), to: fmtMin(sm + 10), rx_key: x.key, taken: !!x.taken, for_session: x.session || null });
           }
+          // the medicines (meds.js): eye drops on waking and before bed, BP medicine before bed
+          try {
+            const M = require('./meds');
+            const taken = day.today ? (((await require('./storage').getJSON('meds-' + day.date, { taken: {} })) || {}).taken || {}) : {};
+            for (const m of M.dueFor(day.date, taken, SWin)) {
+              const sm = S.toMin(m.time); if (sm == null) continue;
+              day.events.push({ summary: m.name, detail: 'medicine', category: 'supplement', source: 'rx', kind: 'supplement', calendar: 'The Way', allDay: false, blocking: false,
+                minutes: 5, start_min: sm, end_min: sm + 5, from: fmtMin(sm), to: fmtMin(sm + 5), rx_key: 'med:' + m.key, taken: !!m.taken, for_session: null });
+            }
+          } catch (e) { /* no medicines */ }
           day.events.sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
         }
       } catch (e) { /* the day stands without them */ }
