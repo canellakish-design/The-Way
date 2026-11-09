@@ -105,6 +105,9 @@ function applySpecialSchedules(events) {
     const day = tz.keyOf(new Date(e.start)), sp = specials[day];
     if (!sp) { out.push(e); continue; }
     const startMin = tz.minutesOf(new Date(e.start));
+    // Already at one of the day's special period times: the calendar itself was re-timed (Harry moves his own
+    // class events on a delay day), so re-timing again would push it a period later. Leave it.
+    if (Object.values(sp.periods).some(q => Math.abs(q.start_min - startMin) <= 1)) { out.push(e); continue; }
     let idx = -1, best = 31;
     PERIODS.forEach((s, i) => { const d = Math.abs(s - startMin); if (d < best) { best = d; idx = i; } });
     if (idx < 0) { out.push(e); continue; }

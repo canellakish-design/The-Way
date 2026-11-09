@@ -78,12 +78,21 @@ function shortTitle(s) {
   if (x.length > TITLE_MAX) { const cut = x.slice(0, TITLE_MAX + 1); const sp = cut.lastIndexOf(' '); x = (sp > 8 ? cut.slice(0, sp) : x.slice(0, TITLE_MAX)).trim(); }
   return x || 'event';
 }
+// Only Harry's own events count down. The other teams' calendars (he oversees the whole girls program, so they
+// are all subscribed), the school-wide Upper School calendar and the boys' events are on the Day page for
+// context, but none of them is somewhere he has to be.
+const MY_TEAM = /^U16 G MARYLAND UNITED ECNL$/i;
+const NOT_MINE = /^(U\d{2} G MARYLAND UNITED\b.*|Upper School|Boys Events|Holidays in .*)$/i;
+function mine(e) {
+  const cal = String(e.calendar || '').trim();
+  return MY_TEAM.test(cal) || !NOT_MINE.test(cal);
+}
 function nextEvent(events, nowMs) {
   const now = nowMs == null ? Date.now() : nowMs;
   let best = null;
   for (const e of events || []) {
     if (!e || e.allDay || !e.start) continue;
-    if (e.category === 'training' || e.workout_id) continue;
+    if (e.category === 'training' || e.workout_id || !mine(e)) continue;
     const t = Date.parse(e.start);
     if (!Number.isFinite(t) || t <= now) continue;
     if (!best || t < best.t) best = { t, e };
@@ -96,6 +105,8 @@ async function sessionToday() {
   let ev = [];
   try { const k = tz.todayKey(); ev = await require('./calendar').eventsBetween(k, tz.shiftKey(k, 1)); } catch (e) { ev = []; }
   out.next_event = nextEvent(ev);
+  // the field's extras (garmin-extras.js): fuel prompts, fuel tank, sunset, turn buffer, VO2, pre-ride, energy
+  try { Object.assign(out, await require('./garmin-extras').extrasFor(await P.sessionFor('today'))); } catch (e) { /* the session stands without them */ }
   return out;
 }
 
@@ -133,6 +144,11 @@ function attach(app) {
     try { res.json(await receive(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.get('/garmin/session/today', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await sessionToday()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  // the Edge's lap press at a fuel prompt, and the post-ride rating (garmin-extras.js)
+  app.post('/garmin/fuel', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await require('./garmin-extras').logFuel(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
+  app.post('/garmin/rating', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await require('./garmin-extras').rateRide(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.post('/garmin/build', async (req, res) => { if (!auth(req, res)) return;
     try { res.json({ ok: true, run: await noteBuild(req.body || {}) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
   app.get('/garmin/build', async (req, res) => { if (!auth(req, res)) return;

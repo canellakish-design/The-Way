@@ -75,5 +75,14 @@ const events = [
     const flag = C.specialPeriods('8:15 Advisory\n8:30 - 9:40 Period 1 (70 min)\n9:45 - 11:25 Period 2 (100 min)\n12:05 Lunch\n12:50 Period 3 (70 min)\n2:05 Period 4 (70 min)\n4:00 Regular buses depart');
     assert.deepStrictEqual(flag[3], { start_min: 12 * 60 + 50, end_min: 14 * 60 }); assert.deepStrictEqual(flag[4], { start_min: 14 * 60 + 5, end_min: 15 * 60 + 15 }); assert.deepStrictEqual(flag[2], { start_min: 585, end_min: 685 });
   });
+  await ok('a class already moved to the special day\'s period time stays put (no second re-timing)', () => {
+    const desc = '8:00 - 10:00    PLC/Weather-Related Delay\n10:15 Advisory\n10:30 - 11:20 Period 1 (50 min)\n11:25 - 12:35 Period 2 (70 min)\n12:35 Lunch\n1:30 - 2:20 Period 3 (50 min)\n2:25 - 3:15 Period 4 (50 min)';
+    const special = { summary: 'Special Schedule: Faculty Professional Development (Two-Hour Delay)', allDay: true, start: '2026-11-09', end: '2026-11-10', description: desc, calendar: 'Upper School' };
+    const movedF2 = cls('2026-11-09', '10:30', 'F2'), movedG1 = cls('2026-11-09', '11:25', 'G1'), notMoved = cls('2026-11-09', '08:30', 'E1');
+    const outEv = C.applySpecialSchedules([special, movedF2, movedG1, notMoved]);
+    const at_ = k => tz.minutesOf(new Date(outEv.find(e => e.summary.includes('Sec. ' + k)).start));
+    assert.strictEqual(at_('F2'), 10 * 60 + 30); assert.strictEqual(at_('G1'), 11 * 60 + 25);
+    assert.strictEqual(at_('E1'), 10 * 60 + 30);   // a regular 8:30 class still moves to Period 1
+  });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });
