@@ -622,27 +622,29 @@
       "fiber_g": 0
     },
     {
-      "name": "whey protein",
+      "name": "huel plant protein",
       "match": [
-        "whey",
+        "huel",
+        "plant protein",
         "protein powder",
         "protein shake",
-        "protein smoothie"
+        "protein smoothie",
+        "whey"
       ],
-      "serving_g": 30,
-      "iron_mg": 0.5,
-      "calcium_mg": 400,
-      "magnesium_mg": 70,
-      "potassium_mg": 500,
-      "sodium_mg": 170,
-      "zinc_mg": 0.5,
+      "serving_g": 29,
+      "iron_mg": 0,
+      "calcium_mg": 0,
+      "magnesium_mg": 0,
+      "potassium_mg": 0,
+      "sodium_mg": 0,
+      "zinc_mg": 0,
       "vitamin_d_ug": 0,
-      "b12_ug": 1,
+      "b12_ug": 0,
       "folate_ug": 0,
       "vitamin_c_mg": 0,
       "vitamin_a_ug": 0,
-      "omega3_mg": 0,
-      "fiber_g": 1
+      "omega3_mg": 100,
+      "fiber_g": 1.8
     },
     {
       "name": "spinach, cooked",

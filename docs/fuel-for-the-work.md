@@ -6,7 +6,7 @@ Carbohydrate periodised by the session, not the day's name (Impey et al. 2018, *
 
 | Kind | When | Before | On the bike | Within 2 h after |
 |---|---|---|---|---|
-| **low** | a Zone 1 ride under 90 min, morning; one a week; never on a hard day or the day before one | coffee + 20 g whey, under 20 g carbs | water | 45 g protein, ~0.4 g/kg carbs |
+| **low** | a Zone 1 ride under 90 min, morning; one a week; never on a hard day or the day before one | coffee + a Huel plant protein shake, under 20 g carbs | water | 45 g protein, ~0.4 g/kg carbs |
 | **light** | a Zone 1 ride under 2 h | 25 g+ carbs with 30 g protein, 1–2 h before | 30 g/h past 75 min | 45 g protein, ~40–55 g carbs |
 | **long** | 2 h and up | ~1 g/kg carbs, 2–3 h before | 60 g/h (90 past 2.5 h) | 45 g protein, up to 1.2 g/kg carbs; starch at dinner |
 | **hard** | VO2, threshold, a race | carbs 2–3 h before | the 50 g bottle | 45 g protein, carbs: recover high |
