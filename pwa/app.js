@@ -1907,7 +1907,7 @@ V.today = async function(){
     drawEnergyDetail();
     // the live energy line (the Fuel page's chart, links.js) under the CTL and meter, above the boxes: today
     const de = document.getElementById("dayEnergy");
-    if (de && window.balanceHTML && b && b.points){ const open = !!(de.querySelector("details[open]")); de.innerHTML = window.balanceHTML(b, foodData && foodData.target && foodData.target.base_burn); if (open){ const d = de.querySelector("details"); if (d) d.open = true; } }
+    if (de && window.balanceHTML && b && b.points){ const open = !!(de.querySelector("details[open]")); de.innerHTML = window.balanceHTML(b, foodData && foodData.target && foodData.target.base_burn, { compact: true }); if (open){ const d = de.querySelector("details"); if (d) d.open = true; } }
   };
   const drawEnergyDetail = ()=>{
     const d = document.getElementById("enDetail"), f = document.getElementById("enField"); if (!d) return;
