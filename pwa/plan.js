@@ -6,6 +6,7 @@
 (function(){
 
 const J = {"Content-Type":"application/json"};
+const FIRST_START = "07:30";   // sleep first (bridge/sleep-window.js): an hour after a 6:30 wake, never before 7 a.m.
 const pad = n => String(n).padStart(2,"0");
 function keyAdd(k,n){ const [y,m,d]=k.split("-").map(Number); return new Date(Date.UTC(y,m-1,d)+n*864e5).toISOString().slice(0,10); }
 function mondayOf(k){ const [y,m,d]=k.split("-").map(Number); const wd=new Date(Date.UTC(y,m-1,d)).getUTCDay(); return keyAdd(k, -((wd+6)%7)); }
@@ -265,7 +266,7 @@ V.workout = async function(){
   const date0 = wanted < today ? keyAdd(today, 1) : wanted;
 
   // A new workout's start: a window tapped on the day passes its own; today, the next whole hour at least
-  // fifteen minutes ahead with nothing else planned in it (10:00p at 9:36p, never 9:00p); 7:00a is the
+  // fifteen minutes ahead with nothing else planned in it (10:00p at 9:36p, never 9:00p); 7:30a is the
   // house start, nothing earlier. Another day keeps the old default, the time of day now in 15-minute steps.
   let busy = [];
   if (!/^\d{2}:\d{2}$/.test(p.time||"")) try{ const c = await bridge(`/calendar?from=${date0}&to=${date0}`); const d0 = c && c.days && c.days[0];
@@ -273,8 +274,9 @@ V.workout = async function(){
   const hhmm = m => pad(Math.floor(m / 60)) + ":" + pad(m % 60);
   const nextFree = () => {
     const dnow = new Date();
-    if (date0 !== today){ let m = dnow.getHours() * 60 + dnow.getMinutes() + 15; m = Math.ceil(m / 15) * 15; return hhmm(Math.max(7 * 60, Math.min(21 * 60, m))); }
-    let m = Math.max(7 * 60, Math.ceil((dnow.getHours() * 60 + dnow.getMinutes() + 15) / 60) * 60);
+    // sleep first: from 7:30, and another day's default no later than 7:30p (a 60-minute ride then ends 2 h before bed)
+    if (date0 !== today){ let m = dnow.getHours() * 60 + dnow.getMinutes() + 15; m = Math.ceil(m / 15) * 15; return hhmm(Math.max(7 * 60 + 30, Math.min(19 * 60 + 30, m))); }
+    let m = Math.max(7 * 60 + 30, Math.ceil((dnow.getHours() * 60 + dnow.getMinutes() + 15) / 60) * 60);
     while (m < 23 * 60 && busy.some(([a, b]) => m < b && m + 60 > a)) m += 60;
     return hhmm(Math.min(23 * 60, m));
   };
@@ -287,9 +289,9 @@ V.workout = async function(){
         <button class="plibitem" data-i="-1"><span class="pn">Blank workout</span><span class="pm">build it step by step</span></button></div>`;
     box.querySelectorAll(".plibitem").forEach(b=>b.onclick = ()=>{
       const t = lib[+b.dataset.i];
-      // 7:00 is the house start, nothing earlier; the meal plan hangs off this time. A window
-      // tapped on the day passes its own start.
-      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? (p.time < "07:00" ? "07:00" : p.time) : nextFree();
+      // 7:30 is the house start (sleep first: an hour after a 6:30 wake), nothing earlier; the meal plan hangs
+      // off this time. A window tapped on the day passes its own start.
+      const t0 = /^\d{2}:\d{2}$/.test(p.time||"") ? (p.time < FIRST_START ? FIRST_START : p.time) : nextFree();
       const where = p.where === "out" ? "Ride" : p.where === "in" ? "VirtualRide" : null;
       W = t ? {name:t.name, date:date0, time:t0, sport:where || t.sport, notes:notesFor(t, t.notes||"", where || t.sport), steps:clone(t.steps), tpl:t}
             : {name:"Workout", date:date0, time:t0, sport:where || "Ride", notes:"", steps:[blankStep()]};
@@ -306,7 +308,7 @@ V.workout = async function(){
         <label for="wName">Name</label><input id="wName" value="${esc(W.name)}">
         <div class="row3">
           <div><label for="wDate">Date</label><input id="wDate" type="date" min="${saved ? "" : today}" value="${esc(W.date)}"></div>
-          <div><label for="wTime">Start</label><input id="wTime" type="time" min="07:00" value="${esc(W.time||"")}"></div>
+          <div><label for="wTime">Start</label><input id="wTime" type="time" min="${FIRST_START}" value="${esc(W.time||"")}"></div>
           <div><label for="wSport">Where</label><select id="wSport">
             ${["Ride","VirtualRide"].concat(["Ride","VirtualRide"].includes(W.sport) ? [] : [W.sport]).map(s=>`<option value="${s}"${W.sport===s?" selected":""}>${SPORT[s]||s}</option>`).join("")}</select></div>
         </div>
@@ -327,12 +329,13 @@ V.workout = async function(){
       <details class="card"><summary>What intervals.icu receives</summary><pre id="wText" class="ptext"></pre></details>`;
     const bind = (id, k, f) => { const el = document.getElementById(id); el.oninput = el.onchange = ()=>{ W[k] = f ? f(el.value) : el.value; schedule(); }; };
     bind("wName","name"); bind("wDate","date"); bind("wNotes","notes");
-    // no workouts before 7 a.m.: an earlier start is set back to 7:00a at once, and said beside Save (on the first screen)
+    // sleep first: a new start before 7:30 is set back to 7:30a at once, and said beside Save (on the first screen);
+    // a session already saved earlier keeps its time unless it is moved
     const tEl = document.getElementById("wTime");
     tEl.oninput = ()=>{ W.time = tEl.value; schedule(); };
     tEl.onchange = ()=>{ const v = tEl.value, m2 = document.getElementById("wMsg");
-      if (v && v < "07:00"){ tEl.value = "07:00"; W.time = "07:00"; if (m2) m2.textContent = `No workouts before 7 a.m.: ${hm12(v)} is set to 7:00a.`; }
-      else { W.time = v; if (m2 && /^No workouts before/.test(m2.textContent)) m2.textContent = ""; }
+      if (v && v < FIRST_START && !(saved && saved.time === v)){ tEl.value = FIRST_START; W.time = FIRST_START; if (m2) m2.textContent = `Sleep first: no workouts before ${hm12(FIRST_START)}. ${hm12(v)} is set to ${hm12(FIRST_START)}.`; }
+      else { W.time = v; if (m2 && /^Sleep first/.test(m2.textContent)) m2.textContent = ""; }
       schedule(); };
     // the notes follow where the ride is: road notes for a road ride, trainer notes on the trainer
     const sEl = document.getElementById("wSport");
@@ -364,7 +367,7 @@ V.workout = async function(){
 
   async function store(send){
     const msg = document.getElementById("wMsg") || document.getElementById("wSync"); msg.textContent = send ? "Saving and sending…" : "Saving…";
-    if (W.time && W.time < "07:00"){ const was = W.time; W.time = "07:00"; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = "07:00"; msg.textContent = `No workouts before 7 a.m.: ${hm12(was)} is set to 7:00a. Save again to keep it.`; return; }
+    if (W.time && W.time < FIRST_START && !(saved && saved.time === W.time)){ const was = W.time; W.time = FIRST_START; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = FIRST_START; msg.textContent = `Sleep first: no workouts before ${hm12(FIRST_START)}. ${hm12(was)} is set to ${hm12(FIRST_START)}. Save again to keep it.`; return; }
     const body = JSON.stringify(Object.assign({}, W, {time: W.time || null, send, tpl: undefined}));
     try{
       const r = saved ? await bridge("/workouts/"+encodeURIComponent(saved.id),{method:"PUT",headers:J,body})
@@ -374,7 +377,7 @@ V.workout = async function(){
       editor();
     }catch(e){ const t = String(e.message).replace(/^bridge \d+ — /, ""); msg.textContent = t;
       // the server's 7 a.m. refusal: the field goes back to the earliest start, so the next Save is one tap
-      if (/before 7 a\.m\./i.test(t)){ W.time = "07:00"; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = "07:00"; msg.textContent = t + " The start is set to 7:00a."; } }
+      if (/before 7 a\.m\.|Sleep first/i.test(t)){ W.time = FIRST_START; const tEl = document.getElementById("wTime"); if (tEl) tEl.value = FIRST_START; msg.textContent = t + ` The start is set to ${hm12(FIRST_START)}.`; } }
   }
 
   function drawSteps(){

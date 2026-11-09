@@ -47,7 +47,11 @@ async function settings() { return W.settingsOf(await getJSON('workout-settings'
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 const isTime = s => /^\d{2}:\d{2}$/.test(String(s || ''));
 
-const EARLIEST = '07:00';   // a standing rule: no workouts before 7 a.m., refused here, not only in the advisor's prompt
+// a standing rule, refused here, not only in the advisor's prompt: no workout before 7 a.m., and, sleep first
+// (sleep-window.js, Harry 9 Nov), none until an hour after waking: 7:30 with his 6:30 wake
+const SWin = require('./sleep-window');
+const EARLIEST = SWin.toHM(SWin.DEFAULT_RULES.earliest_workout);
+const earliestHM = async () => { try { return SWin.toHM((await SWin.get()).earliest_workout); } catch (e) { return EARLIEST; } };
 function durationOf(items) { let t = 0; for (const x of items || []) { if (x.kind === 'repeat') t += (x.count || 1) * durationOf(x.steps); else t += x.dur_s || 0; } return t; }
 // "Zone 1, 60 min" stays true when the steps grow to 90: a library-shaped name follows the length
 function nameForLength(name, steps) {
@@ -55,11 +59,14 @@ function nameForLength(name, steps) {
   if (!mins) return name;
   return String(name || '').replace(/^(.*?),\s*\d+\s*min\b/, (m0, head) => `${head}, ${mins} min`);
 }
-function clean(body, prev) {
-  const b = body || {}, p = prev || {};
+function clean(body, prev, earliest) {
+  const b = body || {}, p = prev || {}, first = earliest || EARLIEST;
   const date = isDate(b.date) ? b.date : (p.date || tz.todayKey());
   const askedTime = b.time === '' || b.time === null ? null : (isTime(b.time) ? b.time : (p.time || null));
-  if (askedTime && askedTime < EARLIEST) { const err = new Error(`No workouts before 7 a.m. (${tz.hm12(askedTime)} asked). The earliest start is 7:00a.`); err.status = 400; throw err; }
+  // never before 7 a.m., even kept from an old edit; a newly asked time not before an hour after waking
+  // (a session already on the calendar at 7:00 keeps its time when edited, and the Day flags it)
+  if (askedTime && askedTime < '07:00') { const err = new Error(`No workouts before 7 a.m. (${tz.hm12(askedTime)} asked). The earliest start is ${tz.hm12(first)}.`); err.status = 400; throw err; }
+  if (askedTime && isTime(b.time) && b.time !== p.time && askedTime < first) { const err = new Error(`Sleep first: no workouts before ${tz.hm12(first)}, an hour after waking (${tz.hm12(askedTime)} asked).`); err.status = 400; throw err; }
   return {
     id: p.id || 'w_' + crypto.randomBytes(6).toString('hex'),
     date,
@@ -524,6 +531,9 @@ async function calendar(from, to, o) {
       totals, compliance: dayCompliance(graded, totals, k < today, done.length) });
     if (days.length > 62) break;
   }
+  // sleep first (sleep-window.js): a session still to come that starts under an hour after waking, or ends
+  // within 2 h of bed (3 h if hard), carries a "cuts sleep" flag; warned, never refused
+  try { const R = await SWin.get(); for (const d of days) for (const w of d.planned || []) { if (w.logged || !w.time) continue; const f = SWin.lateFlag({ name: w.name, time: w.time, minutes: Math.round(((w.metrics && w.metrics.duration_s) || 3600) / 60) }, R); if (f) w.sleep = f; } } catch (e) { /* no flags */ }
   // fuel for the work required: each day's carbs from its sessions, the week's train-low rule applied in order
   try { const wf = await require('./fuel-week').weekFuel(from, to, st.ftp); for (const d of days) d.fuel = wf[d.date] || null; } catch (e) { /* the days stand without it */ }
   // the magic buckets (buckets.js): each planned ride's plan in seconds per bucket on the lines of its day, and
@@ -682,7 +692,7 @@ function attach(app) {
 
   app.post('/workouts', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db();
-    let w; try { w = clean(req.body); await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+    let w; try { w = clean(req.body, undefined, await earliestHM()); await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
     if ((req.body || {}).send) w = await syncOne(w, st);
     d.workouts[w.id] = w; await save(d);
     res.json(withMetrics(w, st)); });
@@ -690,7 +700,7 @@ function attach(app) {
   app.put('/workouts/:id', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db(); const prev = d.workouts[req.params.id];
     if (!prev) return res.status(404).json({ error: 'no such workout' });
-    let w; try { w = clean(req.body, prev); if (w.date !== prev.date) await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
+    let w; try { w = clean(req.body, prev, await earliestHM()); if (w.date !== prev.date) await restCheck(w, req.body); } catch (e) { return res.status(e.status || 400).json({ error: e.message }); }
     // A workout already on the Garmin is changed there too, or it is marked
     // as out of date — never silently left different.
     if ((req.body || {}).send || (prev.sync && prev.sync.state === 'synced')) {
@@ -724,7 +734,7 @@ async function restCheck(w, body) {
 }
 async function create(body) {
   const st = await settings(); const d = await db();
-  const w = clean(body);
+  const w = clean(body, undefined, await earliestHM());
   await restCheck(w, body);
   d.workouts[w.id] = w; await save(d);
   return withMetrics(w, st);
@@ -735,7 +745,7 @@ async function create(body) {
 async function update(id, body) {
   const st = await settings(); const d = await db(); const prev = d.workouts[id];
   if (!prev) return null;
-  let w = clean(body, prev);
+  let w = clean(body, prev, await earliestHM());
   if (w.date !== prev.date) await restCheck(w, body);
   if (prev.sync && prev.sync.state === 'synced') {
     if (prev.date !== w.date) await unsyncOne(prev);

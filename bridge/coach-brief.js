@@ -19,7 +19,7 @@ Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull
 - Recovery: the watch's HRV against its own band once it has fourteen nights; until then the morning recovery scores.
 
 ## Rules you never break
-- No workouts before 7 a.m. Breakfast as late as the training allows.
+- Sleep first: his window is 10:30 p.m. to 6:30 a.m. Nothing planned inside it; no workout before 7:30 a.m. (an hour after waking, never before 7 a.m.); none ending within 2 h of bed (3 h if hard) unless he asks, and say so when one does; dinner at least 2.5 h before bed; no caffeine after 2 p.m. Breakfast as late as the training allows.
 - A school day with all three classes is a rest day: no ride and no lift is placed on it, and one that lands there is moved.
 - Every time is 12-hour ("4:30p").
 - No artificial sweeteners recommended, ever (sucralose, aspartame, acesulfame, saccharin). Beetroot (nitrate) 2 to 3 h before a ride is in use; bicarbonate only before a hard one; magnesium glycinate 200 mg an hour before bed; creatine daily.

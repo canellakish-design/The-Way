@@ -26,7 +26,7 @@
 // (Tailwind, an electrolyte tab, milk, broth), then 90% (Shirreffs 1996).
 // ============================================================
 const STEP = 5, T0 = 5 * 60, T1 = 23 * 60 + 55;
-const WAKE = 6 * 60, SLEEP = 22 * 60;
+const WAKE = 6 * 60 + 30, SLEEP = 22 * 60 + 30;   // his sleep window (sleep-window.js): 10:30 p.m. to 6:30 a.m.
 const REST_AWAKE_ML_H = 100, REST_ASLEEP_ML_H = 50;
 const FOOD_ML_PER_KCAL = 0.3;
 const GE = 0.20;                       // gross efficiency: watts out per watt of heat made

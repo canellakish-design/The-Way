@@ -326,3 +326,4 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 .thrkey{display:grid; grid-template-columns:auto minmax(0,1fr) minmax(0,1fr); column-gap:14px; row-gap:8px; align-items:center; margin:4px 0 10px; font-family:var(--mono); font-size:13px; color:var(--ink)}
 .thrkey .thk-h{font-size:9.5px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted)}
 .thrkey .thk-b{font-family:var(--num); font-weight:700; font-size:18px; letter-spacing:.5px; white-space:nowrap}
+.sleepflag{color:var(--muted)}

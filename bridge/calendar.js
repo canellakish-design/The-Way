@@ -619,16 +619,17 @@ async function scheduleReport(q) {
       // double up. Today's rows know whether the dose is already logged.
       try {
         const S = require('./supps');
+        const SWin = await require('./sleep-window').get().catch(() => null);   // sleep first: nothing before waking
         const todayKey = tz.todayKey();
         let todayEntries = [], yEntries = [];
         try { const { getJSON } = require('./storage'); todayEntries = ((await getJSON('food-' + todayKey, null)) || {}).entries || []; yEntries = ((await getJSON('food-' + tz.shiftKey(todayKey, -1), null)) || {}).entries || []; } catch (e) { /* no journal */ }
         for (const day of days) {
           const rides = (day.events || []).filter(e => e.category === 'training' && e.kind === 'ride' && e.start_min != null)
             .map(e => ({ name: e.summary, time: S.toHM(e.start_min), sport: 'Ride', done: false }));
-          const r = S.dueFor(day.date, rides, day.today ? todayEntries : [], null, day.today ? yEntries : []);
+          const r = S.dueFor(day.date, rides, day.today ? todayEntries : [], null, day.today ? yEntries : [], SWin);
           for (const x of r.due) {
             if (!x.time || x.key === 'creatine') continue;                          // creatine is any time: it lives under the Lift box
-            const sm = S.toMin(x.time); if (sm == null || sm < (S.EARLIEST || 330)) continue;   // never before 5:30 a.m.
+            const sm = S.toMin(x.time); if (sm == null || sm < (SWin ? SWin.wake : S.EARLIEST)) continue;   // never before waking
             day.events.push({ summary: x.name, detail: x.why, category: 'supplement', source: 'rx', kind: 'supplement', calendar: 'The Way', allDay: false, blocking: false,
               minutes: 10, start_min: sm, end_min: sm + 10, from: fmtMin(sm), to: fmtMin(sm + 10), rx_key: x.key, taken: !!x.taken, for_session: x.session || null });
           }
