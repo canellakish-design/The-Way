@@ -1,0 +1,395 @@
+From df49eda7615c31f1780017e8e9042a79b940d57c Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 9 Nov 2026 04:04:21 +0000
+Subject: [PATCH] next_event, delay-day classes, Hexis/Alma removed, Garmin
+ extras (fuel, tank, sunset, turn, VO2, pre-ride, energy) + /garmin/fuel and
+ /garmin/rating
+
+---
+ bridge/classes.js       |   3 +
+ bridge/classes.test.js  |   9 +++
+ bridge/garmin-extras.js | 130 ++++++++++++++++++++++++++++++++++++++++
+ bridge/garmin.js        |  54 ++++++++++++++++-
+ bridge/garmin.test.js   |  79 ++++++++++++++++++++++++
+ bridge/status.js        |  29 +--------
+ 6 files changed, 276 insertions(+), 28 deletions(-)
+ create mode 100644 bridge/garmin-extras.js
+
+diff --git a/bridge/classes.js b/bridge/classes.js
+index 56988c4..910eb8a 100644
+--- a/bridge/classes.js
++++ b/bridge/classes.js
+@@ -104,6 +104,9 @@ function applySpecialSchedules(events) {
+     const day = tz.keyOf(new Date(e.start)), sp = specials[day];
+     if (!sp) { out.push(e); continue; }
+     const startMin = tz.minutesOf(new Date(e.start));
++    // Already at one of the day's special period times: the calendar itself was re-timed (Harry moves his own
++    // class events on a delay day), so re-timing again would push it a period later. Leave it.
++    if (Object.values(sp.periods).some(q => Math.abs(q.start_min - startMin) <= 1)) { out.push(e); continue; }
+     let idx = -1, best = 31;
+     PERIODS.forEach((s, i) => { const d = Math.abs(s - startMin); if (d < best) { best = d; idx = i; } });
+     if (idx < 0) { out.push(e); continue; }
+diff --git a/bridge/classes.test.js b/bridge/classes.test.js
+index 654e3b8..065296c 100644
+--- a/bridge/classes.test.js
++++ b/bridge/classes.test.js
+@@ -67,5 +67,14 @@ const events = [
+     const flag = C.specialPeriods('8:15 Advisory\n8:30 - 9:40 Period 1 (70 min)\n9:45 - 11:25 Period 2 (100 min)\n12:05 Lunch\n12:50 Period 3 (70 min)\n2:05 Period 4 (70 min)\n4:00 Regular buses depart');
+     assert.deepStrictEqual(flag[3], { start_min: 12 * 60 + 50, end_min: 14 * 60 }); assert.deepStrictEqual(flag[4], { start_min: 14 * 60 + 5, end_min: 15 * 60 + 15 }); assert.deepStrictEqual(flag[2], { start_min: 585, end_min: 685 });
+   });
++  await ok('a class already moved to the special day\'s period time stays put (no second re-timing)', () => {
++    const desc = '8:00 - 10:00    PLC/Weather-Related Delay\n10:15 Advisory\n10:30 - 11:20 Period 1 (50 min)\n11:25 - 12:35 Period 2 (70 min)\n12:35 Lunch\n1:30 - 2:20 Period 3 (50 min)\n2:25 - 3:15 Period 4 (50 min)';
++    const special = { summary: 'Special Schedule: Faculty Professional Development (Two-Hour Delay)', allDay: true, start: '2026-11-09', end: '2026-11-10', description: desc, calendar: 'Upper School' };
++    const movedF2 = cls('2026-11-09', '10:30', 'F2'), movedG1 = cls('2026-11-09', '11:25', 'G1'), notMoved = cls('2026-11-09', '08:30', 'E1');
++    const outEv = C.applySpecialSchedules([special, movedF2, movedG1, notMoved]);
++    const at_ = k => tz.minutesOf(new Date(outEv.find(e => e.summary.includes('Sec. ' + k)).start));
++    assert.strictEqual(at_('F2'), 10 * 60 + 30); assert.strictEqual(at_('G1'), 11 * 60 + 25);
++    assert.strictEqual(at_('E1'), 10 * 60 + 30);   // a regular 8:30 class still moves to Period 1
++  });
+   console.log(n + ' passed');
+ })().catch(e => { console.error(e); process.exit(1); });
+diff --git a/bridge/garmin-extras.js b/bridge/garmin-extras.js
+new file mode 100644
+index 0000000..a5d6f6d
+--- /dev/null
++++ b/bridge/garmin-extras.js
+@@ -0,0 +1,130 @@
++// ============================================================
++// garmin-extras.js — what the Edge field needs beyond the session itself (9 Nov 2026):
++// the fuel prompts, the fuel tank at the start, sunset, how long after the ride he needs before
++// the next event, the VO2 targets, the pre-ride screen, the energy line; and the two things the
++// Edge sends back: a fuel press (logged as on-bike carbs) and a post-ride rating.
++// Pure helpers first (tested in garmin.test.js), then the gatherers that read the stores.
++// ============================================================
++const { getJSON, setJSON } = require('./storage');
++const tz = require('./tz');
++
++const HOME = { lat: 38.978, lon: -76.492 };        // Annapolis
++const SOCCERPLEX = { lat: 39.153, lon: -77.312 };   // Maryland SoccerPlex, Boyds
++const PLEX_RE = /soccerplex|schaeffer|germantown|boyds/i;
++const VO2_RE = /\bvo2\b|40\/20|4\s*[x×]\s*4/i;
++const MTB_RE = /mountain bike|\bmtb\b/i;
++
++// ---- the fuel prompts: one rule with the plan's on-bike line (food-math.onBike) ----
++// grams per hour by session length; a hard session is always fed; under 75 min easy, water only.
++function fuelPlan(name, minutes) {
++  const mins = Number(minutes) || 0;
++  const hard = VO2_RE.test(String(name || ''));
++  let gph;
++  if (hard) gph = mins > 0 ? Math.min(60, Math.round(50 / (mins / 60))) : 50;
++  else if (mins < 75) return null;
++  else if (mins < 120) gph = 30;
++  else if (mins <= 150) gph = 60;
++  else gph = 90;
++  const every = 20;
++  return { every_min: every, grams: Math.round(gph * every / 60), product: 'Tailwind', start_min: 20, g_per_h: gph };
++}
++
++// ---- sunset: NOAA's simplified solar position, good to a minute or two ----
++function sunsetEpoch(dateKey, lat, lon) {
++  const [y, m, d] = String(dateKey).split('-').map(Number);
++  const rad = Math.PI / 180;
++  const N = Math.floor(Date.UTC(y, m - 1, d) / 864e5 - Date.UTC(y, 0, 0) / 864e5);
++  const g = 2 * Math.PI / 365 * (N - 1 + 0.5);
++  const eqt = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
++  const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);
++  const ha = Math.acos(Math.cos(90.833 * rad) / (Math.cos(lat * rad) * Math.cos(decl)) - Math.tan(lat * rad) * Math.tan(decl)) / rad;
++  const minutesUTC = 720 - 4 * (lon - ha) - eqt;   // sunset, minutes after UTC midnight
++  return Math.round(Date.UTC(y, m - 1, d) / 1000 + minutesUTC * 60);
++}
++
++// where the ride starts, from its notes: the SoccerPlex weekend, else home
++function placeOf(notes) { return PLEX_RE.test(String(notes || '')) ? SOCCERPLEX : HOME; }
++
++// the minutes needed after the ride before the next event: a shower and the drive at the fields
++function turnBuffer(notes) { return { buffer_min: PLEX_RE.test(String(notes || '')) ? 45 : 30 }; }
++
++function vo2Of(name) { return VO2_RE.test(String(name || '')) ? { hr_floor: 147, goal_min: [8, 12] } : null; }
++
++// the first line of the EAT note's "Before:" for the pre-ride screen
++function eatBefore(notes) {
++  const m = String(notes || '').match(/Before:\s*([^\n]+)/i);
++  return m ? m[1].trim().slice(0, 60) : null;
++}
++
++// the session's fuel tank at its start, from the day's live fuel model (food.dayReport().energy)
++function tankFor(energy, name) {
++  if (!energy) return null;
++  const s = (energy.starts || []).find(x => String(x.name || '') === String(name || '')) || null;
++  const p = s || energy.now || null;
++  if (!p || p.pct == null) return null;
++  const full = energy.full_g || 110, legsFull = energy.legs_full_g || 320;
++  return { quick_pct: Math.round(p.pct), legs_pct: p.legs_pct == null ? null : Math.round(p.legs_pct),
++    quick_g: Math.round(full * p.pct / 100), legs_g: p.legs_pct == null ? null : Math.round(legsFull * p.legs_pct / 100) };
++}
++
++// ---- the gatherer: everything above for today's session, each part on its own so one dead source never blanks the rest ----
++async function extrasFor(session) {
++  const w = (session && session.workout) || null;
++  const today = tz.todayKey();
++  const out = { fuel: null, tank: null, sunset: null, turn: null, vo2: null, recovery: null, eat_before: null, energy: null, sport: null };
++  const place = placeOf(w && w.notes);
++  try { out.sunset = sunsetEpoch(today, place.lat, place.lon); } catch (e) { out.sunset = null; }
++  if (!w) return out;
++  out.sport = MTB_RE.test(w.name || '') ? 'mtb' : VO2_RE.test(w.name || '') ? 'vo2' : (w.sport || null);
++  out.fuel = fuelPlan(w.name, (w.duration_s || 0) / 60);
++  out.turn = turnBuffer(w.notes);
++  out.vo2 = vo2Of(w.name);
++  out.eat_before = eatBefore(w.notes);
++  let day = null;
++  try { day = await require('./food').dayReport(today); } catch (e) { day = null; }
++  if (day) {
++    try { out.tank = tankFor(day.energy, w.name); } catch (e) { out.tank = null; }
++    try {
++      const t = day.target || {};
++      out.energy = { base_burn: t.base_burn != null ? Math.round(t.base_burn) : null, eaten_kcal: day.actual && day.actual.kcal != null ? Math.round(day.actual.kcal) : 0,
++        day_target_net: t.deficit != null ? Math.round(t.deficit) : null };
++    } catch (e) { out.energy = null; }
++  }
++  try { const s = await require('./whoop').sleepLatest({ sync: false }); out.recovery = s && s.recovery && s.recovery.score != null ? Math.round(s.recovery.score) : null; } catch (e) { out.recovery = null; }
++  return out;
++}
++
++// ---- what the Edge sends back ----
++// A fuel press: on-bike carbs, logged once per (ride, second). Tailwind 2 scoops: 50 g carbs in 200 kcal.
++async function logFuel(b) {
++  const x = b || {};
++  const rideId = String(x.ride_id || '').slice(0, 40), t = Math.round(Number(x.t) || 0);
++  const grams = Math.max(1, Math.min(100, Math.round(Number(x.grams) || 20)));
++  if (!rideId) { const e = new Error('ride_id needed'); e.status = 400; throw e; }
++  const seen = await getJSON('garmin-fuel', { presses: [] });
++  const key = rideId + '|' + t;
++  if ((seen.presses || []).some(p => p.key === key)) return { ok: true, duplicate: true };
++  const product = String(x.product || 'Tailwind').slice(0, 40);
++  const entry = await require('./food').addKnown({ name: `${product}, ${grams} g carbs (on the bike)`, kcal: grams * 4, carbs_g: grams, protein_g: 0, fat_g: 0,
++    tags: [], why: 'Logged from the Edge with a lap press at a fuel prompt.', fits: 'yes' });
++  seen.presses = (seen.presses || []).concat([{ key, ride_id: rideId, t, grams, at: Date.now(), entry: entry && entry.id }]).slice(-500);
++  await setJSON('garmin-fuel', seen);
++  return { ok: true, entry: entry && entry.id };
++}
++
++// A rating: legs and breathing, 1 to 5. Kept with the ride, and the legs feed the fuel model's calibration.
++async function rateRide(b) {
++  const x = b || {};
++  const rideId = String(x.ride_id || '').slice(0, 40);
++  const legs = Math.round(Number(x.legs)), breathing = Math.round(Number(x.breathing));
++  const okN = n => n >= 1 && n <= 5;
++  if (!rideId || (!okN(legs) && !okN(breathing))) { const e = new Error('ride_id and legs or breathing 1 to 5 needed'); e.status = 400; throw e; }
++  const d = await getJSON('garmin-ratings', { rides: [] });
++  const row = { ride_id: rideId, legs: okN(legs) ? legs : null, breathing: okN(breathing) ? breathing : null, name: x.name ? String(x.name).slice(0, 80) : null, date: tz.todayKey(), at: Date.now() };
++  d.rides = (d.rides || []).filter(r => r.ride_id !== rideId).concat([row]).slice(-300);
++  await setJSON('garmin-ratings', d);
++  if (row.legs && row.name) { try { await require('./food').rateLegs(row.date + '|' + row.name, row.legs); } catch (e) { /* the rating stands on its own */ } }
++  return { ok: true, rating: row };
++}
++
++module.exports = { fuelPlan, sunsetEpoch, placeOf, turnBuffer, vo2Of, eatBefore, tankFor, extrasFor, logFuel, rateRide, HOME, SOCCERPLEX };
+diff --git a/bridge/garmin.js b/bridge/garmin.js
+index 6aec0f6..1a56e53 100644
+--- a/bridge/garmin.js
++++ b/bridge/garmin.js
+@@ -63,7 +63,54 @@ async function receive(b) {
+ 
+ // The day's session, small enough for the field to hold: the name, the line to count minutes above,
+ // and each step as [start_s, dur_s, target_w, hr_lo, hr_hi] (0 where a step has no such target).
++// The next calendar event after now, for the countdown on the field's bottom line ("Zoom: Girls staff  -1:45:12").
++// Timed events only: an all-day marker like "Day 4" is nothing to count down to. The Way's own training
++// events are left out. The events are the schedule's own (calendar.eventsBetween: Google as last synced, the
++// calendar feeds, the app's events, the written-down snapshot, with special school schedules applied), today
++// and tomorrow, so the Edge counts down to what the Day page shows.
++// Returns { start: epoch seconds, title } or null; the field shows "next event: --" for null.
++const TITLE_MAX = 22;
++// Short enough for one line on the Edge: drop bracketed asides when too long ("(CP) World History I (Sec. F2)"
++// reads "World History I"), then cut at the last whole word.
++function shortTitle(s) {
++  let x = String(s || '').replace(/\s+/g, ' ').trim();
++  if (x.length > TITLE_MAX) x = x.replace(/\([^)]*\)/g, ' ').replace(/\s+/g, ' ').trim() || x;
++  if (x.length > TITLE_MAX) { const cut = x.slice(0, TITLE_MAX + 1); const sp = cut.lastIndexOf(' '); x = (sp > 8 ? cut.slice(0, sp) : x.slice(0, TITLE_MAX)).trim(); }
++  return x || 'event';
++}
++// Only Harry's own events count down. The other teams' calendars (he oversees the whole girls program, so they
++// are all subscribed), the school-wide Upper School calendar and the boys' events are on the Day page for
++// context, but none of them is somewhere he has to be.
++const MY_TEAM = /^U16 G MARYLAND UNITED ECNL$/i;
++const NOT_MINE = /^(U\d{2} G MARYLAND UNITED\b.*|Upper School|Boys Events|Holidays in .*)$/i;
++function mine(e) {
++  const cal = String(e.calendar || '').trim();
++  return MY_TEAM.test(cal) || !NOT_MINE.test(cal);
++}
++function nextEvent(events, nowMs) {
++  const now = nowMs == null ? Date.now() : nowMs;
++  let best = null;
++  for (const e of events || []) {
++    if (!e || e.allDay || !e.start) continue;
++    if (e.category === 'training' || e.workout_id || !mine(e)) continue;
++    const t = Date.parse(e.start);
++    if (!Number.isFinite(t) || t <= now) continue;
++    if (!best || t < best.t) best = { t, e };
++  }
++  return best ? { start: Math.floor(best.t / 1000), title: shortTitle(best.e.summary) } : null;
++}
++
+ async function sessionToday() {
++  const out = await sessionCore();
++  let ev = [];
++  try { const k = tz.todayKey(); ev = await require('./calendar').eventsBetween(k, tz.shiftKey(k, 1)); } catch (e) { ev = []; }
++  out.next_event = nextEvent(ev);
++  // the field's extras (garmin-extras.js): fuel prompts, fuel tank, sunset, turn buffer, VO2, pre-ride, energy
++  try { Object.assign(out, await require('./garmin-extras').extrasFor(await P.sessionFor('today'))); } catch (e) { /* the session stands without them */ }
++  return out;
++}
++
++async function sessionCore() {
+   const s = await P.sessionFor('today');
+   const vt2 = s.thresholds && s.thresholds.vt2_hr ? s.thresholds.vt2_hr : 139;
+   // the buckets (buckets.js): the lines and colours the field draws with, and the plan in seconds per bucket.
+@@ -97,6 +144,11 @@ function attach(app) {
+     try { res.json(await receive(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
+   app.get('/garmin/session/today', async (req, res) => { if (!auth(req, res)) return;
+     try { res.json(await sessionToday()); } catch (e) { res.status(500).json({ error: e.message }); } });
++  // the Edge's lap press at a fuel prompt, and the post-ride rating (garmin-extras.js)
++  app.post('/garmin/fuel', async (req, res) => { if (!auth(req, res)) return;
++    try { res.json(await require('./garmin-extras').logFuel(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
++  app.post('/garmin/rating', async (req, res) => { if (!auth(req, res)) return;
++    try { res.json(await require('./garmin-extras').rateRide(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
+   app.post('/garmin/build', async (req, res) => { if (!auth(req, res)) return;
+     try { res.json({ ok: true, run: await noteBuild(req.body || {}) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+   app.get('/garmin/build', async (req, res) => { if (!auth(req, res)) return;
+@@ -105,4 +157,4 @@ function attach(app) {
+     try { const idx = await getJSON(P.INDEX, { rides: [] }); res.json({ rides: (idx.rides || []).filter(x => x.device).slice(-50) }); }
+     catch (e) { res.status(500).json({ error: e.message }); } });
+ }
+-module.exports = { attach, receive, sessionToday, noteBuild, MIN_SECONDS };
++module.exports = { attach, receive, sessionToday, noteBuild, nextEvent, MIN_SECONDS };
+diff --git a/bridge/garmin.test.js b/bridge/garmin.test.js
+index 22fb5c0..db7c80d 100644
+--- a/bridge/garmin.test.js
++++ b/bridge/garmin.test.js
+@@ -83,5 +83,84 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
+     for (let i = 0; i < 40; i++) await G.noteBuild({ ok: true });
+     assert.strictEqual(mem['garmin-build'].runs.length, 30);
+   });
++  await ok('next_event: the soonest timed event after now, never training, never all-day, short title', async () => {
++    const now = Date.parse('2026-11-09T14:00:00Z');
++    const ev = [
++      { summary: 'Day 4', start: '2026-11-09', end: '2026-11-10', allDay: true, category: 'busy' },
++      { summary: 'Earlier meeting', start: '2026-11-09T08:00:00-05:00', allDay: false, category: 'work' },
++      { summary: 'Z1 trainer 60 min', start: '2026-11-09T09:30:00-05:00', allDay: false, category: 'training' },
++      { summary: 'Push', start: '2026-11-09T09:40:00-05:00', allDay: false, category: 'busy', workout_id: 'w_x' },
++      { summary: '(CP) World History I (Sec. G1)', start: '2026-11-09T11:25:00-05:00', allDay: false, category: 'work' },
++      { summary: '(CP) World History I (Sec. F2)', start: '2026-11-09T10:30:00-05:00', allDay: false, category: 'work' },
++    ];
++    const x = G.nextEvent(ev, now);
++    assert.strictEqual(x.start, Date.parse('2026-11-09T10:30:00-05:00') / 1000);
++    assert.strictEqual(x.title, 'World History I');
++    assert.strictEqual(G.nextEvent([{ summary: 'Junior-Senior Flag Football Game', start: '2026-11-10T11:30:00-05:00' }], now).title, 'Junior-Senior Flag');
++    assert.ok(x.title.length <= 22);
++    assert.strictEqual(G.nextEvent([], now), null);
++    // other teams' calendars and the school-wide calendar never count down; his own team's does
++    const cals = [
++      { summary: 'U17 G MARYLAND UNITED ECNL - Practice', start: '2026-11-09T09:10:00-05:00', calendar: 'U17 G MARYLAND UNITED ECNL' },
++      { summary: 'Office Hours', start: '2026-11-09T09:20:00-05:00', calendar: 'Upper School' },
++      { summary: 'U16 G MARYLAND UNITED ECNL - Practice', start: '2026-11-09T09:30:00-05:00', calendar: 'U16 G MARYLAND UNITED ECNL' },
++    ];
++    assert.strictEqual(G.nextEvent(cals, now).start, Date.parse('2026-11-09T09:30:00-05:00') / 1000);
++    assert.strictEqual(G.nextEvent(ev.slice(0, 4), now), null);
++  });
++  await ok('session/today carries next_event from the schedule\'s events, and null without one', async () => {
++    const C = require('./calendar'); const real = C.eventsBetween;
++    C.eventsBetween = async () => [];
++    assert.strictEqual((await G.sessionToday()).next_event, null);
++    const soon = new Date(Date.now() + 3600e3).toISOString();
++    C.eventsBetween = async () => [{ summary: 'Zoom: Girls staff', start: soon, allDay: false, category: 'work' }];
++    const s = await G.sessionToday();
++    assert.deepStrictEqual(s.next_event, { start: Math.floor(Date.parse(soon) / 1000), title: 'Zoom: Girls staff' });
++    C.eventsBetween = async () => { throw new Error('no calendar'); };
++    assert.strictEqual((await G.sessionToday()).next_event, null);   // a dead calendar never breaks the field's session
++    C.eventsBetween = real;
++  });
++  await ok('extras: fuel prompts follow the plan\'s on-bike rule, a hard session is always fed, short easy rides get none', () => {
++    const X = require('./garmin-extras');
++    assert.strictEqual(X.fuelPlan('Z1 trainer 60 min', 60), null);
++    assert.deepStrictEqual(X.fuelPlan('Z1 road 120 min', 120), { every_min: 20, grams: 20, product: 'Tailwind', start_min: 20, g_per_h: 60 });
++    assert.strictEqual(X.fuelPlan('Z1 road 90 min', 90).grams, 10);
++    assert.strictEqual(X.fuelPlan('Long Z1', 180).grams, 30);
++    assert.ok(X.fuelPlan('VO2 4 × 4 min · heart rate 139–147', 50).grams > 0);
++  });
++  await ok('extras: sunset at the SoccerPlex on 13 Nov is about 4:55 p.m., VO2 targets only on VO2 days, the Plex needs 45 minutes', () => {
++    const X = require('./garmin-extras');
++    const ss = X.sunsetEpoch('2026-11-13', X.SOCCERPLEX.lat, X.SOCCERPLEX.lon);
++    const local = new Date(ss * 1000).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
++    const mins = (h => (+h[0] % 12 + 12) * 60 + +h[1])(local.replace(/\s*PM/, '').split(':'));
++    assert.ok(Math.abs(mins - (16 * 60 + 55)) <= 6, 'sunset ' + local);
++    assert.deepStrictEqual(X.vo2Of('VO2 4 × 4 min · heart rate 139–147'), { hr_floor: 147, goal_min: [8, 12] });
++    assert.strictEqual(X.vo2Of('Z1 trainer 60 min'), null);
++    assert.strictEqual(X.turnBuffer('Ride from the SoccerPlex lot').buffer_min, 45);
++    assert.strictEqual(X.turnBuffer('Home trainer').buffer_min, 30);
++    assert.strictEqual(X.eatBefore('EAT\nBefore: lunch at the fields by 1:30, carbs in it.\nOn the bike: x'), 'lunch at the fields by 1:30, carbs in it.');
++  });
++  await ok('extras: the tank is the session\'s start from the live fuel model, else now', () => {
++    const X = require('./garmin-extras');
++    const e = { full_g: 110, legs_full_g: 320, now: { pct: 50, legs_pct: 60 }, starts: [{ name: 'Z1 road 120 min', pct: 80, legs_pct: 75 }] };
++    assert.deepStrictEqual(X.tankFor(e, 'Z1 road 120 min'), { quick_pct: 80, legs_pct: 75, quick_g: 88, legs_g: 240 });
++    assert.strictEqual(X.tankFor(e, 'other').quick_pct, 50);
++    assert.strictEqual(X.tankFor(null, 'x'), null);
++  });
++  await ok('extras: a fuel press logs on-bike carbs once; a rating keeps legs and breathing', async () => {
++    const X = require('./garmin-extras'); const food = require('./food');
++    const logged = []; const realAdd = food.addKnown, realRate = food.rateLegs;
++    food.addKnown = async b => { logged.push(b); return { id: 'f_test' + logged.length }; };
++    food.rateLegs = async () => ({ ok: true });
++    const r1 = await X.logFuel({ ride_id: '1794', t: 1200, grams: 20 });
++    const r2 = await X.logFuel({ ride_id: '1794', t: 1200, grams: 20 });
++    assert.strictEqual(r1.entry, 'f_test1'); assert.strictEqual(r2.duplicate, true); assert.strictEqual(logged.length, 1);
++    assert.strictEqual(logged[0].carbs_g, 20); assert.strictEqual(logged[0].kcal, 80);
++    const r = await X.rateRide({ ride_id: '1794', legs: 4, breathing: 3, name: 'Z1 road 120 min' });
++    assert.strictEqual(r.rating.legs, 4); assert.strictEqual(r.rating.breathing, 3);
++    let bad = null; try { await X.rateRide({ ride_id: '1794', legs: 9 }); } catch (e) { bad = e; }
++    assert.ok(bad && bad.status === 400);
++    food.addKnown = realAdd; food.rateLegs = realRate;
++  });
+   console.log(n + ' passed');
+ })().catch(e => { console.error(e); process.exit(1); });
+diff --git a/bridge/status.js b/bridge/status.js
+index 4aa8523..4e02605 100644
+--- a/bridge/status.js
++++ b/bridge/status.js
+@@ -163,33 +163,8 @@ async function report() {
+     });
+   } catch (e) { push({ key: 'ical', name: 'Calendar feeds (iCal)', error: e.message }); }
+ 
+-  // ---- Hexis (pushed in by the morning run) ----
+-  try {
+-    const m = await getJSON('macros', { days: {} });
+-    const keys = Object.keys(m.days || {});
+-    const key = tz.todayKey();
+-    push({
+-      key: 'hexis', name: 'Hexis macros', role: 'the day\'s macro targets',
+-      configured: true,                       // nothing to configure — it's an inbox
+-      connected: keys.length > 0, has_data: !!m.days[key],
+-      detail: m.days[key] ? 'today posted' : keys.length ? `last posted ${keys.sort().pop()}` : 'nothing posted yet',
+-      auth_url: null,
+-      fix: m.days[key] ? null : 'run the morning Chrome fetch (deploy/hexis-morning-run.md)'
+-    });
+-  } catch (e) { push({ key: 'hexis', name: 'Hexis macros', error: e.message }); }
+-
+-  // ---- Alma (pushed in by the sync run) ----
+-  try {
+-    const i = await getJSON('intake', { days: {} });
+-    const keys = Object.keys(i.days || {});
+-    push({
+-      key: 'alma', name: 'Alma intake', role: 'what was actually eaten, for the compliance score',
+-      configured: true, connected: keys.length > 0, has_data: keys.length > 0,
+-      detail: keys.length ? `last posted ${keys.sort().pop()}` : 'nothing posted yet — falling back to the app\'s own food log',
+-      auth_url: null,
+-      fix: keys.length ? null : 'run the Alma sync (deploy/alma-sync.md)'
+-    });
+-  } catch (e) { push({ key: 'alma', name: 'Alma intake', error: e.message }); }
++  // Hexis and Alma were removed as connections (8 Nov 2026, Harry's call): The Way's own food log and
++  // targets replaced them, so their tiles only ever showed "nothing posted yet".
+ 
+   // ---- classes (a file in the repo) ----
+   try {
+-- 
+2.43.0
+
