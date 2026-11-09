@@ -68,10 +68,15 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     const s2 = await G.sessionToday();
     assert.strictEqual(s2.lines.vt1_w, 180); assert.strictEqual(s2.vt2_hr, 141);
     assert.deepStrictEqual(s2.buckets_plan, { low: 1440, high: 0, peak: 540 });   // 179 W is under the new 180 W VT1: LOW
-    // a ride-by-feel session plans nothing, and its free steps carry no band
+    // a ride by feel is a Zone 1 ride (9 Nov 2026): it plans its whole time LOW, and its free steps go to the Edge
+    // as the Zone 1 heart-rate band, so the field's bars show the Zone 1 target and its due line fills
     mem['plan-workouts'] = { workouts: { w_z1: { id: 'w_z1', date: today, time: '23:00', sport: 'VirtualRide', name: 'Zone 1, 120 min', steps: [{ kind: 'step', label: 'Zone 1', dur_s: 7200, target: { type: 'free' } }] } } };
-    const s3 = await G.sessionToday();
-    assert.strictEqual(s3.buckets_plan, null); assert.deepStrictEqual(s3.steps, [[0, 7200, 0, 0, 0]]);
+    const s3 = await G.sessionToday(), v1 = s3.lines.vt1_hr;
+    assert.deepStrictEqual(s3.buckets_plan, { low: 7200, high: 0, peak: 0 }); assert.deepStrictEqual(s3.steps, [[0, 7200, 0, v1 - 20, v1 - 1]]);
+    // a mountain bike ride with no target the same: 90 min of Zone 1 to fill
+    mem['plan-workouts'] = { workouts: { w_mtb: { id: 'w_mtb', date: today, time: '23:00', sport: 'Ride', name: 'Mountain bike, 90 min', steps: [{ kind: 'step', label: 'Bike handling', dur_s: 5400, target: { type: 'free' }, cadence: null }] } } };
+    const s4 = await G.sessionToday();
+    assert.deepStrictEqual(s4.buckets_plan, { low: 5400, high: 0, peak: 0 });
     await require('./thresholds').remove(today);
   });
   await ok('the PC\'s build reports: kept, the last 30, and the build on the Edge remembered', async () => {

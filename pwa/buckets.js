@@ -12,7 +12,9 @@
 
    Power decides when there is a reading (0 W coasting is LOW); heart rate only when there is none.
    A plan's step goes to one bucket by its target watts (a % of the planning FTP, 175, at the middle of
-   its range), a heart-rate step by the middle of its band; a free step fills no bucket.
+   its range), a heart-rate step by the middle of its band. A free step is LOW: a ride by feel is a Zone 1
+   ride (heart rate 116 or under), so it plans Zone 1 minutes and the bars show how much of it is done
+   (Harry, 9 Nov 2026: a mountain bike or road ride shows its Zone 1 target and what he has ridden).
    Loads as a browser global (window.Buckets) and as a Node module. */
 (function(root){
   const LINES = Object.freeze({ vt1_w: 169, vt2_w: 208, vt1_hr: 117, vt2_hr: 139 });
@@ -38,7 +40,7 @@
   // A step's bucket: target watts by the middle of its range (% of FTP), a ramp by the middle of from and
   // to, absolute watts by their middle, a heart-rate band by its middle; a free step has none.
   function stepBucket(t, ftp, lines) {
-    if (!t) return null;
+    if (!t || t.type === 'free') return 0;   // ridden by feel: Zone 1
     const F = ftp || PLANNING_FTP;
     if (t.type === 'power') return bucketOf({ w: Math.round((num(t.lo) + num(t.hi == null ? t.lo : t.hi)) / 2 / 100 * F) }, lines);
     if (t.type === 'ramp') return bucketOf({ w: Math.round((num(t.from) + num(t.to)) / 2 / 100 * F) }, lines);
@@ -56,7 +58,7 @@
       if (!it) continue;
       if (Array.isArray(it)) {
         const w = num(it[2]), lo = num(it[3]), hi = num(it[4]);
-        push(it[1], w > 0 ? bucketOf({ w }, lines) : hi > 0 ? bucketOf({ hr: Math.round((lo + hi) / 2) }, lines) : null);
+        push(it[1], w > 0 ? bucketOf({ w }, lines) : hi > 0 ? bucketOf({ hr: Math.round((lo + hi) / 2) }, lines) : 0);
       } else if (it.kind === 'repeat') {
         const n = Math.max(1, Math.round(num(it.count) || 1));
         for (let k = 0; k < n; k++) for (const s of it.steps || []) push(s.dur_s, stepBucket(s.target, ftp, lines));
@@ -64,9 +66,9 @@
       else if (it.start_s != null || it.target_w !== undefined || it.target_hr !== undefined) {
         const w = num(it.target_w), we = num(it.target_w_end);
         const b = w != null ? bucketOf({ w: Math.round(we != null ? (w + we) / 2 : w) }, lines)
-          : it.target_hr && num(it.target_hr.hi) ? bucketOf({ hr: Math.round((num(it.target_hr.lo) + num(it.target_hr.hi)) / 2) }, lines) : null;
+          : it.target_hr && num(it.target_hr.hi) ? bucketOf({ hr: Math.round((num(it.target_hr.lo) + num(it.target_hr.hi)) / 2) }, lines) : 0;
         push(it.dur_s, b);
-      } else push(it.dur_s, null);
+      } else push(it.dur_s, 0);
     }
     return out;
   }

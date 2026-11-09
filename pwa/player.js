@@ -602,7 +602,7 @@
     if (!ride) return Promise.resolve();
     if (flushing){ flushAgain = true; return flushing; }
     ride.updated = Date.now();
-    flushing = DB.put(recordOf(ride)).catch(e => note(`could not write to this computer: ${e.message}`)).then(() => { flushing = null; if (flushAgain){ flushAgain = false; return flush(); } });
+    flushing = DB.put(recordOf(ride)).then(() => { if (ride && ride.edge) ride.edge.synced(true, ride.samples.length); }, e => { if (ride && ride.edge) ride.edge.synced(false, 0, -1); note(`could not write to this computer: ${e.message}`); }).then(() => { flushing = null; if (flushAgain){ flushAgain = false; return flush(); } });
     return flushing;
   }
   // what goes into IndexedDB: everything needed to finish and save the ride later
@@ -616,6 +616,7 @@
     const k = idxAt(r, r.wt), iv = r.intervals[k] || null, tgt = targetNow();
     const fresh = at => ts - at <= 3000;
     r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
+    if (r.edge){ const a = r.samples[r.samples.length - 1]; edgeDo(r.edge.second({ t: r.samples.length, wt: r.wt, w: a[1], hr: a[3], cad: a[2] })); }
     r.wt += 1;
     if (iv && iv.kind === "hr") seekStep(iv);
     const k2 = idxAt(r, r.wt);
@@ -660,6 +661,7 @@
     if (ov) ov.hidden = true;
     if (!ride || ride.state !== "countin") return;      // ended during the count-in
     ride.id = Math.round(now()); ride.state = "riding"; nextAt = ride.id;
+    ride.edge = EDGE = edgeFor(ride.workout, ride.intervals, ride.ftp, ride.id);
     lockScreen();
     await ctl([0x00], "request control"); await ctl([0x07], "start");
     DEV.sent = undefined; syncErg(true);
@@ -668,10 +670,11 @@
   }
   function pause(){
     if (!ride || ride.state !== "riding") return;
-    ride.state = "paused"; ride.pauses.push([Math.round(now()), null]);
+    ride.state = "paused"; ride.pauses.push([Math.round(now()), null]); if (ride.edge) ride.edge.stop();
     ctl([0x08, 0x02], "pause"); flush(); paint();
   }
   function resume(){
+    if (ride && ride.edge) ride.edge.state.running = true;
     if (!ride || ride.state !== "paused") return;
     const t = Math.round(now()), p = ride.pauses[ride.pauses.length - 1];
     if (p && p[1] == null) p[1] = t; else ride.pauses.push([ride.samples.length ? ride.samples[ride.samples.length - 1][0] + 1000 : t, t]);
@@ -775,11 +778,42 @@
       <div class="pl-note small" id="plNote" hidden></div>`;
   }
 
+  // ---- the Edge 1050 beside the player (pwa/edge.js): the field's own screen, second by second ----
+  let EDGE = null, EDGE_SESS = null, edgeRaf = 0;
+  function edgeFor(w, ivs, ftp, rideId){
+    if (!window.Edge) return null;
+    const sess = EDGE_SESS ? Object.assign({}, EDGE_SESS, { name: w && w.name }) : null;
+    return Edge.create({ session: sess, intervals: ivs, ftp, rideId, name: w && w.name, time: w && w.time ? hm12(w.time) : null, lines: BKS.lines, colours: BKS.colours });
+  }
+  const edgeAside = () => window.Edge ? `<aside class="pl-edge" aria-label="Edge 1050">${Edge.deviceHTML("plEdgeDev")}<div class="small pl-edge-note">Tap the screen for the next data page. LAP logs fuel at a prompt and answers the rating.</div></aside>` : "";
+  // what the Edge asks for: a buzz is a beep pattern here; a post goes to The Way as the field would send it
+  function edgeDo(evs){
+    for (const e of evs || []){
+      if (e.type === "alert"){ if (e.buzz === "long") beep(520, 0.6); else if (e.buzz === "double"){ beep(700, 0.12); setTimeout(() => beep(700, 0.12), 220); } else beep(900, 0.1); }
+      else if (e.type === "post") bridge(e.path, { method: "POST", headers: J, body: JSON.stringify(e.body) }).catch(err => note(`The Way did not take ${e.path}: ${err.message}`));
+    }
+    paintEdge();
+  }
+  function paintEdge(){
+    const dev = document.getElementById("plEdgeDev"); if (!dev || !EDGE) return;
+    cancelAnimationFrame(edgeRaf);
+    edgeRaf = requestAnimationFrame(() => { const cv = dev.querySelector("canvas"); if (!cv) return; const m = EDGE.model(Date.now()); Edge.draw(cv, m);
+      dev.querySelectorAll(".e-dots i").forEach((d, i) => d.classList.toggle("on", i === m.page)); });
+  }
+  function bindEdge(){
+    const dev = document.getElementById("plEdgeDev"); if (!dev) return;
+    dev.querySelector(".e-lap").onclick = () => { if (EDGE && ride && ride.edge === EDGE) edgeDo(EDGE.lap()); };
+    dev.querySelector(".e-start").onclick = () => { if (!ride){ const go = document.getElementById("plStart"); if (go && !go.disabled) go.click(); } else if (ride.state === "riding") pause(); else if (ride.state === "paused") resume(); };
+    dev.querySelector(".e-screen").onclick = () => { if (EDGE){ EDGE.page(EDGE.state.page + 1); paintEdge(); } };
+    // the next event counts down every second even before the ride starts
+    clearInterval(bindEdge.tick); bindEdge.tick = setInterval(() => { if (!document.getElementById("plEdgeDev")) return clearInterval(bindEdge.tick); paintEdge(); }, 1000);
+  }
+
   function drawRide(){
     const el = page(); if (!el || !ride) return;
     const ftp = ride.ftp;
     try{ window.scrollTo(0, 0); }catch{}
-    el.innerHTML = `<div class="pl-ride">
+    el.innerHTML = `<div class="pl-wrap"><div class="pl-ride">
       <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}${devHTML("breath")}</div></div>
       <div class="pl-bkbox" id="plBk"></div>
       <div class="pl-big">
@@ -805,7 +839,8 @@
       <div class="pl-confirm" id="plConfirm" hidden><div><b>End the ride and save it?</b><div class="small">It goes to The Way and to intervals.icu. Nothing is thrown away.</div></div><button class="primary" id="cSave">Save the ride</button><button id="cBack">Keep riding</button></div>
       <div class="pl-note small" id="plNote" hidden></div>
       <div class="pl-count" id="plCount" hidden></div>
-    </div>`;
+    </div>${edgeAside()}</div>`;
+    bindEdge();
     // the device buttons are bound once, on the page (V.player)
     const $ = id => document.getElementById(id);
     $("cPause").onclick = () => ride.state === "paused" ? resume() : pause();
@@ -861,6 +896,7 @@
     const gb = $("plGoal"), goal = goalOf(r.workout, r.intervals);
     if (gb){ gb.hidden = !goal; if (goal) gb.innerHTML = goalHTML(goal, r.samples, innerWidth >= 900 ? 190 : 104); }
     if (r.wt !== stripAt){ stripAt = r.wt; $("plStrip").innerHTML = profileSVG(r.intervals, r.ftp, { h: 90, cursor: r.wt, cls: "pl-small" }); }
+    paintEdge();
   }
   function drawSaving(rec){
     const el = page(); if (!el) return;
@@ -944,9 +980,12 @@
     if (!S){ const pend = await pendingHTML(null); el.innerHTML = `${pend}<div class="pl-ttl"><h2 class="pl-h">Workout player</h2></div><div class="small">Couldn't load the workout: ${esc(String(err && err.message || "").replace(/^bridge \d+ — /, "").slice(0, 200))}. <a href="#calendar">Pick one on the Calendar</a>.</div>`; return; }
     S0 = S;
     BKS.lines = S.lines || null; BKS.colours = S.colours || null;
+    EDGE_SESS = null; EDGE = edgeFor(S.workout, S.intervals, S.settings && S.settings.ftp || 175, null);
+    if (S.workout && S.workout.date === keyOf(new Date())) bridge("/garmin/session/today").then(x => { if (!x || (x.workout_id && S.workout.id && x.workout_id !== S.workout.id)) return; EDGE_SESS = x; if (EDGE) EDGE.setSession(Object.assign({}, x, { name: S.workout.name })); paintEdge(); }).catch(() => {});
     const pend = await pendingHTML(S);
     if (!alive()) return;
-    el.innerHTML = (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend);
+    el.innerHTML = `<div class="pl-wrap"><div class="pl-startcol">` + (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend) + `</div>${edgeAside()}</div>`;
+    bindEdge(); paintEdge();
     const go = document.getElementById("plStart");
     drawWhole(S);
     if (go) go.onclick = () => { go.disabled = true; clearInterval(autoTimer); begin(S0); };

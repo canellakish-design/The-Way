@@ -188,3 +188,26 @@ body:has(.pl-ride) #micBtn{display:none}
 .pl-fields .pl-zone{grid-column:1 / -1}
 .hu-chip.hu-ink{color:var(--ink); border-color:var(--ink)}
 .pl-bkres{display:flex; flex-direction:column; gap:4px; padding:10px 12px; background:var(--card); border:1px solid var(--line)}
+
+/* ---- the Edge 1050 beside the player (pwa/edge.js) ---- */
+.pl-wrap{ display:block }
+.pl-edge{ margin:18px auto 0; max-width:300px }
+.pl-edge-note{ text-align:center; margin-top:10px; color:var(--muted,#8A8A86) }
+@media (min-width:900px){
+  .pl-wrap{ display:grid; grid-template-columns:minmax(0,1fr) 320px; gap:24px; align-items:start }
+  .pl-edge{ position:sticky; top:12px; margin:0; max-width:none }
+}
+.edge1050{ position:relative; width:100%; max-width:300px; margin:0 auto; padding:0 0 24px }
+.edge1050 .e-bottom{ height:22px }
+.edge1050 .e-body{ position:relative; background:linear-gradient(160deg,#2c2d2f 0%,#1a1b1c 55%,#111 100%); border-radius:34px; padding:18px 16px 14px;
+  box-shadow:0 1px 0 rgba(255,255,255,.08) inset, 0 -2px 0 rgba(0,0,0,.6) inset, 0 14px 30px rgba(0,0,0,.45) }
+.edge1050 .e-glass{ background:#000; border-radius:10px; padding:6px; box-shadow:0 0 0 2px #0b0b0b, 0 0 0 3px #3a3b3d }
+.edge1050 .e-screen{ display:block; width:100%; height:auto; aspect-ratio:480/800; border-radius:4px; cursor:pointer; background:#000 }
+.edge1050 .e-chin{ display:flex; align-items:center; justify-content:space-between; padding:10px 6px 0; height:24px }
+.edge1050 .e-word{ font:700 10px/1 ui-monospace,Menlo,monospace; letter-spacing:3px; color:#5c5e60 }
+.edge1050 .e-dots{ display:flex; gap:6px } .edge1050 .e-dots i{ width:7px; height:7px; border-radius:50%; background:#3d3f41 } .edge1050 .e-dots i.on{ background:#cfd0d1 }
+.edge1050 .e-bottom{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between; padding:0 34px }
+.edge1050 button.e-btn{ all:unset; box-sizing:border-box; text-align:center; display:block; font:700 10px/22px ui-monospace,Menlo,monospace; letter-spacing:1px; color:#cfd0d1; background:linear-gradient(#3a3b3d,#202122); border:1px solid #0d0d0d; border-radius:0 0 9px 9px;
+  width:64px; height:22px; padding:0; cursor:pointer; box-shadow:0 2px 0 #0a0a0a }
+.edge1050 button.e-btn:active{ transform:translateY(2px); box-shadow:none }
+.edge1050 button.e-pwr{ position:absolute; left:-5px; top:84px; width:6px; height:46px; border-radius:4px 0 0 4px; z-index:1; cursor:default }
