@@ -1,7 +1,7 @@
 From df49eda7615c31f1780017e8e9042a79b940d57c Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 9 Nov 2026 04:04:21 +0000
-Subject: [PATCH] next_event, delay-day classes, Hexis/Alma removed, Garmin
+Subject: [PATCH 1/2] next_event, delay-day classes, Hexis/Alma removed, Garmin
  extras (fuel, tank, sunset, turn, VO2, pre-ride, energy) + /garmin/fuel and
  /garmin/rating
 
@@ -390,6 +390,112 @@ index 4aa8523..4e02605 100644
  
    // ---- classes (a file in the repo) ----
    try {
+-- 
+2.43.0
+
+
+From d083b1879d27b09bfb2059cbc1ad5368d99a6a9f Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 9 Nov 2026 15:59:57 +0000
+Subject: [PATCH 2/2] Deficit: half on a night under 6 hours asleep (food.js
+ deficitFromBody, tested)
+
+---
+ bridge/deficit.test.js | 23 +++++++++++++++++++++++
+ bridge/food.js         | 27 ++++++++++++++++++++++-----
+ package.json           |  2 +-
+ 3 files changed, 46 insertions(+), 6 deletions(-)
+ create mode 100644 bridge/deficit.test.js
+
+diff --git a/bridge/deficit.test.js b/bridge/deficit.test.js
+new file mode 100644
+index 0000000..4d39381
+--- /dev/null
++++ b/bridge/deficit.test.js
+@@ -0,0 +1,23 @@
++// node bridge/deficit.test.js — the body's say on the day's deficit (food.js deficitFromBody):
++// red recovery or low HRV two days running: maintenance; under 6 hours asleep: half; otherwise the plan's.
++const assert = require('assert');
++const { deficitFromBody } = require('./food');
++let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok ' + name); };
++ok('red recovery means maintenance, whatever the sleep', () => {
++  assert.strictEqual(deficitFromBody({ recovery: 30, sleep_h: 8 }).deficit, 0);
++  assert.strictEqual(deficitFromBody({ recovery: 30, sleep_h: 4 }).deficit, 0);
++});
++ok('HRV low two days running means maintenance', () => {
++  assert.strictEqual(deficitFromBody({ recovery: 70, hrv_state: 'low2', sleep_h: 8 }).deficit, 0);
++});
++ok('under 6 hours asleep halves the deficit (5.3 h on 9 Nov: -450 becomes -220)', () => {
++  const r = deficitFromBody({ recovery: 67, sleep_h: 5.3, base_deficit: -450 });
++  assert.strictEqual(r.deficit, -220); assert.ok(/5.3 h asleep/.test(r.why));
++  assert.strictEqual(deficitFromBody({ recovery: 67, sleep_h: 5.99, base_deficit: -450 }).deficit, -220);
++});
++ok('6 hours or more, or no reading, leaves the plan alone', () => {
++  assert.strictEqual(deficitFromBody({ recovery: 67, sleep_h: 6 }).deficit, undefined);
++  assert.strictEqual(deficitFromBody({ recovery: 67 }).deficit, undefined);
++  assert.strictEqual(deficitFromBody({}).deficit, undefined);
++});
++console.log(n + ' passed');
+diff --git a/bridge/food.js b/bridge/food.js
+index e033c64..ce2d822 100644
+--- a/bridge/food.js
++++ b/bridge/food.js
+@@ -248,15 +248,32 @@ async function sessionsFor(date) {
+ // The body's say on the deficit: a red WHOOP morning, or HRV below the band
+ // two days running, means eat to maintenance today (the IOC's "adaptable"
+ // low energy availability is the transient kind; prolonged is the problem).
++// A short night (under 6 hours asleep) halves it: dieters sleeping ~5.5 h lose
++// more lean mass and less fat than at 8.5 h on the same diet (Nedeltcheva 2010).
++// Harry asked for this on 9 Nov 2026. Pure rule, tested in deficit.test.js.
++const SHORT_SLEEP_H = 6;
++function deficitFromBody(o) {
++  const x = o || {};
++  if (x.recovery != null && x.recovery < 34) return { deficit: 0, why: `WHOOP recovery ${Math.round(x.recovery)}: no deficit today, eat to maintenance` };
++  if (x.hrv_state === 'low2') return { deficit: 0, why: 'HRV below your band two days running: no deficit today, eat to maintenance' };
++  if (x.sleep_h != null && x.sleep_h > 0 && x.sleep_h < SHORT_SLEEP_H) {
++    const base = x.base_deficit != null ? x.base_deficit : F.DEFICIT;
++    return { deficit: Math.round(base / 2 / 10) * 10, why: `${(Math.round(x.sleep_h * 10) / 10)} h asleep: half the deficit today` };
++  }
++  return { deficit: undefined, why: null };
++}
+ async function deficitFor(date) {
+   if (date !== tz.todayKey()) return { deficit: undefined, why: null };
+   try {
+     const s = await require('./whoop').sleepLatest({ sync: false });
+     const rec = s && s.recovery;
+-    if (rec && rec.score != null && rec.score < 34) return { deficit: 0, why: `WHOOP recovery ${Math.round(rec.score)}: no deficit today, eat to maintenance` };
+-    const fit = await getJSON('fitness', { wellness: [] });
+-    const guide = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null);
+-    if (guide.state === 'low2') return { deficit: 0, why: 'HRV below your band two days running: no deficit today, eat to maintenance' };
++    let hrvState = null;
++    try {
++      const fit = await getJSON('fitness', { wellness: [] });
++      hrvState = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null).state;
++    } catch (e) { hrvState = null; }
++    const sleepH = s && s.sleep && !s.sleep.nap && s.sleep.hours != null ? Number(s.sleep.hours) : null;
++    return deficitFromBody({ recovery: rec && rec.score != null ? rec.score : null, hrv_state: hrvState, sleep_h: sleepH });
+   } catch (e) { /* no reading: the deficit stands */ }
+   return { deficit: undefined, why: null };
+ }
+@@ -1047,4 +1064,4 @@ function attach(app) {
+     } catch (e) { res.status(500).json({ error: e.message }); } });
+ }
+ 
+-module.exports = { attach, dayReport, recheckDay, bodyKg, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };
++module.exports = { attach, deficitFromBody, dayReport, recheckDay, bodyKg, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };
+diff --git a/package.json b/package.json
+index 49ecd2d..23a1a47 100644
+--- a/package.json
++++ b/package.json
+@@ -3,7 +3,7 @@
+   "version": "1.1.0",
+   "private": true,
+   "scripts": {
+-    "test": "node bridge/workout-math.test.js && node bridge/scores-math.test.js && node bridge/food-math.test.js && node bridge/workouts.test.js && node bridge/ride-math.test.js && node bridge/micro-math.test.js && node bridge/zones.test.js && node bridge/ics.test.js && node bridge/player.test.js && node bridge/garmin.test.js && node bridge/buckets.test.js && node bridge/classes.test.js && node bridge/chain.test.js && node bridge/hydration-live.test.js"
++    "test": "node bridge/workout-math.test.js && node bridge/scores-math.test.js && node bridge/food-math.test.js && node bridge/workouts.test.js && node bridge/ride-math.test.js && node bridge/micro-math.test.js && node bridge/zones.test.js && node bridge/ics.test.js && node bridge/player.test.js && node bridge/garmin.test.js && node bridge/buckets.test.js && node bridge/classes.test.js && node bridge/chain.test.js && node bridge/hydration-live.test.js && node bridge/deficit.test.js"
+   },
+   "dependencies": {
+     "@netlify/blobs": "^8.1.0",
 -- 
 2.43.0
 
