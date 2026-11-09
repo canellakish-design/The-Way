@@ -243,10 +243,11 @@
     const nowDot = b.now_min < 1440 ? `<circle cx="${x(b.now_min).toFixed(1)}" cy="${y(b.now).toFixed(1)}" r="5.5" class="eb-now"/>` : "";
     const sign = v => (v > 0 ? "+" : v < 0 ? "−" : "") + Math.abs(v).toLocaleString("en-US");
     const off = b.target_end != null ? b.end - b.target_end : null;
+    const onPlan = off != null && Math.abs(off) <= 25;   // the prediction is the plan: say it once
     const tone = off == null ? "" : Math.abs(off) <= 150 ? "hu-go" : Math.abs(off) <= 400 ? "hu-hold" : "hu-stop";
     return `<div class="eb-card">
       <div class="eb-head"><div><span class="hu-lab">Live energy · now</span><div><span class="hu-n eb-big">${sign(b.now)}</span><span class="small"> kcal</span></div></div>
-        <div class="eb-end"><span class="hu-lab">End of day</span><div><span class="hu-n eb-big ${tone}">${sign(b.end)}</span><span class="small"> predicted</span></div>${b.target_end != null ? `<span class="small">the plan: ${sign(b.target_end)}</span>` : ""}</div></div>
+        <div class="eb-end"><span class="hu-lab">End of day</span><div><span class="hu-n eb-big ${tone}">${sign(b.end)}</span><span class="small"> ${onPlan ? "on plan" : "predicted"}</span></div>${b.target_end != null && !onPlan ? `<span class="small">plan ${sign(b.target_end)}</span>` : ""}</div></div>
       <svg class="eb-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Calories in minus out since midnight: ${sign(b.now)} now, ${sign(b.end)} predicted at midnight">
         ${bands}${grid.join("")}${tgt}<path d="${path(past)}" class="eb-past"/>${ahead.length > 1 ? `<path d="${path(ahead)}" class="eb-ahead"/>` : ""}${dots}${nowDot}${hrs}</svg>
 

@@ -1226,7 +1226,7 @@ function paintChain(c){
     // Lift: sessions of those due, the Lift page's count
     if (ck === "lift"){ num = L.sessions == null || (L.first_week && !L.of && !L.sessions) ? "—" : `${L.sessions}`; unit = (L.first_week && !L.of ? "due later" : L.first_week ? `of ${L.of} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
-    el.querySelector(".cweek").textContent = unit;
+    el.querySelector(".cweek").textContent = num === "—" ? "" : unit;   // "—" alone, not "— avg"
     el.dataset.week = state || "none";
     // the Plan box names its own week (the seven days ahead), so it is never read as the chain's week or the Calendar's
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }
@@ -1236,8 +1236,9 @@ function paintChain(c){
     const mk = el.querySelector(".cmark"); mk.textContent = brk ? (L.state === "warn" ? "!" : "✕") : ""; mk.classList.toggle("warn", brk && L.state === "warn");
     // today, small under the week: its own number, word and colour
     const t = todayCell(ck, L);
-    const tn = el.querySelector(".ctn"); tn.textContent = t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || (t.num === "—" ? "var(--muted)" : "var(--ink)");
-    el.querySelector(".ctw").textContent = t.word || "today";
+    const none = t.num == null || t.num === "—";   // nothing today: the word alone, no second dash
+    const tn = el.querySelector(".ctn"); tn.textContent = none ? "" : t.num; tn.classList.toggle("long", String(t.num).length > 5); tn.style.color = TC[t.tone] || "var(--ink)";
+    el.querySelector(".ctw").textContent = t.word || (none ? "nothing yet" : "today");
     el.title = ck === "plan" ? `Plan: ${num} of the seven days ahead placed (${L.week_label || ""}); the Calendar's "done of plan" is a different number · today ${t.word || t.num}`
       : ck === "food" ? `Macros: ${num} on plan this week · today ${t.num} ${t.word}`
       : `${label}: ${num} ${unit} this week · today ${t.num}${t.word ? ", " + t.word : ""}`;
@@ -1253,8 +1254,8 @@ function paintChain(c){
   // the header: the week's dates, and today with the day's type
   const D = new Date(), day = n => { const x = new Date(D.getTime() + n * 864e5); return x.toLocaleDateString("en-US", { month: "short", day: "numeric" }); };
   const hd = document.getElementById("chainDates"); if (hd) hd.textContent = `· ${day(-6)} – ${day(0)}`;
-  const th = document.getElementById("chainTodayHead"); if (th) th.textContent = `Today · ${D.toLocaleDateString("en-US", { weekday: "long" })}`;
-  const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? `· ${foodData.fuel_day}` : "";
+  const th = document.getElementById("chainTodayHead"); if (th) th.textContent = "";   // the day card and the stepper already say today
+  const tk = document.getElementById("chainTodayKind"); if (tk) tk.textContent = foodData && foodData.fuel_day ? foodData.fuel_day : "";
 }
 // Today's macros from the day report the Food page reads (/food/today): kcal and protein against the
 // day's targets, toned against what is due by now (bridge/chain.js macrosToday is the same rule).
@@ -1667,7 +1668,7 @@ function dayCard(d, plan, nowMin, rec, solo){
         <div class="mgrid"><div class="mc c"><b>${m.carbs_g ?? "—"}</b><span>carbs g</span></div><div class="mc p"><b>${m.protein_g ?? "—"}</b><span>protein g</span></div><div class="mc f"><b>${m.fat_g ?? "—"}</b><span>fat g</span></div></div></div>`
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
-    <div class="dayhead"><h4>${isToday?"Today · ":""}${esc(d.label)}</h4></div>
+    <div class="dayhead"><h4>${esc(d.label)}</h4></div>
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda hsched${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
@@ -1722,7 +1723,7 @@ V.today = async function(){
     </div>
     <div class="card endetail" id="enDetail" hidden></div>
     <div id="dayEnergy" class="dayenergy"></div>
-    <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
+    <div class="chainhead"><span><span id="chainTodayHead"></span><span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
     <div class="card daycoach" id="dayCoach" hidden></div>
@@ -2320,7 +2321,7 @@ V.today = async function(){
     await Promise.all([
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
-      get("/food/today", v => { foodData = v; HUB.food = v; if (chainData) paintChain(chainData); if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = `· ${v.fuel_day}`; }
+      get("/food/today", v => { foodData = v; HUB.food = v; if (chainData) paintChain(chainData); if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = v.fuel_day; }
         if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
