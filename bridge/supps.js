@@ -3,7 +3,7 @@
 // they show up under the link they serve and as a row on the day at the
 // right time, with no box of their own.
 //   creatine        under Lift:  5 g every day, any time; no loading
-//   beetroot        under Fuel:  2 to 3 hours before any ride
+//   beetroot        under Fuel:  2 to 3 hours before any ride; on waking (5:30) for one before 8:30
 //   sodium_bicarb   under Ride:  60 to 90 minutes before a hard session only
 //   magnesium       under Sleep: 200 mg glycinate an hour before bed
 // Creatine adds a pound or two of water in its first two weeks, and the
@@ -23,6 +23,11 @@ const RX = {
   magnesium: { name: 'Magnesium glycinate, 200 mg', link: 'sleep', every: 'night', at_min: 21 * 60, why: 'an hour before bed' }
 };
 
+// Nothing is scheduled before 5:30 a.m. (Harry, 9 Nov: beetroot was landing at 4:30 for a 7:00 ride). A ride
+// before 8:30 cannot have the full two hours of beetroot on a normal wake-up, so it is taken on waking.
+const EARLIEST = 5 * 60 + 30, EARLY_RIDE = 8 * 60 + 30;
+const notBefore = m => Math.max(EARLIEST, m);
+
 function dueFor(date, sessions, entries, nowMin, yesterdayEntries) {
   const taken = (entries || []).filter(e => e && e.supplement && RX[e.key]).map(e => ({ key: e.key, time: e.time }));
   const has = k => taken.some(t => t.key === k);
@@ -34,9 +39,11 @@ function dueFor(date, sessions, entries, nowMin, yesterdayEntries) {
   const first = rides.filter(s => !s.done).sort((a, b) => toMin(a.time) - toMin(b.time))[0] || rides[0];
   if (first) {
     const start = toMin(first.time);
-    due.push({ key: 'beetroot', name: RX.beetroot.name, link: 'fuel', time: toHM(start - RX.beetroot.before_min), session: first.name, why: `${RX.beetroot.why} · ${first.name.replace(/,.*$/, '')}`, taken: has('beetroot'), past: !!first.done });
+    const early = start < EARLY_RIDE;
+    const bWhy = early ? 'on waking (5:30) · less than the full 2 h, still worth it' : RX.beetroot.why;
+    due.push({ key: 'beetroot', name: RX.beetroot.name, link: 'fuel', time: toHM(early ? EARLIEST : notBefore(start - RX.beetroot.before_min)), session: first.name, why: `${bWhy} · ${first.name.replace(/,.*$/, '')}`, on_waking: early, taken: has('beetroot'), past: !!first.done });
     const hard = rides.find(hardName);
-    if (hard) due.push({ key: 'sodium_bicarb', name: RX.sodium_bicarb.name, link: 'fuel', time: toHM(toMin(hard.time) - RX.sodium_bicarb.before_min), session: hard.name, why: `${RX.sodium_bicarb.why} · ${hard.name.replace(/,.*$/, '')}`, taken: has('sodium_bicarb'), past: !!hard.done });
+    if (hard) due.push({ key: 'sodium_bicarb', name: RX.sodium_bicarb.name, link: 'fuel', time: toHM(notBefore(toMin(hard.time) - RX.sodium_bicarb.before_min)), session: hard.name, why: `${RX.sodium_bicarb.why} · ${hard.name.replace(/,.*$/, '')}`, taken: has('sodium_bicarb'), past: !!hard.done });
   }
   // magnesium: this evening
   due.push({ key: 'magnesium', name: RX.magnesium.name, link: 'sleep', time: toHM(RX.magnesium.at_min), why: RX.magnesium.why, taken: has('magnesium') });
@@ -57,4 +64,4 @@ function weekOf(rows) {
   };
 }
 
-module.exports = { RX, dueFor, weekOf, toMin, toHM };
+module.exports = { RX, dueFor, weekOf, toMin, toHM, EARLIEST };

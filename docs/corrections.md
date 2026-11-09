@@ -59,6 +59,8 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 6 Nov | "Your rides say you are nearer 205" (FTP), asked how | Claude stated a reconciliation of the ramp test and Tymewear as if the rides showed it; the power curve says 152 on old efforts | answer corrected; FTP stays 175 | my mistake |
 | 8 Nov | "Ride it" still on Saturday's McKeldin ride after he rode it | The button hid only on a green grade | `f10dafd`: hides once a ride answers the session | disagreement |
 | 8 Nov | Saturday's easy trail ride graded "partly 74%" | A session with heart-rate targets but no "Zone 1" in its name is graded on load (29 of 39 TSS), not as an easy ride | open: his call on grading easy rides and the trail floor | disagreement |
+| 9 Nov | Beetroot due at 4:30 a.m. before a 7:00 ride (Mon 9, Tue 10) | Beetroot was placed 2.5 h before the ride whatever the hour | nothing before 5:30; a ride before 8:30 takes it on waking (supps.js, the Nov 9 commit) | new case |
+| 9 Nov | The day's burn worked from age 55; he is 48 | The food model's profile carried the 2033 goal age as his age | age and height are settings (Setup, body.js), 48 now: BMR +35, base burn +47 a day | my mistake |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
@@ -67,7 +69,8 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **5 Nov: 1.** 1 new case.
 **6 Nov: 6.** 4 new case, 1 disagreement, 1 my mistake.
 **7 Nov: 0** logged.
-**8 Nov so far: 2.** 2 disagreement.
+**8 Nov: 2.** 2 disagreement.
+**9 Nov so far: 2.** 1 new case, 1 my mistake.
 
 ## Found by the Chrome tests (before Harry saw them)
 

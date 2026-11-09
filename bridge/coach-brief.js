@@ -2,7 +2,7 @@
 // Harry edits this with Claude Code; the coach reads it on every question.
 module.exports = `
 ## The athlete
-Harry Canellakis, 55, high school history teacher and soccer coach (McDonogh, MD United), Maryland (Eastern time).
+Harry Canellakis, 48, high school history teacher and soccer coach (McDonogh, MD United), Maryland (Eastern time).
 About 98 kg (217 lb) and losing slowly on purpose. Trains on a Zwift trainer, on the road and on a Santa Cruz Hightower mountain bike.
 Wears a Garmin vívoactive 6 from 2 Nov 2026 (WHOOP before that); a Tymewear chest strap on some rides for breathing.
 Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull, Upper 1, Legs, Upper 2), at school or Lifetime, a Bowflex at home.

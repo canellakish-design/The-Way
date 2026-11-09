@@ -877,7 +877,7 @@ V.lift = async function(){
         <span class="ld">${esc(dayFmt(x.date).slice(0,3))} ${esc(x.date.slice(8).replace(/^0/,""))}</span>
         <b>${ls.length ? ls.map(k => `${sh(k)}${dk.includes(k) ? "✓" : ""}`).join(" ") : "—"}</b>${sug ? `<span class="lsug">${sh(sug)}?</span>` : ""}
       </a>`; }).join("")}</div>
-      <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${false ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
+      <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.blasts_this_week ? ` · +${L.blasts_this_week} kettlebell blast${L.blasts_this_week === 1 ? "" : "s"}` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${false ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
       <details class="why"><summary>why these days</summary><div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
@@ -1224,7 +1224,7 @@ function paintChain(c){
     // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
     if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
-    if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`; }
+    if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = (L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
     el.querySelector(".cweek").textContent = unit;
     // the trend against the week before: a small triangle and the change, green when it is better, red when worse; nothing when it barely moved
@@ -1695,10 +1695,35 @@ function clearDayTimers(){
 let __dayWake = false, __dayKeys = null;
 const DAY_SYNC_MS = 5*60*1000, DAY_PAINT_MS = 30*1000, DAY_STALE_MS = 60*1000;
 
+/* The energy meter beside CTL (bridge/energy-meter.js, food-math.balanceSeries): a half dial, 9 o'clock to
+   3 o'clock. Noon is eaten = burned; left of noon a deficit (losing), right a surplus (gaining); full scale
+   ±1,000 kcal, clamped, the true number printed. Solid needle: now. Faint needle: the day's end if the plan's
+   meals and sessions happen. The thin tick: the day's target. Ink and grey only: position carries the meaning. */
+const kc = n => n == null ? "—" : (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const ENERGY_SCALE = 1000;
+const enDeg = k => k == null || !isFinite(k) ? null : Math.max(-ENERGY_SCALE, Math.min(ENERGY_SCALE, k)) / ENERGY_SCALE * 90;
+function energyDial(o){
+  const W = 120, H = 64, cx = 60, cy = 58, R = 50;
+  const pt = (deg, r) => { const a = (deg - 90) * Math.PI / 180; return [(cx + r * Math.cos(a)).toFixed(1), (cy + r * Math.sin(a)).toFixed(1)]; };
+  const needle = (deg, cls) => { if (deg == null) return ""; const [x, y] = pt(deg, R - 6); return `<line class="${cls}" x1="${cx}" y1="${cy}" x2="${x}" y2="${y}"></line>`; };
+  const tick = (deg, cls, r0, r1) => { if (deg == null) return ""; const [x0, y0] = pt(deg, r0), [x1, y1] = pt(deg, r1); return `<line class="${cls}" x1="${x0}" y1="${y0}" x2="${x1}" y2="${y1}"></line>`; };
+  const [ax, ay] = pt(-90, R), [bx, by] = pt(90, R);
+  const scale = [-90, -45, 45, 90].map(d => tick(d, "edt", R - 4, R)).join("") + tick(0, "edn", R - 9, R + 3);
+  const x = o || {};
+  return `<svg class="edial" viewBox="0 0 ${W} ${H}" aria-hidden="true">
+    <path class="eda" d="M${ax},${ay} A${R},${R} 0 0 1 ${bx},${by}"></path>${scale}
+    ${tick(x.target, "edg", R - 12, R + 4)}${needle(x.avg, "edv")}${needle(x.end, "edh")}${needle(x.now, "edm")}
+    <circle class="edc" cx="${cx}" cy="${cy}" r="3.5"></circle></svg>`;
+}
+
 V.today = async function(){
   clearDayTimers();                       // re-entering must not stack timers
   view.innerHTML = `
+    <div class="hutop">
     <a class="hufit" id="fitField" href="#ride" aria-label="Fitness, open the Ride page"><span class="fl"><span class="fk">Fitness · CTL</span><span class="fv"><b class="fn">—</b><span class="fr"><span class="fd">reaching the bridge…</span><span class="fw"></span></span></span></span><svg class="fspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></a>
+    <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy balance today, tap for the breakdown"><span class="fk">Energy · today</span>${energyDial(null)}<span class="en1">reaching the bridge…</span><span class="en2"></span><span class="en3"></span></button>
+    </div>
+    <div class="card endetail" id="enDetail" hidden></div>
     <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
@@ -1858,6 +1883,51 @@ V.today = async function(){
     w.textContent = [t.ramp && t.ramp.word, fitLevel(t.ctl)].filter(Boolean).join(" · ");
     el.querySelector(".fspark").style.color = t.ramp && (t.ramp.tone === "good" || t.ramp.tone === "warn" || t.ramp.tone === "bad") ? toneC(t.ramp.tone) : "var(--ink)";
   };
+  // the energy meter: today's needle from the day report (moves with every meal and ride), the week's
+  // average and the body from /energy/meter; tap for the breakdown
+  let energyData = null, energyOpen = false;
+  const fmtDay = k => k ? new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
+  const drawEnergy = ()=>{
+    const el = document.getElementById("enField"); if (!el) return;
+    const b = (foodData && foodData.balance) || (energyData && energyData.today) || null;
+    const body = energyData && energyData.body;
+    const bmrDay = (b && b.parts && b.parts.bmr_day) || (body && body.bmr) || null;
+    const tgt = b ? b.target_end : null;
+    const svg = el.querySelector(".edial");
+    if (svg) svg.outerHTML = energyDial(b ? { now: enDeg(b.now), end: enDeg(b.end), target: enDeg(tgt) } : null);
+    const l1 = el.querySelector(".en1"), l2 = el.querySelector(".en2"), l3 = el.querySelector(".en3");
+    if (!b){ l1.textContent = scoresLoading ? "reaching the bridge…" : "no day report"; l2.textContent = ""; l3.textContent = bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}/day` : ""; return; }
+    l1.innerHTML = `<b>${kc(b.now)}</b> kcal so far${tgt != null ? ` · target ${kc(tgt)}` : ""}`;
+    const lw = energyData ? energyData.lb_week : null;
+    l2.textContent = lw != null ? `≈ ${lw > 0 ? "+" : lw < 0 ? "−" : ""}${Math.abs(lw)} lb a week at this rate` : energyData ? "a week's rate after a day logged" : "";
+    l3.textContent = bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}/day` : "";
+    el.setAttribute("aria-label", `Energy balance today ${kc(b.now)} kcal so far${tgt != null ? `, target ${kc(tgt)}` : ""}. Tap for the breakdown.`);
+    drawEnergyDetail();
+  };
+  const drawEnergyDetail = ()=>{
+    const d = document.getElementById("enDetail"), f = document.getElementById("enField"); if (!d) return;
+    d.hidden = !energyOpen; if (f) f.setAttribute("aria-expanded", energyOpen ? "true" : "false");
+    if (!energyOpen) return;
+    const b = (foodData && foodData.balance) || (energyData && energyData.today) || null;
+    const p = (b && b.parts) || {}, body = (energyData && energyData.body) || {}, m = (b && b.meter) || {};
+    const row = (k, v, cls) => `<li${cls ? ` class="${cls}"` : ""}><span>${k}</span><b>${v}</b></li>`;
+    const n = v => v == null ? "—" : Math.round(v).toLocaleString("en-US");
+    const avg = energyData ? energyData.avg7 : null;
+    const kg = body.kg || m.kg, age = body.age || m.age, cm = body.cm || m.cm;
+    d.innerHTML = `<h4>Energy · in and out since midnight</h4>
+      <ul class="enlist">
+        ${row(`BMR, at rest${p.bmr_day ? ` <i>${n(p.bmr_day)} a day</i>` : ""}`, n(p.bmr))}
+        ${row(`+ daily, on your feet <i>BMR × 0.35</i>`, n(p.daily))}
+        ${row(`+ exercise done`, n(p.exercise))}
+        ${row(`burned so far`, n(p.burned), "ensum")}
+        ${row(`eaten`, n(p.eaten))}
+        ${row(`net`, kc(p.net != null ? p.net : b && b.now), "ennet")}
+      </ul>
+      <div class="small">Noon is eaten = burned. The solid needle is now; the faint one is midnight if the rest of the plan happens (${kc(b && b.end)}); the thin mark is today's target (${kc(b && b.target_end)}).${b && Math.abs(b.now) > ENERGY_SCALE ? ` The dial stops at ±1,000; the true number is ${kc(b.now)}.` : ""}</div>
+      <div class="enweek">${energyDial({ avg: enDeg(avg) })}<div class="small"><b>${avg != null ? kc(avg) + " kcal a day" : "—"}</b>, the last ${energyData && energyData.avg_days ? energyData.avg_days : 0} days logged averaged${energyData && energyData.lb_week != null ? ` · ≈ ${energyData.lb_week > 0 ? "+" : energyData.lb_week < 0 ? "−" : ""}${Math.abs(energyData.lb_week)} lb a week (× 7 ÷ 3,500)` : ""}</div></div>
+      <div class="small">Burn from Mifflin-St Jeor: ${kg ? `${kg} kg` : "—"}${body.kg_from ? ` from weigh-in, ${fmtDay(body.kg_from)}` : body.kg_fallback ? " (no weigh-in: the default)" : ""} · ${cm || "—"} cm · age ${age || "—"}. <a href="#settings">Change age or height in Setup</a>. Tap the meter again to close.</div>`;
+  };
+  { const ef = document.getElementById("enField"); if (ef) ef.onclick = ()=>{ energyOpen = !energyOpen; drawEnergyDetail(); }; }
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
@@ -2022,6 +2092,7 @@ V.today = async function(){
     return "Train as planned.";
   };
   const drawScores = ()=>{
+    try{ drawEnergy(); }catch{}
     const d = scoresData;
     const vd = document.getElementById("scoreVerdict");
     if (!d){
@@ -2242,7 +2313,8 @@ V.today = async function(){
     const keep = (p, v) => { try { if (v && !v.error) localStorage.setItem(LAST + p, JSON.stringify(v)); } catch {} };
     const get = (path, set) => { const once = () => bridge(path).then(v => { keep(path, v); set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
     if (!scoresData && !chainData) {
-      const s0 = last("/scores"), c0 = last("/compliance"), f0 = last("/food/today"), k0 = last("/chain");
+      const s0 = last("/scores"), c0 = last("/compliance"), f0 = last("/food/today"), k0 = last("/chain"), e0 = last("/energy/meter");
+      if (e0) energyData = e0;
       if (s0) scoresData = s0; if (c0) complianceData = c0; if (f0) { foodData = f0; HUB.food = f0; }
       if (k0) { chainData = k0; try { paintChain(k0); } catch {} }
       if (s0 || k0) { try { drawScores(); } catch {} }
@@ -2255,6 +2327,7 @@ V.today = async function(){
         if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
+      get("/energy/meter", v => { energyData = v; }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word || !v.flagged) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; WBK={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.buckets_plan) WBK[w.id]={ plan:w.buckets_plan, actual:null }; for(const x of (day.done||[])) if(x.buckets && x.plan_wid && WBK[x.plan_wid]){ const A=WBK[x.plan_wid].actual||(WBK[x.plan_wid].actual={low:0,high:0,peak:0}); A.low+=x.buckets.low||0; A.high+=x.buckets.high||0; A.peak+=x.buckets.peak||0; } for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length, ridden:(day.done||[]).some(x => x.plan_wid === w.id)}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
@@ -2817,7 +2890,47 @@ function demoSchedule(){
    which, per source, with the link that fixes it. */
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
+    <div class="card" id="youCard"><h4>You and the scores</h4><div class="small">reading…</div></div>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
+
+  // Scores count from (fresh-start.js): everything that grades you counts days on or after this date; the
+  // rides, meals, lifts and weigh-ins before it stay stored and visible. Age and height (body.js) set BMR.
+  const drawYou = async ()=>{
+    const el = document.getElementById("youCard"); if (!el) return;
+    const [fs, body] = await Promise.all([bridge("/fresh-start").catch(()=>null), bridge("/body").catch(()=>null)]);
+    const lab = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
+    const date = fs && fs.date;
+    el.innerHTML = `<h4>You and the scores</h4>
+      <div class="small"><b>${date ? `Scores count from ${esc(lab(date))}` : "Scores count every day: no fresh start set"}</b>. The chain's seven-day links, the Lift count, the Food week and the coach's week figures count only days on or after it. Rides, meals, lifts, weigh-ins and the journal before it stay stored and visible. Fitness, fatigue, HRV and the weight trend keep their history.</div>
+      <div class="row2"><span><label for="fsDate">Scores count from</label><input id="fsDate" type="date" value="${attr(date || "")}"></span>
+        <span class="gbtns"><button class="primary" id="fsSave">Save</button><button id="fsClear"${date ? "" : " disabled"}>Clear</button></span></div>
+      <div class="small" id="fsMsg"></div>
+      <h4 style="margin-top:14px">Body · for the energy meter</h4>
+      <div class="small">BMR is Mifflin-St Jeor from weight, height and age; weight follows the latest weigh-in${body && body.kg_from ? ` (${body.kg} kg, ${esc(lab(body.kg_from))})` : ""}.${body && body.bmr ? ` Now: BMR ${body.bmr.toLocaleString("en-US")} a day, ${body.base_burn.toLocaleString("en-US")} with everyday movement.` : ""}</div>
+      <div class="row2"><span><label for="bAge">Age</label><input id="bAge" type="number" inputmode="numeric" min="14" max="100" value="${attr(body ? body.age : "")}"></span>
+        <span><label for="bCm">Height, cm</label><input id="bCm" type="number" inputmode="numeric" min="120" max="230" value="${attr(body ? body.cm : "")}"></span></div>
+      <div class="gbtns"><button class="primary" id="bSave">Save</button></div>
+      <div class="small" id="bMsg"></div>`;
+    const post = (path, b) => bridge(path, { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(b) });
+    const say = (id, t) => { const m = document.getElementById(id); if (m) m.textContent = t; };
+    document.getElementById("fsSave").onclick = async ()=>{
+      const v = document.getElementById("fsDate").value;
+      if (!v){ say("fsMsg", "Pick a date, or Clear."); return; }
+      say("fsMsg", "saving…");
+      try{ await post("/fresh-start", { date: v }); drawYou(); }catch(e){ say("fsMsg", e.message); }
+    };
+    document.getElementById("fsClear").onclick = async ()=>{
+      say("fsMsg", "clearing…");
+      try{ await post("/fresh-start", { date: null }); drawYou(); }catch(e){ say("fsMsg", e.message); }
+    };
+    document.getElementById("bSave").onclick = async ()=>{
+      say("bMsg", "saving…");
+      try{ const r = await post("/body", { age: document.getElementById("bAge").value, cm: document.getElementById("bCm").value });
+        say("bMsg", `Saved. BMR ${r.bmr.toLocaleString("en-US")} a day, ${r.base_burn.toLocaleString("en-US")} with everyday movement.`); }
+      catch(e){ say("bMsg", e.message); }
+    };
+  };
+  drawYou();
 
   const drawConnections = async ()=>{
     const el = document.getElementById("conn");

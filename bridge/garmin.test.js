@@ -99,6 +99,13 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     assert.strictEqual(G.nextEvent([{ summary: 'Junior-Senior Flag Football Game', start: '2026-11-10T11:30:00-05:00' }], now).title, 'Junior-Senior Flag');
     assert.ok(x.title.length <= 22);
     assert.strictEqual(G.nextEvent([], now), null);
+    // other teams' calendars and the school-wide calendar never count down; his own team's does
+    const cals = [
+      { summary: 'U17 G MARYLAND UNITED ECNL - Practice', start: '2026-11-09T09:10:00-05:00', calendar: 'U17 G MARYLAND UNITED ECNL' },
+      { summary: 'Office Hours', start: '2026-11-09T09:20:00-05:00', calendar: 'Upper School' },
+      { summary: 'U16 G MARYLAND UNITED ECNL - Practice', start: '2026-11-09T09:30:00-05:00', calendar: 'U16 G MARYLAND UNITED ECNL' },
+    ];
+    assert.strictEqual(G.nextEvent(cals, now).start, Date.parse('2026-11-09T09:30:00-05:00') / 1000);
     assert.strictEqual(G.nextEvent(ev.slice(0, 4), now), null);
   });
   await ok('session/today carries next_event from the schedule\'s events, and null without one', async () => {
@@ -112,6 +119,48 @@ const batch = (from, count, done) => ({ id: START, device: 'edge', name: 'Zone 1
     C.eventsBetween = async () => { throw new Error('no calendar'); };
     assert.strictEqual((await G.sessionToday()).next_event, null);   // a dead calendar never breaks the field's session
     C.eventsBetween = real;
+  });
+  await ok('extras: fuel prompts follow the plan\'s on-bike rule, a hard session is always fed, short easy rides get none', () => {
+    const X = require('./garmin-extras');
+    assert.strictEqual(X.fuelPlan('Z1 trainer 60 min', 60), null);
+    assert.deepStrictEqual(X.fuelPlan('Z1 road 120 min', 120), { every_min: 20, grams: 20, product: 'Tailwind', start_min: 20, g_per_h: 60 });
+    assert.strictEqual(X.fuelPlan('Z1 road 90 min', 90).grams, 10);
+    assert.strictEqual(X.fuelPlan('Long Z1', 180).grams, 30);
+    assert.ok(X.fuelPlan('VO2 4 × 4 min · heart rate 139–147', 50).grams > 0);
+  });
+  await ok('extras: sunset at the SoccerPlex on 13 Nov is about 4:55 p.m., VO2 targets only on VO2 days, the Plex needs 45 minutes', () => {
+    const X = require('./garmin-extras');
+    const ss = X.sunsetEpoch('2026-11-13', X.SOCCERPLEX.lat, X.SOCCERPLEX.lon);
+    const local = new Date(ss * 1000).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+    const mins = (h => (+h[0] % 12 + 12) * 60 + +h[1])(local.replace(/\s*PM/, '').split(':'));
+    assert.ok(Math.abs(mins - (16 * 60 + 55)) <= 6, 'sunset ' + local);
+    assert.deepStrictEqual(X.vo2Of('VO2 4 × 4 min · heart rate 139–147'), { hr_floor: 147, goal_min: [8, 12] });
+    assert.strictEqual(X.vo2Of('Z1 trainer 60 min'), null);
+    assert.strictEqual(X.turnBuffer('Ride from the SoccerPlex lot').buffer_min, 45);
+    assert.strictEqual(X.turnBuffer('Home trainer').buffer_min, 30);
+    assert.strictEqual(X.eatBefore('EAT\nBefore: lunch at the fields by 1:30, carbs in it.\nOn the bike: x'), 'lunch at the fields by 1:30, carbs in it.');
+  });
+  await ok('extras: the tank is the session\'s start from the live fuel model, else now', () => {
+    const X = require('./garmin-extras');
+    const e = { full_g: 110, legs_full_g: 320, now: { pct: 50, legs_pct: 60 }, starts: [{ name: 'Z1 road 120 min', pct: 80, legs_pct: 75 }] };
+    assert.deepStrictEqual(X.tankFor(e, 'Z1 road 120 min'), { quick_pct: 80, legs_pct: 75, quick_g: 88, legs_g: 240 });
+    assert.strictEqual(X.tankFor(e, 'other').quick_pct, 50);
+    assert.strictEqual(X.tankFor(null, 'x'), null);
+  });
+  await ok('extras: a fuel press logs on-bike carbs once; a rating keeps legs and breathing', async () => {
+    const X = require('./garmin-extras'); const food = require('./food');
+    const logged = []; const realAdd = food.addKnown, realRate = food.rateLegs;
+    food.addKnown = async b => { logged.push(b); return { id: 'f_test' + logged.length }; };
+    food.rateLegs = async () => ({ ok: true });
+    const r1 = await X.logFuel({ ride_id: '1794', t: 1200, grams: 20 });
+    const r2 = await X.logFuel({ ride_id: '1794', t: 1200, grams: 20 });
+    assert.strictEqual(r1.entry, 'f_test1'); assert.strictEqual(r2.duplicate, true); assert.strictEqual(logged.length, 1);
+    assert.strictEqual(logged[0].carbs_g, 20); assert.strictEqual(logged[0].kcal, 80);
+    const r = await X.rateRide({ ride_id: '1794', legs: 4, breathing: 3, name: 'Z1 road 120 min' });
+    assert.strictEqual(r.rating.legs, 4); assert.strictEqual(r.rating.breathing, 3);
+    let bad = null; try { await X.rateRide({ ride_id: '1794', legs: 9 }); } catch (e) { bad = e; }
+    assert.ok(bad && bad.status === 400);
+    food.addKnown = realAdd; food.rateLegs = realRate;
   });
   console.log(n + ' passed');
 })().catch(e => { console.error(e); process.exit(1); });

@@ -74,7 +74,7 @@ const TOOLS = [
   { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6 }
 ];
 
-function system(notebook) {
+function system(notebook, fresh) {
   const p = tz.parts(new Date());
   const now = `${tz.todayKey()} ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))} Eastern`;
   return `You are Harry's training and nutrition coach: a sports scientist and sports dietitian with the judgement of a coach who has worked with masters endurance athletes for years. You have the whole of his app, The Way, to read, the current research on the web, and your own notebook.
@@ -97,7 +97,7 @@ ${BRIEF}
 Your notebook (newest last):
 ${notebook.length ? notebook.slice(-40).map(n => `- ${n.date} [${n.kind}] ${n.note}`).join('\n') : '(empty)'}
 
-Now: ${now}.`;
+${fresh ? `Scores and streaks count from ${tz.dayShort ? tz.dayShort(fresh) : fresh} (a fresh start Harry set). When you quote a week's adherence (the chain, the food week, the Lift count, rides done of planned), use only days since then and say "since ${tz.dayShort ? tz.dayShort(fresh) : fresh}"; the days before are not his to answer for. Fitness, HRV, weight and power keep their full history.\n\n` : ''}Now: ${now}.`;
 }
 
 async function readSite(base, path) {
@@ -147,7 +147,8 @@ async function runJob(id, who) {
     // The system prompt and the tools are the same on every step, so they are cached once per question (the
     // clock in the prompt is read once, not per step); the conversation so far is cached at its last block, so a
     // step pays full price only for what the last step added. Without this, every step re-bought the whole context.
-    const sys = [{ type: 'text', text: system(notebook), cache_control: { type: 'ephemeral' } }];
+    const fresh = await require('./fresh-start').freshStart();
+    const sys = [{ type: 'text', text: system(notebook, fresh), cache_control: { type: 'ephemeral' } }];
     const cached = ms => ms.map((m, i) => {
       if (i !== ms.length - 1) return m;
       const c = typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : m.content.map(b => Object.assign({}, b));
