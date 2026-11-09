@@ -31,7 +31,7 @@ ok('verdict: the first link from the left that is off is the break; all good and
   const unplanned = Object.assign({}, all, { plan: { week: 20, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 1 } });
   assert.ok(/breaks at planning: 60 of 360 minutes of riding placed for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
-  assert.ok(/breaks at lifting: 1 of 5 sessions/.test(C.verdict(noLift).text));
+  assert.ok(/breaks at lifting: 1 of 5\./.test(C.verdict(noLift).text));
   const noRide = Object.assign({}, all, { work: { week: 40, state: 'bad', done_min: 120, planned_min: 300 } });
   assert.ok(/breaks at riding: 120 of 300 planned minutes ridden/.test(C.verdict(noRide).text));
   assert.strictEqual(C.stateOf('lift', 0.8), 'good'); assert.strictEqual(C.stateOf('lift', 0.6), 'warn'); assert.strictEqual(C.stateOf('lift', 0), 'bad');
@@ -83,7 +83,7 @@ ok('plan link: the planning score on its own week, labelled so it cannot read as
 
 ok('lift link: the verdict reads the Lift page\'s count, "1 of 1 due" in the first week', () => {
   const L = { lift: { week: 0, state: 'bad', sessions: 0, target: 5, count_word: '0 of 1 due' } };
-  assert.ok(/lifting: 0 of 1 due sessions/.test(C.verdict(L).text), C.verdict(L).text);
+  assert.ok(/lifting: 0 of 1 due\./.test(C.verdict(L).text), C.verdict(L).text);
 });
 ok('fuel: a ride scores what went in against the plan (before, on the bike, supplements); under below 100, over above', () => {
   const r = { sessions: [{ name: 'VO2 40/20s', sport: 'VirtualRide', time: '07:00', minutes: 51, done: true }],

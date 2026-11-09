@@ -1224,7 +1224,7 @@ function paintChain(c){
     // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
     if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
-    if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = (L.first_week ? `of ${L.of || L.expected} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
+    if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = (L.first_week && !L.of ? "due later" : L.first_week ? `of ${L.of} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
     el.querySelector(".cweek").textContent = unit;
     el.dataset.week = state || "none";
@@ -1718,7 +1718,7 @@ V.today = async function(){
   view.innerHTML = `
     <div class="hutop">
     <a class="hufit" id="fitField" href="#ride" aria-label="Fitness, open the Ride page"><span class="fl"><span class="fk">Fitness · CTL</span><span class="fv"><b class="fn">—</b><span class="fr"><span class="fd">reaching the bridge…</span><span class="fw"></span></span></span></span><svg class="fspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-    <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy balance today, tap for the breakdown"><span class="fk">Energy · today</span>${energyDial(null)}<span class="en1">reaching the bridge…</span><span class="en2"></span><span class="en3"></span></button>
+    <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy balance today, tap for the breakdown"><span class="fk">Energy</span>${energyDial(null)}<span class="en1">…</span><span class="en2"></span></button>
     </div>
     <div class="card endetail" id="enDetail" hidden></div>
     <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
@@ -1892,12 +1892,12 @@ V.today = async function(){
     const tgt = b ? b.target_end : null;
     const svg = el.querySelector(".edial");
     if (svg) svg.outerHTML = energyDial(b ? { now: enDeg(b.now), end: enDeg(b.end), target: enDeg(tgt) } : null);
-    const l1 = el.querySelector(".en1"), l2 = el.querySelector(".en2"), l3 = el.querySelector(".en3");
-    if (!b){ l1.textContent = scoresLoading ? "reaching the bridge…" : "no day report"; l2.textContent = ""; l3.textContent = bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}/day` : ""; return; }
-    l1.innerHTML = `<b>${kc(b.now)}</b> kcal so far${tgt != null ? ` · target ${kc(tgt)}` : ""}`;
+    const l1 = el.querySelector(".en1"), l2 = el.querySelector(".en2");
     const lw = energyData ? energyData.lb_week : null;
-    l2.textContent = lw != null ? `≈ ${lw > 0 ? "+" : lw < 0 ? "−" : ""}${Math.abs(lw)} lb a week at this rate` : energyData ? "a week's rate after a day logged" : "";
-    l3.textContent = bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}/day` : "";
+    // two short lines: now against the target; the week's pace and the BMR
+    l2.textContent = [lw != null ? `${lw > 0 ? "+" : lw < 0 ? "−" : ""}${Math.abs(lw)} lb/wk` : "", bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
+    if (!b){ l1.textContent = scoresLoading ? "…" : "—"; return; }
+    l1.innerHTML = `<b>${kc(b.now)}</b>${tgt != null ? ` / ${kc(tgt)}` : ""}`;
     el.setAttribute("aria-label", `Energy balance today ${kc(b.now)} kcal so far${tgt != null ? `, target ${kc(tgt)}` : ""}. Tap for the breakdown.`);
     drawEnergyDetail();
   };
@@ -1911,18 +1911,18 @@ V.today = async function(){
     const n = v => v == null ? "—" : Math.round(v).toLocaleString("en-US");
     const avg = energyData ? energyData.avg7 : null;
     const kg = body.kg || m.kg, age = body.age || m.age, cm = body.cm || m.cm;
-    d.innerHTML = `<h4>Energy · in and out since midnight</h4>
+    d.innerHTML = `<h4>Energy today</h4>
       <ul class="enlist">
-        ${row(`BMR, at rest${p.bmr_day ? ` <i>${n(p.bmr_day)} a day</i>` : ""}`, n(p.bmr))}
-        ${row(`+ daily, on your feet <i>BMR × 0.35</i>`, n(p.daily))}
-        ${row(`+ exercise done`, n(p.exercise))}
-        ${row(`burned so far`, n(p.burned), "ensum")}
-        ${row(`eaten`, n(p.eaten))}
-        ${row(`net`, kc(p.net != null ? p.net : b && b.now), "ennet")}
+        ${row("BMR", n(p.bmr))}
+        ${row("+ daily", n(p.daily))}
+        ${row("+ exercise", n(p.exercise))}
+        ${row("burned", n(p.burned), "ensum")}
+        ${row("eaten", n(p.eaten))}
+        ${row("net", kc(p.net != null ? p.net : b && b.now), "ennet")}
       </ul>
-      <div class="small">Noon is eaten = burned. The solid needle is now; the faint one is midnight if the rest of the plan happens (${kc(b && b.end)}); the thin mark is today's target (${kc(b && b.target_end)}).${b && Math.abs(b.now) > ENERGY_SCALE ? ` The dial stops at ±1,000; the true number is ${kc(b.now)}.` : ""}</div>
-      <div class="enweek">${energyDial({ avg: enDeg(avg) })}<div class="small"><b>${avg != null ? kc(avg) + " kcal a day" : "—"}</b>, the last ${energyData && energyData.avg_days ? energyData.avg_days : 0} days logged averaged${energyData && energyData.lb_week != null ? ` · ≈ ${energyData.lb_week > 0 ? "+" : energyData.lb_week < 0 ? "−" : ""}${Math.abs(energyData.lb_week)} lb a week (× 7 ÷ 3,500)` : ""}</div></div>
-      <div class="small">Burn from Mifflin-St Jeor: ${kg ? `${kg} kg` : "—"}${body.kg_from ? ` from weigh-in, ${fmtDay(body.kg_from)}` : body.kg_fallback ? " (no weigh-in: the default)" : ""} · ${cm || "—"} cm · age ${age || "—"}. <a href="#settings">Change age or height in Setup</a>. Tap the meter again to close.</div>`;
+      <div class="small">Midnight ${kc(b && b.end)} · target ${kc(b && b.target_end)}</div>
+      <div class="enweek">${energyDial({ avg: enDeg(avg) })}<div class="small"><b>${avg != null ? kc(avg) : "—"}</b> a day, last 7${energyData && energyData.lb_week != null ? ` · ${energyData.lb_week > 0 ? "+" : energyData.lb_week < 0 ? "−" : ""}${Math.abs(energyData.lb_week)} lb/wk` : ""}</div></div>
+      <div class="small">${kg ? `${kg} kg` : "—"}${body.kg_from ? ` (${fmtDay(body.kg_from)})` : ""} · ${cm || "—"} cm · ${age || "—"} y · <a href="#settings">edit</a></div>`;
   };
   { const ef = document.getElementById("enField"); if (ef) ef.onclick = ()=>{ energyOpen = !energyOpen; drawEnergyDetail(); }; }
   const drawMicroTile = ()=>{
@@ -2887,7 +2887,7 @@ function demoSchedule(){
    which, per source, with the link that fixes it. */
 V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
-    <div class="card" id="youCard"><h4>You and the scores</h4><div class="small">reading…</div></div>
+    <div class="card" id="youCard"><h4>Scores</h4><div class="small">…</div></div>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
 
   // Scores count from (fresh-start.js): everything that grades you counts days on or after this date; the
@@ -2897,13 +2897,13 @@ V.settings = function(){
     const [fs, body] = await Promise.all([bridge("/fresh-start").catch(()=>null), bridge("/body").catch(()=>null)]);
     const lab = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
     const date = fs && fs.date;
-    el.innerHTML = `<h4>You and the scores</h4>
-      <div class="small"><b>${date ? `Scores count from ${esc(lab(date))}` : "Scores count every day: no fresh start set"}</b>. The chain's seven-day links, the Lift count, the Food week and the coach's week figures count only days on or after it. Rides, meals, lifts, weigh-ins and the journal before it stay stored and visible. Fitness, fatigue, HRV and the weight trend keep their history.</div>
-      <div class="row2"><span><label for="fsDate">Scores count from</label><input id="fsDate" type="date" value="${attr(date || "")}"></span>
+    el.innerHTML = `<h4>Scores</h4>
+      <div class="small">Earlier days stay saved, not scored.</div>
+      <div class="row2"><span><label for="fsDate">Count from</label><input id="fsDate" type="date" value="${attr(date || "")}"></span>
         <span class="gbtns"><button class="primary" id="fsSave">Save</button><button id="fsClear"${date ? "" : " disabled"}>Clear</button></span></div>
       <div class="small" id="fsMsg"></div>
-      <h4 style="margin-top:14px">Body · for the energy meter</h4>
-      <div class="small">BMR is Mifflin-St Jeor from weight, height and age; weight follows the latest weigh-in${body && body.kg_from ? ` (${body.kg} kg, ${esc(lab(body.kg_from))})` : ""}.${body && body.bmr ? ` Now: BMR ${body.bmr.toLocaleString("en-US")} a day, ${body.base_burn.toLocaleString("en-US")} with everyday movement.` : ""}</div>
+      <h4 style="margin-top:14px">Body</h4>
+      <div class="small">${body && body.bmr ? `BMR ${body.bmr.toLocaleString("en-US")}` : ""}${body && body.kg_from ? ` · ${body.kg} kg (${esc(lab(body.kg_from))})` : ""}</div>
       <div class="row2"><span><label for="bAge">Age</label><input id="bAge" type="number" inputmode="numeric" min="14" max="100" value="${attr(body ? body.age : "")}"></span>
         <span><label for="bCm">Height, cm</label><input id="bCm" type="number" inputmode="numeric" min="120" max="230" value="${attr(body ? body.cm : "")}"></span></div>
       <div class="gbtns"><button class="primary" id="bSave">Save</button></div>
@@ -2923,7 +2923,7 @@ V.settings = function(){
     document.getElementById("bSave").onclick = async ()=>{
       say("bMsg", "saving…");
       try{ const r = await post("/body", { age: document.getElementById("bAge").value, cm: document.getElementById("bCm").value });
-        say("bMsg", `Saved. BMR ${r.bmr.toLocaleString("en-US")} a day, ${r.base_burn.toLocaleString("en-US")} with everyday movement.`); }
+        say("bMsg", `Saved · BMR ${r.bmr.toLocaleString("en-US")}`); }
       catch(e){ say("bMsg", e.message); }
     };
   };

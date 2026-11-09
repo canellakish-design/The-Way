@@ -68,7 +68,7 @@ function verdict(links) {
       plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding placed for the week ahead${L.plan.week_label ? ` (${L.plan.week_label})` : ''}, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
       fuel: () => `fuelling at ${L.fuel.week}% of what the plan asked for (food before and on the bike, and the pre-ride supplements; 100% is the plan).`,
       work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
-      lift: () => `lifting: ${L.lift.count_word || `${L.lift.sessions} of ${L.lift.target}`} sessions this week.`,
+      lift: () => `lifting: ${L.lift.count_word || `${L.lift.sessions} of ${L.lift.target}`}.`,
       recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
     }[first]();
     // red is a break; amber is a weak link: the chain holds, with a warning on it
@@ -370,8 +370,8 @@ async function report() {
     // the plan's first week is judged against the sessions due since it started, not a full five
     // the box reads "1 of 1 due" in the plan's first week and "3 of 5" after it, the Lift page's own count
     lift: { week: Math.round(Math.min(1, lift.sessions / (lift.of || 5)) * 100),
-      state: lift.deload ? 'none' : stateOf('lift', lift.sessions / (lift.of || 5)),
-      first_week: !!lift.first_week, of: lift.of || 5, count_word: lift.word,
+      state: lift.deload || (lift.first_week && !lift.of) ? 'none' : stateOf('lift', lift.sessions / (lift.of || 5)),   // nothing due yet: grey, not red
+      first_week: !!lift.first_week, of: lift.of != null ? lift.of : 5, count_word: lift.word,
       sessions: lift.sessions, pumps: lift.pumps || 0, blasts: lift.blasts || 0, extras: (lift.pumps || 0) + (lift.blasts || 0), target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: lift.first_week ? `of ${lift.of} due` : `of ${lift.of || 5}`,
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
