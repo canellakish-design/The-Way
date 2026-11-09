@@ -179,6 +179,7 @@ details.ln-fold .primary{margin-top:10px}
 .eb-head{display:flex; justify-content:space-between; align-items:flex-end; gap:10px; margin-bottom:6px}
 .eb-end{text-align:right}
 .eb-big{font-size:34px}
+.eb-compact{padding:8px 10px 4px} .eb-compact .eb-head{margin-bottom:2px} .eb-compact .eb-big{font-size:28px}
 .eb-svg{width:100%; height:auto; display:block}
 .eb-grid{stroke:var(--line); stroke-width:1; stroke-dasharray:3 4}
 .eb-zero{stroke:var(--muted); stroke-width:1}
