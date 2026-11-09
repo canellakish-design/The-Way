@@ -2,6 +2,7 @@
 const { getJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const tz = require('./tz');
+const Light = require('./light');   // pwa/light.js: low sun, half light, dark, the woods sooner
 const HOME_LAT = process.env.HOME_LAT || 39.0;
 const HOME_LON = process.env.HOME_LON || -76.5;
 const ROUTE_BEARING = 135;
@@ -73,6 +74,9 @@ async function forecastAt(dateKey, startMin, minutes, opts) {
   const d = await r.json(); const h = d.hourly;
   const dk = d.daily && d.daily.time ? d.daily.time.indexOf(dateKey) : -1;
   const sr = dk >= 0 ? +d.daily.sunrise[dk].slice(11, 13) + (+d.daily.sunrise[dk].slice(14, 16) >= 30 ? 1 : 0) : null, ss = dk >= 0 ? +d.daily.sunset[dk].slice(11, 13) : null;
+  const L = dk >= 0 ? Light.lightDay(dateKey, lat, d.daily.sunrise[dk].slice(11, 16), d.daily.sunset[dk].slice(11, 16)) : null;
+  const from = startMin == null ? 7 * 60 : startMin, woods = !!o.woods;
+  const lightOpt = L ? { L, woods, from, to: from + (minutes || 60) } : null;
   const h0 = Math.floor((startMin == null ? 7 * 60 : startMin) / 60), h1 = Math.ceil(((startMin == null ? 7 * 60 : startMin) + (minutes || 60)) / 60);
   const hours = [];
   for (let hh = h0; hh <= Math.min(23, h1); hh++) {
@@ -82,20 +86,24 @@ async function forecastAt(dateKey, startMin, minutes, opts) {
     hours.push({ hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
       wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(dir), wind_deg: dir, humidity: h.relative_humidity_2m[i],
       ride: windKind(dir, bearing) + ' out, ' + windKind(dir, (bearing + 180) % 360) + ' home' });
-    Object.assign(hours[hours.length - 1], scoreHour(hours[hours.length - 1], sr, ss));
+    Object.assign(hours[hours.length - 1], scoreHour(hours[hours.length - 1], sr, ss, lightOpt));
   }
   if (!hours.length) return null;
   const mid = hours[Math.floor(hours.length / 2)];
-  return { date: dateKey, hours, conditions: gradeRide(hours), summary: `${mid.temp_f}°F, feels ${mid.feels_f}°, wind ${mid.wind_mph} mph from the ${mid.wind_from}${mid.gust_mph > mid.wind_mph + 8 ? `, gusts ${mid.gust_mph}` : ''}, ${mid.rain_pct}% rain`,
+  return { date: dateKey, hours, conditions: gradeRide(hours), light: L ? Object.assign({ day: L }, Light.summary(L, woods)) : null, summary: `${mid.temp_f}°F, feels ${mid.feels_f}°, wind ${mid.wind_mph} mph from the ${mid.wind_from}${mid.gust_mph > mid.wind_mph + 8 ? `, gusts ${mid.gust_mph}` : ''}, ${mid.rain_pct}% rain`,
     bearing, source: 'Open-Meteo' };
 }
 // Each hour of a day graded for riding outside: red when it is dark, very
 // cold, very hot, very windy or wet; amber when marginal; green otherwise.
 // Daylight from Open-Meteo's sunrise and sunset for that day.
-function gradeHour(h, sunrise, sunset) {
+function gradeHour(h, sunrise, sunset, L) {
   const why = []; let g = 'good';
   const bad = r => { g = 'bad'; why.push(r); }, ok = r => { if (g !== 'bad') g = 'ok'; why.push(r); };
-  if (h.hour < sunrise || h.hour >= sunset) bad('dark');
+  if (L) {
+    // half an hour or more of half light or dark in the hour is red; any of it, or a half hour of low sun, is amber
+    const n = Light.lightCut(h.hour * 60, h.hour * 60 + 60, L, false).minutes, dim = n.twilight + n.dark;
+    if (dim >= 30) bad(n.dark >= 30 ? 'dark' : 'half light'); else if (dim > 0) ok('lights on'); else if (n.low >= 30) ok('low sun');
+  } else if (h.hour < sunrise || h.hour >= sunset) bad('dark');
   if (h.feels_f < 35) bad(`${h.feels_f}° feels`); else if (h.feels_f < 45) ok(`${h.feels_f}° feels`);
   if (h.feels_f > 95) bad(`${h.feels_f}° feels`); else if (h.feels_f > 88) ok(`${h.feels_f}° feels`);
   if (h.wind_mph >= 20 || h.gust_mph >= 32) bad(`wind ${h.wind_mph}, gusts ${h.gust_mph}`); else if (h.wind_mph >= 14 || h.gust_mph >= 25) ok(`wind ${h.wind_mph}, gusts ${h.gust_mph}`);
@@ -106,10 +114,14 @@ function gradeHour(h, sunrise, sunset) {
 // 100 and loses points for cold or heat (feels-like), wind on his own bands (under 12 mph green,
 // 12 to 15 amber, over 15 red), gusts well over the wind, rain, and dark. A ride's score is the
 // mean of its hours leaning on the worst one. The letter table is the school one.
-function scoreHour(h, sunrise, sunset) {
+// light (optional): { L: Light.lightDay(...), woods, from, to } scores the hour's light minute by minute over the
+// part of it the ride covers (pwa/light.js): low sun, half light and dark, the woods half an hour sooner.
+// Without it, the old whole-hour rule: an hour before sunrise or from sunset on is dark.
+function scoreHour(h, sunrise, sunset, light) {
   let s = 100; const why = [];
   const cut = (n, r) => { s -= n; if (n >= 8) why.push(r); };
-  if (sunrise != null && sunset != null && (h.hour < sunrise || h.hour >= sunset)) cut(100, 'dark');
+  const useLight = light && light.L;
+  if (!useLight && sunrise != null && sunset != null && (h.hour < sunrise || h.hour >= sunset)) cut(100, 'dark');
   const f = h.feels_f;
   if (f < 55) cut(f >= 40 ? (55 - f) : f >= 30 ? 15 + (40 - f) * 3 : 45 + (30 - f) * 4, `${f}° feels`);   // a point a degree down to 40, three a degree to 30, four below
   else if (f > 75) cut(f <= 85 ? (f - 75) : 10 + (f - 85) * 2.5, `${f}° feels`);
@@ -118,7 +130,13 @@ function scoreHour(h, sunrise, sunset) {
   if (h.gust_mph > w + 8) cut(Math.min(15, h.gust_mph - w - 8), `gusts ${h.gust_mph}`);
   const rp = h.rain_pct || 0, ri = h.rain_in || 0;
   if (ri >= 0.1) cut(70, 'rain'); else if (rp >= 60 || ri >= 0.05) cut(45, `${rp}% rain`); else if (rp >= 35) cut(15 + (rp - 35) * 0.6, `${rp}% rain`);
-  return { cscore: Math.max(0, Math.round(s)), cwhy: why };
+  const wx = Math.max(0, Math.round(s));   // the weather alone, so the page can add the light over a ride's own minutes
+  let lightMin = null;
+  if (useLight) {
+    const a = Math.max(h.hour * 60, light.from != null ? light.from : -Infinity), b = Math.min(h.hour * 60 + 60, light.to != null ? light.to : Infinity);
+    if (b > a) { const lc = Light.lightCut(a, b, light.L, light.woods); s -= lc.cut; if (lc.cut >= 8) why.unshift(...lc.why); lightMin = lc.minutes; }
+  }
+  return { cscore: Math.max(0, Math.round(s)), cscore_wx: wx, cwhy: why, light_min: lightMin };
 }
 const LETTERS = [[97, 'A+'], [92, 'A'], [88, 'A−'], [84, 'B+'], [79, 'B'], [74, 'B−'], [69, 'C+'], [63, 'C'], [57, 'C−'], [50, 'D+'], [40, 'D'], [0, 'F']];
 function letterOf(score) { for (const [min, l] of LETTERS) if (score >= min) return l; return 'F'; }
@@ -140,6 +158,7 @@ async function outlook(from, to) {
     const date = dd.time[k];
     if (date < from || date > to) continue;
     const sr = +dd.sunrise[k].slice(11, 13) + (+dd.sunrise[k].slice(14, 16) >= 30 ? 1 : 0), ss = +dd.sunset[k].slice(11, 13);
+    const L = Light.lightDay(date, HOME_LAT, dd.sunrise[k].slice(11, 16), dd.sunset[k].slice(11, 16));
     const hours = [];
     for (let hh = 0; hh < 24; hh++) {
       const i = h.time.indexOf(`${date}T${String(hh).padStart(2, '0')}:00`); if (i < 0) continue;
@@ -147,7 +166,7 @@ async function outlook(from, to) {
       const pt = { hour: hh, temp_f: Math.round(h.temperature_2m[i]), feels_f: Math.round(h.apparent_temperature[i]), rain_pct: h.precipitation_probability[i], rain_in: h.precipitation[i],
         wind_mph: Math.round(h.wind_speed_10m[i]), gust_mph: Math.round(h.wind_gusts_10m[i]), wind_from: compass(h.wind_direction_10m[i]), wind_deg: Math.round(h.wind_direction_10m[i]),
         code, cloud_pct: cloud, is_day: isDay, sky: skyOf(code, cloud, isDay) };
-      hours.push(Object.assign(pt, gradeHour(pt, sr, ss), scoreHour(pt, sr, ss)));
+      hours.push(Object.assign(pt, gradeHour(pt, sr, ss, L), scoreHour(pt, sr, ss, L ? { L } : null)));
     }
     // the best stretch: the longest run of green hours, then amber
     let best = null, run = null;
@@ -155,7 +174,7 @@ async function outlook(from, to) {
       if (x.grade === 'good') { if (!run) run = { from: x.hour, to: x.hour + 1 }; else run.to = x.hour + 1; if (!best || run.to - run.from > best.to - best.from) best = run; }
       else run = null;
     }
-    days[date] = { date, sunrise: dd.sunrise[k].slice(11, 16), sunset: dd.sunset[k].slice(11, 16), hours, best };
+    days[date] = { date, sunrise: dd.sunrise[k].slice(11, 16), sunset: dd.sunset[k].slice(11, 16), light: L, hours, best };
   }
   return { from, to, days, source: 'Open-Meteo' };
 }

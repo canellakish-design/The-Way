@@ -52,9 +52,14 @@ const EXAMPLE = [step(300, 55, 60), { kind: 'repeat', label: '3 x', count: 3, st
     const arr = ivs.map(x => [x.start_s, x.dur_s, x.target_w || 0, 0, 0]);
     assert.deepStrictEqual(B.planOf(B.planFromSteps(arr)), { low: 1140, high: 300, peak: 540 });
   });
-  await ok('a free step fills no bucket; a heart-rate band goes by its middle; a ramp by the middle of its ends', () => {
+  await ok('a free step is Zone 1 (LOW), in every form; a heart-rate band goes by its middle; a ramp by the middle of its ends', () => {
     const free = [{ kind: 'step', dur_s: 3600, target: { type: 'free' } }];
-    const p = B.planFromSteps(free); assert.deepStrictEqual(B.planOf(p), { low: 0, high: 0, peak: 0 }); assert.strictEqual(p.planned, false);
+    const p = B.planFromSteps(free); assert.deepStrictEqual(B.planOf(p), { low: 3600, high: 0, peak: 0 }); assert.strictEqual(p.planned, true);
+    // the same ride as the player's intervals, the Edge's arrays, and a step with no target at all
+    assert.deepStrictEqual(B.planOf(B.planFromSteps([{ start_s: 0, dur_s: 3600, target_w: null }])), { low: 3600, high: 0, peak: 0 });
+    assert.deepStrictEqual(B.planOf(B.planFromSteps([[0, 3600, 0, 0, 0]])), { low: 3600, high: 0, peak: 0 });
+    assert.deepStrictEqual(B.planOf(B.planFromSteps([{ kind: 'step', dur_s: 3600 }])), { low: 3600, high: 0, peak: 0 });
+    assert.strictEqual(p.dueAt(1800).low, 1800);
     assert.deepStrictEqual(B.planOf(B.planFromSteps([{ dur_s: 240, target: { type: 'hr', lo: 139, hi: 147 } }])), { low: 0, high: 0, peak: 240 });
     assert.deepStrictEqual(B.planOf(B.planFromSteps([{ dur_s: 240, target: { type: 'hr', lo: 110, hi: 122 } }])), { low: 240, high: 0, peak: 0 });   // middle 116: LOW
     assert.deepStrictEqual(B.planOf(B.planFromSteps([{ dur_s: 240, target: { type: 'hr', lo: 112, hi: 124 } }])), { low: 0, high: 240, peak: 0 });   // middle 118: HIGH
@@ -98,11 +103,22 @@ const EXAMPLE = [step(300, 55, 60), { kind: 'repeat', label: '3 x', count: 3, st
     assert.strictEqual(bad({ date: '2026-10-01', vt1_w: 'x', vt2_w: 208, vt1_hr: 117, vt2_hr: 139 }), 400);
     assert.strictEqual(bad({ date: '2099-01-01', vt1_w: 169, vt2_w: 208, vt1_hr: 117, vt2_hr: 139 }), 400);
   });
-  await ok('a session\'s buckets: the lines, the colours and the plan, null when nothing is planned', () => {
+  await ok('a session\'s buckets: the lines, the colours and the plan; a ride by feel plans Zone 1; null only with no steps', () => {
     const s = B.sessionBuckets(EXAMPLE, Object.assign({}, B.LINES, { date: '2026-08-14', source: 'Tymewear' }));
     assert.deepStrictEqual(s.buckets_plan, { low: 1140, high: 300, peak: 540 });
     assert.strictEqual(s.colours.peak, '#E00000'); assert.strictEqual(s.lines.vt2_w, 208); assert.strictEqual(s.lines.source, 'Tymewear');
-    assert.strictEqual(B.sessionBuckets([{ dur_s: 3600, target: { type: 'free' } }], B.LINES).buckets_plan, null);
+    assert.deepStrictEqual(B.sessionBuckets([{ dur_s: 3600, target: { type: 'free' } }], B.LINES).buckets_plan, { low: 3600, high: 0, peak: 0 });
+    assert.strictEqual(B.sessionBuckets([], B.LINES).buckets_plan, null);
+  });
+  await ok('the guard (9 Nov 2026): every ride the library makes shows buckets on the site and the Edge, Zone 1 rides all LOW', () => {
+    const { LIBRARY } = require('./workout-library');
+    const rides = LIBRARY.filter(t => /ride/i.test(t.sport || ''));
+    assert.ok(rides.length >= 10, 'library rides: ' + rides.length);
+    for (const t of rides) {
+      const p = B.planFromSteps(t.steps || [], 175, B.LINES);
+      assert.ok(p.planned, `${t.name} plans no buckets`);
+      if (/zone 1|mountain bike/i.test(t.name)) assert.strictEqual(p.low, p.total, `${t.name} should be all Zone 1`);
+    }
   });
   await ok('a Strava ride\'s seconds: stopped time counts nowhere, and estimated power is not power', () => {
     const RD = require('./rides');

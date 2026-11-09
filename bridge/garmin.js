@@ -114,12 +114,16 @@ async function sessionCore() {
   const s = await P.sessionFor('today');
   const vt2 = s.thresholds && s.thresholds.vt2_hr ? s.thresholds.vt2_hr : 139;
   // the buckets (buckets.js): the lines and colours the field draws with, and the plan in seconds per bucket.
-  // buckets_plan null means no plan (a free ride, or a ride-by-feel session): the bars share the ride time.
+  // buckets_plan null means no session at all: the bars share the ride time. A ride by feel plans Zone 1 (LOW).
   // The field reads these at each ride start, so a new threshold reaches the Edge with no rebuild.
   const bk = { lines: s.lines || null, colours: s.colours || null, buckets_plan: s.buckets_plan || null };
   if (!s.workout) return Object.assign({ name: null, workout_id: null, vt2_hr: vt2, steps: [] }, bk);
-  // each step as [start_s, dur_s, target_w, hr_lo, hr_hi]; a free step is all zeros and fills no bucket
-  const steps = (s.intervals || []).map(x => [x.start_s, x.dur_s, x.target_w || 0, x.target_hr ? x.target_hr.lo : 0, x.target_hr ? x.target_hr.hi : 0]);
+  // each step as [start_s, dur_s, target_w, hr_lo, hr_hi]. A free step is ridden by feel, which is Zone 1, so it
+  // goes out as the Zone 1 heart-rate band (VT1 - 20 to VT1 - 1, 97 to 116): the field's due line then fills
+  // LOW through it, the same as the plan the bridge sends (pwa/buckets.js).
+  const v1 = (s.lines && s.lines.vt1_hr) || 117;
+  const steps = (s.intervals || []).map(x => { const hasW = x.target_w > 0, hasHr = x.target_hr && x.target_hr.hi > 0;
+    return [x.start_s, x.dur_s, x.target_w || 0, hasHr ? x.target_hr.lo : hasW ? 0 : v1 - 20, hasHr ? x.target_hr.hi : hasW ? 0 : v1 - 1]; });
   return Object.assign({ name: s.workout.name, workout_id: s.workout.id, time: s.workout.time, vt2_hr: vt2, steps }, bk);
 }
 

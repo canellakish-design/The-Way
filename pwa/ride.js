@@ -89,7 +89,10 @@ V.ride = async function(){
   const whenWord = startDate === date ? hm12(startHM) : `${hm12(startHM)} tomorrow`;
   // Indoors: a ride planned on the trainer, or one whose hours grade F (dark, or unridable): trainer kit, Zwift, no outdoor ranking
   const rideHours = ride && ride.time && w ? w.hours.filter(h => h.hour >= (hm2mm(ride.time)/60|0) && h.hour < Math.max((hm2mm(ride.time)/60|0) + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60))) : [];
-  const rideGrade0 = rideHours.length ? condGrade(rideHours) : null;
+  // the light over the ride's own minutes, a trail half an hour sooner (pwa/light.js): a ride done by 4:30 is not dark at 5
+  const rideLt = ride && ride.time && w && w.light && window.Light ? { L: w.light, woods: Light.isWoods(ride.name, ride.sport), from: hm2mm(ride.time), to: hm2mm(ride.time) + (ride.minutes || 60) } : null;
+  const lightSum = w && w.light && window.Light ? Light.summary(w.light, !!(rideLt && rideLt.woods)) : null;
+  const rideGrade0 = rideHours.length ? condGrade(rideHours, rideLt) : null;
   const indoor = !!(ride && !ride.done && startDate === date && (/virtualride/i.test(ride.sport || "") || (typeof kindOf === "function" && kindOf(ride.name, ride.sport) === "trainer") || (rideGrade0 && rideGrade0.letter === "F")));
 
   // ---- the courses for that start
@@ -145,10 +148,10 @@ V.ride = async function(){
   const isDark = h => riseMin != null && setMin != null ? (h.hour * 60 + 30 < riseMin || h.hour * 60 + 30 > setMin) : h.is_day === false;
   const hFacts = h => { const dark = isDark(h);
     return { big: `${h.temp_f}° · ${h.wind_mph} mph ${esc(h.wind_from)}`,
-      line: [`feels ${h.feels_f}°`, h.gust_mph > h.wind_mph + 8 ? `gusts ${h.gust_mph}` : "", dark ? "dark" : setMin != null ? `light till ${esc(hm12(w.sunset))}` : "", h.rain_pct >= 20 ? `${h.rain_pct}% rain` : "dry", h.sky && SKYW[h.sky] ? SKYW[h.sky] : ""].filter(Boolean).join(" · ") }; };
+      line: [`feels ${h.feels_f}°`, h.gust_mph > h.wind_mph + 8 ? `gusts ${h.gust_mph}` : "", dark ? "dark" : lightSum ? `good light till ${esc(lightSum.good_until)}, lights ${esc(lightSum.lights_from)}` : setMin != null ? `light till ${esc(hm12(w.sunset))}` : "", h.rain_pct >= 20 ? `${h.rain_pct}% rain` : "dry", h.sky && SKYW[h.sky] ? SKYW[h.sky] : ""].filter(Boolean).join(" · ") }; };
   const rideH0 = ride && ride.time ? (hm2mm(ride.time)/60|0) : null;
   const rideH1 = ride && ride.time ? Math.max(rideH0 + 1, Math.ceil((hm2mm(ride.time) + (ride.minutes || 60))/60)) : null;
-  const rideG = ride && ride.time && w ? condGrade(w.hours.filter(h => h.hour >= rideH0 && h.hour < rideH1)) : null;
+  const rideG = ride && ride.time && w ? condGrade(w.hours.filter(h => h.hour >= rideH0 && h.hour < rideH1), rideLt) : null;
   const heroH = hNow || (top && w.hours.find(h => h.hour === top.a));
   const wear = indoor ? `<div class="rd-wear"><span class="hu-lab">Indoors at ${esc(whenWord)} · trainer kit</span>Bibs and a light jersey, the fan on, a towel, two bottles.</div>`
     : kit && kit.items ? `<div class="rd-wear"><span class="hu-lab">Wear at ${esc(whenWord)} · feels ${kit.feels_low_f}°</span>${kit.items.map(esc).join(", ")}.</div>` : "";

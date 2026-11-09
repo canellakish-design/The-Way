@@ -249,15 +249,32 @@ async function sessionsFor(date) {
 // The body's say on the deficit: a red WHOOP morning, or HRV below the band
 // two days running, means eat to maintenance today (the IOC's "adaptable"
 // low energy availability is the transient kind; prolonged is the problem).
+// A short night (under 6 hours asleep) halves it: dieters sleeping ~5.5 h lose
+// more lean mass and less fat than at 8.5 h on the same diet (Nedeltcheva 2010).
+// Harry asked for this on 9 Nov 2026. Pure rule, tested in deficit.test.js.
+const SHORT_SLEEP_H = 6;
+function deficitFromBody(o) {
+  const x = o || {};
+  if (x.recovery != null && x.recovery < 34) return { deficit: 0, why: `WHOOP recovery ${Math.round(x.recovery)}: no deficit today, eat to maintenance` };
+  if (x.hrv_state === 'low2') return { deficit: 0, why: 'HRV below your band two days running: no deficit today, eat to maintenance' };
+  if (x.sleep_h != null && x.sleep_h > 0 && x.sleep_h < SHORT_SLEEP_H) {
+    const base = x.base_deficit != null ? x.base_deficit : F.DEFICIT;
+    return { deficit: Math.round(base / 2 / 10) * 10, why: `${(Math.round(x.sleep_h * 10) / 10)} h asleep: half the deficit today` };
+  }
+  return { deficit: undefined, why: null };
+}
 async function deficitFor(date) {
   if (date !== tz.todayKey()) return { deficit: undefined, why: null };
   try {
     const s = await require('./whoop').sleepLatest({ sync: false });
     const rec = s && s.recovery;
-    if (rec && rec.score != null && rec.score < 34) return { deficit: 0, why: `WHOOP recovery ${Math.round(rec.score)}: no deficit today, eat to maintenance` };
-    const fit = await getJSON('fitness', { wellness: [] });
-    const guide = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null);
-    if (guide.state === 'low2') return { deficit: 0, why: 'HRV below your band two days running: no deficit today, eat to maintenance' };
+    let hrvState = null;
+    try {
+      const fit = await getJSON('fitness', { wellness: [] });
+      hrvState = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null).state;
+    } catch (e) { hrvState = null; }
+    const sleepH = s && s.sleep && !s.sleep.nap && s.sleep.hours != null ? Number(s.sleep.hours) : null;
+    return deficitFromBody({ recovery: rec && rec.score != null ? rec.score : null, hrv_state: hrvState, sleep_h: sleepH });
   } catch (e) { /* no reading: the deficit stands */ }
   return { deficit: undefined, why: null };
 }
@@ -1057,4 +1074,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, dayReport, recheckDay, bodyKg, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };
+module.exports = { attach, deficitFromBody, dayReport, recheckDay, bodyKg, dayDocFor: dayDoc, saveDayDoc: (date, doc) => setJSON(dayKey(date), doc), guidelinesFor, sessionsFor, addPhoto, addKnown, addSupplement, removeEntry, todayEntries, twinToday, rateLegs };

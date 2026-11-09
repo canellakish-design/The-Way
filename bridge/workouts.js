@@ -668,7 +668,7 @@ function attach(app) {
         try {
           const sm = isTime(w.time) ? (+w.time.slice(0, 2)) * 60 + (+w.time.slice(3, 5)) : null;
           const WX = require('./weather');
-          out.weather = await WX.forecastAt(w.date, sm, Math.round(m.duration_s / 60));
+          out.weather = await WX.forecastAt(w.date, sm, Math.round(m.duration_s / 60), { woods: require('./light').isWoods(w.name, w.sport) });
           out.kit = out.weather ? WX.kit(out.weather.hours) : null;
         } catch (e) { out.weather = null; out.weather_error = e.message; }
       } else out.weather = null;

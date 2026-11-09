@@ -9,7 +9,7 @@ self.addEventListener("activate", e => {
 });
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  const shellPaths = ["/", "/index.html", "/app.js", "/plan.js", "/food.js", "/links.js", "/coach.js", "/ride.js", "/flags.js", "/voice.js", "/fit.js", "/buckets.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
+  const shellPaths = ["/", "/index.html", "/app.js", "/plan.js", "/food.js", "/links.js", "/coach.js", "/ride.js", "/flags.js", "/voice.js", "/fit.js", "/buckets.js", "/light.js", "/edge.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
   if (shellPaths.includes(u.pathname)) {
     e.respondWith(fetch(e.request).then(r => {
       // Only cache a real success. A 404 page, or the API function answering
@@ -18,7 +18,7 @@ self.addEventListener("fetch", e => {
       const type = r.headers.get("content-type") || "";
       const cacheable = r.ok && r.status === 200
         && (/\.css$/.test(u.pathname) ? type.includes("css")
-          : (u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js" || u.pathname === "/links.js" || u.pathname === "/coach.js" || u.pathname === "/ride.js" || u.pathname === "/flags.js" || u.pathname === "/voice.js" || u.pathname === "/fit.js" || u.pathname === "/buckets.js" || u.pathname === "/player.js") ? type.includes("javascript")
+          : (u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js" || u.pathname === "/links.js" || u.pathname === "/coach.js" || u.pathname === "/ride.js" || u.pathname === "/flags.js" || u.pathname === "/voice.js" || u.pathname === "/fit.js" || u.pathname === "/buckets.js" || u.pathname === "/light.js" || u.pathname === "/edge.js" || u.pathname === "/player.js") ? type.includes("javascript")
           : type.includes("html"));
       if (cacheable) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
       return r;

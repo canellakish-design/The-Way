@@ -42,6 +42,14 @@ function sunsetEpoch(dateKey, lat, lon) {
   return Math.round(Date.UTC(y, m - 1, d) / 1000 + minutesUTC * 60);
 }
 
+// epochs for the Edge: good light ends, lights on, dark. Road: lights on at sunset, dark at civil dusk.
+// Trail: under the trees it dims half an hour before sunset and is dark at sunset.
+function lightFor(sunset, dateKey, lat, woods) {
+  if (sunset == null) return null;
+  const Lt = require('./light'), t = Lt.twilightMinutes(dateKey, lat), w = woods ? Lt.WOODS_MIN : 0;
+  return { woods: !!woods, good_until: sunset - (w + Lt.LOW_MIN) * 60, lights_from: sunset - w * 60, dark_at: woods ? sunset : sunset + t * 60, twilight_min: t };
+}
+
 // where the ride starts, from its notes: the SoccerPlex weekend, else home
 function placeOf(notes) { return PLEX_RE.test(String(notes || '')) ? SOCCERPLEX : HOME; }
 
@@ -71,10 +79,12 @@ function tankFor(energy, name) {
 async function extrasFor(session) {
   const w = (session && session.workout) || null;
   const today = tz.todayKey();
-  const out = { fuel: null, tank: null, sunset: null, turn: null, vo2: null, recovery: null, eat_before: null, energy: null, sport: null };
+  const out = { fuel: null, tank: null, sunset: null, light: null, turn: null, vo2: null, recovery: null, eat_before: null, energy: null, sport: null };
   const place = placeOf(w && w.notes);
   try { out.sunset = sunsetEpoch(today, place.lat, place.lon); } catch (e) { out.sunset = null; }
   if (!w) return out;
+  // light, not just sunset (pwa/light.js): when good light ends, when lights go on, when it is dark; a trail half an hour sooner
+  try { out.light = lightFor(out.sunset, today, place.lat, require('./light').isWoods(w.name, w.sport)); } catch (e) { out.light = null; }
   out.sport = MTB_RE.test(w.name || '') ? 'mtb' : VO2_RE.test(w.name || '') ? 'vo2' : (w.sport || null);
   out.fuel = fuelPlan(w.name, (w.duration_s || 0) / 60);
   out.turn = turnBuffer(w.notes);
@@ -127,4 +137,4 @@ async function rateRide(b) {
   return { ok: true, rating: row };
 }
 
-module.exports = { fuelPlan, sunsetEpoch, placeOf, turnBuffer, vo2Of, eatBefore, tankFor, extrasFor, logFuel, rateRide, HOME, SOCCERPLEX };
+module.exports = { fuelPlan, sunsetEpoch, lightFor, placeOf, turnBuffer, vo2Of, eatBefore, tankFor, extrasFor, logFuel, rateRide, HOME, SOCCERPLEX };
