@@ -643,6 +643,15 @@ async function scheduleReport(q) {
                 minutes: 5, start_min: sm, end_min: sm + 5, from: fmtMin(sm), to: fmtMin(sm + 5), rx_key: 'med:' + m.key, taken: !!m.taken, for_session: null });
             }
           } catch (e) { /* no medicines */ }
+          // a dose that falls inside a session comes 10 minutes after it ends (push.js shiftAfter, the reminder's rule)
+          try {
+            const SA = require('./push').shiftAfter;
+            const sess = (day.events || []).filter(e => e.category === 'training' && e.start_min != null && e.end_min > e.start_min).map(e => ({ start: e.start_min, end: e.end_min }));
+            for (const e of day.events.filter(e => e.kind === 'supplement' && e.source === 'rx')) {
+              const [x] = SA([{ time: S.toHM(e.start_min) }], sess);
+              if (x.after_session) { const sm = S.toMin(x.time); e.start_min = sm; e.end_min = sm + (e.minutes || 10); e.from = fmtMin(sm); e.to = fmtMin(e.end_min); e.detail = `${e.detail ? e.detail + ' · ' : ''}after the session`; }
+            }
+          } catch (e) { /* the times stand */ }
           day.events.sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
         }
       } catch (e) { /* the day stands without them */ }

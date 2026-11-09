@@ -51,6 +51,19 @@ ok('what goes now: due in the last half hour, not taken, not sent; the 10:00 p.m
   assert.deepStrictEqual(pl.items.map(x => x.kind + ':' + x.key), ['med:bp', 'med:eye_pm']);
 });
 
+ok('a late session: a reminder that falls inside it comes 10 minutes after it ends; one before it stays', () => {
+  const items = [{ kind: 'supp', key: 'magnesium', time: '21:30' }, { kind: 'med', key: 'bp', time: '22:00' }, { kind: 'med', key: 'eye_pm', time: '22:00' }, { kind: 'supp', key: 'beetroot', time: '18:30' }];
+  const late = P.shiftAfter(items, [{ start: m('20:45'), end: m('21:45') }]);   // a ride 8:45 to 9:45 p.m.
+  assert.deepStrictEqual(late.map(x => `${x.key} ${x.time}`), ['magnesium 21:55', 'bp 22:00', 'eye_pm 22:00', 'beetroot 18:30']);
+  assert.strictEqual(late[0].moved_from, '21:30'); assert.strictEqual(late[0].after_session, true);
+  // a session over 10:00 moves the bedtime pair after it, and they still go together
+  const later = P.shiftAfter(items, [{ start: m('21:00'), end: m('22:15') }]);
+  assert.deepStrictEqual(later.map(x => x.time), ['22:25', '22:25', '22:25', '18:30']);
+  assert.deepStrictEqual(P.pick(later, m('22:30'), {}).map(g => g.length), [3]);
+  // back to back: past the end of the second
+  assert.strictEqual(P.shiftAfter([{ time: '21:30' }], [{ start: m('21:00'), end: m('21:40') }, { start: m('21:45'), end: m('22:30') }])[0].time, '22:40');
+  assert.strictEqual(P.shiftAfter(items, [])[0], items[0], 'no session: nothing moves');
+});
 ok('a subscription without its keys is refused; a phone subscribed twice is kept once', async () => {
   mem.clear();
   await assert.rejects(() => P.subscribe({ endpoint: 'https://push.example/1' }), e => e.status === 400);
