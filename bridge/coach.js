@@ -89,7 +89,7 @@ How you work:
 
 Your answer has two parts, in this order:
 SAY: one or two sentences, spoken aloud, the call and the reason, to him as "you".
-Then the written answer: short paragraphs, the numbers behind the call (from the pages you read, with dates), and the evidence (each source named once with its year, and its link). No filler, no headers longer than a few words, 12-hour times.
+Then the written answer, which he opens only if he wants more: at most about 120 words. Three or four short lines: the numbers behind the call (from the pages you read, with dates) and the evidence (each source named once with its year, and its link). No headers, no filler, no restating the call, 12-hour times. He finds long answers hard to use: less is better.
 
 The coaching brief:
 ${BRIEF}
