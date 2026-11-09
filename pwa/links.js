@@ -254,6 +254,7 @@
     </div>`;
   }
 
+  window.balanceHTML = balanceHTML;   // the Day draws the same chart under the CTL and meter
   V.fuel = async function(){
     const el = page("Fuel");
     const draw = (first)=> load(el, "fuel", ["/chain", "/food/today"], [1], (chain, food, pending) => {
