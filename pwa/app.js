@@ -1226,14 +1226,10 @@ function paintChain(c){
     // Lift: sessions of those due, the Lift page's count
     if (ck === "lift"){ num = L.sessions == null || (L.first_week && !L.of && !L.sessions) ? "—" : `${L.sessions}`; unit = (L.first_week && !L.of ? "due later" : L.first_week ? `of ${L.of} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
-<<<<<<< HEAD
-    el.querySelector(".cweek").textContent = unit;
+    el.querySelector(".cweek").textContent = num === "—" ? "" : unit;   // "—" alone, not "— avg"
     // the trend against the week before: a small triangle and the change, green when it is better, red when worse; nothing when it barely moved
     const tr = L.trend, te = el.querySelector(".ctr"), moved = tr && Math.abs(tr.delta) >= (ck === "sleep" ? 0.3 : 2);
     if (te){ te.hidden = !moved; if (moved){ te.textContent = `${tr.delta > 0 ? "▲" : "▼"}${Math.abs(tr.delta)}`; te.className = `ctr ${tr.better ? "good" : "bad"}`; } }
-=======
-    el.querySelector(".cweek").textContent = num === "—" ? "" : unit;   // "—" alone, not "— avg"
->>>>>>> nov9
     el.dataset.week = state || "none";
     // the Plan box names its own week (the seven days ahead), so it is never read as the chain's week or the Calendar's
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }
