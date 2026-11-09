@@ -178,7 +178,11 @@ function macrosToday(m) {
 async function report() {
   const today = tz.todayKey();
   const dates = []; for (let i = DAYS - 1; i >= 0; i--) dates.push(tz.shiftKey(today, -i));
-  const past = dates.slice(0, -1);
+  // the fresh start (fresh-start.js): days before it drop out of every graded link's week; physiology keeps its history
+  const FS = await require('./fresh-start').freshStart();
+  const counts = d => !FS || d >= FS, todayIn = counts(today);
+  const weekFrom = FS && FS > dates[0] ? (FS > today ? today : FS) : dates[0];
+  const past = dates.slice(0, -1).filter(counts);
   const store = await getJSON('chain-days', { days: {} });
   store.dirty = false;
   // food and water: today live, past days from the store (a couple read fresh per call)
@@ -218,7 +222,7 @@ async function report() {
   let nights = [], recs = [], band = { state: 'none', why: 'no watch' }, hrvWeekMs = null, hrvBaseMs = null, rhrWeek = null;
   // one recovery model for the whole site (recovery.js): the same band the Day's tile and advice read
   tasks.push((async () => { try {
-    const R = await require('./recovery').weekBand(today, dates[0]);
+    const R = await require('./recovery').weekBand(today, weekFrom);
     nights = R.nights; recs = R.recs; band = R.band; hrvWeekMs = R.hrv_week_ms; hrvBaseMs = R.hrv_base_ms; rhrWeek = R.rhr_week;
   } catch (e) { nights = []; recs = []; } })());
   // work: minutes done against minutes planned over the week
@@ -226,7 +230,7 @@ async function report() {
   const planAhead = { ride_min: 0, rides: 0, untimed: 0, lifts: 0, days: [] };
   tasks.push((async () => { try {
     const { calendar } = require('./workouts');
-    const cal = await calendar(dates[0], today);
+    const cal = await calendar(weekFrom, today);
     // riding only: the lifting is its own link. Planned: the plan's rides and intervals.icu's; done: Strava's rides and rides logged by hand.
     const isWeight = x => /weight|lift|strength|^run$|^virtualrun$|^walk$|^hike$/i.test(String(x.sport || x.type || ''));   // riding only: lifts, runs and walks are not rides
     // a ride counts by its minutes, discounted by how far it strayed from its zone: a Zone 1 day wants 80% of
@@ -235,6 +239,7 @@ async function report() {
     const Rd = require('./rides');
     work.credit_min = 0; work.hr_min = 0; work.hr_credit_min = 0;
     for (const day of cal.days || []) {
+      if (!counts(day.date)) continue;   // before the fresh start: not graded
       // today's sessions count in the plan once their planned end has passed (an untimed one from 9 p.m.): the
       // week's ratio at dawn, or mid-ride, is the week so far, not the session he is still on or has not reached
       const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
@@ -260,14 +265,15 @@ async function report() {
   tasks.push((async () => { try {
     const { calendar } = require('./workouts');
     const ahead = await calendar(today, tz.shiftKey(today, 6));
-    for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged).length;
+    const blast = w => require('./food-math').isBlast(w);   // a Kettlebell Blast is an extra, not one of the five
+    for (const day of ahead.days || []) liftsPlanned += (day.planned || []).filter(w => /weight|lift|strength/i.test(String(w.sport || '')) && !w.logged && !blast(w)).length;
     // the Plan link: the week ahead as it stands on the calendar
     const isW = x => /weight|lift|strength|^run$|^virtualrun$|^walk$|^hike$/i.test(String(x.sport || x.type || ''));
     for (const day of ahead.days || []) {
       const rides = (day.planned || []).filter(w => !isW(w)).map(w => ({ name: w.name, time: w.time || null, minutes: Math.round((w.metrics ? w.metrics.duration_s : 0) / 60), logged: !!w.logged, ridden: !!w.compliance }))
         .concat((day.intervals || []).filter(e => !isW(e)).map(e => ({ name: e.name, time: e.time || null, minutes: e.minutes || 0, logged: false })));
       const isLiftW = w => /weight|lift|strength/i.test(String(w.sport || '')) || /\blift\b|^push\b|\bpull\b|\bupper\b|\blegs\b|\bpump\b/i.test(String(w.name || ''));
-      const lifts = (day.planned || []).filter(isLiftW).map(w => ({ name: w.name, time: w.time || null }));
+      const lifts = (day.planned || []).filter(w => isLiftW(w) && !blast(w)).map(w => ({ name: w.name, time: w.time || null }));
       planAhead.days.push({ date: day.date, rides, lifts, ride_min: rides.reduce((a, r) => a + r.minutes, 0) });
       planAhead.ride_min += rides.reduce((a, r) => a + r.minutes, 0); planAhead.rides += rides.length; planAhead.untimed += rides.filter(r => !r.time).length; planAhead.lifts += lifts.length;
     }
@@ -286,20 +292,20 @@ async function report() {
   tasks.push((async () => { try {
     const d = await getJSON('lifts', { sessions: [] });
     const L = require('./lifts');
-    const wk = (d.sessions || []).filter(x => x.date >= dates[0] && x.date <= today && x.template !== 'pump');
+    const wk = (d.sessions || []).filter(x => x.date >= weekFrom && counts(x.date) && x.date <= today && x.template !== 'pump');
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
     // the count is the Lift page's own (lifts.weekCount): the first week judged on the sessions due, a ninth week a deload
     const c = await L.weekCountPlaced(d.sessions || [], today);
-    lift = { sessions: c.sessions, pumps: c.pumps, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
+    lift = { sessions: c.sessions, pumps: c.pumps, blasts: c.blasts || 0, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ } })());
   await Promise.all(tasks);
-  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
-  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayRow && todayRow.water != null ? [todayRow.water] : []);
-  const readDays = past.filter(d => rows[d]).length + 1;
+  const foodDays = past.map(d => rows[d]).filter(x => x && x.logged && x.food != null).map(x => x.food).concat(todayIn && todayRow && todayRow.logged && todayRow.food != null ? [todayRow.food] : []);
+  const waterDays = past.map(d => rows[d]).filter(x => x && x.water != null).map(x => x.water).concat(todayIn && todayRow && todayRow.water != null ? [todayRow.water] : []);
+  const readDays = past.filter(d => rows[d]).length + (todayIn ? 1 : 0);
   // the supplements over the week, and when creatine began (its water on the scale)
   const S = require('./supps');
-  const suppRows = past.map(d => rows[d]).filter(Boolean).concat(todayRow ? [todayRow] : []);
+  const suppRows = past.map(d => rows[d]).filter(Boolean).concat(todayRow && todayIn ? [todayRow] : []);
   const rxWeek = S.weekOf(suppRows);
   let creatineStart = null;
   try {
@@ -343,10 +349,10 @@ async function report() {
     // once a macro is far past what is due, so on a day already over it did not move with a log.)
     food: Object.assign({ week: foodWeek, state: foodDays.length >= 3 ? stateOf('food', foodWeek) : (foodDays.length ? stateOf('food', foodWeek) : 'none'), days_logged: foodDays.length, days_on: foodDays.filter(x => x >= 80).length, today: todayRow && todayRow.logged ? todayRow.food : null, unit: 'kcal', micros: todayRow ? todayRow.micros : null, basis: `the box is today's kcal and protein against the day's targets, the numbers at the top of the Food page; the chain's verdict uses the day's compliance score averaged over the logged days of the last ${DAYS} (${readDays} days read)` },
       macrosToday(todayRow && todayRow.macros)),
-    micros: { week: todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
+    micros: { week: todayIn && todayRow && todayRow.micros ? todayRow.micros.score : null, state: stateOf('micros', todayIn && todayRow && todayRow.micros ? todayRow.micros.score : null), today: todayRow && todayRow.micros ? todayRow.micros.score : null, today_word: todayRow && todayRow.micros ? todayRow.micros.word : null, gaps: todayRow && todayRow.micros ? todayRow.micros.gaps : [], unit: 'this week', basis: 'thirteen nutrients against their daily targets, averaged over the week\'s journal' },
     water: { week: waterWeek, state: stateOf('water', waterWeek), today: todayRow && todayRow.water_now ? todayRow.water_now.ml : null, today_word: todayRow && todayRow.water_now && todayRow.water_now.band ? todayRow.water_now.band.word : null, unit: 'balance', basis: 'the hydration balance score each day ended on (100 at the morning, 0 at 2% down), the same measure the tile and the Live tab show, averaged over the days with a drink logged' },
     fuel: (() => {
-      const all = past.flatMap(d => (rows[d] && rows[d].fuel) || []).concat(todayRow ? (todayRow.fuel || []) : []);
+      const all = past.flatMap(d => (rows[d] && rows[d].fuel) || []).concat(todayRow && todayIn ? (todayRow.fuel || []) : []);
       const score = fuelScore(all), todays = todayRow ? fuelScore(todayRow.fuel || []) : null;
       const fn = todayRow && todayRow.fuel_now;
       return { week: score == null ? null : Math.round(score * 100), state: stateOf('fuel', score), rides: all.filter(c => c.kind === 'ride').length, list: all.slice(-12),
@@ -366,7 +372,7 @@ async function report() {
     lift: { week: Math.round(Math.min(1, lift.sessions / (lift.of || 5)) * 100),
       state: lift.deload ? 'none' : stateOf('lift', lift.sessions / (lift.of || 5)),
       first_week: !!lift.first_week, of: lift.of || 5, count_word: lift.word,
-      sessions: lift.sessions, pumps: lift.pumps || 0, target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
+      sessions: lift.sessions, pumps: lift.pumps || 0, blasts: lift.blasts || 0, extras: (lift.pumps || 0) + (lift.blasts || 0), target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: lift.first_week ? `of ${lift.of} due` : `of ${lift.of || 5}`,
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
       basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions the plan placed from its first day through today; 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
@@ -400,7 +406,7 @@ async function report() {
     })()
   };
   const v = verdict(links);
-  return { order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays };
+  return { order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays, fresh_start: FS, week_from: weekFrom };
 }
 
 function attach(app) {
@@ -414,4 +420,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };
+module.exports = { ROW_V, fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };

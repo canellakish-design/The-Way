@@ -117,7 +117,7 @@ async function buildSessions(date, o) {
     // a lift saved on the Lift page is done, whatever the clock says
     const WK = require('./workouts');
     const savedLifts = ((await WK.liftsSavedBy(date, date))[date]) || [];
-    const dayLifts = Object.values(d.workouts || {}).filter(w => w.date === date && !WK.isRideSport(w)).length;
+    const dayLifts = Object.values(d.workouts || {}).filter(w => w.date === date && !WK.isRideSport(w) && !F.isBlast(w)).length;
     const dayW = Object.values(d.workouts || {}).filter(w => w.date === date);
     for (const w of dayW) {
       // an untimed copy of a timed lift of the same name is the same session said twice: counted once
@@ -125,7 +125,8 @@ async function buildSessions(date, o) {
       const m = W.metrics(w.steps || [], st);
       const start = w.time ? tz.zonedToUTC(...date.split('-').map(Number), +w.time.slice(0, 2), +w.time.slice(3, 5)) : null;
       const { pastNow, liftMatches } = require('./workouts');
-      const logged = pastNow(w, tz.todayKey()) || liftMatches(w, savedLifts, dayLifts);
+      // a Kettlebell Blast is not a Lift-page session: a lift saved that day does not mark it done
+      const logged = pastNow(w, tz.todayKey()) || (!F.isBlast(w) && liftMatches(w, savedLifts, dayLifts));
       // a run has no power behind its TSS: its calories are its minutes, about 11 a minute at his weight at an easy pace
       const runKcal = w.sport === 'Run' ? Math.round(m.duration_s / 60 * 11) : null;
       out.push({ name: w.name, sport: w.sport, minutes: Math.round(m.duration_s / 60), tss: m.tss, kcal: runKcal, notes: w.notes || '', planned: !logged, done: logged,
@@ -272,12 +273,12 @@ async function bodyKg() {
 
 async function guidelinesFor(date) {
   const { sessions, ftp, work, burn } = await sessionsFor(date);
-  const [{ deficit, why }, kg] = await Promise.all([deficitFor(date), bodyKg()]);
+  const [{ deficit, why }, kg, body] = await Promise.all([deficitFor(date), bodyKg(), require('./body').stored().catch(() => ({}))]);
   // fuel for the work required: the sessions' prescriptions set the carbs and the shape of the day
   let rx = null;
   try { const FW = require('./fuel-week'); rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, await FW.contextFor(date, kg || F.PROFILE.kg, ftp)); } catch (e) { rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, {}); }
   const day = rx.day;
-  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, deficit, rx });
+  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, cm: body.cm, age: body.age, deficit, rx });
   if (why) t.deficit_note = why;
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
@@ -398,7 +399,7 @@ async function recheckDay(date) {
   const g = await guidelinesFor(date);
   const sum = k => Math.round(doc.entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
   const line = e => `${tz.hm12(e.time)} ${e.drink_only ? 'drink' : e.slot || e.meal}: ${e.name}, ${e.kcal} kcal, ${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat${F.alcoholOf(e) ? ` (alcohol, ${F.alcoholOf(e)} drink${F.alcoholOf(e) === 1 ? '' : 's'})` : ''}`;
-  const prompt = `You are the nutrition coach for one cyclist, 55, 98 kg, losing weight slowly while training. Each journal entry carries one sentence you wrote when it was logged. The day has moved on since; rewrite the sentences below so each is true of the day AS IT NOW STANDS.
+  const prompt = `You are the nutrition coach for one cyclist, 48, 98 kg, losing weight slowly while training. Each journal entry carries one sentence you wrote when it was logged. The day has moved on since; rewrite the sentences below so each is true of the day AS IT NOW STANDS.
 Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
 Today's rules:
 ${g.guidelines.map(x => '- ' + x.text).join('\n')}
@@ -457,7 +458,9 @@ async function dayReport(date) {
   // over its own window (3 days for the quick ones, 7 for iron, D, B12,
   // zinc, sodium, omega-3). Sweat sodium is added from the day's riding.
   const microDays = [MI.sumDays(entries.map(e => e.micros).filter(Boolean))];
+  const FS = await require('./fresh-start').freshStart();   // the look-back stops at the fresh start: a graded score
   for (let i = 1; i <= 6; i++) {
+    if (FS && tz.shiftKey(date, -i) < FS) break;
     const prev = await getJSON(dayKey(tz.shiftKey(date, -i)), null);
     if (prev && prev.entries && prev.entries.length) microDays.push(MI.sumDays(prev.entries.map(e => e.micros).filter(Boolean)));
     else if (microDays.length > 1) break;   // the journal started here
@@ -486,11 +489,15 @@ async function dayReport(date) {
   let balance = null;
   try {
     const isToday = date === tz.todayKey(), mins = isToday ? nowMin : 1440;
-    const sess = (g.sessions || []).filter(x => F.toMin(x.time) != null).map(x => { const st = F.toMin(x.time); return { name: x.name, start: st, end: st + (x.minutes || 60), kcal: F.workoutKcal([x], g.ftp || 175) }; });
+    // a session burns toward "now" only once done (a ride on Strava or the Garmin, a lift or a blast logged)
+    const sess = (g.sessions || []).filter(x => F.toMin(x.time) != null).map(x => { const st = F.toMin(x.time); return { name: x.name, start: st, end: st + (x.minutes || 60), kcal: F.workoutKcal([x], g.ftp || 175), done: !!x.done }; });
     const eaten = entries.filter(e => !e.supplement && (e.kcal || 0) > 0 && F.toMin(e.time) != null).map(e => ({ min: F.toMin(e.time), kcal: e.kcal, label: e.name }));
     const planned = isToday ? rows.filter(m => !(m.logged || []).length && (m.kcal || 0) > 0).map(m => ({ min: (m.at_min != null ? m.at_min : F.toMin(m.time)), kcal: m.kcal, label: m.slot })) : [];
-    balance = F.balanceSeries({ baseBurn: (g.target && g.target.base_burn) || 0, nowMin: mins, sessions: sess, eaten, planned });
+    balance = F.balanceSeries({ baseBurn: (g.target && g.target.base_burn) || 0, bmr: (g.target && g.target.bmr) || 0, nowMin: mins, sessions: sess, eaten, planned });
     balance.target_end = g.target ? Math.round(g.target.kcal - (g.target.base_burn || 0) - (g.target.ride_kcal || 0)) : null;
+    // the meter beside CTL (pwa: the energy dial): needle now, ghost at the day's end, the tick at the target
+    balance.meter = { now_deg: F.meterAngle(balance.now), end_deg: F.meterAngle(balance.end), target_deg: F.meterAngle(balance.target_end), scale: F.METER_SCALE,
+      clamped: Math.abs(balance.now) > F.METER_SCALE, age: g.target ? g.target.age : null, cm: g.target ? g.target.cm : null, kg: g.target ? g.target.kg : null };
   } catch (e) { balance = null; }
   return {
     date, today: date === tz.todayKey(),
@@ -844,8 +851,11 @@ function attach(app) {
         days.push(Object.assign({ date: d }, row));
       }
       if (dirty) { for (const k of Object.keys(cache.rows)) if (k < tz.shiftKey(today, -14)) delete cache.rows[k]; await setJSON('food-week-cache', cache).catch(() => {}); }
-      const scored = days.filter(x => x.logged && x.overall != null);
-      res.json({ today, days, week: scored.length ? Math.round(scored.reduce((a, x) => a + x.overall, 0) / scored.length) : null, days_logged: scored.length });
+      // days before the fresh start stay visible but are not rolled up into the week (fresh-start.js)
+      const FS = await require('./fresh-start').freshStart();
+      for (const x of days) x.counted = !FS || x.date >= FS;
+      const scored = days.filter(x => x.counted && x.logged && x.overall != null);
+      res.json({ today, days, week: scored.length ? Math.round(scored.reduce((a, x) => a + x.overall, 0) / scored.length) : null, days_logged: scored.length, fresh_start: FS });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/food/day', async (req, res) => { if (!auth(req, res)) return;

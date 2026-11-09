@@ -15,10 +15,13 @@
 
 // Energy. Mifflin-St Jeor is the equation Frankenfield found most reliable
 // in adults including the overweight: 10·kg + 6.25·cm − 5·age + 5. A
-// teacher and coach on his feet is light-active, factor 1.35. At 104 kg,
-// 178 cm, 55 that is ~1,890 × 1.35 ≈ 2,550 kcal before riding; the old flat
+// teacher and coach on his feet is light-active, factor 1.35. At 98.4 kg,
+// 178 cm, 48 that is 1,862 × 1.35 ≈ 2,513 kcal before riding; the old flat
 // 2,050 undercounted the day by ~500 kcal and squeezed the carbs out.
-const PROFILE = { kg: 98, cm: 178, age: 55, activity: 1.35 };   // the scale overrides kg; this is the fallback
+// Age and height are settings (body.js, Setup); these are the fallbacks. 55 was the goal age for 2033,
+// not his age: he is 48 (9 Nov 2026), which adds 35 kcal to BMR and about 47 to the day's burn.
+const PROFILE = { kg: 98, cm: 178, age: 48, activity: 1.35 };   // the scale overrides kg; this is the fallback
+const DAILY_SHARE = PROFILE.activity - 1;   // everyday movement on top of BMR: BMR × 0.35
 const DEFICIT = -450;              // ≈0.4% of body mass a week, under Garthe's 0.7% slow rate
 const PROTEIN_PER_KG = 1.9;        // 1.8 to 2.0 g/kg in a deficit (Phillips & Van Loon; Morton's breakpoint 1.6)
 const FAT_FLOOR_PER_KG = 0.7;      // hormones and absorption: never below this
@@ -126,10 +129,15 @@ function fuelRx(sessions, kg, ftp, ctx) {
 
 // Riding energy for a day: Strava's number when the ride is done, an estimate
 // from planned TSS otherwise (TSS × FTP × 0.036 ≈ kJ, and kJ ≈ kcal on a bike).
+// A Kettlebell Blast (his at-home extra, WeightTraining, ~30 min) is about 6 kcal a minute, whatever the
+// watch or the TSS says: not a ride, and not the cycling estimate.
+const BLAST = /kettlebell\s*blast/i, BLAST_KCAL_MIN = 6;
+const isBlast = x => !!x && BLAST.test(String(x.name || ''));
 function workoutKcal(sessions, ftp) {
   let k = 0;
   for (const x of sessions || []) {
-    if (x.kcal) k += x.kcal;
+    if (isBlast(x)) k += Math.round((x.minutes || 30) * BLAST_KCAL_MIN);
+    else if (x.kcal) k += x.kcal;
     else if (x.tss) k += x.tss * (ftp || 175) * 0.036;
   }
   return Math.round(k);
@@ -168,7 +176,7 @@ function targets(day, kcalFromRiding, opts) {
     if (fat_g < fat_floor) { const need = protein_g * 4 + carbs_g * 4 + fat_floor * 9; trimmed += need - kcal; kcal = Math.round(need / 10) * 10; fat_g = fat_floor; }
   }
   return { kcal, carbs_g, protein_g, fat_g, fuel_day: o.rx && o.rx.label ? o.rx.label : (LABEL[day] || LABEL.normal), day, rx: o.rx || null,
-    base_burn: baseBurn(p), ride_kcal: Math.round(kcalFromRiding || 0), deficit: kcal - burn,
+    base_burn: baseBurn(p), bmr: bmr(p), age: p.age, cm: p.cm, ride_kcal: Math.round(kcalFromRiding || 0), deficit: kcal - burn,
     deficit_trimmed: trimmed ? Math.round(trimmed) : 0, kg: p.kg,
     per_kg: { carbs: Math.round(carbs_g / p.kg * 10) / 10, protein: Math.round(protein_g / p.kg * 10) / 10 } };
 }
@@ -881,19 +889,56 @@ function drinksOf(entries, modelDrinks) {
 // (resting plus everyday movement) runs evenly through the 24 hours, each session's burn is spread over its
 // minutes, food lands as a step at the time it was eaten. Before now the line is what happened; after now it
 // is the plan: the open meals at their times and the sessions still ahead. Every 15 minutes.
+// A session counts toward "now" only once it is done (done: true); one still planned burns nothing until
+// now and, in the projection, burns its whole energy from now (or its start, if later). With no done flag
+// at all a session is taken as it was always taken: on the clock.
+// o.bmr splits the base burn into BMR and everyday movement for the meter's breakdown.
 function balanceSeries(o) {
   const per = (o.baseBurn || 0) / 1440, nowMin = o.nowMin == null ? 1440 : o.nowMin;
   const sessions = (o.sessions || []).filter(x => x.start != null && x.end > x.start);
+  const flagged = sessions.some(x => x.done != null);
+  const isDone = x => !flagged || !!x.done;
   const food = (o.eaten || []).map(x => Object.assign({ projected: false }, x)).concat((o.planned || []).filter(x => x.min >= nowMin).map(x => Object.assign({ projected: true }, x)));
-  const burnTo = m => per * m + sessions.reduce((a, x) => a + x.kcal * Math.max(0, Math.min(1, (m - x.start) / (x.end - x.start))), 0);
+  const frac = (m, a, b) => Math.max(0, Math.min(1, (m - a) / (b - a)));
+  const sessBurn = (x, m) => {
+    if (isDone(x)) return x.kcal * frac(m, x.start, x.end);
+    if (m <= nowMin) return 0;
+    const a = Math.max(x.start, nowMin), b = a + (x.end - x.start);
+    return x.kcal * frac(m, a, b);
+  };
+  const exTo = m => sessions.reduce((a, x) => a + sessBurn(x, m), 0);
+  const burnTo = m => per * m + exTo(m);
   const inTo = m => food.filter(x => x.min <= m).reduce((a, x) => a + (x.kcal || 0), 0);
   const at = m => Math.round(inTo(m) - burnTo(m));
   const points = [];
   for (let m = 0; m <= 1440; m += 15) points.push({ m, kcal: at(m), projected: m > nowMin });
-  return { points, now: at(Math.min(nowMin, 1440)), end: at(1440), now_min: nowMin,
+  const nowM = Math.min(nowMin, 1440);
+  const bmrDay = o.bmr > 0 ? o.bmr : null, base = o.baseBurn || 0;
+  const parts = {
+    bmr_day: bmrDay, daily_day: bmrDay != null ? Math.round(base - bmrDay) : null, base_day: Math.round(base),
+    bmr: bmrDay != null ? Math.round(bmrDay * nowM / 1440) : null,
+    daily: bmrDay != null ? Math.round((base - bmrDay) * nowM / 1440) : null,
+    base: Math.round(per * nowM),
+    exercise: Math.round(exTo(nowM)),
+    eaten: Math.round(inTo(nowM)),
+  };
+  parts.burned = parts.base + parts.exercise; parts.net = at(nowM);
+  return { points, now: at(nowM), end: at(1440), now_min: nowMin, parts,
     meals: food.map(x => ({ min: x.min, kcal: x.kcal, label: x.label, logged: !x.projected, at: at(x.min) })),
-    sessions: sessions.map(x => ({ start: x.start, end: x.end, kcal: Math.round(x.kcal), name: x.name })) };
+    sessions: sessions.map(x => ({ start: x.start, end: x.end, kcal: Math.round(x.kcal), name: x.name, done: isDone(x) })) };
 }
 
-module.exports = { balanceSeries, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+// The energy meter beside CTL: a half dial, 9 o'clock to 3 o'clock, noon is eaten = burned. Left of
+// noon a deficit (losing), right a surplus (gaining); full scale ±1,000 kcal, clamped there, the true
+// number printed. Returns the needle angle in degrees from noon (−90 full left, +90 full right).
+const METER_SCALE = 1000;
+function meterAngle(kcal) {
+  if (kcal == null || !Number.isFinite(kcal)) return null;
+  const c = Math.max(-METER_SCALE, Math.min(METER_SCALE, kcal));
+  return Math.round(c / METER_SCALE * 90 * 10) / 10;
+}
+// lb a week at a daily balance: 3,500 kcal a pound
+const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
+
+module.exports = { balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };

@@ -628,7 +628,7 @@ async function scheduleReport(q) {
           const r = S.dueFor(day.date, rides, day.today ? todayEntries : [], null, day.today ? yEntries : []);
           for (const x of r.due) {
             if (!x.time || x.key === 'creatine') continue;                          // creatine is any time: it lives under the Lift box
-            const sm = S.toMin(x.time); if (sm == null || sm < 5 * 60) continue;
+            const sm = S.toMin(x.time); if (sm == null || sm < (S.EARLIEST || 330)) continue;   // never before 5:30 a.m.
             day.events.push({ summary: x.name, detail: x.why, category: 'supplement', source: 'rx', kind: 'supplement', calendar: 'The Way', allDay: false, blocking: false,
               minutes: 10, start_min: sm, end_min: sm + 10, from: fmtMin(sm), to: fmtMin(sm + 10), rx_key: x.key, taken: !!x.taken, for_session: x.session || null });
           }

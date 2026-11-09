@@ -242,8 +242,11 @@ async function drawFoodWeek(){
   if (!w || !w.days) return;
   const tone = s => s == null ? "var(--muted)" : s >= 80 ? "var(--green)" : s >= 60 ? "var(--amber)" : "var(--red)";
   const dshort = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short" }).slice(0, 2);
-  const scored = w.days.filter(d => d.logged && d.overall != null);
-  const tiles = w.days.map(d => `<span class="fw-day${d.date === w.today ? " today" : ""}"><b style="color:${tone(d.overall)}">${d.overall != null ? d.overall : "—"}</b><span>${dshort(d.date)}</span></span>`).join("");
+  // a day before the fresh start (Setup) keeps its own grade, greyed, and is left out of the week's average
+  const counted = d => d.counted !== false;
+  const scored = w.days.filter(d => counted(d) && d.logged && d.overall != null);
+  const tiles = w.days.map(d => `<span class="fw-day${d.date === w.today ? " today" : ""}${counted(d) ? "" : " fw-before"}"${counted(d) ? "" : ` title="before the fresh start: not in the week"`}><b style="color:${counted(d) ? tone(d.overall) : "var(--muted)"}">${d.overall != null ? d.overall : "—"}</b><span>${dshort(d.date)}</span></span>`).join("");
+  const fsWord = w.fresh_start ? new Date(w.fresh_start + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }) : null;
   // what would raise it: the checks that fail most, then the macro that misses most, each as the thing to do
   const DO = { protein: "Protein at every main meal", plants: "Vegetables or fruit at two meals", carbs: "Starch where the plan puts it", processed: "Nothing ultra-processed", post: "Eat within two hours of the ride" };
   const fails = {};
@@ -262,7 +265,7 @@ async function drawFoodWeek(){
     <div class="fw-head"><span class="fw-big" style="color:${tone(w.week)}">${w.week != null ? w.week : "—"}</span><span class="fw-days">${tiles}</span></div>
     ${todo.length ? `<div class="hu-lab">To raise it</div><ul class="fw-todo">${todo.map(t => `<li><span>${esc(t.text)}</span><b>+${t.pts}</b></li>`).join("")}</ul>` : scored.length ? `<div class="small">Every check passed this week.</div>` : `<div class="small">Nothing logged yet this week.</div>`}
     ${open.length ? `<div class="hu-lab">Today, still open</div><ul class="fw-todo"><li><span>${open.map(c => esc(DO[c.key] || c.label)).join(" · ")}</span></li></ul>` : ""}
-    <details class="why"><summary>how it's scored</summary><div class="small">A day is half how close carbs, protein and fat came to their targets, half five checks: protein at the main meals, vegetables or fruit, starch where the plan puts it, nothing ultra-processed, fed within two hours of a ride. The week is the average of the logged days. Green at 80, amber at 60. "+n" is roughly what each line is costing the week's score.</div></details>
+    <details class="why"><summary>how it's scored</summary><div class="small">A day is half how close carbs, protein and fat came to their targets, half five checks: protein at the main meals, vegetables or fruit, starch where the plan puts it, nothing ultra-processed, fed within two hours of a ride. The week is the average of the logged days${fsWord ? ` since ${esc(fsWord)}, when the scores started counting again; the greyed days before it keep their own grade` : ""}. Green at 80, amber at 60. "+n" is roughly what each line is costing the week's score.</div></details>
   </div>`;
 }
 V.food = async function(){

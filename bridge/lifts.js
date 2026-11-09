@@ -308,28 +308,51 @@ async function weekDays(n, from0) {
 // the lift sessions the plan placed on the calendar between two dates (an untimed copy of a timed one counts once)
 async function placedLiftsBetween(from, to) {
   const d = await getJSON('plan-workouts', { workouts: {} });
-  const ws = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /weight|lift|strength/i.test(String(w.sport || '')));
+  // a Kettlebell Blast is an extra, like the Pump: never one of the five due
+  const ws = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /weight|lift|strength/i.test(String(w.sport || '')) && !isBlast(w));
   return new Set(ws.map(w => w.date + '|' + String(w.name || '').toLowerCase().replace(/\s+/g, ' ').trim())).size;
+}
+// Kettlebell Blasts (his at-home extras, on the calendar as WeightTraining, ~30 min) done in the window: a
+// planned one logged, or a done one by its name. Counted beside the five as "+1", like the Pump, never inside.
+const isBlast = w => require('./food-math').isBlast(w);
+async function blastsBetween(from, to) {
+  const { calendar } = require('./workouts');
+  const cal = await calendar(from, to);
+  const seen = new Set();
+  for (const day of cal.days || []) {
+    for (const w of (day.planned || []).filter(isBlast)) if (w.logged) seen.add(day.date + '|' + String(w.name).toLowerCase());
+    for (const r of (day.done || []).filter(isBlast)) seen.add(day.date + '|' + String(r.name).toLowerCase());
+  }
+  return seen.size;
 }
 // the week's count with the first week's due sessions read from the calendar
 async function weekCountPlaced(sessions, today) {
-  const w0 = weekCount(sessions, today);
-  const placed = w0.first && w0.first_week ? await placedLiftsBetween(w0.first, today).catch(() => 0) : 0;
-  return placed ? weekCount(sessions, today, placed) : w0;
+  const fs = await require('./fresh-start').freshStart();
+  const w0 = weekCount(sessions, today, undefined, fs);
+  const [placed, blasts] = await Promise.all([
+    w0.first_count && w0.first_week ? placedLiftsBetween(w0.first_count, today).catch(() => 0) : 0,
+    blastsBetween(w0.from, today).catch(() => 0)]);
+  const c = placed ? weekCount(sessions, today, placed, fs) : w0;
+  return Object.assign(c, { blasts, extras: c.pumps + blasts });
 }
-function weekCount(sessions, today, placedDue) {
-  const from = tz.shiftKey(today, -6);
+function weekCount(sessions, today, placedDue, fresh) {
+  // the fresh start (fresh-start.js): sessions before it are not counted, and the first week runs from it
+  const fs = /^\d{4}-\d{2}-\d{2}$/.test(fresh || '') ? fresh : null;
+  const from = fs && fs > tz.shiftKey(today, -6) ? fs : tz.shiftKey(today, -6);
   const wk = (sessions || []).filter(x => x.date >= from && x.date <= today);
   const five = wk.filter(x => x.template !== 'pump');
   const first = (sessions || []).filter(x => TEMPLATES.some(t => t.key === x.template)).map(x => x.date).sort()[0] || null;
-  const dayN = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
-  const weekNo = first ? Math.floor((dayN - 1) / 7) + 1 : 0;
+  const dayN0 = first ? Math.round((Date.parse(today) - Date.parse(first)) / 864e5) + 1 : 0;
+  const weekNo = first ? Math.floor((dayN0 - 1) / 7) + 1 : 0;   // the deload cycle runs from the plan's real first day
+  // the count's first week: from the plan's first session, or from the fresh start when that is later
+  const firstCount = first && fs && fs > first && fs <= today ? fs : first;
+  const dayN = firstCount ? Math.round((Date.parse(today) - Date.parse(firstCount)) / 864e5) + 1 : 0;
   // in the first week, the sessions due are the ones the plan placed on the calendar from its first day through today;
   // with nothing placed yet, five a week prorated
   const expected = !first ? 0 : dayN < 7 ? (placedDue > 0 ? Math.min(5, placedDue) : Math.min(5, Math.ceil(5 * dayN / 7))) : 5;
   const firstWeek = !!first && expected > 0 && expected < 5;
   const of = firstWeek ? expected : 5;
-  return { sessions: five.length, pumps: wk.length - five.length, target: 5, expected, of, first_week: firstWeek, started: !!first, first,
+  return { from, sessions: five.length, pumps: wk.length - five.length, blasts: 0, target: 5, expected, of, first_week: firstWeek, started: !!first, first, first_count: firstCount, fresh_start: fs,
     week_no: weekNo, deload: weekNo > 0 && weekNo % 9 === 0, word: `${five.length} of ${of}${firstWeek ? ' due' : ''}` };
 }
 // A calendar entry's name to its session: "Upper body and core (Upper 2)" by its bracket, "Pull" by its
@@ -393,8 +416,8 @@ async function report(from) {
     sessions: sessions.slice(-15).reverse().map(s => ({ id: s.id, date: s.date, template: s.template, name: nameOf(s.template),
       notes: s.notes || '', volume_lb: (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0),
       exercises: (s.exercises || []).map(e => ({ name: e.name, sets: e.sets })) })),
-    history, this_week: wc.sessions, target_per_week: 5, pumps_this_week: wc.pumps, count: wc,
-    rules: ['Legs the day before a day off the bike or a long coaching day, or on a long coaching day.', 'No lift on the two biggest riding days.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.'] };
+    history, this_week: wc.sessions, target_per_week: 5, pumps_this_week: wc.pumps, blasts_this_week: wc.blasts || 0, count: wc,
+    rules: ['Legs the day before a day off the bike or a long coaching day, or on a long coaching day.', 'No lift on the two biggest riding days.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.', 'A Kettlebell Blast at home is extra too: shown as +1 beside the five, about 180 kcal toward the day\'s burn.'] };
 }
 
 async function save(body) {
