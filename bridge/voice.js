@@ -27,7 +27,7 @@ const { LIBRARY } = require('./workout-library');
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 
 const SUPPS = () => require('./micro-math').TABLE.supplements.map(s => s.key);
-const FIELDS = ['type', 'text', 'meal', 'supplement', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport', 'sleep_h', 'sleep_score', 'recovery', 'hrv', 'rhr'];
+const FIELDS = ['type', 'text', 'meal', 'supplement', 'medicine', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport', 'sleep_h', 'sleep_score', 'recovery', 'hrv', 'rhr'];
 const SCHEMA = () => ({
   type: 'object', additionalProperties: false, required: ['actions', 'reply'],
   properties: {
@@ -35,10 +35,11 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
+        medicine: { type: 'string', enum: ['', 'bp', 'eye_am', 'eye_pm'] },
         lb: { type: 'number' },
         date: { type: 'string' }, time: { type: 'string' }, new_date: { type: 'string' },
         library_key: { type: 'string', enum: [''].concat(LIBRARY.map(l => l.key)) },
@@ -148,6 +149,7 @@ Action types:
 - meal: something eaten. text = the plate in his words (keep every food and any weights); meal = which meal if he said or it is obvious from the time, else "".
 - drink: something drunk on its own (water, coffee, a bottle, a shake with nothing else). text = what and roughly how much.
 - supplement: one of the known supplements (supplement = its key). One action per supplement.
+- medicine: a medicine taken (meds.js): medicine = "bp" (his blood pressure pill), "eye_am" (eye drops before noon) or "eye_pm" (eye drops from noon). "Took my pill and did my eye drops" at night is two actions: bp and eye_pm.
 - weigh_in: lb = his weight in pounds (convert kg if he says kg).
 - workout: a ride, run or session to put on the calendar, or one already done today said after the fact ("I ran 40 minutes on the treadmill": sport Run, minutes 40, time = when it started or ""). date = YYYY-MM-DD (resolve "tomorrow", "Saturday"; the next such day), time = HH:MM 24h or "" if none, library_key when one of the library sessions fits, else name/minutes/sport. Library: ${LIBRARY.map(l => `${l.key} (${l.name})`).join(', ')}.
 - A session before 7 a.m. is against the rules. If he names a time before 7 (or an ambiguous "6:30" that could be morning), do NOT pick p.m. to get around it and do NOT change anything: return a question action and ask, e.g. "6:30 a.m. breaks the 7 a.m. rule. Keep it at 7:00a, or did you mean 6:30 p.m.?". Only an explicit p.m. ("6:30 pm", "half past six tonight") is an evening time.
@@ -251,6 +253,10 @@ async function run(a, x) {
     case 'supplement': {
       const e = await food.addSupplement(a.supplement);
       return e ? { ok: true, summary: `Supplement logged: ${e.name}.` } : { ok: false, summary: `Unknown supplement "${a.supplement}".` };
+    }
+    case 'medicine': {
+      try { const r = await require('./meds').mark(a.medicine); const m = r.due.find(x => x.key === a.medicine); return { ok: true, summary: `Taken: ${m ? m.name : a.medicine}.` }; }
+      catch (e) { return { ok: false, summary: `Unknown medicine "${a.medicine}".` }; }
     }
     case 'weigh_in': {
       const lb = Number(a.lb);
