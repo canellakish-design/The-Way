@@ -26,17 +26,18 @@ function sheet(){
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">Training and nutrition advisor</span><span class="vlinks"><button class="linkish" id="vNew">new conversation</button><button class="vx" id="vClose" aria-label="Close">×</button></span></div>
+    <div class="vhead"><span class="eyebrow">Coach</span><span class="vlinks">${SR ? `<button class="linkish" id="vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="vNew">new conversation</button><button class="vx" id="vClose" aria-label="Close">×</button></span></div>
     <div class="vthread" id="vThread"></div>
     <div class="vheard" id="vHeard"></div>
     <div class="vrow">${SR ? `<button class="primary big vhold" id="vHold">Hold to talk</button>` : ""}<button class="big" id="vType">Type</button></div>
     <div id="vTypeBox" hidden><textarea id="vText" rows="2" placeholder="${SR ? "Or type it here" : "Type here, or use the keyboard's microphone key"}"></textarea>
       <div class="vrow"><button class="primary" id="vSend">Send</button></div></div>
     <div class="small" id="vStatus"></div>
-    <div class="small vhint">"two eggs and toast" · "skim or whole milk?" · "add 30 minutes to today's ride" · "move the dentist to 3" · then answer back: "yes, do that" · "the second one"</div>
   </div>`;
   document.body.appendChild(s);
   document.getElementById("vClose").onclick = close;
+  const hb = document.getElementById("vHey"); if (hb) hb.onclick = ()=> setHey(!heyOn);
+  drawHey();
   document.getElementById("vNew").onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
   document.getElementById("vSend").onclick = ()=>{ if (window.primeSound) primeSound(); send(document.getElementById("vText").value.trim()); };
   document.getElementById("vType").onclick = ()=>{ const b = document.getElementById("vTypeBox"); b.hidden = !b.hidden; if (!b.hidden) document.getElementById("vText").focus(); };
@@ -52,7 +53,7 @@ function status(t){ const el = document.getElementById("vStatus"); if (el) el.te
 function drawThread(){
   const el = document.getElementById("vThread"); if (!el) return;
   el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
-    || `<div class="small">Hold the button and say it, or ask it. It answers, and you can answer back.</div>`;
+    || `<div class="small">Hold to talk. Or turn on Hey Coach and start with "Coach".</div>`;
   el.scrollTop = el.scrollHeight;
 }
 function open(){ const s = sheet(); s.hidden = false; drawThread(); }
@@ -92,11 +93,13 @@ function ensureRec(){
     else if (!toss && !holding) status("Heard nothing. Hold the button and speak.");
     // a hold began while this session was ending: start it now
     if (wantListen && holding) startListening();
+    else heyResume();
   };
   return rec;
 }
 function startListening(){
   if (!SR) return;
+  heyPause();
   wantListen = true;
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
   try{ speechSynthesis.cancel(); }catch{}
@@ -168,6 +171,67 @@ async function send(text){
   sending = false;
 }
 
+/* ---- Hey Coach ----
+   Hands-free while The Way is open (on the Zwift screen, propped up in the gym): it listens all the time
+   and acts only on a sentence that starts with "Coach" ("Coach, log a gel", "coach how long is left").
+   "Coach" alone answers "Yes?" and takes the next sentence. The answer is spoken (into the Shokz) and
+   shown for a few seconds at the bottom; nothing opens over the page. Its own recogniser, paused while
+   the round button is held and while it is speaking, restarted when Safari ends a session. A web page
+   cannot listen with the screen locked or the app closed: Siri's "Ask my coach" covers that. */
+let heyOn = false, heyRec = null, heyPaused = false, heyArmedUntil = 0;
+try{ heyOn = localStorage.getItem("way-hey") === "1"; }catch{}
+const WAKE = /^\s*(?:hey|ok|okay)?\s*coach\b[\s,.:!?-]*(.*)$/i;
+function drawHey(){
+  const hb = document.getElementById("vHey"); if (hb) hb.textContent = "Hey Coach: " + (heyOn ? "on" : "off");
+  const m = document.getElementById("micBtn"); if (m) m.classList.toggle("hey", heyOn);
+}
+function toast(t){
+  let el = document.getElementById("heyToast");
+  if (!el){ el = document.createElement("div"); el.id = "heyToast"; el.setAttribute("role", "status"); document.body.appendChild(el); }
+  el.textContent = t; el.hidden = !t; clearTimeout(el.__t); if (t) el.__t = setTimeout(() => { el.hidden = true; }, 9000);
+}
+const ttsBusy = () => { try{ return typeof __ttsSpeaking !== "undefined" && __ttsSpeaking; }catch{ return false; } };
+async function heyAsk(text){
+  if (sending) return;
+  sending = true; heyPause(); toast("…");
+  history.push({ role: "user", text }); keep(); drawThread();
+  try{
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
+    toast(r.reply || "Done.");
+    if (r.reply && typeof speak === "function") speak(r.reply);
+    if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
+  }catch(e){ toast(String(e.message).replace(/^bridge \d+ — /, "")); history.pop(); keep(); }
+  sending = false;
+  setTimeout(heyResume, 400);
+}
+function heyHeard(t){
+  if (ttsBusy()) return;                                   // the coach's own voice, not him
+  const m = WAKE.exec(t);
+  if (m && m[1].trim()) { heyArmedUntil = 0; heyAsk(m[1].trim()); return; }
+  if (m) { heyArmedUntil = Date.now() + 8000; toast("Yes?"); if (typeof speak === "function") speak("Yes?"); return; }
+  if (Date.now() < heyArmedUntil && t.trim()) { heyArmedUntil = 0; heyAsk(t.trim()); }
+}
+function heyStart(){
+  if (!SR || !heyOn || heyPaused || heyRec || document.hidden) return;
+  try{
+    heyRec = new SR(); heyRec.lang = "en-US"; heyRec.continuous = true; heyRec.interimResults = false; heyRec.maxAlternatives = 1;
+    heyRec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) heyHeard(e.results[i][0].transcript); };
+    heyRec.onerror = e => { if (e.error === "not-allowed" || e.error === "service-not-allowed"){ setHey(false); toast("Microphone blocked: allow it for The Way, then turn Hey Coach on again."); } };
+    heyRec.onend = () => { heyRec = null; if (heyOn && !heyPaused) setTimeout(heyStart, 300); };
+    heyRec.start();
+  }catch{ heyRec = null; setTimeout(heyStart, 1500); }
+}
+function heyStop(){ const r = heyRec; heyRec = null; if (r){ r.onend = null; try{ r.abort(); }catch{} } }
+function heyPause(){ heyPaused = true; heyStop(); }
+function heyResume(){ heyPaused = false; if (heyOn && !ttsBusy()) heyStart(); else if (heyOn) setTimeout(heyResume, 700); }
+function setHey(on){
+  heyOn = !!on; try{ localStorage.setItem("way-hey", heyOn ? "1" : "0"); }catch{}
+  drawHey();
+  if (heyOn){ heyPaused = false; heyStart(); toast("Hey Coach is listening. Start with \"Coach\"."); } else { heyStop(); toast("Hey Coach off."); }
+}
+document.addEventListener("visibilitychange", () => { if (document.hidden) heyStop(); else if (heyOn && !heyPaused) heyStart(); });
+
 // the round button, on every page: hold to talk, tap to open the thread
 const b = document.createElement("button");
 b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Hold to talk to the training and nutrition advisor");
@@ -175,6 +239,7 @@ b.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true
 if (SR) wireHold(b, ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else open(); });
 else b.onclick = ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else { open(); const t = document.getElementById("vTypeBox"); if (t) t.hidden = false; } };
 document.body.appendChild(b);
+drawHey(); if (heyOn) heyStart();
 
-window.voiceBits = { open, close, send, supported: !!SR };
+window.voiceBits = { open, close, send, supported: !!SR, setHey };
 })();

@@ -13,10 +13,14 @@
     return lines.every(l => /^\s*[-•]\s/.test(l)) ? `<ul class="ch-ul">${html.map(l => `<li>${l.replace(/^\s*[-•]\s/, "")}</li>`).join("")}</ul>` : `<p>${html.join("<br>")}</p>`;
   }).join("");
   const split = t => { const m = /^\s*\**SAY:\**\s*([\s\S]*?)(?:\n\s*\n|$)/.exec(t || ""); return m ? { say: m[1].trim().replace(/\*\*/g, ""), answer: t.slice(m.index + m[0].length).trim() } : { say: "", answer: t || "" }; };
-  const turnHTML = (q, say, answer, sources, when) => `<div class="ch-turn">
-      <div class="ch-q"><span class="hu-lab">${when ? esc(when) : "You"}</span><div>${esc(q)}</div></div>
-      <div class="ch-a">${say ? `<div class="ch-say">${esc(say)}</div>` : ""}<div class="ch-body">${md(answer)}</div>
-        ${sources && sources.length ? `<details class="why"><summary>sources · ${sources.length}</summary><ul class="ch-src">${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join("")}</ul></details>` : ""}</div></div>`;
+  // one exchange, folded: the question on one line; open, the coach's spoken call, and the write-up and
+  // sources behind "more". Only the newest is open; the rest are a list of questions.
+  const turnHTML = (q, say, answer, sources, when, open) => `<details class="ch-turn"${open ? " open" : ""}>
+      <summary><span class="ch-qt">${esc(q)}</span>${when ? `<span class="ch-when">${esc(when)}</span>` : ""}</summary>
+      ${say ? `<div class="ch-say">${esc(say)}</div>` : ""}
+      ${answer || (sources && sources.length) ? `<details class="ch-more"${say ? "" : " open"}><summary>more</summary><div class="ch-body">${md(answer)}</div>
+        ${sources && sources.length ? `<ul class="ch-src">${sources.map(s => `<li><a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a></li>`).join("")}</ul>` : ""}</details>` : ""}
+    </details>`;
   const clock = iso => { const d = new Date(iso); if (isNaN(d)) return ""; let h = d.getHours(); const ap = h < 12 ? "a" : "p"; h = h % 12 || 12; return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${h}:${String(d.getMinutes()).padStart(2, "0")}${ap}`; };
 
   V.coach = async function(){
@@ -35,7 +39,7 @@
       const el = document.getElementById("chThread"); if (!el || !alive()) return;
       const turns = (th && th.turns) || [], pairs = [];
       for (let i = 0; i < turns.length; i++) if (turns[i].role === "user" && turns[i + 1] && turns[i + 1].role === "assistant") { pairs.push([turns[i], turns[i + 1]]); i++; }
-      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a]) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at)); }).join("") : "";
+      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a], i) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at), i === 0 && !live.innerHTML); }).join("") : "";
     };
     const drawNotes = async () => {
       let nb = null; try { nb = await bridge("/coach/notebook"); } catch {}
@@ -59,7 +63,8 @@
         const st = live.querySelector(".ch-steps");
         if (job && st) st.innerHTML = (job.steps || []).slice(-8).map(s => `<div class="ch-step">${esc(s)}</div>`).join("") + (job.status === "running" || job.status === "queued" ? `<div class="ch-step ch-now">thinking · ${Math.round((Date.now() - t0) / 1000)} s</div>` : "");
         if (job && job.status === "done"){
-          live.innerHTML = turnHTML(job.text, job.say, job.answer, job.sources, "just now" + (job.usage && job.usage.usd != null ? ` · $${job.usage.usd.toFixed(2)}` : ""));
+          live.innerHTML = turnHTML(job.text, job.say, job.answer, job.sources, "just now", true);
+          drawThread();   // the earlier ones fold away under it
           if (job.say && typeof speak === "function") speak(job.say);
           go.disabled = false; drawNotes(); return;
         }
