@@ -268,7 +268,12 @@ function attach(app) {
     const W = require('./workouts'), today = tz.todayKey();
     const cal = await W.calendar(today, today);
     const day = (cal.days || [])[0] || {};
-    return (day.done || []).filter(r => W.isRideSport ? W.isRideSport(r) : true).map(r => ({ id: String(r.id), name: r.name, time: r.time || null, minutes: r.minutes || null,
+    // a false start is not a ride (Harry, 9 Nov: the player saved a 0-minute "Z1 trainer 90 min" at 3:59p before the
+    // real one at 4:04p, and the coach debriefed both): under 5 minutes gets no debrief, and of two saves with the same
+    // name the longer one is the ride
+    const real = (day.done || []).filter(r => (W.isRideSport ? W.isRideSport(r) : true) && (r.minutes || 0) >= 5);
+    const keep = real.filter(r => !real.some(o => o !== r && String(o.name) === String(r.name) && ((o.minutes || 0) > (r.minutes || 0) || ((o.minutes || 0) === (r.minutes || 0) && String(o.id) > String(r.id)))));
+    return keep.map(r => ({ id: String(r.id), name: r.name, time: r.time || null, minutes: r.minutes || null,
       planned: (day.planned || []).filter(w => w.compliance).map(w => ({ name: w.name, band: w.compliance.band, pct: w.compliance.pct, basis: w.compliance.basis })) }));
   };
   app.get('/coach/debrief/today', async (req, res) => { if (!auth(req, res)) return;
