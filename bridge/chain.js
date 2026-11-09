@@ -51,31 +51,32 @@ function stateOf(key, v) {
 function verdict(links) {
   const first = ORDER.slice(0, -1).find(k => links[k] && (links[k].state === 'bad' || links[k].state === 'warn'));
   const w = links.weight || {};
-  const wWord = w.week == null ? null : w.week <= -0.8 ? `down ${Math.abs(w.week)} lb a week, on pace` : w.week < -0.2 ? `down ${Math.abs(w.week)} lb a week, under the pound` : w.week <= 0.3 ? 'flat' : `up ${w.week} lb a week`;
+  // short: the link, its number, nothing the box already says (Harry, 9 Nov: "too many words")
+  const wWord = w.week == null ? null : w.week <= -0.8 ? `down ${Math.abs(w.week)} lb/wk, on pace` : w.week < -0.2 ? `down ${Math.abs(w.week)} lb/wk, under 1 lb` : w.week <= 0.3 ? 'flat' : `up ${w.week} lb/wk`;
   const L = links;
   let text;
   if (!first) {
-    if (w.week == null) text = 'Every link holds. The scale has not said yet.';
-    else if (w.creatine_water && w.week > 0) text = `Every link holds and weight is ${wWord}: creatine started ${w.creatine_days} days ago, and a pound or two of that is water. Judge it from day 14.`;
-    else if (w.state === 'good') text = `The chain holds: weight ${wWord}.`;
-    else text = `Every link holds and weight is ${wWord}: the calorie target is the suspect, not the week.`;
+    if (w.week == null) text = 'Every link holds. No weight yet.';
+    else if (w.creatine_water && w.week > 0) text = `Every link holds. Weight ${wWord}: creatine water until day 14 (day ${w.creatine_days}).`;
+    else if (w.state === 'good') text = `Chain holds. Weight ${wWord}.`;
+    else text = `Every link holds, weight ${wWord}: check the calorie target.`;
   } else {
     const say = {
-      sleep: () => `sleep: ${L.sleep.week} h a night this week. Appetite and recovery follow it.`,
-      food: () => `macros: on plan ${L.food.days_on} of ${L.food.days_logged} logged days${L.food.kcal_today != null && L.food.kcal_target ? `; today ${L.food.kcal_today.toLocaleString('en-US')} of ${L.food.kcal_target.toLocaleString('en-US')} kcal${L.food.protein_today != null && L.food.protein_target ? `, ${L.food.protein_today} of ${L.food.protein_target} g protein` : ''}` : ''}.`,
-      micros: () => `micros: ${L.micros.week} this week${L.micros.gaps && L.micros.gaps.length ? `, low on ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
-      water: () => `hydration: a balance score of ${L.water.week} on average this week; the scale wobbles with it.`,
-      plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} minutes of riding placed for the week ahead${L.plan.week_label ? ` (${L.plan.week_label})` : ''}, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} ride${L.plan.untimed === 1 ? '' : 's'} with no start time` : ''}.`,
-      fuel: () => `fuelling at ${L.fuel.week}% of what the plan asked for (food before and on the bike, and the pre-ride supplements; 100% is the plan).`,
-      work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} planned minutes ridden${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% of them in zone` : ''}.`,
+      sleep: () => `sleep: ${L.sleep.week} h a night.`,
+      food: () => `macros: ${L.food.days_on} of ${L.food.days_logged} days on plan${L.food.kcal_today != null && L.food.kcal_target ? `; today ${L.food.kcal_today.toLocaleString('en-US')} of ${L.food.kcal_target.toLocaleString('en-US')} kcal${L.food.protein_today != null && L.food.protein_target ? `, ${L.food.protein_today} of ${L.food.protein_target} g protein` : ''}` : ''}.`,
+      micros: () => `micros: ${L.micros.week}${L.micros.gaps && L.micros.gaps.length ? `, low ${L.micros.gaps.slice(0, 3).join(', ')}` : ''}.`,
+      water: () => `water: ${L.water.week} balance.`,
+      plan: () => `planning: ${L.plan.ride_min} of ${L.plan.ride_target_min} ride min placed${L.plan.week_label ? ` (${L.plan.week_label})` : ''}, ${L.plan.lifts} of 5 lifts${L.plan.untimed ? `, ${L.plan.untimed} untimed` : ''}.`,
+      fuel: () => `fuelling: ${L.fuel.week}% of plan.`,
+      work: () => `riding: ${L.work.done_min} of ${L.work.planned_min} min${L.work.in_zone_pct != null && L.work.in_zone_pct < 95 ? `, ${L.work.in_zone_pct}% in zone` : ''}.`,
       lift: () => `lifting: ${L.lift.count_word || `${L.lift.sessions} of ${L.lift.target}`}.`,
-      recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% against your band`}. The training is landing on a body that is not absorbing it.`
+      recovery: () => `recovery: ${L.recovery.why || `${L.recovery.week}% vs band`}.`
     }[first]();
     // red is a break; amber is a weak link: the chain holds, with a warning on it
     text = `${links[first].state === 'bad' ? 'Chain breaks at' : 'Chain weak at'} ${say}${wWord ? ` Weight ${wWord}.` : ''}`;
   }
   // a green recovery on a week that asked for little is not credit
-  if (L.recovery && L.recovery.state === 'good' && L.work && L.lift && (L.work.state === 'bad' || L.work.state === 'warn') && (L.lift.state === 'bad' || L.lift.state === 'warn')) text += ' Recovery is green because little was asked of it.';
+  if (L.recovery && L.recovery.state === 'good' && L.work && L.lift && (L.work.state === 'bad' || L.work.state === 'warn') && (L.lift.state === 'bad' || L.lift.state === 'warn')) text += ' Recovery green: little asked.';
   return { break_at: first || null, break_state: first ? links[first].state : null, text };
 }
 
@@ -102,9 +103,12 @@ function fuelChecks(r) {
   const meals = (r.meals || []);
   const supTaken = k => (r.entries || []).filter(e => e.supplement && e.key === k).length;
   const hard = rides.some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, '')));
+  // today, only what is due by now is asked for: a 5:45 breakfast or 5:30 beetroot is not missed at 3 a.m.
+  const nowMin = r.date === tz.todayKey() ? (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })() : 24 * 60;
+  const suppAt = k => { const d = r.supps && (r.supps.due || []).find(x => x.key === k); return d && F.toMin(d.time) != null ? F.toMin(d.time) : null; };
   rides.forEach((x, i) => {
     const st = F.toMin(x.time), end = st + (x.minutes || 60), parts = [];
-    const preMeals = meals.filter(m => m.slot !== 'on the bike' && F.toMin(m.time) != null && F.toMin(m.time) >= st - 240 && F.toMin(m.time) < st);
+    const preMeals = meals.filter(m => m.slot !== 'on the bike' && F.toMin(m.time) != null && F.toMin(m.time) >= st - 240 && F.toMin(m.time) < st && F.toMin(m.time) <= nowMin);
     const planPre = preMeals.reduce((a, m) => a + (m.carbs_g || 0), 0);
     const ate = ents.filter(e => F.toMin(e.time) >= st - 240 && F.toMin(e.time) < st).reduce((a, e) => a + (e.carbs_g || 0), 0);
     // a train-low before is kept low: at or under the plan is the point, over is the miss
@@ -112,7 +116,6 @@ function fuelChecks(r) {
     if (planPre > 0) parts.push({ kind: 'pre', got_g: Math.round(ate), plan_g: Math.round(planPre), low: !!lowPre, ratio: lowPre ? (ate <= planPre * 1.25 ? 1 : planPre / ate) : ate / planPre });
     // the meal after the ride: the carbs within two hours of its end against the plan's, once the window has closed
     const post = meals.find(m => m.post_ride && Math.abs((m.ride_end || 0) - end) <= 30) || meals.find(m => m.post_ride && F.toMin(m.time) >= end && F.toMin(m.time) <= end + 90);
-    const nowMin = r.date === tz.todayKey() ? (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })() : 24 * 60;
     if (post && post.carbs_g > 0 && (x.done || x.kept) && nowMin >= end + 120) {
       const gotAfter = ents.filter(e => F.toMin(e.time) >= end - 5 && F.toMin(e.time) <= end + 120 && e.slot !== 'on the bike').reduce((a, e) => a + (e.carbs_g || 0), 0);
       parts.push({ kind: 'after', got_g: Math.round(gotAfter), plan_g: post.carbs_g, ratio: gotAfter / post.carbs_g });
@@ -123,9 +126,10 @@ function fuelChecks(r) {
       parts.push({ kind: 'bottle', got_g: Math.round(got), plan_g: bottle.carbs_g, ratio: got / bottle.carbs_g });
     }
     if (i === 0) {
-      const due = ['beetroot'].concat(hard ? ['sodium_bicarb'] : []);
+      // a supplement is due once its time has come (or the ride has started), or once taken
+      const due = ['beetroot'].concat(hard ? ['sodium_bicarb'] : []).filter(k => supTaken(k) || nowMin >= st || (suppAt(k) != null && suppAt(k) <= nowMin));
       const taken = due.reduce((a, k) => a + Math.min(2, supTaken(k)), 0);
-      parts.push({ kind: 'supp', got: taken, due: due.length, keys: due, ratio: taken / due.length });
+      if (due.length) parts.push({ kind: 'supp', got: taken, due: due.length, keys: due, ratio: taken / due.length });
     }
     if (!parts.length) return;
     const ratio = fuelMean(parts);

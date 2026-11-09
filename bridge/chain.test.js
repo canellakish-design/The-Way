@@ -14,26 +14,26 @@ ok('states: one rule a link', () => {
 ok('verdict: the first link from the left that is off is the break; all good and flat blames the target', () => {
   const L = { sleep: { week: 7.4, state: 'good' }, food: { week: 71, state: 'warn', days_on: 3, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, water: { week: 90, state: 'good' }, work: { week: 95, state: 'good', done_min: 300, planned_min: 315 }, lift: { week: 80, state: 'good', sessions: 4, target: 5 }, recovery: { week: 72, state: 'good' }, weight: { week: 0.2, state: 'warn' } };
   const v = C.verdict(L);
-  assert.strictEqual(v.break_at, 'food'); assert.ok(/weak at macros: on plan 3 of 7/.test(v.text), v.text);   // amber is a weak link, red a break assert.ok(/Weight flat/.test(v.text), v.text);
+  assert.strictEqual(v.break_at, 'food'); assert.ok(/weak at macros: 3 of 7 days on plan/.test(v.text), v.text);   // amber is a weak link, red a break assert.ok(/Weight flat/.test(v.text), v.text);
   const all = Object.assign({}, L, { food: { week: 88, state: 'good', days_on: 6, days_logged: 7 } });
   const v2 = C.verdict(all);
-  assert.strictEqual(v2.break_at, null); assert.ok(/calorie target is the suspect/.test(v2.text), v2.text);
+  assert.strictEqual(v2.break_at, null); assert.ok(/check the calorie target/.test(v2.text), v2.text);
   const down = Object.assign({}, all, { weight: { week: -0.9, state: 'good' } });
-  assert.ok(/chain holds: weight down 0.9 lb a week, on pace/.test(C.verdict(down).text), C.verdict(down).text);
+  assert.ok(/Chain holds\. Weight down 0\.9 lb\/wk, on pace/.test(C.verdict(down).text), C.verdict(down).text);
   const slow = Object.assign({}, all, { weight: { week: -0.4, state: 'warn' } });
-  assert.ok(/under the pound.*calorie target is the suspect/.test(C.verdict(slow).text), C.verdict(slow).text);
+  assert.ok(/under 1 lb.*check the calorie target/.test(C.verdict(slow).text), C.verdict(slow).text);
   const sleepy = Object.assign({}, all, { sleep: { week: 6.0, state: 'bad' } });
   assert.strictEqual(C.verdict(sleepy).break_at, 'sleep');
   const lowMicro = Object.assign({}, all, { micros: { week: 55, state: 'bad', gaps: ['iron', 'calcium'] } });
-  const v3 = C.verdict(lowMicro); assert.strictEqual(v3.break_at, 'micros'); assert.ok(/low on iron, calcium/.test(v3.text), v3.text);
+  const v3 = C.verdict(lowMicro); assert.strictEqual(v3.break_at, 'micros'); assert.ok(/low iron, calcium/.test(v3.text), v3.text);
   assert.deepStrictEqual(C.ORDER, ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight']);
   assert.strictEqual(C.stateOf('fuel', 0.95), 'good'); assert.strictEqual(C.stateOf('fuel', 0.85), 'warn'); assert.strictEqual(C.stateOf('fuel', 0.5), 'bad');   // 100% is the plan now assert.strictEqual(C.stateOf('plan', 0.9), 'good'); assert.strictEqual(C.stateOf('plan', 0.6), 'warn'); assert.strictEqual(C.stateOf('plan', 0.2), 'bad');
   const unplanned = Object.assign({}, all, { plan: { week: 20, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 1 } });
-  assert.ok(/breaks at planning: 60 of 360 minutes of riding placed for the week ahead, 1 of 5 lifts, 1 ride with no start time/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
+  assert.ok(/breaks at planning: 60 of 360 ride min placed, 1 of 5 lifts, 1 untimed/.test(C.verdict(unplanned).text), C.verdict(unplanned).text);
   const noLift = Object.assign({}, all, { lift: { week: 20, state: 'bad', sessions: 1, target: 5 } });
   assert.ok(/breaks at lifting: 1 of 5\./.test(C.verdict(noLift).text));
   const noRide = Object.assign({}, all, { work: { week: 40, state: 'bad', done_min: 120, planned_min: 300 } });
-  assert.ok(/breaks at riding: 120 of 300 planned minutes ridden/.test(C.verdict(noRide).text));
+  assert.ok(/breaks at riding: 120 of 300 min/.test(C.verdict(noRide).text));
   assert.strictEqual(C.stateOf('lift', 0.8), 'good'); assert.strictEqual(C.stateOf('lift', 0.6), 'warn'); assert.strictEqual(C.stateOf('lift', 0), 'bad');
 });
 
@@ -50,7 +50,7 @@ ok('recovery: the week against the rider\'s own band; a dip is one step, two is 
   const few = C.recoveryState({ hrv_week: [50, 52], hrv_base: base.slice(0, 5) });
   assert.strictEqual(few.state, 'none');
   const L = { sleep: { week: 7.4, state: 'good' }, water: { week: 90, state: 'good' }, food: { week: 88, state: 'good', days_on: 6, days_logged: 7 }, micros: { week: 90, state: 'good', gaps: [] }, lift: { week: 20, state: 'bad', sessions: 1, target: 5 }, work: { week: 30, state: 'bad', done_min: 60, planned_min: 200 }, recovery: { week: 4, state: 'good', why: 'HRV inside your band (+4%)' }, weight: { week: 0.1, state: 'warn' } };
-  assert.ok(/little was asked/.test(C.verdict(L).text), C.verdict(L).text);
+  assert.ok(/little asked/.test(C.verdict(L).text), C.verdict(L).text);
 });
 
 ok('macros box: today\'s kcal and protein against the targets, the Food page\'s own numbers, moving with every log', () => {
@@ -78,12 +78,25 @@ ok('plan link: the planning score on its own week, labelled so it cannot read as
   assert.strictEqual(C.planWeekLabel('2026-11-02'), 'Nov 2 – Nov 8');
   assert.strictEqual(C.planWeekLabel('2026-12-29'), 'Dec 29 – Jan 4');
   const L = { plan: { week: 40, state: 'bad', ride_min: 60, ride_target_min: 360, lifts: 1, untimed: 0, week_label: 'Nov 2 – Nov 8' } };
-  assert.ok(/placed for the week ahead \(Nov 2 – Nov 8\)/.test(C.verdict(L).text), C.verdict(L).text);
+  assert.ok(/placed \(Nov 2 – Nov 8\)/.test(C.verdict(L).text), C.verdict(L).text);
 });
 
 ok('lift link: the verdict reads the Lift page\'s count, "1 of 1 due" in the first week', () => {
   const L = { lift: { week: 0, state: 'bad', sessions: 0, target: 5, count_word: '0 of 1 due' } };
   assert.ok(/lifting: 0 of 1 due\./.test(C.verdict(L).text), C.verdict(L).text);
+});
+ok('fuel today: food and supplements not due yet are not asked for (3 a.m. before a 7:00 ride: nothing to score)', () => {
+  const tz = require('./tz'), parts0 = tz.parts, today = tz.todayKey();
+  tz.parts = () => ({ h: 3, mi: 25 });
+  try {
+    const r = { date: today, sessions: [{ name: 'Z1 trainer 60', sport: 'VirtualRide', time: '07:00', minutes: 60, planned: true, done: false, awaiting: null }],
+      meals: [{ slot: 'before', time: '05:45', carbs_g: 40 }, { slot: 'on the bike', time: '07:00', carbs_g: 30 }], entries: [],
+      supps: { due: [{ key: 'beetroot', time: '05:30' }] } };
+    assert.deepStrictEqual(C.fuelChecks(r).map(c => c.parts.filter(p => p.kind !== 'bottle').length), [0]);
+    tz.parts = () => ({ h: 6, mi: 0 });
+    const kinds = C.fuelChecks(r)[0].parts.map(p => p.kind);
+    assert.ok(kinds.includes('pre') && kinds.includes('supp'), kinds.join());
+  } finally { tz.parts = parts0; }
 });
 ok('fuel: a ride scores what went in against the plan (before, on the bike, supplements); under below 100, over above', () => {
   const r = { sessions: [{ name: 'VO2 40/20s', sport: 'VirtualRide', time: '07:00', minutes: 51, done: true }],
