@@ -51,7 +51,7 @@ function fuelDay(sessions) {
 // ---- fuel for the work required (Impey 2018): a prescription per session ----
 // Carbohydrate availability is set for each session by what it demands, and the
 // day's carbs are the sum of the work, not a tier picked by the day's name.
-//   low    a Zone 1 ride under 90 min, in the morning: coffee and whey before (under 20 g), water on the
+//   low    a Zone 1 ride under 90 min, in the morning: coffee and a Huel shake before (under 20 g), water on the
 //          bike, protein and modest carbs after. At most TRAIN_LOW_PER_WEEK a week, never on a hard day
 //          or the day before one (Marquet 2016: sleep-low works in blocks, with the hard work fuelled).
 //   light  a Zone 1 ride under two hours: 0.5 g/kg before, 30 g an hour, 1 g/kg in the two hours after.
@@ -85,7 +85,7 @@ function sessionRx(x, kg, ftp, o) {
   const beforeG = kind === 'low' ? 20 : g(Math.max(beforeFloor, Math.min(1.0 * w, work * 0.45)));
   const afterG = g(Math.max(0.4 * w, Math.min(1.2 * w, work * 0.75)));
   const rx = kind === 'low' ? {
-      before: { carbs_g: 20, protein_g: 20, low: true, hours_before: 0.75, words: 'Coffee and a 20 g whey shake; under 20 g of carbs. This is the low ride of the week.' },
+      before: { carbs_g: 20, protein_g: 20, low: true, hours_before: 0.75, words: 'Coffee and a Huel shake (20 g protein); under 20 g of carbs. This is the low ride of the week.' },
       during: { carbs_g: 0, g_per_h: 0, words: 'Water only.' },
       after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs.` } }
     : kind === 'light' ? {
@@ -93,11 +93,11 @@ function sessionRx(x, kg, ftp, o) {
       during: { carbs_g: ob.carbs, g_per_h: mins >= 75 ? 30 : 0, words: ob.what },
       after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs.` } }
     : kind === 'long' ? {
-      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, whey.` },
+      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, a Huel shake.` },
       during: { carbs_g: ob.carbs, g_per_h: 60, words: ob.what },
       after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs; starch at dinner too.` } }
     : {
-      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, whey.` },
+      before: { carbs_g: beforeG, protein_g: 30, low: false, hours_before: 2.5, words: `About ${beforeG} g carbs 2 to 3 hours before: oats, fruit, a Huel shake.` },
       during: { carbs_g: ob.carbs, g_per_h: 50, words: ob.what },
       after: { carbs_g: afterG, protein_g: 45, within_min: 120, words: `Within 2 hours: 45 g protein and about ${afterG} g carbs. Recover high.` } };
   // what the session adds to the day's carbs: its windows (a low ride's before is not carbs)
@@ -194,7 +194,7 @@ function guidelines(day, opts) {
     g.push({ key: 'pre', text: 'Carb breakfast 2 to 3 hours before the ride: oats and fruit.' });
     g.push({ key: 'post', text: 'A real meal within 2 hours of the ride: 45 g protein and carbs.' });
   } else if (day === 'normal' && o.rx && o.rx.train_low) {
-    g.push({ key: 'pre', text: 'Train-low day: coffee and whey before the ride, under 20 g of carbs; water on the bike.' });
+    g.push({ key: 'pre', text: 'Train-low day: coffee and a Huel shake before the ride, under 20 g of carbs; water on the bike.' });
     g.push({ key: 'carbs', text: 'Carbs after the ride and at the main meals later; none before it.' });
     g.push({ key: 'post', text: 'Protein and carbs within 2 hours of the ride: recover high.' });
   } else if (day === 'normal') {
@@ -227,10 +227,10 @@ function cue(day, sessions, nowIso, rx) {
     const early = toMin(next.x.time) != null && toMin(next.x.time) < 7 * 60 + 30;
     if (next.dt <= 180) return { key: 'pre', text: early
       ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or rice cakes 45 minutes before, breakfast after.`
-                        : rx && rx.train_low ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a 20 g whey shake, then go: the low ride of the week. Breakfast after.`
-                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or a small bowl with whey, then go. Breakfast after.`)
+                        : rx && rx.train_low ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a Huel shake, then go: the low ride of the week. Breakfast after.`
+                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or a Huel shake, then go. Breakfast after.`)
       : toMin(next.x.time) != null && toMin(next.x.time) >= 11 * 60
-      ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: something light with protein now, Greek yogurt, a whey shake or a small rice bowl. Nothing heavy.`
+      ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: something light with protein now, Greek yogurt, a Huel shake or a small rice bowl. Nothing heavy.`
       : day === 'high'
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: carb breakfast now, oats and fruit, then water.`
       : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: low carb breakfast now. Protein smoothie, eggs or Greek yogurt, no toast.` };
@@ -282,13 +282,13 @@ function mealPlan(day, sessions, target) {
   const LOW_CARB_G = 20;
   const lowCarb = (time, slot, what, protein) => Object.assign(meal(time, slot, what, 0.15, 0, protein), { carbs_g: LOW_CARB_G, low_carb: true });
   const bfast = (time, pre) => restDay ? Object.assign(meal(time, 'breakfast', 'Protein first: eggs or Greek yogurt, fruit. No starch.', 0.25, 0.15, 45), { low_carb: true })
-    : day === 'high' ? meal(time, 'breakfast', pre ? `Carb breakfast 2 to 3 hours before ${pre}: 70 g oats, fruit, whey.` : 'Oats and fruit, whey in the bowl.', 0.25, 0.30, 45)
+    : day === 'high' ? meal(time, 'breakfast', pre ? `Carb breakfast 2 to 3 hours before ${pre}: 70 g oats, fruit, a Huel shake.` : 'Oats and fruit, a Huel shake beside it.', 0.25, 0.30, 45)
     : lowCarb(time, 'breakfast', pre ? `Low carb breakfast before ${pre}, under ${LOW_CARB_G} g of carbs, 30 g protein: eggs, Greek yogurt or a smoothie. No toast.` : `Protein smoothie or eggs, 30 g protein, under ${LOW_CARB_G} g of carbs.`, 30);
   // Shares of the day's calories and carbs; each layout below hands out the whole day once.
   const lunch = (time, share, carbShare) => meal(time, 'lunch', restDay ? 'Protein and vegetables. Big salad with chicken or fish.' : 'Protein with rice or potatoes, vegetables.', share == null ? 0.30 : share, carbShare == null ? (restDay ? 0.25 : 0.35) : carbShare, 50);
   const dinner = (time, share, carbShare) => meal(time, 'dinner', restDay ? 'Protein, vegetables and the one starch of the day.'
     : day === 'high' ? 'Protein, vegetables, and a proper starch. Carbs still count today.' : 'Protein and vegetables, starch beside it.', share == null ? 0.35 : share, carbShare == null ? (restDay ? 0.50 : 0.40) : carbShare, 55);
-  const snack = time => meal(time, 'snack', `Whey or cottage cheese if protein is short of ${t.protein_g} g.`, 0.10, 0.08, 25);
+  const snack = time => meal(time, 'snack', `A Huel shake or cottage cheese if protein is short of ${t.protein_g} g.`, 0.10, 0.08, 25);
   // Breakfast is as late as the training allows: he would rather sleep.
   if (!timed) {
     const b = restDay || day === 'high' ? 0.25 : 0.15, bC = restDay ? 0.15 : day === 'high' ? 0.30 : 0.08;
@@ -317,7 +317,7 @@ function mealPlan(day, sessions, target) {
     'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', share, carbShare, 25), { post_ride: true, ride_end: endMin });
   // A carb breakfast wants 2.5 h before a hard ride; a light low-carb one 1.5 h
   // before Zone 1. Breakfast sits at the latest of those, and if that would mean
-  // getting up before 6:30 it becomes coffee and whey 45 minutes out, with
+  // getting up before 6:30 it becomes coffee and a Huel shake 45 minutes out, with
   // breakfast after the ride instead.
   const gap = day === 'high' ? 150 : 90;
   const early = start - gap < 6 * 60 + 30;
@@ -326,7 +326,7 @@ function mealPlan(day, sessions, target) {
     // Morning ride: breakfast before it (or nothing before a dawn ride), the post-ride meal, then the day.
     if (early) out.push(meal(start - 45, 'before', day === 'high'
       ? `Small and quick before ${name}: a banana or two rice cakes with honey.`
-      : `Coffee and a 20 g whey shake before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
+      : `Coffee and a Huel shake (20 g protein) before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
     else out.push(bfast(start - gap, name));
     out.push(onBikeSlot);
     // the carbs the low-carb breakfast did not carry land here
@@ -345,7 +345,7 @@ function mealPlan(day, sessions, target) {
     out.push(bfast(Math.min(9 * 60 + 30, start - gap), name));
     if (start - gap > 9 * 60 + 30 + 60) out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
-      : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
+      : `Two hours before ${name}: something light with protein, Greek yogurt or a Huel shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBikeSlot);
     const hasBefore = start - gap > 9 * 60 + 30 + 60;
     const used = (day === 'high' ? 0.25 : 0.15) + (hasBefore ? 0.08 : 0) + 0.10, usedC = (day === 'high' ? 0.30 : 0.08) + (hasBefore ? (day === 'high' ? 0.12 : 0.04) : 0) + 0.08;
@@ -366,7 +366,7 @@ function mealPlan(day, sessions, target) {
     out.push(dinner(dnT, Math.round((1 - b - 0.27 - pre - post) * 100) / 100, Math.round((1 - bC - lC - preC - postC) * 100) / 100));
     if (hasBefore) out.push(meal(start - 90, 'before', day === 'high'
       ? `Before ${name}: a banana or two rice cakes with honey.`
-      : `Before ${name}: something light with protein, Greek yogurt or a whey shake.`, pre, preC, 15));
+      : `Before ${name}: something light with protein, Greek yogurt or a Huel shake.`, pre, preC, 15));
     out.push(onBikeSlot);
     out.push(bedtime(end, post, postC));
   } else {
@@ -375,7 +375,7 @@ function mealPlan(day, sessions, target) {
     out.push(lunch(13 * 60, 0.27, day === 'high' ? 0.25 : 0.30));
     out.push(meal(start - 120, 'before', day === 'high'
       ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a banana and yogurt.`
-      : `Two hours before ${name}: something light with protein, Greek yogurt or a whey shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
+      : `Two hours before ${name}: something light with protein, Greek yogurt or a Huel shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
     out.push(onBikeSlot);
     const lateSnack = end + 30 <= 20 * 60;
     out.push(after('dinner', Math.round((1 - (day === 'high' ? 0.25 : 0.15) - 0.27 - 0.10 - (lateSnack ? 0.10 : 0)) * 100) / 100,

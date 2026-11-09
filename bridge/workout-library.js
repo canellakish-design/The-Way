@@ -48,7 +48,7 @@ The day: higher carb day.`,
   lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes the day before a day off the bike or a long coaching day. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets, at school or Lifetime; the Pump at home is extra. Log it set by set on the Lift tab; it tells you the next weight.
 
 EAT
-Before: a normal meal 1 to 2 hours before, or the whey shake if it is first thing.
+Before: a normal meal 1 to 2 hours before, or a Huel shake if it is first thing.
 After: protein within 2 hours, 45 g. No extra carbs for lifting.
 The day: normal.`,
   mtb: `MOUNTAIN BIKE: bike handling only. No power or heart rate target. Cornering, braking late, line choice, descending.

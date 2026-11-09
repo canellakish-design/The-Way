@@ -104,7 +104,7 @@ const KCAL = { 'white rice, cooked': 260, 'brown rice, cooked': 220, 'oats, cook
   'bread, whole wheat': 150, 'pasta, cooked': 320, 'quinoa, cooked': 220, 'salmon, cooked': 300, 'tuna, canned': 130, 'sardines, canned': 190,
   'anchovies': 60, 'shrimp, cooked': 120, 'chicken breast, cooked': 250, 'chicken thigh, cooked': 270, 'turkey, cooked': 180, 'beef, lean, cooked': 300,
   'pork, lean, cooked': 220, 'egg, whole': 150, 'tofu, firm': 210, 'edamame': 120, 'lentils, cooked': 230, 'black beans, cooked': 200,
-  'greek yogurt, nonfat': 100, 'cottage cheese': 180, 'milk, 2%': 120, 'cheese, cheddar': 120, 'whey protein': 120, 'spinach, cooked': 20,
+  'greek yogurt, nonfat': 100, 'cottage cheese': 180, 'milk, 2%': 120, 'cheese, cheddar': 120, 'huel plant protein': 105, 'spinach, cooked': 20,
   'kale, cooked': 35, 'broccoli, cooked': 35, 'mixed salad greens': 15, 'carrot': 33, 'bell pepper': 30, 'tomato': 18, 'cucumber': 12, 'kimchi': 15,
   'avocado': 110, 'mushrooms': 18, 'onion': 16, 'nori seaweed': 2, 'banana': 105, 'blueberries': 57, 'orange': 60, 'apple': 95, 'mango': 90,
   'dates and dried fruit': 110, 'almonds': 165, 'chia or flax seeds': 75, 'olive oil': 120, 'soy sauce': 10, 'dark chocolate': 170, 'tailwind or sports drink': 200 };

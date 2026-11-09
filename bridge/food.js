@@ -71,7 +71,7 @@ async function rowsFor(date, g, entries, seen) {
   const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
   const plan = (g.meals || []).map(m => m.slot !== 'snack' || !today ? m : Object.assign({}, m, { what: (() => {
     const short = (g.target.protein_g || 0) - proteinSoFar;
-    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: whey or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
+    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: a Huel shake or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
   })() }));
   let hide = null;
   if (today) {
@@ -328,7 +328,7 @@ const READER = `You are the nutrition coach for one cyclist. He photographs ever
 Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo). Several photos are the same meal from different angles, or its courses and its drink: one entry, the whole of it added together, never counted twice.
 List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
 Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
-protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, whey, cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit.
+protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, a protein shake (his is Huel plant protein), cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit.
 processed is true only for ultra-processed food, NOVA group 4: industrially formulated products such as chips and crisps, candy and sweets, pastries and packaged cakes, soft drinks, packaged snack bars, instant noodles, hot dogs and deli meats, sugary cereals, or a deep-fried fast-food plate. Whole and minimally processed foods are never processed, cooked at home or not: eggs, bread and toast, fruit, plain Greek yogurt, milk, cheese, rice, oats, potatoes, meat, fish, vegetables, nuts, olive oil, butter. Judge processed by what is on this plate only.
 fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one or two whole sentences, at most 35 words in all, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. He has already eaten this plate: never tell him to skip it, swap it, leave part of it, or save it for tomorrow, and never say "skip the rice"; say what it means for what comes next (the next slot on the plan, or the rest of the evening).`;
 
@@ -655,7 +655,7 @@ async function liveHydration(date, entries, g, nowMin) {
 // The suggestion is the plan's next slot, sized to the slot, with the
 // compliance it would leave: what the plan says to eat next, not a snack
 // chosen against the whole day. After the last slot, only a protein gap
-// earns a word (whey or cottage cheese, as the plan's snack says).
+// earns a word (a Huel shake or cottage cheese, as the plan's snack says).
 function nextUp(g, entries, actual, macroNow, nowHM) {
   const { scoreDay } = require('./intake');
   // the day's rows (rowsFor): rolled forward already, a slot logged when it holds food
@@ -665,7 +665,7 @@ function nextUp(g, entries, actual, macroNow, nowHM) {
   const before = macroNow ? macroNow.overall : null;
   if (!nx) {
     const short = Math.round((g.target.protein_g || 0) - (actual.protein_g || 0));
-    if (short >= 20) return { slot: 'snack', time: null, name: 'Whey or cottage cheese', what: `Protein is ${short} g short of the day. A scoop of whey or a bowl of cottage cheese closes most of it.`,
+    if (short >= 20) return { slot: 'snack', time: null, name: 'Huel shake or cottage cheese', what: `Protein is ${short} g short of the day. A Huel shake or a bowl of cottage cheese closes most of it.`,
       kcal: 160, carbs_g: 5, protein_g: 25, fat_g: 3, why: 'every planned meal is logged; protein is what is left', score_before: before, score_after: null, snap: 'snack' };
     return { none: true, why: 'every planned meal is logged' };
   }

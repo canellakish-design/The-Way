@@ -2,7 +2,7 @@
   "note": "Candidates the compliance suggester draws from. One serving each, as eaten. Add or edit freely — the suggester only ever proposes what's in here.",
   "snacks": [
     { "name": "Greek yogurt, nonfat (170 g)",    "kcal": 100, "carbs_g": 6,  "protein_g": 17, "fat_g": 0 },
-    { "name": "Whey shake (1 scoop)",            "kcal": 120, "carbs_g": 3,  "protein_g": 25, "fat_g": 1 },
+    { "name": "Huel plant protein shake (1 scoop)", "kcal": 105, "carbs_g": 3,  "protein_g": 20, "fat_g": 1 },
     { "name": "Cottage cheese (1 cup)",          "kcal": 180, "carbs_g": 8,  "protein_g": 24, "fat_g": 5 },
     { "name": "Turkey slices (85 g)",            "kcal": 90,  "carbs_g": 1,  "protein_g": 19, "fat_g": 1 },
     { "name": "Banana",                          "kcal": 105, "carbs_g": 27, "protein_g": 1,  "fat_g": 0.4 },
