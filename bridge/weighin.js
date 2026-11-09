@@ -135,6 +135,9 @@ function latestComposition(entries) {
   return null;
 }
 
+// Harry weighs in once a week, on Wednesdays (9 Nov 2026). The week's change is then this reading
+// against the one about a week before it, and the trend a line through the last five weeks of them.
+const WEIGH_DAY = 3;   // Wednesday (0 is Sunday)
 function trend(entries) {
   const all = entries.slice().sort((a, b) => a.ts - b.ts);
   const latest = all.length ? all[all.length - 1] : null;
@@ -147,15 +150,28 @@ function trend(entries) {
   }));
   // the trend: a straight line through the last 21 days of readings, in lb a week. Daily
   // readings swing a pound or two with water; the line through three weeks does not.
-  const recent = since(21 * 864e5);
+  // daily readings: the last three weeks, five readings over ten days or more; weekly ones: the last five
+  // weeks, three readings over thirteen days or more
+  const daily = since(21 * 864e5), weekly = since(35 * 864e5);
+  const span = xs => xs.length >= 2 ? xs[xs.length - 1].ts - xs[0].ts : 0;
+  const recent = daily.length >= 5 && span(daily) >= 10 * 864e5 ? daily : weekly.length >= 3 && span(weekly) >= 13 * 864e5 ? weekly : daily;
   let slope = null;
-  if (recent.length >= 5 && (recent[recent.length - 1].ts - recent[0].ts) >= 10 * 864e5) {
+  if (recent.length >= 3 && span(recent) >= 10 * 864e5 && (recent.length >= 5 || span(recent) >= 13 * 864e5)) {
     const xs = recent.map(e => e.ts / 6048e5), ys = recent.map(e => e.lb);   // weeks
     const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
     const sxx = xs.reduce((a, x) => a + (x - mx) * (x - mx), 0), sxy = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
     if (sxx > 0) slope = Math.round(sxy / sxx * 10) / 10;
   }
+  // one reading a week: this one against the one five to ten days before it, when the seven-day windows
+  // do not both hold a reading
+  let weekChange = (ma7 == null || prev7 == null) ? null : Math.round((ma7 - prev7) * 10) / 10;
+  if (latest && weekChange == null) {
+    const prior = all.filter(e => latest.ts - e.ts >= 5 * 864e5 && latest.ts - e.ts <= 10 * 864e5).pop();
+    if (prior) weekChange = Math.round((latest.lb - prior.lb) * 10) / 10;
+  }
+  const dow = new Date(tz.todayKey() + 'T12:00:00Z').getUTCDay();
   return {
+    weigh_day: WEIGH_DAY, weigh_today: dow === WEIGH_DAY && !(latest && isToday(latest.ts)),
     trend_lb_wk: slope,
     trend_days: recent.length >= 2 ? Math.round((recent[recent.length - 1].ts - recent[0].ts) / 864e5) : 0,
     latest: latest ? {
@@ -165,7 +181,7 @@ function trend(entries) {
       source: latest.source || 'manual'
     } : null,
     ma7_lb: ma7 == null ? null : Math.round(ma7 * 10) / 10,
-    week_change_lb: (ma7 == null || prev7 == null) ? null : Math.round((ma7 - prev7) * 10) / 10,
+    week_change_lb: weekChange,
     direction: direction(ma7, prev7),
     trends: fieldTrends(all),
     composition: latestComposition(all),
