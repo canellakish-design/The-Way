@@ -39,10 +39,11 @@ const BELLS = [18, 26, 35, 44, 53, 62, 70, 80, 88];     // the common kettlebell
 const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' || kind === 'bar' || kind === 'cable' ? 10 : kind === 'db' ? 5 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
 const TEMPLATES = [
   { key: 'push', name: 'Push', short: 'Push', minutes: 55, order: 1,
-    why: 'Chest, shoulders and triceps: bench, incline bench, dumbbell bench, triceps pushdown. At school or Lifetime.',
+    why: 'Chest, shoulders and triceps: incline bench, bench, dumbbell bench, triceps pushdown. At school or Lifetime.',
     exercises: [
+      // Harry, 9 Nov: the incline first, and 135 (the bar and a 45 a side) for 4 as its starting point
+      ex('Incline barbell bench press', 3, 4, 6, 'bar', 135, 'Bench at 30 degrees. At home: Bowflex incline press.', 10),
       ex('Barbell bench press', 3, 4, 6, 'bar', 135, 'Shoulder blades pinned, bar to the chest, feet planted. At home: Bowflex chest press.', 10),
-      ex('Incline barbell bench press', 3, 4, 6, 'bar', 115, 'Bench at 30 degrees. At home: Bowflex incline press.', 10),
       ex('Dumbbell bench press', 3, 4, 6, 'db', 50, 'The weight of one dumbbell. Elbows at 45 degrees. At home: kettlebell floor press.', 5),
       ex('Triceps pushdown', 3, 6, 8, 'cable', 50, 'Elbows pinned to the sides. At home: Bowflex pushdown.', 5)
     ] },
