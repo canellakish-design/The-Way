@@ -1224,7 +1224,7 @@ function paintChain(c){
     // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
     if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
-    if (ck === "lift"){ num = L.sessions == null ? "—" : `${L.sessions}`; unit = (L.first_week && !L.of ? "due later" : L.first_week ? `of ${L.of} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
+    if (ck === "lift"){ num = L.sessions == null || (L.first_week && !L.of && !L.sessions) ? "—" : `${L.sessions}`; unit = (L.first_week && !L.of ? "due later" : L.first_week ? `of ${L.of} due` : `of ${L.of || L.target || 5}`) + (L.extras ? ` +${L.extras}` : ""); }   // the Pump and Kettlebell Blasts: "+1" beside the five
     const n = el.querySelector(".cnum"); n.textContent = num; n.classList.toggle("long", String(num).length > 4); n.style.color = TC[state] || "var(--muted)";
     el.querySelector(".cweek").textContent = unit;
     el.dataset.week = state || "none";
@@ -1721,6 +1721,7 @@ V.today = async function(){
     <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy balance today, tap for the breakdown"><span class="fk">Energy</span>${energyDial(null)}<span class="en1">…</span><span class="en2"></span></button>
     </div>
     <div class="card endetail" id="enDetail" hidden></div>
+    <div id="dayEnergy" class="dayenergy"></div>
     <div class="chainhead"><span><span id="chainTodayHead">Today</span> <span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
@@ -1900,6 +1901,9 @@ V.today = async function(){
     l1.innerHTML = `<b>${kc(b.now)}</b>${tgt != null ? ` / ${kc(tgt)}` : ""}`;
     el.setAttribute("aria-label", `Energy balance today ${kc(b.now)} kcal so far${tgt != null ? `, target ${kc(tgt)}` : ""}. Tap for the breakdown.`);
     drawEnergyDetail();
+    // the live energy line (the Fuel page's chart, links.js) under the CTL and meter, above the boxes
+    const de = document.getElementById("dayEnergy");
+    if (de && window.balanceHTML && b.points){ const open = !!(de.querySelector("details[open]")); de.innerHTML = window.balanceHTML(b, foodData && foodData.target && foodData.target.base_burn); if (open){ const d = de.querySelector("details"); if (d) d.open = true; } }
   };
   const drawEnergyDetail = ()=>{
     const d = document.getElementById("enDetail"), f = document.getElementById("enField"); if (!d) return;
