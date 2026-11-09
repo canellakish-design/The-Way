@@ -148,7 +148,7 @@ V.calendar = async function(){
     // a planned ride not yet done, today or ahead: straight into the workout player
     const rideIt = (w, c, date)=> /weight|lift|strength|^run$|walk|hike/i.test(w.sport||"") || w.logged || (c && c.band==="green") || date < (n => `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,"0")}-${String(n.getDate()).padStart(2,"0")}`)(new Date()) ? ""
       : `<a class="rideit" href="#player?id=${encodeURIComponent(w.id)}">Ride it</a>`;
-    const word = (c)=> c.zone_over?"Above Z1":c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
+    const word = (c)=> c.zone_over?(c.zone_over > 0 ? "Above Z1" : "Below Z1"):c.band==="green"?"Done":c.over?"Over":c.band==="yellow"?"Partly":(d.done.length?"Short":"Missed");
     // A ride is drawn once: inside the planned session it was graded against
     // when there is one, on its own when nothing was planned.
     let ridesShown = false;
@@ -157,7 +157,7 @@ V.calendar = async function(){
       const withRides = !!(c && !w.logged && d.done.length && !ridesShown);
       if (withRides) ridesShown = true;
       const chip = w.logged ? `<span class="hu-chip hu-go" title="Saved on a day already gone, with no Strava ride that day: counted as done">Logged</span>`
-        : c ? `<span class="hu-chip ${TONE[c.band]||"hu-dim"}" title="${esc(c.basis||"")}">${c.zone_over ? "Above Z1" : !d.done.length && c.band==="red" ? "Missed" : c.pct+"%"}</span>`
+        : c ? `<span class="hu-chip ${TONE[c.band]||"hu-dim"}" title="${esc(c.basis||"")}">${c.zone_over ? (c.zone_over > 0 ? "Above Z1" : "Below Z1") : !d.done.length && c.band==="red" ? "Missed" : c.pct+"%"}</span>`
         : syncChip(w);
       const rides = withRides ? d.done : [];
       rows.push(`<div class="pitem planned hu-stripe ${c?STRIPE[c.band]||"":""}${c?" graded "+c.band:""}">
