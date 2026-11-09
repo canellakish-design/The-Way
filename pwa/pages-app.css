@@ -332,3 +332,8 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 .takelist li{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:6px 0; border-bottom:1px solid var(--line-soft)}
 .takelist li i{font-style:normal; color:var(--muted)} .takelist li b{color:var(--ink); font-weight:400}
 .takelist li button{min-height:0; padding:6px 12px}
+/* the 3 a.m. tracker's morning question: one row */
+.daynight{display:flex; align-items:center; gap:8px; margin:0 0 10px; padding:6px 10px; border:1px solid var(--line); background:var(--paper)}
+.daynight[hidden]{display:none}
+.daynight .dn-q{flex:1; font-family:var(--mono); font-size:10px; letter-spacing:1.4px; text-transform:uppercase; color:var(--muted)}
+.daynight button{min-height:0; padding:6px 10px; font-size:11px}

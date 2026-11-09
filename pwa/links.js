@@ -326,9 +326,23 @@
   };
 
   // ---------------- Sleep ----------------
+  // The 3 a.m. tracker (bridge/nights.js): last night's answer, and what goes with waking once there are
+  // nights on both sides of a factor
+  function nightsHTML(nw){
+    if (!nw) return "";
+    const ns = nw.nights || [], last14 = ns.slice(0, 14);
+    const ask = !nw.answered_today ? `<div class="hu-fields two"><button class="hu-field ln-fbtn" data-woke="1"><span class="k">Last night</span><span class="n">Woke ~3</span></button><button class="hu-field ln-fbtn" data-woke="0"><span class="k">Last night</span><span class="n">Slept through</span></button></div>` : "";
+    const woke = ns.filter(n => n.woke).length;
+    const facts = (nw.factors || []).slice(0, 4).map(f => `<li><span class="n">${esc(f.label)}</span><span class="tag"><b>${f.with.woke_pct}%</b> <span class="small">vs ${f.without.woke_pct}% without · ${f.with.nights}/${f.without.nights} nights</span></span></li>`).join("");
+    return `<div class="ln-sec"><span class="hu-lab">Waking at 3</span>${ns.length ? `<span class="small"> · ${woke} of ${ns.length} night${ns.length === 1 ? "" : "s"}</span>` : ""}</div>${ask}
+      ${facts ? `<ul class="agenda totals">${facts}</ul>` : `<div class="small">${ns.length < 4 ? "Tap each morning. After a week or two this shows which evenings come before the 3 a.m. wake-ups." : "Not enough nights on both sides of any factor yet."}</div>`}
+      ${last14.length ? `<div class="small">${last14.map(n => `${esc(dayShort(n.date))} ${n.woke ? "woke" : "✓"}`).join(" · ")}</div>` : ""}`;
+  }
   V.sleep = async function(){
     const el = page("Sleep");
-    const draw = (first)=> load(el, "sleep", ["/chain", "/food/today"], [0], (chain, food) => {
+    const draw = (first)=> load(el, "sleep", ["/chain", "/food/today", "/sleep-window", "/nights"], [0], (chain, food, win, nw) => {
+      // the sleep window (Setup): bed and magnesium times come from it, never a fixed clock
+      const bedHM = (win && win.bed_hm) || "22:30", mgHM = (win && win.magnesium != null) ? String(Math.floor(win.magnesium / 60)).padStart(2, "0") + ":" + String(win.magnesium % 60).padStart(2, "0") : "21:30";
       const L = chain && chain.links && chain.links.sleep;
       const nights = (L && L.nights) || [];
       const mgE = (food && food.entries || []).filter(e => e.supplement && e.key === "magnesium"), mg = mgE.length > 0;
@@ -341,13 +355,14 @@
           ${nights.length ? `<details class="why"><summary>each night</summary><ul class="agenda totals">${nights.slice().reverse().map(n => `<li><span class="n">${esc(dayLong(n.date))}${n.manual ? ` <span class="small">· ${esc(n.manual)}</span>` : ""}</span><span class="tag"><b style="color:${TC[n.hours >= 7 ? "good" : n.hours >= 6.25 ? "warn" : "bad"]}">${n.hours} h</b>${n.score != null ? ` · score ${n.score}` : ""}</span></li>`).join("")}</ul></details>` : ""}</div>
         <div class="ln-sec"><span class="hu-lab">Tonight</span></div>
         <div class="hu-fields two">
-          <div class="hu-field"><span class="k">Bed tonight</span><span class="n">9:45p</span></div>
+          <div class="hu-field"><span class="k">Bed tonight</span><span class="n">${esc(hm12(bedHM))}</span></div>
           ${mg ? `<div class="hu-field"><span class="k">Magnesium</span><span class="n hu-go">✓${mgAt ? " " + esc(hm12(mgAt)) : ""}</span><span class="u">taken · 200 mg</span></div>`
-            : (() => { const d = new Date(), nowM = d.getHours() * 60 + d.getMinutes(), dueM = 20 * 60 + 45;   // an hour before the 9:45p bedtime
+            : (() => { const d = new Date(), nowM = d.getHours() * 60 + d.getMinutes(), dueM = +mgHM.slice(0, 2) * 60 + +mgHM.slice(3);   // an hour before bed
                 const due = nowM >= dueM - 30;
-                return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : "8:45p"}</span><span class="u">200 mg</span></button>`; })()}
+                return `<button class="hu-field ln-fbtn" data-supp="magnesium"><span class="k">Magnesium</span><span class="n ${due ? "hu-hold" : ""}">${due ? "Due" : esc(hm12(mgHM))}</span><span class="u">200 mg</span></button>`; })()}
         </div>
         ${food && food.hydration && food.hydration.bedtime_note ? `<div class="small hu-hold">${esc(food.hydration.bedtime_note)}</div>` : ""}
+        ${nightsHTML(nw)}
         <details class="ln-fold"><summary>Add a night</summary>
           <div class="row2"><span><label>Hours asleep</label><input id="slH" type="number" step="0.05" inputmode="decimal" placeholder="7.5"></span><span><label>Sleep score</label><input id="slS" type="number" inputmode="numeric" placeholder="80"></span></div>
           <div class="row2"><span><label>From</label><select id="slSrc"><option>Garmin</option><option>WHOOP</option><option>by hand</option></select></span><span><label>&nbsp;</label><button class="primary" id="slGo">Save the night</button></span></div>
@@ -357,6 +372,7 @@
         if (!(h > 0 && h <= 16)) { m.textContent = "Hours asleep, like 7.5."; return; }
         m.textContent = "saving…"; try{ await bridge("/wellness", { method: "POST", headers: J, body: JSON.stringify({ sleep_h: h, sleep_score: sc || undefined, source: document.getElementById("slSrc").value }) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
       el.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/food/supplement", { method: "POST", headers: J, body: JSON.stringify({ key: b.dataset.supp }) }); }catch(e){} await draw(); });
+      el.querySelectorAll("[data-woke]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/nights", { method: "POST", headers: J, body: JSON.stringify({ woke: b.dataset.woke === "1" }) }); }catch(e){} await draw(); });
     }, first);
     await draw(true);
   };

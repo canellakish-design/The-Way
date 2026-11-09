@@ -1726,6 +1726,7 @@ V.today = async function(){
     </div>
     <div class="card endetail" id="enDetail" hidden></div>
     <div id="dayEnergy" class="dayenergy"></div>
+    <div id="dayNight" class="daynight" hidden></div>
     <div class="chainhead"><span><span id="chainTodayHead"></span><span id="chainTodayKind"></span></span></div>
     <div class="hchain" id="scores">${chainHTML()}</div>
     <a class="daynext" id="dayNextLine" href="#today" hidden></a>
@@ -1929,6 +1930,16 @@ V.today = async function(){
       <div class="small">${kg ? `${kg} kg` : "—"}${body.kg_from ? ` (${fmtDay(body.kg_from)})` : ""} · ${cm || "—"} cm · ${age || "—"} y · <a href="#settings">edit</a></div>`;
   };
   { const ef = document.getElementById("enField"); if (ef) ef.onclick = ()=>{ energyOpen = !energyOpen; drawEnergyDetail(); }; }
+  // the 3 a.m. tracker's morning question (bridge/nights.js): one row until it is answered
+  const drawNight = nw => {
+    const el = document.getElementById("dayNight"); if (!el) return;
+    if (!nw || nw.answered_today){ el.hidden = true; el.innerHTML = ""; return; }
+    el.hidden = false;
+    el.innerHTML = `<span class="dn-q">Last night</span><button data-woke="1">Woke ~3</button><button data-woke="0">Slept through</button>`;
+    el.querySelectorAll("[data-woke]").forEach(b => b.onclick = async ()=>{ el.querySelectorAll("button").forEach(x => x.disabled = true);
+      try{ const r = await bridge("/nights", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ woke: b.dataset.woke === "1" }) }); drawNight(r); }
+      catch(e){ el.querySelectorAll("button").forEach(x => x.disabled = false); } });
+  };
   const drawMicroTile = ()=>{
     const m = foodData && foodData.micros;
     if (!m){ paintTile("micros", null, "", "", foodData ? "snap a meal" : scoresLoading ? "reaching the bridge…" : "bridge unreachable"); return; }
@@ -2329,6 +2340,7 @@ V.today = async function(){
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/energy/meter", v => { energyData = v; }),
+      get("/nights", v => { drawNight(v); }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word || !v.flagged) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
       (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; WBK={}; WSLEEP={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.sleep && w.sleep.word) WSLEEP[w.id]=w.sleep.word; for(const w of (day.planned||[])) if(w.buckets_plan) WBK[w.id]={ plan:w.buckets_plan, actual:null }; for(const x of (day.done||[])) if(x.buckets && x.plan_wid && WBK[x.plan_wid]){ const A=WBK[x.plan_wid].actual||(WBK[x.plan_wid].actual={low:0,high:0,peak:0}); A.low+=x.buckets.low||0; A.high+=x.buckets.high||0; A.peak+=x.buckets.peak||0; } for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length, ridden:(day.done||[]).some(x => x.plan_wid === w.id)}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)

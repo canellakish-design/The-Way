@@ -54,6 +54,7 @@ require('./energy-meter').attach(app);
 require('./sleep-window').attach(app);
 require('./meds').attach(app);
 require('./push').attach(app);
+require('./nights').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);
 require('./agent').attach(app);
