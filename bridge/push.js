@@ -52,6 +52,20 @@ async function send(payload) {
 }
 
 const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : null; };
+const toHM = m => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+// Harry, 9 Nov: "If I have a late session, make the reminder after the session." A reminder that falls
+// inside a session (from its start to its end) moves to 10 minutes after it ends. sessions: [{ start, end }]
+// in minutes. The pre-ride doses are timed before their ride and never fall inside it.
+const AFTER_MIN = 10;
+function shiftAfter(items, sessions) {
+  const ss = (sessions || []).filter(x => x && x.start != null && x.end > x.start).sort((a, b) => a.start - b.start);
+  return (items || []).map(x => {
+    let t = toMin(x.time); if (t == null) return x;
+    for (const s of ss) if (t >= s.start && t < s.end) t = s.end + AFTER_MIN;   // sessions in order: one ending into the next moves on again
+    return t === toMin(x.time) ? x : Object.assign({}, x, { time: toHM(Math.min(t, 1439)), moved_from: x.time, after_session: true });
+  });
+}
+const sessionsOf = r => ((r && r.sessions) || []).filter(x => toMin(x.time) != null).map(x => ({ start: toMin(x.time), end: toMin(x.time) + (x.minutes || 60), name: x.name }));
 // today's reminders: the supplements the day report schedules (kept 20 minutes) and the medicines
 async function dueToday(date) {
   let plan = await getJSON('push-plan', null);
@@ -59,13 +73,13 @@ async function dueToday(date) {
     const r = await require('./food').dayReport(date).catch(() => null);
     const due = ((r && r.supps && r.supps.due) || []).map(x => ({ kind: 'supp', key: x.key, name: x.name, short: x.key === 'sodium_bicarb' ? 'bicarbonate' : x.key === 'magnesium' ? 'magnesium' : x.key === 'creatine' ? 'creatine' : x.key,
       time: x.time || (x.key === 'creatine' ? CREATINE_AT : null), why: x.why || '' })).filter(x => x.time);
-    plan = { date, at: new Date().toISOString(), supps: due };
+    plan = { date, at: new Date().toISOString(), supps: due, sessions: sessionsOf(r) };
     await setJSON('push-plan', plan).catch(() => {});
   }
   const doc = await getJSON('food-' + date, { entries: [] }).catch(() => ({ entries: [] }));
   const tookSupp = k => (doc.entries || []).some(e => e && e.supplement && e.key === k);
   const meds = (await require('./meds').today()).due.map(m => ({ kind: 'med', key: m.key, name: m.name, short: m.short, time: m.time, why: '', taken: m.taken }));
-  return plan.supps.map(x => Object.assign({}, x, { taken: tookSupp(x.key) })).concat(meds).sort((a, b) => a.time.localeCompare(b.time));
+  return shiftAfter(plan.supps.map(x => Object.assign({}, x, { taken: tookSupp(x.key) })).concat(meds), plan.sessions).sort((a, b) => a.time.localeCompare(b.time));
 }
 // the notification for the items due at one time
 function payloadFor(date, items) {
@@ -109,4 +123,4 @@ function attach(app) {
   app.post('/push/test', wrap(() => send({ title: 'The Way · reminders are on', body: 'Supplements and medicines will come here at their times.', tag: 'way-test', items: [], url: '/#today' })));
   app.get('/push/due', wrap(async () => { const date = tz.todayKey(); const log = await getJSON('push-sent', { date, sent: {} }); return { date, devices: (await subs()).length, items: await dueToday(date), sent: log.date === date ? log.sent : {} }; }));
 }
-module.exports = { attach, reminders, dueToday, payloadFor, pick, send, subscribe, unsubscribe, vapid, WINDOW_MIN };
+module.exports = { attach, shiftAfter, sessionsOf, reminders, dueToday, payloadFor, pick, send, subscribe, unsubscribe, vapid, WINDOW_MIN };
