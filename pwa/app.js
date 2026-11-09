@@ -1721,7 +1721,7 @@ V.today = async function(){
   view.innerHTML = `
     <div class="hutop">
     <a class="hufit" id="fitField" href="#ride" aria-label="Fitness, open the Ride page"><span class="fl"><span class="fk">Fitness · CTL</span><span class="fv"><b class="fn">—</b><span class="fr"><span class="fd">reaching the bridge…</span><span class="fw"></span></span></span></span><svg class="fspark" viewBox="0 0 160 56" preserveAspectRatio="none" aria-hidden="true"></svg></a>
-    <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy balance today, tap for the breakdown"><span class="fk">Energy</span>${energyDial(null)}<span class="en1">…</span><span class="en2"></span></button>
+    <button class="huen" id="enField" type="button" aria-expanded="false" aria-controls="enDetail" aria-label="Energy, last seven days, tap for the days"><span class="fk">Energy · 7 days</span>${energyDial(null)}<span class="en1">…</span><span class="en2"></span></button>
     </div>
     <div class="card endetail" id="enDetail" hidden></div>
     <div id="dayEnergy" class="dayenergy"></div>
@@ -1888,25 +1888,25 @@ V.today = async function(){
   // average and the body from /energy/meter; tap for the breakdown
   let energyData = null, energyOpen = false;
   const fmtDay = k => k ? new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
+  // The meter is the week: its needle the last seven logged days' average balance, the mark the day's
+  // target deficit, and under it the pace in lb a week. Today lives in the live energy chart below it.
   const drawEnergy = ()=>{
     const el = document.getElementById("enField"); if (!el) return;
     const b = (foodData && foodData.balance) || (energyData && energyData.today) || null;
     const body = energyData && energyData.body;
     const bmrDay = (b && b.parts && b.parts.bmr_day) || (body && body.bmr) || null;
     const tgt = b ? b.target_end : null;
+    const avg = energyData ? energyData.avg7 : null, lw = energyData ? energyData.lb_week : null;
     const svg = el.querySelector(".edial");
-    if (svg) svg.outerHTML = energyDial(b ? { now: enDeg(b.now), end: enDeg(b.end), target: enDeg(tgt) } : null);
+    if (svg) svg.outerHTML = energyDial({ now: enDeg(avg), target: enDeg(tgt) });
     const l1 = el.querySelector(".en1"), l2 = el.querySelector(".en2");
-    const lw = energyData ? energyData.lb_week : null;
-    // two short lines: now against the target; the week's pace and the BMR
+    l1.innerHTML = avg != null ? `<b>${kc(avg)}</b> a day` : (energyData ? "log a day" : "…");
     l2.textContent = [lw != null ? `${lw > 0 ? "+" : lw < 0 ? "−" : ""}${Math.abs(lw)} lb/wk` : "", bmrDay ? `BMR ${bmrDay.toLocaleString("en-US")}` : ""].filter(Boolean).join(" · ");
-    if (!b){ l1.textContent = scoresLoading ? "…" : "—"; return; }
-    l1.innerHTML = `<b>${kc(b.now)}</b>${tgt != null ? ` / ${kc(tgt)}` : ""}`;
-    el.setAttribute("aria-label", `Energy balance today ${kc(b.now)} kcal so far${tgt != null ? `, target ${kc(tgt)}` : ""}. Tap for the breakdown.`);
+    el.setAttribute("aria-label", `Energy, last seven days: ${avg != null ? kc(avg) + " kcal a day" : "not enough logged"}${lw != null ? `, ${lw} lb a week` : ""}. Tap for the days.`);
     drawEnergyDetail();
-    // the live energy line (the Fuel page's chart, links.js) under the CTL and meter, above the boxes
+    // the live energy line (the Fuel page's chart, links.js) under the CTL and meter, above the boxes: today
     const de = document.getElementById("dayEnergy");
-    if (de && window.balanceHTML && b.points){ const open = !!(de.querySelector("details[open]")); de.innerHTML = window.balanceHTML(b, foodData && foodData.target && foodData.target.base_burn); if (open){ const d = de.querySelector("details"); if (d) d.open = true; } }
+    if (de && window.balanceHTML && b && b.points){ const open = !!(de.querySelector("details[open]")); de.innerHTML = window.balanceHTML(b, foodData && foodData.target && foodData.target.base_burn); if (open){ const d = de.querySelector("details"); if (d) d.open = true; } }
   };
   const drawEnergyDetail = ()=>{
     const d = document.getElementById("enDetail"), f = document.getElementById("enField"); if (!d) return;
@@ -1914,21 +1914,17 @@ V.today = async function(){
     if (!energyOpen) return;
     const b = (foodData && foodData.balance) || (energyData && energyData.today) || null;
     const p = (b && b.parts) || {}, body = (energyData && energyData.body) || {}, m = (b && b.meter) || {};
-    const row = (k, v, cls) => `<li${cls ? ` class="${cls}"` : ""}><span>${k}</span><b>${v}</b></li>`;
     const n = v => v == null ? "—" : Math.round(v).toLocaleString("en-US");
-    const avg = energyData ? energyData.avg7 : null;
+    const days = (energyData && energyData.days) || [];
     const kg = body.kg || m.kg, age = body.age || m.age, cm = body.cm || m.cm;
-    d.innerHTML = `<h4>Energy today</h4>
+    const bmr = p.bmr_day || body.bmr, base = p.base_day || body.base_burn;
+    const wd = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    d.innerHTML = `<h4>Energy · last 7 days</h4>
       <ul class="enlist">
-        ${row("BMR", n(p.bmr))}
-        ${row("+ daily", n(p.daily))}
-        ${row("+ exercise", n(p.exercise))}
-        ${row("burned", n(p.burned), "ensum")}
-        ${row("eaten", n(p.eaten))}
-        ${row("net", kc(p.net != null ? p.net : b && b.now), "ennet")}
+        ${days.map(x => `<li${x.logged ? "" : ` class="enoff"`}><span>${esc(wd(x.date))}</span><b>${x.logged && x.end != null ? kc(x.end) : x.pending ? "reading…" : "not logged"}</b></li>`).join("")}
+        <li class="ennet"><span>average</span><b>${energyData && energyData.avg7 != null ? kc(energyData.avg7) : "—"}${energyData && energyData.lb_week != null ? ` · ${energyData.lb_week > 0 ? "+" : energyData.lb_week < 0 ? "−" : ""}${Math.abs(energyData.lb_week)} lb/wk` : ""}</b></li>
       </ul>
-      <div class="small">Midnight ${kc(b && b.end)} · target ${kc(b && b.target_end)}</div>
-      <div class="enweek">${energyDial({ avg: enDeg(avg) })}<div class="small"><b>${avg != null ? kc(avg) : "—"}</b> a day, last 7${energyData && energyData.lb_week != null ? ` · ${energyData.lb_week > 0 ? "+" : energyData.lb_week < 0 ? "−" : ""}${Math.abs(energyData.lb_week)} lb/wk` : ""}</div></div>
+      <div class="small">Burn a day: BMR ${n(bmr)} + daily ${n(base != null && bmr != null ? base - bmr : null)} = ${n(base)}, plus exercise</div>
       <div class="small">${kg ? `${kg} kg` : "—"}${body.kg_from ? ` (${fmtDay(body.kg_from)})` : ""} · ${cm || "—"} cm · ${age || "—"} y · <a href="#settings">edit</a></div>`;
   };
   { const ef = document.getElementById("enField"); if (ef) ef.onclick = ()=>{ energyOpen = !energyOpen; drawEnergyDetail(); }; }

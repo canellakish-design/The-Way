@@ -34,7 +34,7 @@ async function week(today) {
     const hit = store.days[d];
     // a row read before the day was over is read again: its sessions may have landed since
     if (hit && hit.sig === sig && hit.final) { rows.push({ date: d, end: hit.end, logged: true }); continue; }
-    if (fresh >= NEW_PER_CALL) { if (hit && hit.end != null) rows.push({ date: d, end: hit.end, logged: true, stale: true }); continue; }
+    if (fresh >= NEW_PER_CALL) { rows.push(hit && hit.end != null ? { date: d, end: hit.end, logged: true, stale: true } : { date: d, end: null, logged: true, pending: true }); continue; }
     try {
       const r = await food.dayReport(d); fresh++;
       const end = r && r.balance ? r.balance.end : null;
