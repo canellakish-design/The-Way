@@ -161,7 +161,7 @@ Action types:
 - note: anything about how he feels or slept, text = his words.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
-- question: he asked for advice or an answer. No other fields; the answer goes in the reply.
+- question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …".
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
 Fill every field: "" or 0 where it does not apply.
 
@@ -363,7 +363,9 @@ const toHM24 = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m
 function attach(app) {
   app.post('/voice', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const text = String((req.body || {}).text || '').trim().slice(0, 1000);
+      // a Siri Shortcut named "The Way" can pass its own name along ("The way what's my next workout"): it is the
+      // name of the door, not part of the sentence
+      const text = String((req.body || {}).text || '').trim().replace(/^(hey\s+)?(siri[\s,]+)?the\s*way\b[\s,:.!?-]*/i, '').trim().slice(0, 1000);
       if (!text) return res.status(400).json({ error: 'nothing heard' });
       const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
