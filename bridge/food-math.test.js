@@ -147,9 +147,16 @@ ok('mealPlan: meals are timed around the session', () => {
   const long = F.mealPlan('high', [{ name: 'Zone 1, 150 min', time: '08:00', minutes: 150 }], F.targets('high', 900));
   assert.strictEqual(long.find(m => m.slot === 'on the bike').carbs_g, 150);
   assert.ok(/2 hours/.test(long.find(m => m.slot === 'breakfast').what));   // breakfast would be 5:30, so it moves after the ride
-  const early = F.mealPlan('normal', [{ name: 'Zone 1, 45 min', time: '05:30', minutes: 45 }], F.targets('normal', 200));
+  // sleep first (wake 6:30): the earliest ride, 7:30, gets its shake at 6:45, and nothing is planned before waking
+  const early = F.mealPlan('normal', [{ name: 'Zone 1, 60 min', time: '07:30', minutes: 60 }], F.targets('normal', 200));
   assert.strictEqual(early[0].slot, 'before');
-  assert.strictEqual(early[0].time, '04:45');
+  assert.strictEqual(early[0].time, '06:45');
+  const dawn = F.mealPlan('normal', [{ name: 'Zone 1, 60 min', time: '07:00', minutes: 60 }], F.targets('normal', 200));
+  assert.ok(dawn.every(m => F.toMin(m.time) >= 390), dawn.map(m => m.time).join());
+  // dinner at least 2.5 h before bed, the snack 1.5 h before it
+  const late = F.mealPlan('normal', [{ name: 'Zone 1, 60 min', time: '13:00', minutes: 60 }], F.targets('normal', 200), { wake: 390, bed: 21 * 60 + 30 });
+  assert.ok(late.filter(m => m.slot === 'dinner').every(m => F.toMin(m.time) <= 19 * 60), late.map(m => m.slot + ' ' + m.time).join());
+  assert.ok(late.filter(m => m.slot === 'snack').every(m => F.toMin(m.time) <= 20 * 60), late.map(m => m.slot + ' ' + m.time).join());
   assert.strictEqual(early[2].slot, 'breakfast');            // after a dawn ride, the post-ride meal is breakfast
   // an evening ride: breakfast and lunch as normal, light before, the post-ride meal is dinner
   const eve = F.mealPlan('normal', [{ name: 'Zone 1, 90 min', time: '19:00', minutes: 90 }], F.targets('normal', 370));

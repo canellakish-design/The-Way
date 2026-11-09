@@ -263,7 +263,11 @@ function stamp(row, t) {
   return row;
 }
 
-function mealPlan(day, sessions, target) {
+// sleep: { wake, bed } in minutes (sleep-window.js; 6:30 and 10:30 p.m. by default). Sleep comes first: no
+// meal before waking, dinner at least 2.5 h before bed, the evening snack 1.5 h before it.
+function mealPlan(day, sessions, target, sleep) {
+  const SL = sleep || {}, WAKE = SL.wake != null ? SL.wake : 6 * 60 + 30, BED = SL.bed != null ? SL.bed : 22 * 60 + 30;
+  const dinnerBy = m => Math.min(m, BED - 150), snackAt = m => Math.min(m, BED - 90);
   const t = target || targets(day, 0);
   // the day is laid out around the first ride; a lift or a run never gets a "before" meal or an on-the-bike slot
   const timed = (sessions || []).filter(x => isRideSession(x) && toMin(x.time) != null)
@@ -317,14 +321,14 @@ function mealPlan(day, sessions, target) {
     'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', share, carbShare, 25), { post_ride: true, ride_end: endMin });
   // A carb breakfast wants 2.5 h before a hard ride; a light low-carb one 1.5 h
   // before Zone 1. Breakfast sits at the latest of those, and if that would mean
-  // getting up before 6:30 it becomes coffee and a Huel shake 45 minutes out, with
+  // getting up before waking it becomes coffee and a Huel shake 45 minutes out (never before waking), with
   // breakfast after the ride instead.
   const gap = day === 'high' ? 150 : 90;
-  const early = start - gap < 6 * 60 + 30;
+  const early = start - gap < WAKE;
 
   if (start < 11 * 60) {
     // Morning ride: breakfast before it (or nothing before a dawn ride), the post-ride meal, then the day.
-    if (early) out.push(meal(start - 45, 'before', day === 'high'
+    if (early) out.push(meal(Math.max(WAKE, start - 45), 'before', day === 'high'
       ? `Small and quick before ${name}: a banana or two rice cakes with honey.`
       : `Coffee and a Huel shake (20 g protein) before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
     else out.push(bfast(start - gap, name));
@@ -338,8 +342,8 @@ function mealPlan(day, sessions, target) {
     // what is left of the day after breakfast, the post-ride meal and the snack, split lunch 40 / dinner 60
     const left = 1 - pre - 0.25 - 0.10, leftC = 1 - preC - (day === 'high' ? 0.30 : 0.40) - 0.08;
     if (hasLunch) out.push(lunch(l, Math.round(left * 0.4 * 100) / 100, Math.round(leftC * 0.4 * 100) / 100));
-    out.push(dinner(Math.max(18 * 60 + 30, l + 300), Math.round(left * (hasLunch ? 0.6 : 1) * 100) / 100, Math.round(leftC * (hasLunch ? 0.6 : 1) * 100) / 100));
-    out.push(snack(20 * 60 + 45));
+    out.push(dinner(dinnerBy(Math.max(18 * 60 + 30, l + 300)), Math.round(left * (hasLunch ? 0.6 : 1) * 100) / 100, Math.round(leftC * (hasLunch ? 0.6 : 1) * 100) / 100));
+    out.push(snack(snackAt(20 * 60 + 45)));
   } else if (start < 15 * 60) {
     // Midday ride: breakfast carries the pre-ride role (as late as 9:30), the post-ride meal is lunch.
     out.push(bfast(Math.min(9 * 60 + 30, start - gap), name));
@@ -350,9 +354,9 @@ function mealPlan(day, sessions, target) {
     const hasBefore = start - gap > 9 * 60 + 30 + 60;
     const used = (day === 'high' ? 0.25 : 0.15) + (hasBefore ? 0.08 : 0) + 0.10, usedC = (day === 'high' ? 0.30 : 0.08) + (hasBefore ? (day === 'high' ? 0.12 : 0.04) : 0) + 0.08;
     out.push(after('lunch', Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));   // carries what the low-carb breakfast did not
-    out.push(dinner(Math.max(18 * 60 + 30, end + 240), Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));
-    out.push(snack(20 * 60 + 45));
-  } else if (end + 30 > 22 * 60) {
+    out.push(dinner(dinnerBy(Math.max(18 * 60 + 30, end + 240)), Math.round((1 - used) * 0.5 * 100) / 100, Math.round((1 - usedC) * 0.5 * 100) / 100));
+    out.push(snack(snackAt(20 * 60 + 45)));
+  } else if (end + 30 > BED - 30) {
     // Late ride (back after 10 p.m., or past midnight): dinner at dinner time, a light bite before
     // the ride when dinner is far from it, and a bedtime snack after it. Nothing vanishes.
     const b = day === 'high' ? 0.25 : 0.15, bC = day === 'high' ? 0.30 : 0.08;
@@ -380,7 +384,7 @@ function mealPlan(day, sessions, target) {
     const lateSnack = end + 30 <= 20 * 60;
     out.push(after('dinner', Math.round((1 - (day === 'high' ? 0.25 : 0.15) - 0.27 - 0.10 - (lateSnack ? 0.10 : 0)) * 100) / 100,
       Math.round((1 - (day === 'high' ? 0.30 : 0.08) - (day === 'high' ? 0.25 : 0.30) - (day === 'high' ? 0.15 : 0.05) - (lateSnack ? 0.08 : 0)) * 100) / 100));   // carries what the low-carb breakfast did not
-    if (lateSnack) out.push(snack(21 * 60));
+    if (lateSnack) out.push(snack(snackAt(21 * 60)));
   }
   // A second timed session later in the day: the meals already laid out step around it. Nothing
   // lands inside it or in the hour before it; dinner never comes before an evening session ends;

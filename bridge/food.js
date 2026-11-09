@@ -287,7 +287,7 @@ async function guidelinesFor(date) {
   return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day, { deficit: t.deficit !== 0, rx }), ride_notes: rideNotes, work,
     fuel: { level: rx.level, label: rx.label, carbs_g: rx.carbs_g, per_kg: rx.per_kg, train_low: rx.train_low, sleep_low: rx.sleep_low },
     cue: today ? F.cue(day, sessions, null, rx) : null,
-    meals: F.mealPlan(day, sessions, t),
+    meals: F.mealPlan(day, sessions, t, await require('./sleep-window').get().catch(() => null)),
     sessions: sessions.map(s => { const r = rxOf(s); return { name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
       slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null,
       rx: r ? { kind: r.kind, before_g: r.before.carbs_g, low: !!r.before.low, during_g: r.during.carbs_g, g_per_h: r.during.g_per_h, after_g: r.after.carbs_g, after_protein_g: r.after.protein_g, words: { before: r.before.words, during: r.during.words, after: r.after.words } } : null }; }) };
@@ -480,7 +480,7 @@ async function dayReport(date) {
   // the four supplements: what is due today and what was taken (supps.js); a pre-ride one whose time
   // has gone by untaken says so, rather than "due" at a time already past
   let supps = null;
-  try { const S = require('./supps'); const y = await getJSON(dayKey(tz.shiftKey(date, -1)), null); supps = S.dueFor(date, g.sessions, entries, nowMin, (y && y.entries) || []); } catch (e) { supps = null; }
+  try { const S = require('./supps'); const y = await getJSON(dayKey(tz.shiftKey(date, -1)), null); supps = S.dueFor(date, g.sessions, entries, nowMin, (y && y.entries) || [], await require('./sleep-window').get().catch(() => null)); } catch (e) { supps = null; }
   if (supps && nowMin != null) for (const d of supps.due || []) if (d.link === 'fuel' && !d.taken && !d.past && F.toMin(d.time) != null && F.toMin(d.time) < nowMin) { d.too_late = true; d.word = 'too late today'; }
   // Live fuel: the carbohydrate on board through the day, from what was logged (energy-math.js).
   let energy = null;

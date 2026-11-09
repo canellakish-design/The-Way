@@ -1503,7 +1503,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {}, FUELV = {}, BTS = {}, WBK = {};   // WBK: each planned ride's buckets, its plan and what was ridden against it
+let WX = {}, WGRADE = {}, FUELV = {}, BTS = {}, WBK = {}, WSLEEP = {};   // WSLEEP: a planned session that cuts sleep (sleep-window.js)   // WBK: each planned ride's buckets, its plan and what was ridden against it
 // the conditions grade, A+ to F, from the hours a ride covers (scores come from the bridge, weather.js)
 const GLETTERS = [[97,"A+"],[92,"A"],[88,"A−"],[84,"B+"],[79,"B"],[74,"B−"],[69,"C+"],[63,"C"],[57,"C−"],[50,"D+"],[40,"D"],[0,"F"]];
 function condGrade(hours){ const hs = (hours||[]).filter(h => h && h.cscore != null); if (!hs.length) return null;
@@ -1659,7 +1659,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? chip(r.meal.match.key === "green" ? "✓ on plan" : shortWord(r.meal.match), TONE[r.meal.match.key], r.meal.match.word) : chip("logged", "")) : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : chip(state === "past" ? "nothing logged" : "plan", ""))) : null;
     return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}</span>
       <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? `Z1 +${g.zone}%` : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -2330,7 +2330,7 @@ V.today = async function(){
       get("/energy/meter", v => { energyData = v; }),
       get("/progress", v => { drawProgress(v); }),
       get("/audit", v => { const el = document.getElementById("auditNote"); if (!el || !v || !v.word || !v.flagged) return; el.textContent = v.word; el.classList.toggle("flag", !!v.flagged); el.title = (v.checks || []).map(c => `${c.key}: ${c.detail}`).join("\n"); }),
-      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; WBK={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.buckets_plan) WBK[w.id]={ plan:w.buckets_plan, actual:null }; for(const x of (day.done||[])) if(x.buckets && x.plan_wid && WBK[x.plan_wid]){ const A=WBK[x.plan_wid].actual||(WBK[x.plan_wid].actual={low:0,high:0,peak:0}); A.low+=x.buckets.low||0; A.high+=x.buckets.high||0; A.peak+=x.buckets.peak||0; } for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length, ridden:(day.done||[]).some(x => x.plan_wid === w.id)}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
+      (()=>{ const d=new Date(), k=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); const a=new Date(d.getTime()-7*864e5), b=new Date(d.getTime()+7*864e5); const kk=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"); return bridge(`/calendar?from=${kk(a)}&to=${kk(b)}`).then(r=>{ WGRADE={}; BTS={}; WBK={}; WSLEEP={}; for(const day of (r.days||[])){ for(const w of (day.planned||[])) if(w.sleep && w.sleep.word) WSLEEP[w.id]=w.sleep.word; for(const w of (day.planned||[])) if(w.buckets_plan) WBK[w.id]={ plan:w.buckets_plan, actual:null }; for(const x of (day.done||[])) if(x.buckets && x.plan_wid && WBK[x.plan_wid]){ const A=WBK[x.plan_wid].actual||(WBK[x.plan_wid].actual={low:0,high:0,peak:0}); A.low+=x.buckets.low||0; A.high+=x.buckets.high||0; A.peak+=x.buckets.peak||0; } for(const w of (day.planned||[])) if(w.compliance) WGRADE[w.id]={band:w.compliance.band, pct:w.compliance.pct, over:!!w.compliance.over, logged:!!w.logged, zone:w.compliance.zone_over||null, rides:(day.done||[]).length, ridden:(day.done||[]).some(x => x.plan_wid === w.id)}; zoneMinutes(day); for(const x of (day.done||[])) if(x.breakthrough) (BTS[day.date]=BTS[day.date]||[]).push({ name:x.name, time:x.time||null, minutes:x.minutes, bt:x.breakthrough }); } if (Object.keys(BTS).length && window.__repaintDay) { try{ window.__repaintDay(); }catch{} } r.today_day=(r.days||[]).find(x=>x.date===k)||null; workoutsData = r; drawScores(); return r; }); })().catch(()=>null)
     ]);
     scoresLoading = false;
     drawScores();
@@ -2897,7 +2897,7 @@ V.settings = function(){
   // rides, meals, lifts and weigh-ins before it stay stored and visible. Age and height (body.js) set BMR.
   const drawYou = async ()=>{
     const el = document.getElementById("youCard"); if (!el) return;
-    const [fs, body] = await Promise.all([bridge("/fresh-start").catch(()=>null), bridge("/body").catch(()=>null)]);
+    const [fs, body, sw] = await Promise.all([bridge("/fresh-start").catch(()=>null), bridge("/body").catch(()=>null), bridge("/sleep-window").catch(()=>null)]);
     const lab = d => d ? new Date(d + "T12:00:00").toLocaleDateString("en-US", { weekday:"short", month:"short", day:"numeric" }) : "";
     const date = fs && fs.date;
     el.innerHTML = `<h4>Scores</h4>
@@ -2905,6 +2905,12 @@ V.settings = function(){
       <div class="row2"><span><label for="fsDate">Count from</label><input id="fsDate" type="date" value="${attr(date || "")}"></span>
         <span class="gbtns"><button class="primary" id="fsSave">Save</button><button id="fsClear"${date ? "" : " disabled"}>Clear</button></span></div>
       <div class="small" id="fsMsg"></div>
+      <h4 style="margin-top:14px">Sleep</h4>
+      <div class="small">Nothing is planned inside it. Workouts from ${sw ? esc(hm12(sw.earliest_workout_hm || "07:30")) : "7:30a"}.</div>
+      <div class="row2"><span><label for="swBed">Bed</label><input id="swBed" type="time" value="${attr(sw ? sw.bed_hm : "22:30")}"></span>
+        <span><label for="swWake">Wake</label><input id="swWake" type="time" value="${attr(sw ? sw.wake_hm : "06:30")}"></span></div>
+      <div class="gbtns"><button class="primary" id="swSave">Save</button></div>
+      <div class="small" id="swMsg"></div>
       <h4 style="margin-top:14px">Body</h4>
       <div class="small">${body && body.bmr ? `BMR ${body.bmr.toLocaleString("en-US")}` : ""}${body && body.kg_from ? ` · ${body.kg} kg (${esc(lab(body.kg_from))})` : ""}</div>
       <div class="row2"><span><label for="bAge">Age</label><input id="bAge" type="number" inputmode="numeric" min="14" max="100" value="${attr(body ? body.age : "")}"></span>
@@ -2922,6 +2928,12 @@ V.settings = function(){
     document.getElementById("fsClear").onclick = async ()=>{
       say("fsMsg", "clearing…");
       try{ await post("/fresh-start", { date: null }); drawYou(); }catch(e){ say("fsMsg", e.message); }
+    };
+    document.getElementById("swSave").onclick = async ()=>{
+      say("swMsg", "saving…");
+      try{ const r = await post("/sleep-window", { bed: document.getElementById("swBed").value, wake: document.getElementById("swWake").value });
+        say("swMsg", `Saved · ${r.hours} h`); }
+      catch(e){ say("swMsg", e.message); }
     };
     document.getElementById("bSave").onclick = async ()=>{
       say("bMsg", "saving…");

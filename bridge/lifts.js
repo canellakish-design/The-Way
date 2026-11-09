@@ -448,9 +448,9 @@ async function save(body) {
 }
 
 // This week's five onto the calendar as planned workouts (the plan store),
-// skipping a day that already has a lift planned. time: "HH:MM", default 07:00.
+// skipping a day that already has a lift planned. time: "HH:MM", default the earliest workout (7:30, sleep first).
 async function scheduleWeek(body) {
-  const time = /^\d{2}:\d{2}$/.test((body || {}).time || '') ? body.time : '07:00';
+  const time = /^\d{2}:\d{2}$/.test((body || {}).time || '') ? body.time : require('./workouts').EARLIEST;
   const r = await report(/^\d{4}-\d{2}-\d{2}$/.test((body || {}).from || '') ? body.from : undefined);
   const { create, calendar } = require('./workouts');
   const cal = await calendar(r.week[0].date, r.week[r.week.length - 1].date).catch(() => ({ days: [] }));

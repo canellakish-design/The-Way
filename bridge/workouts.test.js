@@ -85,9 +85,13 @@ ok('hrLoad: an hour at threshold is 100; easy hours score far less', () => {
 });
 
 
-ok('no workouts before 7 a.m.: 06:30 is refused on the server, 07:00 is accepted; a cleared time is fine', () => {
+ok('no workouts before 7 a.m., and a new one not before 7:30 (an hour after waking); a cleared time is fine', () => {
   assert.throws(() => clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '06:30', steps }), /No workouts before 7 a\.m\./);
-  assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '07:00', steps }).time, '07:00');
+  // sleep first (wake 6:30): a new time before 7:30 is refused; 7:30 is the earliest
+  assert.throws(() => clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '07:00', steps }), /Sleep first: no workouts before 7:30/);
+  assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '07:30', steps }).time, '07:30');
+  // a session already at 7:00 keeps its time through an edit
+  assert.strictEqual(clean({ steps }, { id: 'w_2', date: '2026-11-02', time: '07:00', name: 'x', steps }).time, '07:00');
   assert.strictEqual(clean({ name: 'Zone 1, 60 min', sport: 'Ride', date: '2026-11-02', time: '', steps }).time, null);
   // an update that keeps an old early time is refused too
   assert.throws(() => clean({ steps }, { id: 'w_1', date: '2026-11-02', time: '06:30', name: 'x', steps }), /No workouts before 7 a\.m\./);

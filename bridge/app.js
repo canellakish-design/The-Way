@@ -51,6 +51,7 @@ require('./thresholds').attach(app);
 require('./fresh-start').attach(app);
 require('./body').attach(app);
 require('./energy-meter').attach(app);
+require('./sleep-window').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);
 require('./agent').attach(app);

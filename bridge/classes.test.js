@@ -35,9 +35,9 @@ const events = [
   await ok('a session is refused on a rest day, placed with force, and moved off one freely', async () => {
     mem['workout-settings'] = { ftp: 175 }; mem['plan-workouts'] = { workouts: {} };
     const W = require('./workouts');
-    let err = null; try { await W.create({ name: 'Z1 trainer 60 min', date: '2026-11-12', time: '07:00', steps: [] }); } catch (e) { err = e; }
+    let err = null; try { await W.create({ name: 'Z1 trainer 60 min', date: '2026-11-12', time: '07:30', steps: [] }); } catch (e) { err = e; }
     assert.ok(err && err.status === 400 && /rest day \(three classes\)/.test(err.message), String(err && err.message));
-    const forced = await W.create({ name: 'Z1 trainer 60 min', date: '2026-11-12', time: '07:00', steps: [], force: true });
+    const forced = await W.create({ name: 'Z1 trainer 60 min', date: '2026-11-12', time: '07:30', steps: [], force: true });
     assert.strictEqual(forced.date, '2026-11-12');
     const moved = await W.update(forced.id, { date: '2026-11-13' });
     assert.strictEqual(moved.date, '2026-11-13');
