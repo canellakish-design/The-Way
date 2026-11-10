@@ -295,7 +295,8 @@ function placeSnacks(meals, opts) {
     const nt = early >= wake && (prev == null || early >= prev + 60) ? early : late <= bed - 60 ? late : null;
     if (nt == null) continue;
     m.moved_from = m.time; m.time = toHM(nt); delete m.at_min;
-    m.what = `${String(m.what || '').replace(/\s*$/, '')} ${nt < b.start ? 'Before' : 'After'} ${b.name || 'the block'}.`.trim();
+    m.place_note = `${nt < b.start ? 'Before' : 'After'} ${b.name || 'the block'}.`;
+    m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
   }
   // B: nothing in the 4 hours before a lift or a hard ride
   for (const s of (o.sessions || []).filter(x => x.kind === 'lift' || x.kind === 'hard')) {

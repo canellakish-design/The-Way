@@ -630,7 +630,7 @@ ok('snacks where the day needs them: out of coaching and classes, and a shake be
   ];
   const r = F.placeSnacks(meals, { busy: [{ start: 20 * 60 + 30, end: 22 * 60, name: 'Practice' }], sessions: [{ start: 600, end: 650, name: 'Upper 1', kind: 'lift' }, { start: 975, end: 1015, name: 'VO2 4 x 4 min', kind: 'hard' }], wake: 390, bed: 1350 });
   const snack = r.find(m => m.slot === 'snack');
-  assert.strictEqual(snack.time, '20:00'); assert.ok(/Before Practice\./.test(snack.what), snack.what);
+  assert.strictEqual(snack.time, '20:00'); assert.ok(/Before Practice\./.test(snack.what), snack.what); assert.strictEqual(snack.place_note, 'Before Practice.');
   const shake = r.find(m => m.gap_snack);
   assert.ok(shake && shake.time === '09:00' && shake.protein_g === 20, JSON.stringify(shake));
   const bf = r.find(m => m.slot === 'breakfast');
