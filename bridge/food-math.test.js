@@ -621,5 +621,26 @@ ok('the night before a hard ride before 10 a.m., dinner is the carb meal; it hol
   const rolled = F.rollForward(load, [{ slot: 'lunch', kcal: (lunch.kcal || 0) + 400, carbs_g: (lunch.carbs_g || 0) + 80, protein_g: 50 }]);
   assert.ok(rolled.find(m => m.slot === 'dinner').carbs_g >= d1.carbs_g);
 });
+ok('snacks where the day needs them: out of coaching and classes, and a shake before a lift with nothing in the 4 hours before it', () => {
+  const meals = [
+    { time: '11:00', slot: 'breakfast', kcal: 610, carbs_g: 70, protein_g: 45 },
+    { time: '13:00', slot: 'lunch', kcal: 660, carbs_g: 60, protein_g: 50 },
+    { time: '17:25', slot: 'dinner', kcal: 780, carbs_g: 44, protein_g: 45 },
+    { time: '21:00', slot: 'snack', kcal: 245, carbs_g: 15, protein_g: 25, what: 'A Huel shake or cottage cheese.' }
+  ];
+  const r = F.placeSnacks(meals, { busy: [{ start: 20 * 60 + 30, end: 22 * 60, name: 'Practice' }], sessions: [{ start: 600, end: 650, name: 'Upper 1', kind: 'lift' }, { start: 975, end: 1015, name: 'VO2 4 x 4 min', kind: 'hard' }], wake: 390, bed: 1350 });
+  const snack = r.find(m => m.slot === 'snack');
+  assert.strictEqual(snack.time, '20:00'); assert.ok(/Before Practice\./.test(snack.what), snack.what);
+  const shake = r.find(m => m.gap_snack);
+  assert.ok(shake && shake.time === '09:00' && shake.protein_g === 20, JSON.stringify(shake));
+  const bf = r.find(m => m.slot === 'breakfast');
+  assert.strictEqual(bf.kcal, 505); assert.strictEqual(bf.protein_g, 25);   // the shake comes out of the next meal
+  const sum = k => r.reduce((a, m) => a + (m[k] || 0), 0), sum0 = k => meals.reduce((a, m) => a + (m[k] || 0), 0);
+  assert.strictEqual(sum('kcal'), sum0('kcal')); assert.strictEqual(sum('protein_g'), sum0('protein_g'));
+  assert.ok(!r.some(m => m.gap_snack && m.time > '12:00'), 'the VO2 is fed by lunch: no extra snack');
+  // an easy ride first thing is left alone (a fasted Zone 1 morning)
+  const easy = F.placeSnacks(meals, { sessions: [{ start: 450, end: 510, name: 'Z1', kind: 'easy' }], wake: 390, bed: 1350 });
+  assert.ok(!easy.some(m => m.gap_snack));
+});
 console.log(n + ' passed');
 

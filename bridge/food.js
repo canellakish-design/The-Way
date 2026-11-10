@@ -304,7 +304,22 @@ async function guidelinesFor(date) {
   return { date, day, fuel_day: t.fuel_day, target: t, kg, guidelines: F.guidelines(day, { deficit: t.deficit !== 0, rx }), ride_notes: rideNotes, work,
     fuel: { level: rx.level, label: rx.label, carbs_g: rx.carbs_g, per_kg: rx.per_kg, train_low: rx.train_low, sleep_low: rx.sleep_low },
     cue: today ? F.cue(day, sessions, null, rx) : null,
-    meals: F.mealPlan(day, sessions, t, await require('./sleep-window').get().catch(() => null), { load_for: fctx && fctx.hard_tomorrow_am, kg: kg || F.PROFILE.kg }),
+    meals: await (async () => {
+      const win = await require('./sleep-window').get().catch(() => null);
+      const plan = F.mealPlan(day, sessions, t, win, { load_for: fctx && fctx.hard_tomorrow_am, kg: kg || F.PROFILE.kg });
+      // the snack rules (food-math placeSnacks): the day's coaching, classes and work, and its sessions
+      let busy = [];
+      try {
+        const ev = await require('./calendar').eventsBetween(date, date);
+        busy = (ev || []).filter(e => !e.allDay && e.start && e.end && ['coaching', 'work', 'busy', 'travel'].includes(e.category) && tz.keyOf(new Date(e.start)) === date)
+          .map(e => ({ start: tz.minutesOf(new Date(e.start)), end: tz.minutesOf(new Date(e.end)), name: String(e.summary || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').slice(0, 40) }))
+          .filter(b => b.end > b.start);
+      } catch (e) { busy = []; }
+      const ss = sessions.filter(s => F.toMin(s.time) != null && !s.done).map(s => ({ start: F.toMin(s.time), end: F.toMin(s.time) + (s.minutes || 60), name: String(s.name || '').replace(/\s*[·(].*$/, ''),
+        kind: /weight|strength/i.test(String(s.sport || '')) || /\b(push|pull|upper|legs|lift)\b/i.test(String(s.name || '')) ? (/kettlebell\s*blast|pump/i.test(String(s.name || '')) ? 'easy' : 'lift')
+          : /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i.test(String(s.name || '')) ? 'hard' : 'easy' }));
+      return F.placeSnacks(plan, { busy, sessions: ss, wake: win ? win.wake : null, bed: win ? win.bed : null });
+    })(),
     sessions: sessions.map(s => { const r = rxOf(s); return { name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
       slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null,
       rx: r ? { kind: r.kind, before_g: r.before.carbs_g, low: !!r.before.low, during_g: r.during.carbs_g, g_per_h: r.during.g_per_h, after_g: r.after.carbs_g, after_protein_g: r.after.protein_g, words: { before: r.before.words, during: r.during.words, after: r.after.words } } : null }; }) };

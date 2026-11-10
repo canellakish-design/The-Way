@@ -273,6 +273,42 @@ function mealPlan(day, sessions, target, sleep, opts) {
 // start cannot fill the legs. When the ride moves to the afternoon, the plan goes back to normal by itself.
 const LOAD_G_PER_KG = 1.2;
 const hm12 = t => { const m = toMin(t); if (m == null) return t || ''; const h = Math.floor(m / 60) % 24, mi = m % 60; return `${h % 12 || 12}:${String(mi).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`; };
+// Snacks where the day needs them (Harry, 10 Nov: "Should we add snacks?" ... "Make some adjustments"):
+//  A. a snack never lands inside coaching, a class or work: it moves to half an hour before the block (an hour
+//     after the meal before it at least), else just after it (an hour before bed at most);
+//  B. a lift or a hard ride with no food planned in the 4 hours before it gets a small snack an hour before (a Huel
+//     shake: 20 g protein, little carb), taken out of the next main meal, so the day's total does not move. An easy
+//     ride is left alone: a fasted Zone 1 morning is allowed.
+// opts: { busy: [{ start, end, name }], sessions: [{ start, end, name, kind: 'lift'|'hard'|'easy' }], wake, bed }
+const SHAKE = { kcal: 105, carbs_g: 5, protein_g: 20 };
+function placeSnacks(meals, opts) {
+  const o = opts || {}, out = (meals || []).map(m => Object.assign({}, m));
+  const wake = o.wake != null ? o.wake : 6 * 60 + 30, bed = o.bed != null ? o.bed : 22 * 60 + 30;
+  const busy = (o.busy || []).filter(b => b.end > b.start);
+  const mainBefore = t => out.filter(m => m.slot !== 'snack' && !m.extra && (m.kcal || 0) > 150 && mmin(m) != null && mmin(m) < t).map(mmin).sort((a, b) => b - a)[0];
+  // A: out of the busy blocks
+  for (const m of out) {
+    if (m.slot !== 'snack' || mmin(m) == null) continue;
+    const t = mmin(m), b = busy.find(x => t >= x.start && t < x.end);
+    if (!b) continue;
+    const prev = mainBefore(t), early = b.start - 30, late = b.end + 5;
+    const nt = early >= wake && (prev == null || early >= prev + 60) ? early : late <= bed - 60 ? late : null;
+    if (nt == null) continue;
+    m.moved_from = m.time; m.time = toHM(nt); delete m.at_min;
+    m.what = `${String(m.what || '').replace(/\s*$/, '')} ${nt < b.start ? 'Before' : 'After'} ${b.name || 'the block'}.`.trim();
+  }
+  // B: nothing in the 4 hours before a lift or a hard ride
+  for (const s of (o.sessions || []).filter(x => x.kind === 'lift' || x.kind === 'hard')) {
+    const fed = out.some(m => !m.extra && (m.kcal || 0) > 0 && mmin(m) != null && mmin(m) >= s.start - 240 && mmin(m) < s.start);
+    const at = s.start - 60;
+    if (fed || at < wake) continue;
+    const next = out.filter(m => !m.extra && m.slot !== 'snack' && (m.kcal || 0) > SHAKE.kcal + 150 && mmin(m) != null && mmin(m) > s.start).sort((a, b) => mmin(a) - mmin(b))[0];
+    out.push({ time: toHM(at), slot: 'before', kcal: SHAKE.kcal, carbs_g: SHAKE.carbs_g, protein_g: SHAKE.protein_g, low_carb: true, gap_snack: true,
+      what: `Before ${s.name}: a Huel shake, about 20 g protein, so you don't ${s.kind === 'lift' ? 'lift' : 'ride hard'} on empty.` });
+    if (next) { next.kcal = r5(next.kcal - SHAKE.kcal); next.protein_g = Math.max(0, r5((next.protein_g || 0) - SHAKE.protein_g)); next.carbs_g = Math.max(0, r5((next.carbs_g || 0) - SHAKE.carbs_g)); }
+  }
+  return out.sort((a, b) => mmin(a) - mmin(b));
+}
 function carbLoad(meals, opts) {
   const o = opts || {}, f = o.load_for;
   if (!f) return meals;
@@ -1008,5 +1044,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
