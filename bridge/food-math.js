@@ -537,13 +537,14 @@ function pastOnArrival(plan, seen, nowHM) {
 //   ctx: { day_kcal, target_kcal, isDrink(e), hide: Set of slotKeys to leave out when open }
 // The carb label every meal card and every coach sentence uses (Harry, 10 Nov: "make it very obvious when it's low
 // carb, high carb or a balanced meal, and tie the coach's advice to it"). From the meal's own numbers: carbs as a share
-// of its calories, under 25% low carb, 25 to 50% balanced, over 50% high carb; a meal the plan keeps low (train-low,
+// of its calories, under 20% low carb, 20 to 45% balanced, over 45% high carb (a 715 kcal post-ride dinner
+// with 44 g of carbs is balanced, not low); a meal the plan keeps low (train-low,
 // a rest-day breakfast) is low carb whatever its size. The bottle on the bike carries no label: it is all carbs.
 const CARB_WORD = { low: 'Low carb', balanced: 'Balanced', high: 'High carb' };
 function carbLabel(m) {
   if (!m || m.slot === 'on the bike' || !(m.kcal > 0)) return null;
   const share = (m.carbs_g || 0) * 4 / m.kcal;
-  const key = m.low_carb ? 'low' : share < 0.25 ? 'low' : share <= 0.5 ? 'balanced' : 'high';
+  const key = m.low_carb ? 'low' : share < 0.20 ? 'low' : share <= 0.45 ? 'balanced' : 'high';
   return { key, word: CARB_WORD[key], pct: Math.round(share * 100) };
 }
 
