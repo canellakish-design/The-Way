@@ -564,17 +564,18 @@ ok('fuel for the work: a real breakfast before a long ride, and more carbs than 
   assert.notStrictEqual(post.key, 'green', 'the meal after is judged as planned: ' + post.word);
 });
 ok('carb label: one word per meal from its numbers, and the plain lunch and dinner lines say it in food', () => {
-  assert.strictEqual(F.carbLabel({ slot: 'lunch', kcal: 670, carbs_g: 40 }).word, 'Low carb');      // 24% of its calories
+  assert.strictEqual(F.carbLabel({ slot: 'lunch', kcal: 670, carbs_g: 25 }).word, 'Low carb');      // 15% of its calories
+  assert.strictEqual(F.carbLabel({ slot: 'dinner', kcal: 715, carbs_g: 44, post_ride: true }).word, 'Balanced');   // 25%: a recovery dinner is not low
   assert.strictEqual(F.carbLabel({ slot: 'lunch', kcal: 600, carbs_g: 60 }).word, 'Balanced');      // 40%
   assert.strictEqual(F.carbLabel({ slot: 'before', kcal: 255, carbs_g: 39 }).word, 'High carb');    // 61%
   assert.strictEqual(F.carbLabel({ slot: 'breakfast', kcal: 375, carbs_g: 40, low_carb: true }).word, 'Low carb');   // the plan keeps it low
   assert.strictEqual(F.carbLabel({ slot: 'on the bike', kcal: 200, carbs_g: 50 }), null);
-  const low = { slot: 'lunch', kcal: 670, carbs_g: 40, what: 'Protein with rice or potatoes, vegetables.' };
+  const low = { slot: 'lunch', kcal: 670, carbs_g: 25, what: 'Protein with rice or potatoes, vegetables.' };
   assert.ok(/^Low carb: protein and vegetables, starch a fist at most/.test(F.carbWords(low, F.carbLabel(low))));
   const post = { slot: 'dinner', kcal: 700, carbs_g: 40, what: 'Within 2 hours of the ride.', post_ride: true };
   assert.strictEqual(F.carbWords(post, F.carbLabel(post)), 'Within 2 hours of the ride.', 'a line with its own reason keeps it');
   // the day's rows carry it
-  const rows = F.dayMeals([{ time: '13:00', slot: 'lunch', kcal: 670, carbs_g: 40, protein_g: 45, what: 'Protein with rice or potatoes, vegetables.' }], [], {});
+  const rows = F.dayMeals([{ time: '13:00', slot: 'lunch', kcal: 670, carbs_g: 25, protein_g: 45, what: 'Protein with rice or potatoes, vegetables.' }], [], {});
   assert.strictEqual(rows[0].carb.word, 'Low carb'); assert.ok(/^Low carb:/.test(rows[0].what));
 });
 console.log(n + ' passed');
