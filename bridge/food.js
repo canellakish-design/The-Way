@@ -71,7 +71,8 @@ async function rowsFor(date, g, entries, seen) {
   const proteinSoFar = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0));
   const plan = (g.meals || []).map(m => m.slot !== 'snack' || !today ? m : Object.assign({}, m, { what: (() => {
     const short = (g.target.protein_g || 0) - proteinSoFar;
-    return short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: a Huel shake or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
+    const words = short >= 20 ? `Protein is ${short} g short of ${g.target.protein_g} g so far: a Huel shake or cottage cheese.` : short > 0 ? `Protein is ${short} g short: a small one, or skip it.` : `Protein is covered (${proteinSoFar} of ${g.target.protein_g} g): skip it.`;
+    return m.place_note ? `${words} ${m.place_note}` : words;   // "Before Practice." stays (placeSnacks)
   })() }));
   let hide = null;
   if (today) {
