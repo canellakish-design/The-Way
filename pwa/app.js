@@ -1681,7 +1681,7 @@ function dayCard(d, plan, nowMin, rec, solo){
         <div class="mgrid"><div class="mc c"><b>${m.carbs_g ?? "—"}</b><span>carbs g</span></div><div class="mc p"><b>${m.protein_g ?? "—"}</b><span>protein g</span></div><div class="mc f"><b>${m.fat_g ?? "—"}</b><span>fat g</span></div></div></div>`
     : "";
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
-    <div class="dayhead"><h4>${esc(d.label)}</h4></div>
+    <div class="dayhead"><h4>${esc(d.label)}</h4><a class="dayprint" href="${DEFAULT_API}/print/day?date=${esc(d.date)}&auto=1" target="_blank" rel="noopener">print</a></div>
     ${chips?`<div class="chips">${chips}</div>`:""}
     <ul class="agenda hsched${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
