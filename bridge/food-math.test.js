@@ -642,5 +642,12 @@ ok('snacks where the day needs them: out of coaching and classes, and a shake be
   const easy = F.placeSnacks(meals, { sessions: [{ start: 450, end: 510, name: 'Z1', kind: 'easy' }], wake: 390, bed: 1350 });
   assert.ok(!easy.some(m => m.gap_snack));
 });
+ok('each meal carries its fat: given, or what the calories leave after the carbs and protein', () => {
+  assert.strictEqual(F.fatOf({ kcal: 575, carbs_g: 70, protein_g: 45 }), 13);
+  assert.strictEqual(F.fatOf({ kcal: 200, carbs_g: 50, protein_g: 0 }), 0);
+  assert.strictEqual(F.fatOf({ kcal: 500, carbs_g: 20, protein_g: 20, fat_g: 30 }), 30);
+  const rows = F.dayMeals([{ time: '09:00', slot: 'breakfast', kcal: 575, carbs_g: 70, protein_g: 45, what: 'Oats.' }], []);
+  assert.strictEqual(rows[0].fat_g, 13);
+});
 console.log(n + ' passed');
 

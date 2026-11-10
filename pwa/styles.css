@@ -938,3 +938,13 @@ svg.bars .barline{stroke:var(--muted); stroke-dasharray:3 3; stroke-width:1}
 main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 #micBtn{width:50px; height:50px; right:12px; bottom:calc(12px + env(safe-area-inset-bottom, 0px)); transition:transform .2s ease, opacity .2s ease}
 #micBtn.tuck{transform:translateY(90px); opacity:0; pointer-events:none}
+
+/* a meal's carbs, protein and fat: three thin bars on one scale for the day, the grams beside each */
+.mealbars{display:block; margin:6px 0 2px; max-width:420px}
+.mealbars .mbr{display:grid; grid-template-columns:52px 1fr 46px; gap:8px; align-items:center; margin:3px 0}
+.mealbars .xbl{font-size:9.5px}
+.mealbars .mbt{display:block; height:10px; background:#1A1C20; border:1px solid var(--line); overflow:hidden}
+.mealbars .mbf{display:block; height:100%}
+.mealbars .mbn{font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums}
+.mealbars .mbn b{color:var(--ink); font-size:12px}
+

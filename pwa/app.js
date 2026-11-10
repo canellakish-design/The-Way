@@ -1346,6 +1346,7 @@ function dayRows(d, plan, isToday){
     }
     const nextSlot = f.suggestion && !f.suggestion.none ? f.suggestion.slot : null;
     const seen = new Set();
+    const mscale = mealScale((f.meals || []).filter(m => m.kcal));
     // every meal of the day, so the morning is still there in the evening: logged ones carry their grade
     for (const m of (f.meals || [])){
       if (!m.time || seen.has(m.slot)) continue;
@@ -1359,8 +1360,11 @@ function dayRows(d, plan, isToday){
       const ate = logged ? (f.entries || []).filter(e => (m.logged || []).includes(e.id) && !e.supplement) : [];
       const ateText = ate.length ? `${ate.map(e => e.name).join(", ")} · ${mt ? `${mt.kcal} kcal · ${mt.carbs_g}C · ${mt.protein_g}P` : ""} (plan ${m.kcal} · ${m.carbs_g}C · ${m.protein_g}P)` : null;
       const why = mt && mt.rules && mt.rules.why ? mt.rules.why : null;
+      const sumE = k => ate.reduce((s, e) => s + (e[k] || 0), 0);
+      const bars = ate.length ? mealBars({ carbs_g: sumE("carbs_g"), protein_g: sumE("protein_g"), fat_g: sumE("fat_g") }, Math.max(mscale, sumE("carbs_g"), sumE("protein_g"), sumE("fat_g")), true)
+        : m.kcal ? mealBars({ carbs_g: m.carbs_g, protein_g: m.protein_g, fat_g: mealFat(m) }, mscale) : "";
       rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: `${m.slot}${m.carb ? ` · ${m.carb.word}` : ""}${m.slot === nextSlot && !logged ? " · next" : ""}`, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
-        lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
+        lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, bars, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
     // the bedtime note (alcohol in the evening costs water overnight): its own row before bed, from 8 p.m.
     const bn = f.hydration && f.hydration.bedtime_note;
@@ -1667,7 +1671,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? chip(r.meal.match.key === "green" ? "✓ on plan" : shortWord(r.meal.match), TONE[r.meal.match.key], r.meal.match.word) : chip("logged", "")) : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : chip(state === "past" ? "nothing logged" : "plan", ""))) : null;
     return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${r.bars || ""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}</span>
       <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? (g.zone > 0 ? `Z1 +${g.zone}%` : `Z1 low ${-g.zone}%`) : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -2799,12 +2803,13 @@ function foodCardHTML(day){
   const now = nowHM();
   const next = (day.meals||[]).find(m => m.time >= now && !(m.logged||[]).length) || null;
   const CAM = '<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M9 3 7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-3.2L15 3H9zm3 5a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg>';
+  const scale = mealScale((day.meals||[]).filter(m => m.kcal));
   const plan = (day.meals||[]).map(m => { const logged = (m.logged||[]).length;
     const mealOf = ["breakfast","lunch","dinner","snack","on the bike"].includes(m.slot) ? m.slot : "snack";
     const mark = logged ? `<span class="mk ok">✓</span>` : m.time < now ? `<span class="mk no">✗</span>` : `<span class="mk"></span>`;
     return `<li class="${logged?"done":m===next?"next":(m.time<now?"past":"")}">
       <span class="t">${esc(hm12(m.time))}</span>
-      <span class="n">${esc(m.slot)}${m.carb ? ` · ${esc(m.carb.word)}` : ""}<span class="small"> ${esc(m.what)}</span></span>
+      <span class="n">${esc(m.slot)}${m.carb ? ` · ${esc(m.carb.word)}` : ""}<span class="small"> ${esc(m.what)}</span>${m.kcal ? mealBars({ carbs_g: m.carbs_g, protein_g: m.protein_g, fat_g: mealFat(m) }, scale) : ""}</span>
       <span class="tag mealtag">${mark}<a class="cam" href="#food?snap=${encodeURIComponent(mealOf)}" aria-label="Snap this meal">${CAM}</a></span></li>`; }).join("");
   return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
     ${B.targetsRow ? B.targetsRow(day.target) : ""}
@@ -2858,6 +2863,15 @@ function complianceHTML(c, food){
     <div class="macros"><span class="mfuel">Compliance ${F.compliance && F.compliance.overall != null ? F.compliance.overall : (c.compliance.overall ?? "—")}</span>
       <span class="small">${c.target.fuel_day ? esc(c.target.fuel_day) + " · " : ""}${c.meals||0} photo${c.meals===1?"":"s"}</span></div>
     ${snack}`;
+}
+// A meal's carbs, protein and fat as three bars with their grams (Harry, 10 Nov). One scale for the whole day
+// (max: the biggest macro of any meal), so a small breakfast reads small beside dinner.
+function mealFat(m){ return m.fat_g != null ? m.fat_g : m.kcal == null ? null : Math.max(0, Math.round((m.kcal - 4 * (m.carbs_g || 0) - 4 * (m.protein_g || 0)) / 9)); }
+function mealScale(meals){ return Math.max(1, ...(meals || []).map(m => Math.max(m.carbs_g || 0, m.protein_g || 0, mealFat(m) || 0))); }
+function mealBars(v, max, ate){
+  const M = [["carbs", v.carbs_g, "var(--carb)"], ["protein", v.protein_g, "var(--red)"], ["fat", v.fat_g, "var(--fat)"]];
+  return `<span class="mealbars${ate ? " ate" : ""}" role="img" aria-label="${attr(`${ate ? "eaten" : "plan"}: ${M.map(([l, g]) => `${l} ${Math.round(g || 0)} g`).join(", ")}`)}">${M.map(([l, g, col]) => { const a = Math.round(g || 0);
+    return `<span class="mbr"><span class="xbl">${l}</span><span class="mbt"><span class="mbf" style="width:${Math.min(100, a / max * 100).toFixed(1)}%;background:${col}"></span></span><span class="mbn"><b>${a}</b> g</span></span>`; }).join("")}</span>`;
 }
 // three bars: carbs, protein, fat. The track is the target, the fill what was eaten; under writes the gap, over past a fifth turns the fill amber-edged
 function macroBars(title, got, want, sub, logged, isDay){
