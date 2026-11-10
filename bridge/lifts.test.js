@@ -114,4 +114,16 @@ ok('the strip mirrors the calendar: a day with Push done and Pull planned keeps 
   for (const x of w.filter(x => x.lift && !x.on_calendar)) assert.strictEqual(x.suggested, true);
   assert.ok(w.some(x => x.suggested), 'the rest are suggestions');
 });
+ok('a session lifted in the six days before the window is not placed again inside it (Push on Monday, Tuesday\'s window)', () => {
+  const days = ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16'].map(date => ({ date, ride: null, coaching_min: 0, long_coaching: false }));
+  days[0].ride = { name: 'VO2 4 × 4 min', minutes: 40, tss: 52, hard: true };
+  days[1].locks = ['legs']; days[1].locked = 'legs';
+  const w = L.placeWeek(days, { recent: { push: '2026-11-09' } });
+  assert.strictEqual(w.filter(x => x.lift === 'push').length, 0, JSON.stringify(w.map(x => x.lift)));
+  assert.deepStrictEqual(w.filter(x => x.lift).map(x => x.lift).sort(), ['legs', 'pull', 'upper-1', 'upper-2']);
+  assert.ok(w.some(x => /Push was done/.test(x.why)), w.map(x => x.why).join(' | '));
+  // without the recent Push, it is placed as before
+  assert.strictEqual(L.placeWeek(days).filter(x => x.lift === 'push').length, 1);
+});
 console.log(n + ' passed');
+

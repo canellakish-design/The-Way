@@ -227,8 +227,11 @@ function placeWeek(days, o) {
     if (x.rest && !(opts.done && opts.done[x.date])) s = -3e3;       // a rest day (all three classes): nothing is placed on it
     return s;
   };
+  // a session lifted in the six days before the window is not due again inside it (Harry, 10 Nov: Push on Monday
+  // evening, and Tuesday's window placed Push again for Tuesday): opts.recent is { key: date } of those
+  const recent = opts.recent || {};
   let legsIdx = d.findIndex(x => locksOf(x).includes('legs')), best = -1e9;   // legs already on the calendar this week: it stands
-  if (legsIdx < 0) d.forEach((x, i) => { const s = legsScore(x, i); if (s > best) { best = s; legsIdx = i; } });
+  if (legsIdx < 0 && !recent.legs) d.forEach((x, i) => { const s = legsScore(x, i); if (s > best) { best = s; legsIdx = i; } });
   if (legsIdx >= 0) {
     const x = d[legsIdx], next = d[legsIdx + 1];
     x.lift = 'legs';
@@ -245,7 +248,7 @@ function placeWeek(days, o) {
   // 3. the other four, in the book's order, with pull kept a day clear of legs when it can be
   const slots = d.map((x, i) => i).filter(i => i !== legsIdx && !free.has(i) && !(d[i].locked && d[i].locked !== 'any'));
   // a session already on the calendar this week is placed where it is, not again somewhere else
-  const four = ['push', 'pull', 'upper-1', 'upper-2'].filter(k => !d.some(x => locksOf(x).includes(k)));
+  const four = ['push', 'pull', 'upper-1', 'upper-2'].filter(k => !d.some(x => locksOf(x).includes(k)) && !recent[k]);
   const perms = permutations(four);
   let bestP = null, bestS = 1e9;
   for (const p of perms) {
@@ -259,6 +262,8 @@ function placeWeek(days, o) {
     if (s < bestS) { bestS = s; bestP = p; }
   }
   (bestP || four).forEach((k, j) => { const i = slots[j]; if (i != null) { d[i].lift = k; d[i].why = d[i].ride ? `with the ride (${d[i].ride.name})` : d[i].long_coaching ? 'a coaching day, no ride' : 'a day off the bike'; } });
+  const held = Object.keys(recent).filter(k => recent[k]);
+  for (const i of slots.slice(four.length)) if (!d[i].lift && held.length) d[i].why = `no lift: ${held.map(k => `${nameOf(k)} was done ${tz.labelOf(recent[k])}`).join(', ')}`;
   for (const x of d) if (x.locked && x.locked !== 'any') { x.lift = x.locked; x.why = opts.done && opts.done[x.date] ? 'logged' : 'on the calendar'; }
   // what the calendar holds, and what is only a suggestion for a day the calendar leaves empty
   for (const x of d) { const L = locksOf(x).filter(k => k !== 'any'); x.lifts = L; x.on_calendar = L.length > 0; x.suggested = !!x.lift && !x.on_calendar; }
@@ -401,7 +406,10 @@ async function report(from) {
     for (const day of cal.days || []) for (const w of (day.planned || []).filter(isLiftEntry)) add(day.date, templateOf(w.name));
   } catch (e) { /* the placement stands on its own */ }
   for (const x of days) if (locks[x.date]) { x.locks = locks[x.date]; x.locked = x.locks[0]; }
-  const week = placeWeek(days, { done: doneByDate }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
+  // what was lifted in the six days before the window: not due again yet
+  const recent = {};
+  for (const s of sessions) if (s.template !== 'pump' && s.date < days[0].date && s.date >= tz.shiftKey(days[0].date, -6)) recent[s.template] = s.date;
+  const week = placeWeek(days, { done: doneByDate, recent }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
   // the pump fits any day but legs and the day before it
   week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = x.lift !== 'legs' && !(next && next.lift === 'legs'); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); });
   // each day's sessions still to do (a day can hold a done Push and a planned Pull)
