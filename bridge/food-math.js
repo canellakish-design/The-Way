@@ -617,6 +617,9 @@ function carbWords(m, label) {
     : `Balanced: protein, vegetables and a palm of rice or potatoes (about ${g} g carbs).`;
 }
 
+// a meal's fat: given, or what its calories leave after the carbs and protein (Harry, 10 Nov: carbs, protein and
+// fat for each meal, as bars)
+const fatOf = m => m.fat_g != null ? m.fat_g : m.kcal == null ? null : Math.max(0, Math.round((m.kcal - 4 * (m.carbs_g || 0) - 4 * (m.protein_g || 0)) / 9));
 function dayMeals(plan, entries, ctx) {
   const c = ctx || {};
   const isDrink = c.isDrink || (e => !!e.drink_only);
@@ -669,7 +672,7 @@ function dayMeals(plan, entries, ctx) {
     const food = mine.filter(e => !isDrink(e));
     const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort(byTime)[0];
     const carb = carbLabel(m);
-    const row = Object.assign({}, m, { carb, what: carbWords(m, carb), logged: food.map(e => e.id),
+    const row = Object.assign({}, m, { carb, what: carbWords(m, carb), logged: food.map(e => e.id), fat_g: fatOf(m),
       match: m.kcal == null ? null : mealMatch(m, mine, { day_kcal: c.day_kcal, target_kcal: c.target_kcal }), time_logged: first ? first.time : null });
     delete row._mine; delete row._key; delete row.ride_end;
     return row;
@@ -1045,5 +1048,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
