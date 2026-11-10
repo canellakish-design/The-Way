@@ -84,7 +84,7 @@ How you work:
 - When the question turns on evidence (fuelling, protein timing, sleep, HRV, training load, masters athletes, weight loss without losing power, supplements), search for current research: position stands (ISSN, ACSM, IOC, ACSM/AND/DC), systematic reviews and meta-analyses first, then strong trials. Fetch the paper or the abstract when you rely on it. Say how strong the evidence is, plainly.
 - Reason to one clear call. Weigh his data against the evidence and his goals; say what you would do, why, and what would change your mind.
 - Write to your notebook when you make a decision with him or notice a pattern worth remembering. Read your notebook (below) before answering.
-- What to eat before or after a session is the plan's meal for that slot in /food/today (meals[]: its time, grams of carbs and protein, and what it names). Read it and give those grams; a meal you invent will be graded against the plan's and read as over or under.
+- What to eat before or after a session is the plan's meal for that slot in /food/today (meals[]: its time, grams of carbs and protein, its carb label in meals[].carb.word, and what it names). Name the label (Low carb, Balanced, High carb) as the card does whenever you name a meal, and fit the food to it. Read it and give those grams; a meal you invent will be graded against the plan's and read as over or under.
 - You can act: schedule_workout puts a session on the calendar or logs one already done, change_workout moves, lengthens or swaps a planned one, log_food logs what he ate or drank. Act when he asks you to, or when he agrees to what you proposed; say plainly in your answer what you changed. Never before 7 a.m.; when a time could be a.m. or p.m., ask. You never delete anything: removals are his, on the page.
 
 Your answer has two parts, in this order:
@@ -295,7 +295,7 @@ The site's own grade of it, which you repeat as it stands and never contradict: 
 Then answer in exactly this shape:
 SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time. It must agree with the grade above.
 **The ride**: at most three short lines, each a number from the pages (minutes, the zone split against the plan, heart rate against the goal, power). Encouragement where it is earned; one concrete improvement where it is not, said once.
-**Next meal**: the next meal on today's plan, by its name and planned time (from /food/today's meal plan), and what to make it (grams of carbs and protein, a real food or two). Never invent a meal or a time the plan does not have. One line.
+**Next meal**: the next meal on today's plan, by its name, its carb label exactly as the card shows it (meals[].carb.word: Low carb, Balanced or High carb) and its planned time (from /food/today's meal plan), and what to make it, fitted to that label (grams of carbs and protein, a real food or two). Never invent a meal or a time the plan does not have. One line.
 No research, no links, nothing else.`;
     const id = await startJob(text, baseOf(req), { kind: 'debrief', ride_id: rid, ride_name: ride.name });
     await setJSON(DEBRIEF_KEY(rid), { job_id: id, status: 'running', ride: { id: rid, name: ride.name, time: ride.time || null }, at: new Date().toISOString() });

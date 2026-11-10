@@ -535,6 +535,30 @@ function pastOnArrival(plan, seen, nowHM) {
 // no slot of that name), and the plan as it stands now reshapes only the open slots.
 //   plan: the current plan rows; entries: the day's entries with their saved slots
 //   ctx: { day_kcal, target_kcal, isDrink(e), hide: Set of slotKeys to leave out when open }
+// The carb label every meal card and every coach sentence uses (Harry, 10 Nov: "make it very obvious when it's low
+// carb, high carb or a balanced meal, and tie the coach's advice to it"). From the meal's own numbers: carbs as a share
+// of its calories, under 25% low carb, 25 to 50% balanced, over 50% high carb; a meal the plan keeps low (train-low,
+// a rest-day breakfast) is low carb whatever its size. The bottle on the bike carries no label: it is all carbs.
+const CARB_WORD = { low: 'Low carb', balanced: 'Balanced', high: 'High carb' };
+function carbLabel(m) {
+  if (!m || m.slot === 'on the bike' || !(m.kcal > 0)) return null;
+  const share = (m.carbs_g || 0) * 4 / m.kcal;
+  const key = m.low_carb ? 'low' : share < 0.25 ? 'low' : share <= 0.5 ? 'balanced' : 'high';
+  return { key, word: CARB_WORD[key], pct: Math.round(share * 100) };
+}
+
+// Lunch and dinner say what the label means in food, so the words never promise rice on a low carb lunch
+// (Harry, 10 Nov: the lunch read "Protein with rice or potatoes" while it was planned low carb). Only the plain
+// lunch and dinner lines are rewritten; a post-ride meal, a rest-day plate or a plan line with its own reason keeps it.
+const PLAIN = /^(Protein with rice or potatoes, vegetables\.|Protein and vegetables, starch beside it\.|Protein, vegetables, and a proper starch\. Carbs still count today\.)$/;
+function carbWords(m, label) {
+  if (!label || !/^(lunch|dinner)$/.test(m.slot) || m.post_ride || !PLAIN.test(String(m.what || ''))) return m.what;
+  const g = Math.round(m.carbs_g || 0);
+  return label.key === 'low' ? `Low carb: protein and vegetables, starch a fist at most (about ${g} g carbs).`
+    : label.key === 'high' ? `High carb: protein and a proper plate of rice, potatoes or pasta (about ${g} g carbs).`
+    : `Balanced: protein, vegetables and a palm of rice or potatoes (about ${g} g carbs).`;
+}
+
 function dayMeals(plan, entries, ctx) {
   const c = ctx || {};
   const isDrink = c.isDrink || (e => !!e.drink_only);
@@ -586,7 +610,8 @@ function dayMeals(plan, entries, ctx) {
     const mine = m._mine || [];
     const food = mine.filter(e => !isDrink(e));
     const first = food.filter(e => /^\d{2}:\d{2}$/.test(e.time || '')).sort(byTime)[0];
-    const row = Object.assign({}, m, { logged: food.map(e => e.id),
+    const carb = carbLabel(m);
+    const row = Object.assign({}, m, { carb, what: carbWords(m, carb), logged: food.map(e => e.id),
       match: m.kcal == null ? null : mealMatch(m, mine, { day_kcal: c.day_kcal, target_kcal: c.target_kcal }), time_logged: first ? first.time : null });
     delete row._mine; delete row._key; delete row.ride_end;
     return row;
@@ -944,5 +969,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
