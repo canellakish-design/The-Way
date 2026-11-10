@@ -2328,8 +2328,12 @@ V.today = async function(){
     // The last answer paints at once (kept on the phone), so the Day shows its numbers while the bridge is
     // asked again; each fresh answer replaces it and is kept for next time.
     const LAST = "way-last:";
-    const last = p => { try { return JSON.parse(localStorage.getItem(LAST + p)); } catch { return null; } };
-    const keep = (p, v) => { try { if (v && !v.error) localStorage.setItem(LAST + p, JSON.stringify(v)); } catch {} };
+    // each copy carries the day it was kept: yesterday's plan is never painted as today's (Harry, 10 Nov: Monday's
+    // low carb lunch showed on Tuesday's Day until the bridge answered). A copy from another day, or one kept before
+    // the day was stamped on it, is not painted.
+    const dayNow = (()=>{ const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); })();
+    const last = p => { try { const x = JSON.parse(localStorage.getItem(LAST + p)); return x && x.d === dayNow ? x.v : null; } catch { return null; } };
+    const keep = (p, v) => { try { if (v && !v.error) localStorage.setItem(LAST + p, JSON.stringify({ d: dayNow, v })); } catch {} };
     const get = (path, set) => { const once = () => bridge(path).then(v => { keep(path, v); set(v); drawScores(); return v; }).catch(()=>null); return once().then(v => v == null ? new Promise(r => setTimeout(r, 12000)).then(once) : v); };
     if (!scoresData && !chainData) {
       const s0 = last("/scores"), c0 = last("/compliance"), f0 = last("/food/today"), k0 = last("/chain"), e0 = last("/energy/meter");
@@ -2546,8 +2550,10 @@ V.today = async function(){
 
   // the last schedule paints at once from the phone's copy while the bridge is asked again (as the scores do)
   const LASTD = "way-last:";
-  const lastD = p => { try { return JSON.parse(localStorage.getItem(LASTD + p)); } catch { return null; } };
-  const keepD = (p, v) => { try { if (v && !v.error) localStorage.setItem(LASTD + p, JSON.stringify(v)); } catch {} };
+  // stamped with the day it was kept, as the scores' copies are: never paint yesterday's schedule as today's
+  const dayD = ()=>{ const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0"); };
+  const lastD = p => { try { const x = JSON.parse(localStorage.getItem(LASTD + p)); return x && x.d === dayD() ? x.v : null; } catch { return null; } };
+  const keepD = (p, v) => { try { if (v && !v.error) localStorage.setItem(LASTD + p, JSON.stringify({ d: dayD(), v })); } catch {} };
   const applyDay = (s, plan, wx, fresh) => {
     if (wx && wx.days) WX = wx.days;
     const days = s.days || [];
