@@ -265,7 +265,27 @@ function stamp(row, t) {
 
 // sleep: { wake, bed } in minutes (sleep-window.js; 6:30 and 10:30 p.m. by default). Sleep comes first: no
 // meal before waking, dinner at least 2.5 h before bed, the evening snack 1.5 h before it.
-function mealPlan(day, sessions, target, sleep) {
+function mealPlan(day, sessions, target, sleep, opts) {
+  return carbLoad(mealPlanOf(day, sessions, target, sleep), opts);
+}
+// The night before a hard ride that starts before 10 a.m., dinner is the carb meal: about 1.2 g of carbs per kg
+// (roughly 120 g at 98 kg), with its protein, inside its calories (fat gives way). Breakfast an hour before a 7:00
+// start cannot fill the legs. When the ride moves to the afternoon, the plan goes back to normal by itself.
+const LOAD_G_PER_KG = 1.2;
+const hm12 = t => { const m = toMin(t); if (m == null) return t || ''; const h = Math.floor(m / 60) % 24, mi = m % 60; return `${h % 12 || 12}:${String(mi).padStart(2, '0')}${h < 12 ? 'a' : 'p'}`; };
+function carbLoad(meals, opts) {
+  const o = opts || {}, f = o.load_for;
+  if (!f) return meals;
+  const dinner = (meals || []).filter(m => m.slot === 'dinner' || (m.slot === 'after' && toMin(m.time) >= 16 * 60)).sort((a, b) => mmin(b) - mmin(a))[0];
+  if (!dinner) return meals;
+  const g = r5(Math.min(LOAD_G_PER_KG * (o.kg || PROFILE.kg), (dinner.kcal || 0) * 0.65 / 4));
+  if (g <= (dinner.carbs_g || 0)) { dinner.carb_load = { name: f.name, time: f.time, min_g: dinner.carbs_g }; return meals; }
+  dinner.carbs_g = g; delete dinner.low_carb; dinner.carb_load = { name: f.name, time: f.time, min_g: g };
+  const why = `Tomorrow's ${f.name} at ${hm12(f.time)} runs on tonight's carbs`;
+  dinner.what = dinner.post_ride ? `${dinner.what} ${why}: make it about ${g} g.` : `High carb: ${why}. Rice, potatoes or pasta, about ${g} g carbs, with ${dinner.protein_g || 45} g protein.`;
+  return meals;
+}
+function mealPlanOf(day, sessions, target, sleep) {
   const SL = sleep || {}, WAKE = SL.wake != null ? SL.wake : 6 * 60 + 30, BED = SL.bed != null ? SL.bed : 22 * 60 + 30;
   const dinnerBy = m => Math.min(m, BED - 150), snackAt = m => Math.min(m, BED - 90);
   const t = target || targets(day, 0);
@@ -629,21 +649,33 @@ const r5 = x => Math.round(x / 5) * 5;
 // entries: [{at, meal, assessment:{protein_source, carbs, vegetables, processed, fits}}]
 // rides: [{end_at}] done rides for the day, for the post-ride window.
 function guidelineScore(day, entries, rides, plan) {
-  const e = (entries || []).filter(x => x && x.assessment);
-  if (!e.length) return { score: null, meals: 0, checks: [] };
+  const all = (entries || []).filter(x => x && x.assessment);
+  if (!all.length) return { score: null, meals: 0, checks: [] };
+  // A meal is its slot, not each thing logged into it (Harry, 9 Nov: "these add-ons should fold into the meal and
+  // count against that meal"). The soy sauce beside the sushi is part of dinner: the meal has protein, vegetables
+  // or starch when anything on it does; it is processed only when the processed things are a quarter of its
+  // calories or more; and its fit is weighted by calories, so a 16 kcal add-on hardly moves it. Entries with no
+  // slot stay meals of their own.
+  const groups = {};
+  all.forEach((x, i) => { const k = x.slot || ('_' + i); (groups[k] = groups[k] || []).push(x); });
+  const CARB_RANK = { none: 0, some: 1, light: 1, moderate: 1, heavy: 2 };
+  const e = Object.entries(groups).map(([k, xs]) => {
+    const kcal = xs.reduce((t, x) => t + Math.max(1, x.kcal || 0), 0);
+    const pk = xs.filter(x => x.assessment.processed).reduce((t, x) => t + Math.max(1, x.kcal || 0), 0);
+    const carbs = xs.reduce((c, x) => (CARB_RANK[x.assessment.carbs] ?? 1) > (CARB_RANK[c] ?? 1) ? x.assessment.carbs : c, 'none');
+    const fitPts = xs.reduce((t, x) => t + (FIT_POINTS[x.assessment.fits] ?? 60) * Math.max(1, x.kcal || 0), 0) / kcal;
+    const first = xs.slice().sort((p, q) => String(p.at || '').localeCompare(String(q.at || '')))[0];
+    return { slot: k.startsWith('_') ? null : k, at: first.at, entries: xs, fit_pts: fitPts,
+      assessment: { protein_source: xs.some(x => x.assessment.protein_source), vegetables: xs.some(x => x.assessment.vegetables), carbs, processed: pk >= 0.25 * kcal } };
+  });
   const a = e.map(x => x.assessment);
   const checks = [];
   const n = e.length;
   // protein is asked of the main meals; the shake before a dawn ride, the
   // bottle and the evening snack are their own sizes
   const MAIN = ['breakfast', 'lunch', 'dinner', 'after'];
-  // a meal is its slot, not each thing logged into it: the soy sauce beside the sushi is part of dinner, and
-  // dinner has protein when anything on it does (Harry, 9 Nov: "missed 1 of 1 day" for a dinner of sashimi)
-  const mainEntries = e.filter(x => !x.slot || MAIN.includes(x.slot));
-  const bySlot = {};
-  mainEntries.forEach((x, i) => { const k = x.slot || ('_' + i); (bySlot[k] = bySlot[k] || []).push(x); });
-  const mains = Object.values(bySlot);
-  const prot = mains.filter(g => g.some(x => x.assessment.protein_source)).length;
+  const mains = e.filter(x => !x.slot || MAIN.includes(x.slot));
+  const prot = mains.filter(x => x.assessment.protein_source).length;
   checks.push({ key: 'protein', label: 'protein at the main meals', ok: prot === mains.length, detail: `${prot} of ${mains.length}` });
   const veg = a.filter(x => x.vegetables).length;
   checks.push({ key: 'plants', label: 'vegetables or fruit', ok: veg >= Math.min(2, n), detail: `${veg} meal${veg === 1 ? '' : 's'}` });
@@ -658,10 +690,10 @@ function guidelineScore(day, entries, rides, plan) {
     const hit = rides.some(r => r.end_at && e.some(x => {
       const dt = (new Date(x.at) - new Date(r.end_at)) / 6e4;
       return dt >= -15 && dt <= window && x.assessment.protein_source && x.assessment.carbs !== 'none';
-    }));
+    }));   // a meal counts from its first bite
     checks.push({ key: 'post', label: `fed within ${window} min of the ride`, ok: hit, detail: hit ? 'yes' : 'not yet' });
   }
-  const fit = Math.round(a.reduce((s, x) => s + (FIT_POINTS[x.fits] ?? 60), 0) / n);
+  const fit = Math.round(e.reduce((t, x) => t + x.fit_pts, 0) / n);
   const passed = checks.filter(c => c.ok).length;
   const score = Math.round(0.6 * fit + 0.4 * (passed / checks.length) * 100);
   return { score, fit, meals: n, checks };
@@ -761,6 +793,7 @@ function rollForward(meals, entries) {
     // protein the meal did not carry lands at the next slot (up to 25 g, with its calories), so the day's protein holds
     const proteinShort = Math.min(25, Math.max(0, (a.protein_g || 0) - sum('protein_g')));
     if (proteinShort >= 5) { b.protein_g += proteinShort; b.kcal += 4 * proteinShort; }
+    if (b.carb_load) b.carbs_g = Math.max(b.carbs_g, b.carb_load.min_g || 0);   // a meal running over never takes the night-before carbs
     b.kcal = r5(b.kcal); b.carbs_g = r5(b.carbs_g); b.protein_g = r5(b.protein_g);
     b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g, protein_short_g: proteinShort };
     if (b.plan_kcal > 0 && b.kcal < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = `covered by the ${aName}, which ran over; a protein bite if hungry.`; }
@@ -975,5 +1008,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };

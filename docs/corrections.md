@@ -62,6 +62,9 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 9 Nov | Beetroot due at 4:30 a.m. before a 7:00 ride (Mon 9, Tue 10) | Beetroot was placed 2.5 h before the ride whatever the hour | nothing before 5:30; a ride before 8:30 takes it on waking (supps.js, the Nov 9 commit) | new case |
 | 9 Nov | The day's burn worked from age 55; he is 48 | The food model's profile carried the 2033 goal age as his age | age and height are settings (Setup, body.js), 48 now: BMR +35, base burn +47 a day | my mistake |
 | 9 Nov | "I don't do whey. Huel plant protein shakes." | Whey was written into the plan's words, the snack list, the protein nudge and the advisor's rules | every whey becomes a Huel plant protein shake (105 kcal, 20 g protein a scoop); "whey" in a log still matches the shake | new case |
+| 9 Nov | The coach's sushi dinner (175 g carbs) graded "carbs 312% over" against a 43 g low carb plan | The plan never loaded carbs the night before a 7:00 a.m. VO2, and the coach sized dinner to the whole day's totals instead of the plan's meal | dinner before a hard ride before 10 a.m. is High carb (~1.2 g/kg); the coach follows the plan's meal and says so when it disagrees | disagreement |
+| 9 Nov | "Protein at every main meal: missed 1 of 1 day" | The soy sauce logged beside the sushi counted as a meal of its own | add-ons fold into their meal for every rule; a meal is judged as a whole | disagreement |
+| 9 Nov | "Z1 +-40%" on a ride under the Zone 1 floor, and two debriefs for one ride | A below-floor share printed after "+"; a 0-minute false start got its own debrief | "Z1 low 40%" / "Below Z1"; no debrief under 5 minutes or for a second save | my mistake |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
@@ -71,7 +74,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **6 Nov: 6.** 4 new case, 1 disagreement, 1 my mistake.
 **7 Nov: 0** logged.
 **8 Nov: 2.** 2 disagreement.
-**9 Nov so far: 3.** 2 new case, 1 my mistake.
+**9 Nov: 6.** 2 new case, 2 disagreement, 2 my mistake.
 
 ## Found by the Chrome tests (before Harry saw them)
 
