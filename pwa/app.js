@@ -1359,7 +1359,7 @@ function dayRows(d, plan, isToday){
       const ate = logged ? (f.entries || []).filter(e => (m.logged || []).includes(e.id) && !e.supplement) : [];
       const ateText = ate.length ? `${ate.map(e => e.name).join(", ")} · ${mt ? `${mt.kcal} kcal · ${mt.carbs_g}C · ${mt.protein_g}P` : ""} (plan ${m.kcal} · ${m.carbs_g}C · ${m.protein_g}P)` : null;
       const why = mt && mt.rules && mt.rules.why ? mt.rules.why : null;
-      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: m.slot === nextSlot && !logged ? `${m.slot} · next` : m.slot, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
+      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: `${m.slot}${m.carb ? ` · ${m.carb.word}` : ""}${m.slot === nextSlot && !logged ? " · next" : ""}`, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
     // the bedtime note (alcohol in the evening costs water overnight): its own row before bed, from 8 p.m.
@@ -1479,7 +1479,7 @@ function briefHTML(b, x){
   const bandC = c ? (c.band === "green" ? "var(--green)" : c.band === "yellow" ? "var(--amber)" : "var(--red)") : "";
   const steps = (b.steps||[]).map(s => `<li><span class="n">${esc(s.label)}${s.cadence?`<span class="small"> ${s.cadence.lo}${s.cadence.hi!==s.cadence.lo?`–${s.cadence.hi}`:""} rpm</span>`:""}</span><span class="tag">${clockS(s.dur_s)} · ${fmtTarget(s.target, st)}</span></li>`).join("");
   const n = b.nutrition;
-  const meals = n && n.meals ? n.meals.map(mm => `<li><span class="n"><b>${esc(hm12(mm.time))}</b> ${esc(mm.slot)}<span class="small"> ${esc(mm.what)}</span></span><span class="tag">${mm.kcal?`${mm.kcal} kcal · ${mm.carbs_g}C${mm.protein_g?` · ${mm.protein_g}P`:""}`:""}</span></li>`).join("") : "";
+  const meals = n && n.meals ? n.meals.map(mm => `<li><span class="n"><b>${esc(hm12(mm.time))}</b> ${esc(mm.slot)}${mm.carb ? ` · ${esc(mm.carb.word)}` : ""}<span class="small"> ${esc(mm.what)}</span></span><span class="tag">${mm.kcal?`${mm.kcal} kcal · ${mm.carbs_g}C${mm.protein_g?` · ${mm.protein_g}P`:""}`:""}</span></li>`).join("") : "";
   const wx = b.weather;
   const hours = wx && wx.hours ? wx.hours.map(h => `<li><span class="n"><b>${esc(hm12(String(h.hour).padStart(2,"0")+":00"))}</b> ${h.temp_f}°F, feels ${h.feels_f}°<span class="small"> · ${h.rain_pct}% rain${h.rain_in?` (${h.rain_in} in)`:""} · ${h.humidity}% humidity</span></span><span class="tag">wind ${h.wind_mph} mph ${h.wind_from}${h.gust_mph > h.wind_mph + 8 ? `, gusts ${h.gust_mph}` : ""}<br><span class="small">${esc(h.ride)}</span></span></li>`).join("") : "";
   const rides = (b.rides||[]).map(r => { const h = r.analysis && r.analysis.hr, br = r.analysis && r.analysis.resp;
@@ -2798,7 +2798,7 @@ function foodCardHTML(day){
     const mark = logged ? `<span class="mk ok">✓</span>` : m.time < now ? `<span class="mk no">✗</span>` : `<span class="mk"></span>`;
     return `<li class="${logged?"done":m===next?"next":(m.time<now?"past":"")}">
       <span class="t">${esc(hm12(m.time))}</span>
-      <span class="n">${esc(m.slot)}<span class="small"> ${esc(m.what)}</span></span>
+      <span class="n">${esc(m.slot)}${m.carb ? ` · ${esc(m.carb.word)}` : ""}<span class="small"> ${esc(m.what)}</span></span>
       <span class="tag mealtag">${mark}<a class="cam" href="#food?snap=${encodeURIComponent(mealOf)}" aria-label="Snap this meal">${CAM}</a></span></li>`; }).join("");
   return `<h4>Food · today${day.entries.length?` · ${day.entries.length} ${day.entries.length===1?"photo":"photos"}`:""}</h4>
     ${B.targetsRow ? B.targetsRow(day.target) : ""}
