@@ -429,6 +429,15 @@ function editKey(e) {
   if (e.uid) return 'o:' + e.uid;
   return null;
 }
+// Events on his calendars that are not his to attend (Harry, 10 Nov: "Don't include FX physical therapy", the
+// team's physical therapy session on the U16 calendar). An event whose title contains one of these is left off
+// the day, its free windows and everything planned around it. More can be added to the calendar store's
+// not_mine list; these always apply.
+const NOT_MINE = ['FX Physical Therapy'];
+function mineOnly(events, d) {
+  const pats = NOT_MINE.concat(((d && d.not_mine) || []).filter(x => typeof x === 'string' && x.trim())).map(x => x.toLowerCase());
+  return (events || []).filter(e => !pats.some(p => String(e.summary || '').toLowerCase().includes(p)));
+}
 function applyOverrides(events, overrides) {
   if (!overrides || !Object.keys(overrides).length) return events;
   const out = [];
@@ -558,7 +567,7 @@ async function eventsBetween(firstKey, lastKey) {
   const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
   const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
   const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
-  return require('./classes').applySpecialSchedules(liveEvents.concat(applyOverrides(snapEvents, d.overrides)));
+  return require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d));
 }
 
 async function scheduleReport(q) {
@@ -612,7 +621,7 @@ async function scheduleReport(q) {
           category: classify(e.summary, d.manual, calDefault) };
       });
       // a special schedule on the Upper School calendar re-times that day's classes (classes.js)
-      const days = scheduleDays(require('./classes').applySpecialSchedules(liveEvents.concat(applyOverrides(snapEvents, d.overrides))), n, iv.days, back);
+      const days = scheduleDays(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)), n, iv.days, back);
       // The supplements, as rows tied to the day's rides: beetroot before the
       // first ride, bicarbonate before a hard one, magnesium in the evening.
       // Derived, never stored, so they follow a ride that moves and never
@@ -847,5 +856,5 @@ function attach(app) {
         ...recommendToday(day, rec, w ? w.remaining : null) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
+module.exports = { mineOnly, NOT_MINE, attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
   trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };
