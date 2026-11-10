@@ -578,5 +578,15 @@ ok('carb label: one word per meal from its numbers, and the plain lunch and dinn
   const rows = F.dayMeals([{ time: '13:00', slot: 'lunch', kcal: 670, carbs_g: 25, protein_g: 45, what: 'Protein with rice or potatoes, vegetables.' }], [], {});
   assert.strictEqual(rows[0].carb.word, 'Low carb'); assert.ok(/^Low carb:/.test(rows[0].what));
 });
+ok('protein at every main meal is judged per meal: a side logged into dinner does not count as a meal of its own', () => {
+  const A = (p) => ({ protein_source: p, vegetables: false, carbs: 'some', processed: false, fits: 'yes' });
+  const entries = [
+    { slot: 'breakfast', assessment: A(true) }, { slot: 'lunch', assessment: A(true) },
+    { slot: 'dinner', assessment: A(true) }, { slot: 'dinner', assessment: A(false) }   // sushi, then the soy sauce
+  ];
+  const c = F.guidelineScore('normal', entries, [], []).checks.find(x => x.key === 'protein');
+  assert.strictEqual(c.ok, true); assert.strictEqual(c.detail, '3 of 3');
+  const missed = F.guidelineScore('normal', [{ slot: 'breakfast', assessment: A(false) }, { slot: 'lunch', assessment: A(true) }], [], []).checks.find(x => x.key === 'protein');
+  assert.strictEqual(missed.ok, false); assert.strictEqual(missed.detail, '1 of 2');
+});
 console.log(n + ' passed');
-
