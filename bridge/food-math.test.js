@@ -589,4 +589,37 @@ ok('protein at every main meal is judged per meal: a side logged into dinner doe
   const missed = F.guidelineScore('normal', [{ slot: 'breakfast', assessment: A(false) }, { slot: 'lunch', assessment: A(true) }], [], []).checks.find(x => x.key === 'protein');
   assert.strictEqual(missed.ok, false); assert.strictEqual(missed.detail, '1 of 2');
 });
+ok('add-ons fold into their meal: one meal for every rule, judged as a whole, the fit weighted by calories', () => {
+  const A = (o) => Object.assign({ protein_source: false, vegetables: false, carbs: 'none', processed: false, fits: 'yes' }, o);
+  const entries = [
+    { slot: 'breakfast', kcal: 190, assessment: A({ protein_source: true }) },
+    { slot: 'lunch', kcal: 790, assessment: A({ protein_source: true, vegetables: true, carbs: 'heavy' }) },
+    { slot: 'dinner', kcal: 1410, assessment: A({ protein_source: true, vegetables: true, carbs: 'heavy', fits: 'partly' }) },
+    { slot: 'dinner', kcal: 16, assessment: A({ processed: true, fits: 'no' }) }   // the soy sauce
+  ];
+  const r = F.guidelineScore('normal', entries, [], [{ slot: 'lunch', carbs_g: 60 }, { slot: 'dinner', carbs_g: 60 }]);
+  assert.strictEqual(r.meals, 3, 'three meals, not four entries');
+  assert.strictEqual(r.checks.find(c => c.key === 'protein').detail, '3 of 3');
+  assert.strictEqual(r.checks.find(c => c.key === 'processed').ok, true, 'the soy sauce is 1% of dinner: not a processed meal');
+  assert.strictEqual(r.fit, Math.round((100 + 100 + (60 * 1410 + 20 * 16) / 1426) / 3));
+  // a processed side that is most of the meal still counts
+  const chips = F.guidelineScore('normal', [{ slot: 'lunch', kcal: 200, assessment: A({ protein_source: true }) }, { slot: 'lunch', kcal: 400, assessment: A({ processed: true }) }], [], []);
+  assert.strictEqual(chips.checks.find(c => c.key === 'processed').ok, false);
+});
+ok('the night before a hard ride before 10 a.m., dinner is the carb meal; it holds when lunch runs over; in the afternoon it is normal', () => {
+  const t = F.targets('normal', 0, { kg: 98.4 });
+  const plain = F.mealPlan('normal', [], t);
+  const d0 = plain.find(m => m.slot === 'dinner');
+  const load = F.mealPlan('normal', [], t, null, { load_for: { name: 'VO2 4 × 4 min', time: '07:00' }, kg: 98.4 });
+  const d1 = load.find(m => m.slot === 'dinner');
+  assert.ok(d1.carbs_g >= 115 && d1.carbs_g > d0.carbs_g, `${d0.carbs_g} -> ${d1.carbs_g}`);
+  assert.strictEqual(F.carbLabel(d1).word, 'High carb');
+  assert.ok(/Tomorrow's VO2 4 × 4 min at 7:00a runs on tonight's carbs/.test(d1.what), d1.what);
+  assert.strictEqual(d1.kcal, d0.kcal, 'the same calories: fat gives way');
+  // a lunch that ran over does not take the night-before carbs
+  const lunch = load.find(m => m.slot === 'lunch');
+  const rolled = F.rollForward(load, [{ slot: 'lunch', kcal: (lunch.kcal || 0) + 400, carbs_g: (lunch.carbs_g || 0) + 80, protein_g: 50 }]);
+  assert.ok(rolled.find(m => m.slot === 'dinner').carbs_g >= d1.carbs_g);
+});
 console.log(n + ' passed');
+

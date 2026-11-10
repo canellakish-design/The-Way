@@ -86,7 +86,7 @@ async function context() {
       // the same rows the Day page and the Food page show (food.js rowsFor): what is eaten, and what is still open
       const slotTxt = m => `${tz.hm12(m.time)}${m.next_day ? ' (after midnight)' : ''} ${m.slot === 'after' ? 'post-ride' : m.slot === 'before' ? 'pre-ride' : m.slot}`;
       const nums = m => m.kcal ? `${m.carb ? m.carb.word.toUpperCase() + ': ' : ''}${m.kcal} kcal, ${m.low_carb ? 'under ' : ''}${m.carbs_g || 0} g carbs, ${m.protein_g || 0} g protein` : `${m.carbs_g || 0} g carbs`;
-      lines.push('Each meal carries the carb label its card shows (LOW CARB, BALANCED, HIGH CARB). When you name a meal, say its label first, in those words, and fit the food you suggest to it: never starch for a low carb meal, never a light plate for a high carb one.');
+      lines.push('Each meal carries the carb label its card shows (LOW CARB, BALANCED, HIGH CARB). When you name a meal, say its label first, in those words, and fit the food you suggest to it: never starch for a low carb meal, never a light plate for a high carb one. Size it to that meal, never to catch up the whole day; if the plan looks wrong for what is coming, say "the plan says X; I would eat Y because Z" and let him choose.');
       lines.push('The meal plan: ' + day.meals.map(m => `${slotTxt(m)} (${nums(m)}${(m.logged || []).length ? ', logged' + (m.match ? ', ' + m.match.word : '') : ''})`).join('; ') + '.');
       const open = day.meals.filter(m => !(m.logged || []).length && !m.covered_by && !(m.slot === 'on the bike' && !(m.carbs_g > 0)));
       lines.push(open.length

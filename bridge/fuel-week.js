@@ -33,7 +33,14 @@ async function contextFor(date, kg, ftp, sessionsByDate) {
     const rx = F.fuelRx(by[k] || [], kg, ftp, { low_used_week: lowUsed, hard_tomorrow: isHardDay(by[tz.shiftKey(k, 1)]), evening_yesterday: eveningSession(by[tz.shiftKey(k, -1)]) });
     lowUsed = rx.low_used_week;
   }
-  return { low_used_week: lowUsed, hard_tomorrow: isHardDay(by[tz.shiftKey(date, 1)]), evening_yesterday: eveningSession(by[tz.shiftKey(date, -1)]) };
+  return { low_used_week: lowUsed, hard_tomorrow: isHardDay(by[tz.shiftKey(date, 1)]), hard_tomorrow_am: hardMorning(by[tz.shiftKey(date, 1)]), evening_yesterday: eveningSession(by[tz.shiftKey(date, -1)]) };
+}
+// a hard ride tomorrow that starts before 10 a.m.: breakfast cannot fill the legs for it, so tonight's dinner does
+// (Harry, 9 Nov: VO2 at 7:00 a.m. and a low carb dinner the night before)
+function hardMorning(ss) {
+  const h = (ss || []).filter(s => F.isRideSession(s) && HARD.test(String(s.name || '')) && F.toMin(s.time) != null && F.toMin(s.time) < 10 * 60)
+    .sort((a, b) => F.toMin(a.time) - F.toMin(b.time))[0];
+  return h ? { name: String(h.name).replace(/\s*[·:,].*$/, ''), time: h.time } : null;
 }
 
 // every day from..to: { carbs_g, per_kg, level, label, train_low, sleep_low, sessions: [{name, kind, before, during, after}] }
