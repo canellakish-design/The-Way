@@ -637,8 +637,13 @@ function guidelineScore(day, entries, rides, plan) {
   // protein is asked of the main meals; the shake before a dawn ride, the
   // bottle and the evening snack are their own sizes
   const MAIN = ['breakfast', 'lunch', 'dinner', 'after'];
-  const mains = e.filter(x => !x.slot || MAIN.includes(x.slot));
-  const prot = mains.filter(x => x.assessment.protein_source).length;
+  // a meal is its slot, not each thing logged into it: the soy sauce beside the sushi is part of dinner, and
+  // dinner has protein when anything on it does (Harry, 9 Nov: "missed 1 of 1 day" for a dinner of sashimi)
+  const mainEntries = e.filter(x => !x.slot || MAIN.includes(x.slot));
+  const bySlot = {};
+  mainEntries.forEach((x, i) => { const k = x.slot || ('_' + i); (bySlot[k] = bySlot[k] || []).push(x); });
+  const mains = Object.values(bySlot);
+  const prot = mains.filter(g => g.some(x => x.assessment.protein_source)).length;
   checks.push({ key: 'protein', label: 'protein at the main meals', ok: prot === mains.length, detail: `${prot} of ${mains.length}` });
   const veg = a.filter(x => x.vegetables).length;
   checks.push({ key: 'plants', label: 'vegetables or fruit', ok: veg >= Math.min(2, n), detail: `${veg} meal${veg === 1 ? '' : 's'}` });
