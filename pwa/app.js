@@ -2707,8 +2707,10 @@ V.today = async function(){
     view.addEventListener("click", async (e)=>{
       const b = e.target.closest("[data-delx]"); if (!b) return;
       e.preventDefault(); e.stopPropagation();
-      if (!confirm("Remove this from the calendar?")) return;
-      try{ await bridge("/gcal/event?key="+encodeURIComponent(b.dataset.delx),{method:"DELETE"}); view.__syncAll("deleted"); }
+      // a shared calendar's event (the school's, the club's, a team feed) is hidden in The Way, never deleted on Google
+      const key = b.dataset.delx, cal = (/^g:(.*):[^:]+$/.exec(key) || [])[1] || "", shared = !!cal && !/^[^@]+@mdunitedfc\.org$/i.test(cal);
+      if (!confirm(shared ? "Hide this in The Way? It stays on the shared calendar for everyone else." : "Remove this from the calendar?")) return;
+      try{ if (shared) await bridge("/gcal/hide",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key })}); else await bridge("/gcal/event?key="+encodeURIComponent(key),{method:"DELETE"}); view.__syncAll(shared ? "hidden" : "deleted"); }
       catch(err){ alert(err.message); }
     });
     view.addEventListener("click", async (e)=>{
