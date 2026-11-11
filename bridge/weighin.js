@@ -240,8 +240,12 @@ function attach(app) {
         return Number.isFinite(n) && n > 0 && n <= max ? Math.round(n * 10) / 10 : null;
       };
       const d = await db();
-      d.entries.push({ ts: b.at ? Date.parse(b.at) || Date.now() : Date.now(), lb,
-        source: b.source || 'manual',
+      // the same reading sent again (an iPhone Shortcut reading Apple Health each morning sends the latest
+      // weigh-in every time): same source, within a minute, replaces the one already kept
+      const ts = b.at ? Date.parse(b.at) || Date.now() : Date.now(), source = b.source || 'manual';
+      d.entries = d.entries.filter(e => !(e.source === source && Math.abs(e.ts - ts) < 60000));
+      d.entries.push({ ts, lb,
+        source,
         fat_pct: num(b.fat_pct, 75), fat_mass_lb: num(b.fat_mass_lb, 300),
         fat_free_lb: num(b.fat_free_lb, 400), muscle_lb: num(b.muscle_lb, 400),
         water_lb: num(b.water_lb, 400), bone_lb: num(b.bone_lb, 50) });
