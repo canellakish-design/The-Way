@@ -183,6 +183,29 @@ async function saveRide(body) {
   return { ok: !!up.ok, stored: true, id: sum.id, summary: row, intervals_id: up.intervals_id || null, held_back: !!up.held_back, error: up.ok ? null : up.error };
 }
 
+// Delete a player ride Harry asks to remove (9 Nov 2026: an 18-second start with nothing on it). It leaves the
+// index (so the Calendar and the Day stop counting it), its stored seconds and analysis are cleared, and the
+// copy on intervals.icu is deleted too (already gone there is fine). Only on his say-so: the player never
+// throws a ride away by itself.
+async function removeRide(id, opts) {
+  const o = opts || {};
+  const idx = await getJSON(INDEX, { rides: [] });
+  const row = (idx.rides || []).find(x => String(x.id) === String(id));
+  if (!row) { const e = new Error('no such ride'); e.status = 404; throw e; }
+  let icu = null;
+  if (row.intervals_id && o.intervals !== false) {
+    try {
+      const I = require('./intervals');
+      const r = await (o.fetch || fetch)(`${ICU}/activity/${encodeURIComponent(row.intervals_id)}`, { method: 'DELETE', headers: I.headers() });
+      icu = { id: row.intervals_id, status: r.status, removed: r.ok || r.status === 404 };
+    } catch (e) { icu = { id: row.intervals_id, removed: false, error: e.message }; }
+  }
+  await setJSON(INDEX, { rides: (idx.rides || []).filter(x => String(x.id) !== String(id)) });
+  await setJSON(rideKey(id), null);
+  await setJSON('ride-v3-' + String(id).replace(/\D/g, ''), null).catch(() => {});
+  return { ok: true, removed: row.id, name: row.name, date: row.date, minutes: row.minutes, intervals: icu };
+}
+
 // The index of player rides between two dates (workouts.js counts them as done rides).
 async function ridesBetween(from, to) {
   const idx = await getJSON(INDEX, { rides: [] });
@@ -204,6 +227,9 @@ function attach(app) {
     if (!rec) return res.status(404).json({ error: 'no such ride' });
     const raw = rec.raw || {};
     res.json(Object.assign({}, rec, { raw: req.query.raw === '1' ? raw : undefined, raw_counts: Object.fromEntries(Object.keys(raw).map(k => [k, (raw[k] || []).length])) })); });
+  app.delete('/player/ride/:id', async (req, res) => { if (!auth(req, res)) return;
+    try { res.json(await removeRide(req.params.id)); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
   app.get('/player/rides', async (req, res) => { if (!auth(req, res)) return;
     res.json(await getJSON(INDEX, { rides: [] })); });
 
@@ -215,4 +241,4 @@ function attach(app) {
   });
   app.get('/player/spike', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('player-spike', { runs: [] })); });
 }
-module.exports = { attach, expand, fuelSlots, summarize, analysisOf, cleanSamples, saveRide, uploadFit, ridesBetween, sessionFor, rideKey, INDEX };
+module.exports = { attach, expand, fuelSlots, summarize, analysisOf, cleanSamples, saveRide, removeRide, uploadFit, ridesBetween, sessionFor, rideKey, INDEX };

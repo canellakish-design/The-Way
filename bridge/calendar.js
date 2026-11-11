@@ -521,6 +521,8 @@ async function deleteAny(key) {
   if (key.startsWith('l:')) return removeEvent(key.slice(2));
   if (key.startsWith('g:')) {
     const [, calId, gid] = key.match(/^g:(.*):([^:]+)$/) || [];
+    // a shared calendar (the school's, the club's, a team feed) is never deleted from here: hidden in The Way instead
+    if (sharedCalendar(calId)) { await hideEvent(key, {}); return true; }
     const base = (d.events || []).find(e => e.gid === gid) || {};
     const acct = d.accounts.find(a => a.id === base.account && a.tokens) || d.accounts.find(a => a.tokens);
     if (!acct) { const err = new Error('Google is not connected'); err.status = 400; throw err; }
@@ -539,6 +541,31 @@ async function deleteAny(key) {
   }
   return false;
 }
+// Hide one event in The Way only (Harry, 11 Nov 2026: Signing Day on McDonogh's shared Upper School calendar).
+// Nothing changes on Google: an event on a calendar he doesn't own is everyone's, so it is never deleted
+// there. The hide is an override like an in-app edit, kept until he shows it again.
+const sharedCalendar = calId => !!calId && !/^[^@]+@mdunitedfc\.org$/i.test(calId);
+async function hideEvent(key, meta) {
+  if (!/^[glo]:/.test(String(key || ''))) { const e = new Error('an event key is needed'); e.status = 400; throw e; }
+  const d = await db();
+  d.overrides = d.overrides || {};
+  const m = meta || {};
+  d.overrides[key] = { deleted: true, hidden: true, at: new Date().toISOString(), summary: m.summary ? String(m.summary).slice(0, 120) : null, date: m.date || null };
+  await setJSON('gcal', d);
+  return { ok: true, hidden: key };
+}
+async function unhideEvent(key) {
+  const d = await db();
+  if (!d.overrides || !d.overrides[key] || !d.overrides[key].hidden) return false;
+  delete d.overrides[key];
+  await setJSON('gcal', d);
+  return true;
+}
+async function hiddenEvents() {
+  const d = await db();
+  return Object.entries(d.overrides || {}).filter(([, o]) => o && o.hidden).map(([key, o]) => ({ key, summary: o.summary || null, date: o.date || null, at: o.at }));
+}
+
 async function removeEvent(id) {
   const d = await db();
   const ev = (d.local_events || []).find(e => e.id === id);
@@ -720,6 +747,13 @@ function attach(app) {
   app.put('/gcal/event', async (req, res) => { if (!auth(req, res)) return;
     try { const r = await editEvent(String((req.body || {}).key || ''), req.body || {}); if (!r) return res.status(404).json({ error: 'no such event' }); res.json(r); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  // hide an event in The Way only; Google is not touched
+  app.post('/gcal/hide', async (req, res) => { if (!auth(req, res)) return;
+    try { const b = req.body || {}; res.json(await hideEvent(String(b.key || ''), b)); }
+    catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
+  app.delete('/gcal/hide', async (req, res) => { if (!auth(req, res)) return;
+    const ok = await unhideEvent(String(req.query.key || '')); if (!ok) return res.status(404).json({ error: 'not hidden' }); res.json({ ok: true }); });
+  app.get('/gcal/hidden', async (req, res) => { if (!auth(req, res)) return; res.json({ hidden: await hiddenEvents() }); });
   app.delete('/gcal/event', async (req, res) => { if (!auth(req, res)) return;
     try { const ok = await deleteAny(String(req.query.key || '')); if (!ok) return res.status(404).json({ error: 'no such event' }); res.json({ ok: true }); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
@@ -857,4 +891,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 module.exports = { mineOnly, NOT_MINE, attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
-  trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey };
+  trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey, hideEvent, unhideEvent, hiddenEvents, sharedCalendar, applyOverrides };

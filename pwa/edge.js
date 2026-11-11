@@ -64,7 +64,7 @@
       if (sess) {
         Object.assign(S.lines, sess.lines || {}); Object.assign(S.colours, sess.colours || {});
         if (sess.name) S.name = sess.name;
-        if (sess.time) S.time = sess.time;
+        if (sess.time) { const mm = /^(\d{1,2}):(\d{2})$/.exec(sess.time); S.time = mm ? `${(+mm[1] % 12) || 12}:${mm[2]}${+mm[1] < 12 ? 'a' : 'p'}` : sess.time; }   // 12-hour clock
       }
       steps = stepsOf(S.sess, S.intervals, S.lines);
       fromBridge = !!(S.sess && Object.prototype.hasOwnProperty.call(S.sess, 'buckets_plan'));
