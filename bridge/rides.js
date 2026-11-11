@@ -61,7 +61,7 @@ async function breathingFrom(icuActivity, thresholds) {
   if (!icuActivity) return { resp: null, ve: null, source: 'no intervals.icu activity matched' };
   const t = thresholds || {};
   const fields = Object.keys(icuActivity).filter(k => /resp|breath|tidal|ventil/i.test(k));
-  let resp = null, ve = null, streamTypes = [], hrStream = null;
+  let resp = null, ve = null, streamTypes = [], hrStream = null, respSeries = null, veSeries = null;
   try {
     const streams = await icuGet(`/activity/${encodeURIComponent(icuActivity.id)}/streams.json?types=respiration,tidal_volume_min,tidal_volume,heartrate`);
     const list = Array.isArray(streams) ? streams : (streams && Array.isArray(streams.streams) ? streams.streams : []);
@@ -69,9 +69,9 @@ async function breathingFrom(icuActivity, thresholds) {
     const h = byType.heartrate || list.find(x => /heart/i.test(String(x.type || x.name || '')));
     if (h && Array.isArray(h.data) && h.data.some(v => v > 30)) hrStream = h.data;
     const r = byType.respiration || list.find(x => /resp|breath/i.test(String(x.type || x.name || '')));
-    if (r && Array.isArray(r.data)) { streamTypes.push(r.type || r.name); resp = R.respSummary(r.data); }
+    if (r && Array.isArray(r.data)) { streamTypes.push(r.type || r.name); resp = R.respSummary(r.data); respSeries = r.data; }
     const v = byType.tidal_volume_min || list.find(x => /minute_volume|tidal_volume_min|ventil/i.test(String(x.type || x.name || '')));
-    if (v && Array.isArray(v.data)) { streamTypes.push(v.type || v.name); ve = R.veSummary(v.data, t.vt2_ve, t.vt1_ve); }
+    if (v && Array.isArray(v.data)) { streamTypes.push(v.type || v.name); ve = R.veSummary(v.data, t.vt2_ve, t.vt1_ve); veSeries = v.data; }
   } catch (e) { /* no stream access: fall through to the activity fields */ }
   if (!resp && fields.length) {
     const avg = fields.map(k => Number(icuActivity[k])).find(v => Number.isFinite(v) && v > 4 && v < 90);
@@ -79,8 +79,39 @@ async function breathingFrom(icuActivity, thresholds) {
   }
   return { resp, ve, source: (resp || ve) ? `intervals.icu stream${streamTypes.length > 1 ? 's' : ''} ${streamTypes.join(', ')} (Garmin${ve ? ' + Tymewear' : ''})`
     : (fields.length ? `intervals.icu has ${fields.join(', ')} but no value` : 'no breathing on this ride: pair the Tymewear data field on the Garmin'),
-    icu_id: icuActivity.id, hr_stream: hrStream };
+    icu_id: icuActivity.id, hr_stream: hrStream, resp_series: respSeries, ve_series: veSeries };
 }
+
+// ---- breathing for a ride from The Way's player (Harry, 11 Nov 2026) ----
+// The player can't read the Tymewear's breathing (its private channel), so on trainer days the Edge (or the
+// Fenix) records alongside as a silent recorder with the Tymewear data field. That file reaches intervals.icu
+// through Garmin Connect; this finds it (same day, started within 15 minutes of the player, not the player's own
+// upload, carrying breathing) and puts its breathing on the player's ride: the summary, and the series every
+// 10 s for the charts. The Garmin file lands minutes to hours after the ride, so a player ride without breathing
+// is looked at again (at most every 20 minutes, for 3 days).
+const every10 = a => Array.isArray(a) ? a.filter((_, i) => i % 10 === 0).map(v => v == null ? null : Math.round(Number(v) * 10) / 10) : null;
+function pickRecorder(list, ride) {
+  const toM = t => /^\d{2}:\d{2}$/.test(t || '') ? (+t.slice(0, 2)) * 60 + (+t.slice(3, 5)) : null;
+  const start = toM(ride.time);
+  const hasBreath = a => Object.keys(a || {}).some(k => /resp|breath|tidal|ventil/i.test(k) && a[k] != null && a[k] !== 0);
+  return (list || []).filter(a => a && String(a.id) !== String(ride.intervals_id || ''))
+    .map(a => ({ a, d: start == null ? 999 : Math.abs((toM(String(a.start_date_local || '').slice(11, 16)) ?? 9999) - start) }))
+    .filter(x => x.d <= 15 && hasBreath(x.a)).sort((x, y) => x.d - y.d).map(x => x.a)[0] || null;
+}
+async function breathForPlayerRide(ride) {
+  const list = await icuGet(`/athlete/${encodeURIComponent(ATHLETE)}/activities?oldest=${ride.date}&newest=${ride.date}`);
+  const act = pickRecorder(Array.isArray(list) ? list : [], ride);
+  if (!act) return null;
+  let thresholds = {};
+  try { const f = await getJSON('fitness', {}); thresholds = f.test ? { vt1_ve: f.test.vt1_ve, vt2_ve: f.test.vt2_ve } : {}; } catch (e) { /* none */ }
+  const b = await breathingFrom(act, thresholds);
+  if (!b.resp && !b.ve) return null;
+  return { resp: b.resp, ve: b.ve, breath_icu_id: act.id, breath_series: { every_s: 10, resp: every10(b.resp_series), ve: every10(b.ve_series) },
+    source: `${b.source}, merged from the Garmin recording that ran alongside (${act.name || act.id})` };
+}
+const needsBreath = (a, ride) => ride.source === 'player' && a && !a.resp && !a.ve && ride.date >= tz.shiftKey(tz.todayKey(), -3)
+  && (!a.breath_checked_at || Date.now() - Date.parse(a.breath_checked_at) > 20 * 60 * 1000);
+
 
 // The Garmin without a strap records no heart rate, but the WHOOP on the
 // wrist does, all day. Its workout record for the ride carries average, max
@@ -145,7 +176,13 @@ async function analyze(ride, opts) {
   const o = opts || {};
   const cached = await getJSON(key(ride.id), null);
   const suspect = cached && cached.hr && cached.hr.max != null && cached.hr.max < 130 && /Strava/.test(String(cached.sources && cached.sources.hr || '')) && !cached.hr_checked_icu;
-  if (cached && !o.force && !suspect) return cached;
+  if (cached && !o.force && !suspect && !needsBreath(cached, ride)) return cached;
+  if (cached && !o.force && !suspect && needsBreath(cached, ride)) {
+    const a = Object.assign({}, cached, { breath_checked_at: new Date().toISOString() });
+    try { const b = await breathForPlayerRide(ride); if (b) { Object.assign(a, { resp: b.resp, ve: b.ve, breath_icu_id: b.breath_icu_id, breath_series: b.breath_series }); a.sources = Object.assign({}, a.sources, { resp: b.source }); } } catch (e) { /* tried; again later */ }
+    await setJSON(key(ride.id), a).catch(() => {});
+    return a;
+  }
   // a ride from The Way's own player is read from its own samples, never from Strava (which never had it)
   if (ride.source === 'player') {
     const P = require('./player');
@@ -154,6 +191,8 @@ async function analyze(ride, opts) {
     const a = P.analysisOf(rec.summary || ride, rec.samples, o.ftp || (rec.summary && rec.summary.ftp) || 175);
     if (ride.intervals_id) a.icu_id = ride.intervals_id;
     try { a.buckets = await bucketsOfSamples(ride, rec.samples); } catch (e) { /* none */ }
+    a.breath_checked_at = new Date().toISOString();
+    try { const b = await breathForPlayerRide(Object.assign({}, ride, { intervals_id: ride.intervals_id || (rec.summary && rec.summary.intervals_id) })); if (b) { Object.assign(a, { resp: b.resp, ve: b.ve, breath_icu_id: b.breath_icu_id, breath_series: b.breath_series }); a.sources = Object.assign({}, a.sources, { resp: b.source }); } } catch (e) { /* the Garmin file may not be there yet */ }
     await setJSON(key(ride.id), a).catch(() => {});
     return a;
   }
@@ -255,4 +294,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { ensureBuckets, streamSeconds, isBucketRide, attach, analyze, forWindow, key };
+module.exports = { ensureBuckets, streamSeconds, isBucketRide, attach, analyze, forWindow, key, pickRecorder, breathForPlayerRide, needsBreath };
