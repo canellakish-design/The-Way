@@ -190,6 +190,15 @@ function trend(entries) {
   };
 }
 
+// A weight as an iPhone Shortcut sends a Health sample: 217.9, "217.9", "217.9 lb", "98.8 kg" (Harry, 11 Nov:
+// Withings to Apple Health, then a two-step Shortcut). Kilograms become pounds.
+function lbOf(v) {
+  if (typeof v === 'number') return Math.round(v * 10) / 10;
+  const m = /(-?\d+(?:[.,]\d+)?)\s*(kg|kilograms?|lbs?|pounds?)?/i.exec(String(v == null ? '' : v));
+  if (!m) return null;
+  const x = Number(m[1].replace(',', '.'));
+  return Math.round((/^k/i.test(m[2] || '') ? x * 2.20462 : x) * 10) / 10;
+}
 async function state() {
   const d = await db();
   // Dedupe: Withings mirrors its readings into this store, so the same weigh-in
@@ -230,7 +239,7 @@ function attach(app) {
   app.post('/weigh-in', async (req, res) => { if (!auth(req, res)) return;
     try {
       const b = req.body || {};
-      const lb = Number(b.lb);
+      const lb = lbOf(b.lb != null ? b.lb : b.weight);
       if (!lb || lb < 50 || lb > 500) return res.status(400).json({ error: 'lb required (50–500)' });
       // Composition is optional, and any source can supply it — an Apple
       // Shortcut reading Health, a sync run, or the scale via Withings. The
@@ -243,7 +252,8 @@ function attach(app) {
       // the same reading sent again (an iPhone Shortcut reading Apple Health each morning sends the latest
       // weigh-in every time): same source, within a minute, replaces the one already kept
       const ts = b.at ? Date.parse(b.at) || Date.now() : Date.now(), source = b.source || 'manual';
-      d.entries = d.entries.filter(e => !(e.source === source && Math.abs(e.ts - ts) < 60000));
+      // with no time sent (the two-step Shortcut), the same weight from the same source within a day is the same reading
+      d.entries = d.entries.filter(e => !(e.source === source && (Math.abs(e.ts - ts) < 60000 || (!b.at && e.lb === lb && ts - e.ts < 864e5 && ts >= e.ts))));
       d.entries.push({ ts, lb,
         source,
         fat_pct: num(b.fat_pct, 75), fat_mass_lb: num(b.fat_mass_lb, 300),
@@ -255,4 +265,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, state, direction, trend, fieldTrends, fieldDirection };
+module.exports = { lbOf, attach, state, direction, trend, fieldTrends, fieldDirection };
