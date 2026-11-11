@@ -24,4 +24,9 @@ ok('weekly, on Wednesdays: three readings over two weeks draw the line; the week
   assert.strictEqual(close.week_change_lb, -1);
   assert.strictEqual(t.weigh_day, 3);
 });
+ok('a weight as a Shortcut sends a Health sample: a number, "217.9 lb", "98.8 kg"', () => {
+  assert.strictEqual(W.lbOf(217.9), 217.9); assert.strictEqual(W.lbOf('217.9 lb'), 217.9);
+  assert.strictEqual(W.lbOf('98.8 kg'), 217.8); assert.strictEqual(W.lbOf('217,9'), 217.9); assert.strictEqual(W.lbOf('none'), null);
+});
 console.log(n + ' passed');
+
