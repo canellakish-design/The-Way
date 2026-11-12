@@ -947,4 +947,4 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 .mealbars .mbf{display:block; height:100%}
 .mealbars .mbn{font-family:var(--mono); font-size:11px; color:var(--muted); text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums}
 .mealbars .mbn b{color:var(--ink); font-size:12px}
-
+.lane-drive{border-left-color:var(--amber)}

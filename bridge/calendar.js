@@ -305,7 +305,7 @@ function scheduleForDate(events, dateStr) {
     return {
       summary: e.summary, category: e.category, allDay: false,
       source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, sport: e.sport || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
-      edit: editKey(e),
+      detail: e.detail || null, edit: e.source === 'commute' ? null : editKey(e),
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
     };
@@ -594,7 +594,8 @@ async function eventsBetween(firstKey, lastKey) {
   const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
   const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
   const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
-  return require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d));
+  // the drive to McDonogh and home on class days (commute.js)
+  return require('./commute').withCommutes(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)));
 }
 
 async function scheduleReport(q) {
@@ -648,7 +649,7 @@ async function scheduleReport(q) {
           category: classify(e.summary, d.manual, calDefault) };
       });
       // a special schedule on the Upper School calendar re-times that day's classes (classes.js)
-      const days = scheduleDays(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)), n, iv.days, back);
+      const days = scheduleDays(await require('./commute').withCommutes(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d))), n, iv.days, back);
       // The supplements, as rows tied to the day's rides: beetroot before the
       // first ride, bicarbonate before a hard one, magnesium in the evening.
       // Derived, never stored, so they follow a ride that moves and never

@@ -1130,6 +1130,7 @@ const LANE = {
   intervals: { tag:"icu",     cls:"lane-icu"   },
   plan:      { tag:"plan",    cls:"lane-icu"   },
   calendar:  { tag:"cal",     cls:"lane-cal"   },
+  commute:   { tag:"drive",   cls:"lane-drive" },
   ride:      { tag:"ride",    cls:"lane-icu"   },
   food:      { tag:"food",    cls:"lane-food"  },
   rx:        { tag:"rx",      cls:"lane-rx"    },
@@ -2973,6 +2974,7 @@ V.settings = function(){
   view.innerHTML = `<span class="eyebrow">Setup</span>
     <div class="card" id="remCard"><h4>Reminders</h4><div class="small">…</div></div>
     <div class="card" id="youCard"><h4>Scores</h4><div class="small">…</div></div>
+    <div class="card" id="comCard"><h4>Commute</h4><div class="small">…</div></div>
     <div class="card" id="conn"><h4>Connections</h4><div class="small">checking…</div></div>`;
 
   // Scores count from (fresh-start.js): everything that grades you counts days on or after this date; the
@@ -3025,6 +3027,30 @@ V.settings = function(){
     };
   };
   drawYou();
+  // The drive to McDonogh (commute.js): on the calendar on class days, timed by traffic, and "leave now" to the phone.
+  const drawCom = async ()=>{
+    const el = document.getElementById("comCard"); if (!el) return;
+    const c = await bridge("/commute").catch(()=>null);
+    const t = c && c.today;
+    el.innerHTML = `<h4>Commute</h4>
+      <div class="small">${!c ? "Can't reach the bridge." : !c.home ? "Add your home address to time the drive." : `From ${esc(c.home.label)} to ${esc(c.school)}.`}
+        ${c && !c.traffic ? " Traffic is off until a TomTom key (TOMTOM_API_KEY) is set in Netlify; the drive uses your usual time." : ""}</div>
+      ${t ? `<div class="small"><b>Today:</b> ${t.rows.map(r => `${esc(r.from)} ${esc(r.summary)}`).join(" · ")}</div>` : c ? `<div class="small">No classes today.</div>` : ""}
+      <label for="cHome">Home address</label><input id="cHome" type="text" autocomplete="street-address" placeholder="${attr(c && c.home ? c.home.label : "Street, town")}">
+      <div class="row2"><span><label for="cBefore">In before class, min</label><input id="cBefore" type="number" inputmode="numeric" min="0" max="90" value="${attr(c ? c.arrive_before : 15)}"></span>
+        <span><label for="cUsual">Usual drive, min</label><input id="cUsual" type="number" inputmode="numeric" min="5" max="180" value="${attr(c ? c.usual_min : 50)}"></span></div>
+      <label class="small"><input id="cNotify" type="checkbox"${!c || c.notify ? " checked" : ""}> Tell me when to leave, and when traffic is heavy</label>
+      <div class="gbtns"><button class="primary" id="cSave">Save</button></div>
+      <div class="small" id="cMsg"></div>`;
+    document.getElementById("cSave").onclick = async ()=>{
+      const m = document.getElementById("cMsg"); m.textContent = "saving…";
+      const b = { arrive_before: document.getElementById("cBefore").value, usual_min: document.getElementById("cUsual").value, notify: document.getElementById("cNotify").checked };
+      const h = document.getElementById("cHome").value.trim(); if (h) b.home_address = h;
+      try{ await bridge("/commute", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(b) }); drawCom(); }
+      catch(e){ m.textContent = e.message; }
+    };
+  };
+  drawCom();
   const drawRem = async ()=>{
     const el = document.getElementById("remCard"); if (!el) return;
     const [st, due] = await Promise.all([pushState().catch(e => ({ ok: false, why: e.message })), bridge("/push/due").catch(()=>null)]);
