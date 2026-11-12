@@ -1222,6 +1222,8 @@ function paintChain(c){
     let L = c.links[ck]; const el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
     let num = L.week == null ? "—" : ck === "recovery" && L.week_kind === "score" ? `${L.week}` : ck === "work" || ck === "water" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     let unit = ck === "recovery" && L.week_kind === "score" ? "avg" : UNIT[ck], state = L.state;
+    // Weight before a trend exists (it needs several mornings): the weight itself big, not a dash
+    if (ck === "weight" && L.week == null && L.today != null){ num = `${L.today}`; unit = "lb"; }
     // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
     if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
@@ -1288,6 +1290,9 @@ function todayCell(ck, L){
   if (ck === "lift") return L.today ? { num: "✓", word: L.today_word || "done", tone: "good" } : L.planned_today ? { num: "1", word: L.planned_today, tone: "warn" } : { num: "—", word: L.today_word ? L.today_word.replace(/ · creatine due$/, "").replace(/ on the calendar$/, " planned") : "none", tone: "none" };
   if (ck === "work"){ if (!L.today_planned) return { num: L.today ? `${L.today} min` : "—", word: L.today ? "ridden" : "rest", tone: L.today ? "good" : "none" }; const pct = Math.round(100 * (L.today || 0) / L.today_planned); return { num: `${L.today || 0}/${L.today_planned}`, word: pct >= 85 ? "ridden" : pct > 0 ? "short" : "to ride", tone: pct >= 85 ? "good" : pct >= 60 ? "warn" : L.today ? "bad" : "none" }; }
   if (ck === "recovery") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? "no sync yet" : (L.today_word || (L.today_band === "good" ? "green" : L.today_band === "warn" ? "a dip" : L.today_band === "bad" ? "red" : "")), tone: L.today == null ? "none" : (L.today_band || "none") };
+  // no trend yet: the weight is the big number, so today's line is the change since the first reading
+  if (ck === "weight" && L.week == null && L.today != null){ const m = /^([+−-]\d+(?:\.\d+)?) since (\d+(?:\.\d+)?)$/.exec(L.today_word || "");
+    return m ? { num: m[1], word: `lb since ${m[2]}`, tone: /^\+/.test(m[1]) ? "bad" : "good" } : { num: "—", word: "trend after a few mornings", tone: "none" }; }
   if (ck === "weight") return { num: L.today == null ? "—" : `${L.today}`, word: (L.today_word || "").replace(/^([+−-]\d+(?:\.\d+)?) since \d+$/, "$1 lb"), tone: L.today_word && /^\+/.test(L.today_word) ? "bad" : L.today_word && /^−|^-/.test(L.today_word) ? "good" : "none" };
   return { num: "—", word: "", tone: "none" };
 }
@@ -3031,11 +3036,13 @@ V.settings = function(){
   const drawCom = async ()=>{
     const el = document.getElementById("comCard"); if (!el) return;
     const c = await bridge("/commute").catch(()=>null);
-    const t = c && c.today;
+    // today is a list of trips (school, practice, game), each with its rows
+    const trips = !c || !c.today ? [] : Array.isArray(c.today) ? c.today : [c.today];
+    const rows = trips.flatMap(t => (t && t.rows) || []);
     el.innerHTML = `<h4>Commute</h4>
       <div class="small">${!c ? "Can't reach the bridge." : !c.home ? "Add your home address to time the drive." : `From ${esc(c.home.label)} to ${esc(c.school)}.`}
         ${c && !c.traffic ? " Traffic is off until a TomTom key (TOMTOM_API_KEY) is set in Netlify; the drive uses your usual time." : ""}</div>
-      ${t ? `<div class="small"><b>Today:</b> ${t.rows.map(r => `${esc(r.from)} ${esc(r.summary)}`).join(" · ")}</div>` : c ? `<div class="small">No classes today.</div>` : ""}
+      ${rows.length ? `<div class="small"><b>Today:</b> ${rows.map(r => `${esc(r.from)} ${esc(r.summary)}`).join(" · ")}</div>` : c ? `<div class="small">No drives today.</div>` : ""}
       <label for="cHome">Home address</label><input id="cHome" type="text" autocomplete="street-address" placeholder="${attr(c && c.home ? c.home.label : "Street, town")}">
       <div class="row2"><span><label for="cBefore">In before class, min</label><input id="cBefore" type="number" inputmode="numeric" min="0" max="90" value="${attr(c ? c.arrive_before : 15)}"></span>
         <span><label for="cUsual">Usual drive, min</label><input id="cUsual" type="number" inputmode="numeric" min="5" max="180" value="${attr(c ? c.usual_min : 50)}"></span></div>
