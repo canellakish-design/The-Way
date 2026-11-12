@@ -1223,7 +1223,9 @@ function paintChain(c){
     let num = L.week == null ? "—" : ck === "recovery" && L.week_kind === "score" ? `${L.week}` : ck === "work" || ck === "water" || ck === "plan" || ck === "fuel" ? `${L.week}%` : ck === "weight" || ck === "recovery" ? (L.week > 0 ? `+${L.week}${ck === "recovery" ? "%" : ""}` : `${L.week}${ck === "recovery" ? "%" : ""}`) : `${L.week}`;
     let unit = ck === "recovery" && L.week_kind === "score" ? "avg" : UNIT[ck], state = L.state;
     // Weight before a trend exists (it needs several mornings): the weight itself big, not a dash
-    if (ck === "weight" && L.week == null && L.today != null){ num = `${L.today}`; unit = "lb"; }
+    // coloured by the change since the first reading: down is the way (green), up is red
+    if (ck === "weight" && L.week == null && L.today != null){ num = `${L.today}`; unit = "lb";
+      const d = /^([+−-])\d/.exec(L.today_word || ""); if (d) state = d[1] === "+" ? "bad" : "good"; }
     // Macros: the week's on-plan score big, like Micros; today's kcal against the day's target small under it
     if (ck === "food"){ L = Object.assign({}, L, macrosFromDay(HUB.food) || {}); num = L.week == null ? "—" : `${L.week}`; unit = "avg"; }
     // Lift: sessions of those due, the Lift page's count
