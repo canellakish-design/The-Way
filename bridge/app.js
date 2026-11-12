@@ -52,6 +52,7 @@ require('./fresh-start').attach(app);
 require('./body').attach(app);
 require('./energy-meter').attach(app);
 require('./sleep-window').attach(app);
+require('./commute').attach(app);
 require('./meds').attach(app);
 require('./push').attach(app);
 require('./nights').attach(app);
