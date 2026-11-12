@@ -46,6 +46,8 @@ ok('no time to get home between school and practice: no drive home, practice dri
   assert.strictEqual(t[0].back, null); assert.strictEqual(t[1].from, 'school');
   const rows = M.rowsFor(day, t[1], S, { to: { min: 45 } });
   assert.ok(/from McDonogh/.test(rows[0].detail), rows[0].detail);
+  const unknown = M.chain(M.tripsFor(day, school.concat(early), S), {}, S);   // the venue not looked up: school keeps its drive home
+  assert.strictEqual(unknown[0].back, 930);
   const evening = Object.assign({}, practice, { start: at(day, 19, 0), end: at(day, 20, 30) });   // in by 6:45: home first
   const late = M.chain(M.tripsFor(day, school.concat(evening), S), { 'go:1130 anne chambers way, crownsville, md, usa': { est: 40 } }, S);
   assert.strictEqual(late[0].back, 930); assert.ok(!late[1].from);

@@ -99,11 +99,11 @@ function tripsFor(date, events, s, nextEvents) {
 // No time to get home between two trips: the first keeps no drive home, the second leaves from the first place.
 // est(trip, leg): the drive in minutes as known (a reading, else the straight-line estimate, else the usual).
 function chain(trips, store, s) {
-  const est = (t, leg) => { const c = store && store[t.id]; return (c && c[leg] && c[leg].min) || (c && c.est) || (t.kind === 'school' ? s.usual_min : 45); };
+  const est = (t, leg) => { const c = store && store[t.id]; return (c && c[leg] && c[leg].min) || (c && c.est) || (t.kind === 'school' ? s.usual_min : null); };
   const out = trips.map(t => Object.assign({}, t));
   for (let i = 1; i < out.length; i++) {
     const a = out[i - 1], b = out[i];
-    if (a.back == null) continue;
+    if (a.back == null || est(b, 'to') == null) continue;   // a venue not looked up yet: no guess
     if (a.back + est(a, 'home') + 20 + est(b, 'to') > b.arrive) { a.back = null; b.from = a.id; b.from_label = a.label; b.from_dest = a.dest; }
   }
   return out;
