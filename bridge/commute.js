@@ -32,6 +32,18 @@ const DEF = { home: null, arrive_before: 15, leave_after: 15, usual_min: 50, not
 const SANDBOX = /^(1|true|yes)$/i.test(String(process.env.THE_WAY_SANDBOX || ''));
 const GAME = /\b(game|match|scrimmage|cup|tournament|showcase|invitational)\b/i;
 const NOT_A_TRIP = /\b(webinar|zoom|seminar|call|meeting|evaluations?|at home|idp)\b/i;
+// (Harry, 13 Nov: "Add driving to everything" / "build in that it should update automatically".) Any timed event
+// with a real place gets a drive there and back: doctor, dinner out, trailhead, an in-person meeting. Not a drive:
+// no place, TBD, a video call or link, home, within WALK_KM of home, a McDonogh campus room (it stretches the
+// school trip instead), a ride's route name with no address, an errand looked up more than FAR_KM away (a wrong match).
+// a place that is not a place to drive to
+const VIRTUAL = /\b(zoom|teams|google meet|meet\.google|webex|facetime|online|virtual|phone|dial[- ]?in|remote)\b|https?:\/\/|www\./i;
+// the McDonogh campus: its name, its road, or a classroom number (A104)
+const CAMPUS = /mcdonogh|^\s*[A-Z]\d{3}\b/i;
+// a street address, so "Faculty meeting, 12 Main St" is still a trip
+const STREETISH = /\b\d+\s+[\w.' ]+\b(rd|road|st|street|ave|avenue|blvd|boulevard|dr|drive|way|ln|lane|pkwy|parkway|hwy|highway|ct|court|pl|place|pike|cir|circle|ter|terrace)\b/i;
+const WALK_KM = 1.2;   // nearer than this to home: a walk, not a drive
+const FAR_KM = 400;    // an errand looked up further than this is a wrong match (a game can be that far: PDA)
 
 const clampInt = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
 const trafficKey = () => String(process.env.TOMTOM_API_KEY || '').trim();
@@ -53,7 +65,7 @@ function classTimes(date, events) {
   const mins = [];
   for (const e of events || []) {
     if (!e || e.allDay || !e.start || !e.end || e.source === 'commute') continue;
-    if (!re.test(String(e.summary || '')) && !/mcdonogh class/i.test(String(e.calendar || ''))) continue;
+    if (!re.test(String(e.summary || '')) && !/mcdonogh class/i.test(String(e.calendar || '')) && !onCampus(e)) continue;
     if (tz.keyOf(new Date(e.start)) !== date) continue;
     mins.push([tz.minutesOf(new Date(e.start)), tz.minutesOf(new Date(e.end))]);
   }
@@ -71,36 +83,58 @@ function arriveBy(text) {
 const venueKey = loc => String(loc || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const venueName = loc => String(loc || '').split(',')[0].trim().slice(0, 40);
 const isHomeVenue = (loc, s) => (s.home_venues || []).some(v => v && venueKey(loc).includes(String(v).toLowerCase()));
-// The day's coaching with a venue (practices, training, games): one per venue, earliest arrival, latest end.
-function coachingTrips(date, events, s) {
+const onCampus = e => !!(e && !e.allDay && e.location && CAMPUS.test(String(e.location)) && !VIRTUAL.test(String(e.location)) && e.category !== 'info');
+// home itself, by its street number and street ("1915 Towne Centre")
+function atHome(loc, s) {
+  const h = s && s.home && String(s.home.label || '').toLowerCase().match(/^\s*(\d+\s+\w+)/);
+  const l = venueKey(loc);
+  return /^(home|my (place|house|apartment)|house)$/.test(l) || !!(h && l.includes(h[1]));
+}
+// Does this event take a drive? A timed event with a real place that is not home, not campus, not a call.
+function isTrip(e, s) {
+  if (!e || e.allDay || !e.start || !e.end || e.source === 'commute' || e.category === 'commute' || e.category === 'sleep' || e.category === 'info') return false;
+  const loc = String(e.location || '').trim();
+  if (!loc || /^tbd\b/i.test(loc) || VIRTUAL.test(loc) || CAMPUS.test(loc) || atHome(loc, s)) return false;
+  // a call, a seminar or a meeting is a trip only with a real place ("Staff Meeting (in person)", Liberty Sports Park, …)
+  if (NOT_A_TRIP.test(String(e.summary || '')) && !/in[- ]person/i.test(String(e.summary || '')) && !STREETISH.test(loc) && !loc.includes(',')) return false;
+  // outside coaching, only a place that reads as an address or a named place with its town ("Butler side roads" is a route)
+  if (e.category !== 'coaching' && !STREETISH.test(loc) && !loc.includes(',')) return false;
+  return true;
+}
+// The day's places (coaching, and everything else with a real place): one per place, earliest arrival, latest end.
+function venueTrips(date, events, s) {
   const out = [];
   for (const e of events || []) {
-    if (!e || e.allDay || !e.start || !e.end || e.source === 'commute') continue;
-    if (e.category !== 'coaching' || !e.location || /^tbd$/i.test(String(e.location).trim()) || NOT_A_TRIP.test(String(e.summary || ''))) continue;
+    if (!isTrip(e, s)) continue;
     if (tz.keyOf(new Date(e.start)) !== date) continue;
     const start = tz.minutesOf(new Date(e.start)), end = tz.minutesOf(new Date(e.end));
     const arrive = arriveBy(e.description) ?? (start - s.arrive_before);
-    const game = GAME.test(String(e.summary || ''));
+    const coaching = e.category === 'coaching', game = coaching && GAME.test(String(e.summary || ''));
     const k = venueKey(e.location), have = out.find(g => g.key === k);
-    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; continue; }
-    out.push({ key: k, location: e.location, label: venueName(e.location), arrive, end, game, home_field: isHomeVenue(e.location, s) });
+    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; continue; }
+    // the place's name, or the event's when the place is only a street address ("Dr. Patel" over "12 Main St")
+    const place = venueName(e.location), byTitle = !coaching && /^\d/.test(place);   // coaching keeps its venue's name
+    const label = byTitle ? String(e.summary || place).replace(/^Coaching · /, '').split(/[:·(|]/)[0].trim().slice(0, 40) || place : place;
+    out.push({ key: k, location: e.location, label, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
   }
   return out;
 }
+const coachingTrips = (date, events, s) => venueTrips(date, events, s).filter(g => g.coaching);
 const awayGames = (date, events, s) => coachingTrips(date, events, s).filter(g => g.game && !g.home_field);
 // Every trip of a day: { id, kind, label, dest (school point or venue text), arrive (min), back (min) or null }
 function tripsFor(date, events, s, nextEvents) {
   const trips = [];
   const times = classTimes(date, events);
   if (times) trips.push({ id: 'school', kind: 'school', label: SCHOOL.label, dest: SCHOOL, arrive: times.first - s.arrive_before, back: times.last + s.leave_after });
-  for (const g of coachingTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : 'training', label: g.label, dest: g.location, arrive: g.arrive, back: g.end + 15 });
+  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'errand', label: g.label, dest: g.location, arrive: g.arrive, back: g.end + 15 });
   return trips.sort((a, b) => a.arrive - b.arrive);
 }
 // No time to get home between two trips: the first keeps no drive home, the second leaves from the first place.
 // est(trip, leg): the drive in minutes as known (a reading, else the straight-line estimate, else the usual).
 function chain(trips, store, s) {
   const est = (t, leg) => { const c = store && store[t.id]; return (c && c[leg] && c[leg].min) || (c && c.est) || (t.kind === 'school' ? s.usual_min : null); };
-  const out = trips.map(t => Object.assign({}, t));
+  // a place that turned out to be a walk from home, or a wrong match far away, is no trip
+  const out = trips.filter(t => !(store && store[t.id] && store[t.id].skip)).map(t => Object.assign({}, t));
   for (let i = 1; i < out.length; i++) {
     const a = out[i - 1], b = out[i];
     if (a.back == null || est(b, 'to') == null) continue;   // a venue not looked up yet: no guess
@@ -120,7 +154,7 @@ function heavy(r, usual) {
 function rowsFor(date, trip, s, c, overnight) {
   const usual = trip.kind === 'school' ? s.usual_min : (c && c.est) || null;
   const toMin = (c && c.to && c.to.min) || usual, homeMin = (c && c.home && c.home.min) || usual;
-  if (!toMin) return [];   // a venue not looked up yet: no guess on the calendar
+  if (!toMin || (c && c.skip)) return [];   // a venue not looked up yet (no guess on the calendar), or a walk
   const note = r => r && r.min ? `${r.min} min in traffic${r.usual_min && r.min - r.usual_min >= 5 ? `, ${r.min - r.usual_min} over the usual` : ''}` : `about ${usual} min`;
   const hv = r => r && heavy(r, trip.kind === 'school' ? s.usual_min : null) ? ' · heavy traffic' : '';
   const base = { category: 'commute', source: 'commute', calendar: 'The Way', account: 'the way', allDay: false, blocking: true };
@@ -213,6 +247,9 @@ async function refresh(date, events) {
   for (const t of chain(raw, store, s)) {
     const c = store[t.id] = store[t.id] || {};
     let p, o = home; try { p = await placeOf(t.dest); if (t.from) o = await placeOf(t.from_dest); } catch (e) { continue; }
+    const km = kmBetween(home, p);
+    c.skip = km < WALK_KM ? 'walk' : (t.kind === 'errand' && km > FAR_KM) ? 'far' : null;   // a walk, or a wrong match
+    if (c.skip) continue;
     c.est = Math.round(kmBetween(o, p) * 1.3 / 75 * 60 + 10);   // no traffic yet: the straight line at highway pace
     if (!trafficKey()) continue;
     if (!fresh(c.to, t.from)) { const r = await route(o, p, { arriveAt: new Date(iso(date, t.arrive)) }).catch(() => null); c.to = r ? Object.assign(r, { from: t.from || 'home' }) : (c.to || null); }
@@ -303,7 +340,7 @@ async function status() {
   const trips = chain(tripsFor(date, evs, s), store, s).map(t => ({ trip: t.label, kind: t.kind, in_by: hm(t.arrive),
     rows: rowsFor(date, t, s, store[t.id], null).map(r => ({ summary: r.summary, detail: r.detail, from: hm(tz.minutesOf(new Date(r.start))), to: hm(tz.minutesOf(new Date(r.end))) })) }));
   const ahead = [];
-  for (let i = 1; i < 7; i++) { const d = tz.shiftKey(date, i); for (const g of coachingTrips(d, evs, s)) ahead.push({ date: d, label: tz.labelOf(d), venue: g.label, kind: g.game ? 'game' : 'training', in_by: hm(g.arrive) }); }
+  for (let i = 1; i < 7; i++) { const d = tz.shiftKey(date, i); for (const g of venueTrips(d, evs, s)) ahead.push({ date: d, label: tz.labelOf(d), venue: g.label, kind: g.game ? 'game' : g.coaching ? 'training' : 'errand', in_by: hm(g.arrive) }); }
   const log = await getJSON('commute-sent', { date: null, sent: {} }).catch(() => ({ sent: {} }));
   return { home: s.home ? { label: s.home.label } : null, school: SCHOOL.label, arrive_before: s.arrive_before, leave_after: s.leave_after, usual_min: s.usual_min,
     notify: s.notify, off: !!s.off, traffic: !!trafficKey(), today: trips, coaching_ahead: ahead, sent_today: log.date === date ? log.sent : {} };
@@ -315,4 +352,4 @@ function attach(app) {
   app.post('/commute', async (req, res) => { if (!auth(req, res)) return; try { res.json(await save(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, withCommutes, rowsFor, tripsFor, chain, coachingTrips, classTimes, awayGames, arriveBy, overnightFor, decide, heavy, check, refresh, route, settings, SCHOOL, DEF };
+module.exports = { attach, withCommutes, rowsFor, tripsFor, chain, coachingTrips, venueTrips, isTrip, atHome, classTimes, awayGames, arriveBy, overnightFor, decide, heavy, check, refresh, route, settings, SCHOOL, DEF };
