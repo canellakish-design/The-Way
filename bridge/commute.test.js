@@ -76,23 +76,33 @@ ok('the alerts: a heads-up when traffic is heavy and leaving is half an hour off
   const g = M.decide(780, 820, { min: 41, usual_min: 40 }, 40, {}, 'Maryland SoccerPlex');
   assert.strictEqual(g.title, 'Time to leave for Maryland SoccerPlex');
 });
-ok('a drive for everything with a real place: a doctor, dinner out; none for a call, home, campus, a route name, TBD', () => {
-  const s = Object.assign({}, S, { home: { lat: 38.98, lon: -76.55, label: '1915 Towne Centre Boulevard, Annapolis, MD 21401' } });
-  const e = (summary, location, o) => Object.assign({ summary, location, category: 'busy', allDay: false, start: at(day, 10, 0), end: at(day, 11, 0) }, o || {});
-  assert.strictEqual(M.isTrip(e('Dentist', '12 Main St, Annapolis, MD'), s), true);
-  assert.strictEqual(M.isTrip(e('Dinner', 'Carrol\'s Creek Cafe, Annapolis'), s), true);
-  assert.strictEqual(M.isTrip(e('Staff call', 'https://zoom.us/j/123'), s), false);
-  assert.strictEqual(M.isTrip(e('Faculty meeting', 'A104'), s), false, 'a campus room stretches the school day instead');
-  assert.strictEqual(M.isTrip(e('Ride', 'Butler side roads'), s), false, 'a route name is no address');
-  assert.strictEqual(M.isTrip(e('Lunch', 'TBD'), s), false);
-  assert.strictEqual(M.isTrip(e('Home', '1915 Towne Centre Blvd'), s), false);
-  assert.strictEqual(M.isTrip(e('IDP call', 'Indian Creek, Crownsville, MD'), s), true, 'a meeting with a real place is a trip');
-  assert.strictEqual(M.isTrip(e('Dance Concert', 'McDonogh Theatre, Owings Mills', { category: 'info' }), s), false, 'not going: no drive');
-  const t = M.tripsFor(day, [e('Dentist', '12 Main St, Annapolis, MD', { start: at(day, 17, 0), end: at(day, 18, 0) })], s);
-  assert.strictEqual(t[0].kind, 'errand'); assert.strictEqual(t[0].label, 'Dentist', 'a street address is labelled by the event');
-  assert.strictEqual(M.rowsFor(day, t[0], s, { est: 20, skip: 'walk' }).length, 0, 'a walk from home: no drive');
-  const camp = [ev('(CP) World History I (Sec. E1)', 8, 30, 9, 30), { summary: 'Faculty meeting', location: 'A104', category: 'work', allDay: false, start: at(day, 15, 30), end: at(day, 16, 30) }];
-  assert.strictEqual(M.classTimes(day, camp).last, 990, 'the meeting in A104 keeps him on campus to 4:30');
+ok('driving to everything: any event with a place is a trip; calls, home, campus, routes and TBD are not', () => {
+  const H = Object.assign({}, S, { home: { lat: 38.98, lon: -76.54, label: '1915 Towne Centre Boulevard, Annapolis, MD 21401' } });
+  const doc = ev('Dentist', 10, 0, 11, 0, { category: 'busy', location: 'Annapolis Dental, 2002 Medical Pkwy, Annapolis, MD 21401' });
+  const dinner = ev('Dinner with friends', 19, 0, 21, 0, { category: 'family', location: 'Lewnes Steakhouse, 401 4th St, Annapolis, MD' });
+  const mtb = ev('MTB 90 min', 13, 30, 15, 0, { category: 'training', location: 'Rockburn Branch Park, 6105 Rockburn Branch Park Rd, Elkridge, MD 21075' });
+  const route = ev('Road ride', 7, 30, 9, 30, { category: 'training', location: 'Butler side roads' });
+  const call = ev('Planning call', 12, 0, 12, 30, { category: 'busy', location: 'https://zoom.us/j/123' });
+  const home = ev('Cycle 3 planning', 16, 0, 17, 0, { category: 'busy', location: '1915 Towne Centre Blvd, Annapolis' });
+  const tbd = ev('Lunch', 12, 0, 13, 0, { category: 'busy', location: 'TBD' });
+  const d = '2026-11-18', shift = e => Object.assign({}, e, { start: at(d, ...hmOf(e.start)), end: at(d, ...hmOf(e.end)) });
+  function hmOf(x) { const m = tz.minutesOf(new Date(x)); return [Math.floor(m / 60), m % 60]; }
+  const trips = M.tripsFor(d, [doc, dinner, mtb, route, call, home, tbd].map(shift), H);
+  assert.deepStrictEqual(trips.map(x => [x.kind, x.label]), [['event', 'Annapolis Dental'], ['event', 'Rockburn Branch Park'], ['event', 'Lewnes Steakhouse']]);
+  assert.strictEqual(trips[0].arrive, 9 * 60 + 45); assert.strictEqual(trips[0].back, 11 * 60 + 5);
+  const lib = 'Liberty Sports Park, Prince Georges Boulevard, Upper Marlboro, MD, USA';
+  const pr2 = shift(ev('U16 G MARYLAND UNITED ECNL - Practice', 18, 0, 19, 30, { category: 'coaching', location: lib }));
+  const staff = shift(ev('U13 to U18 Girls Staff Meeting (in person)', 20, 30, 21, 30, { category: 'work', location: lib }));
+  const lt = M.tripsFor(d, [pr2, staff], H);
+  assert.strictEqual(lt.length, 1); assert.strictEqual(lt[0].back, 21 * 60 + 30 + 15);
+  const bare = M.tripsFor(d, [shift(ev('Physio', 8, 0, 9, 0, { category: 'busy', location: '12 West St, Annapolis, MD' }))], H);
+  assert.strictEqual(bare[0].label, 'Physio');
+  const mtg = ev('Department meeting', 15, 30, 16, 30, { category: 'work', location: 'McDonogh School, Allan Building' });
+  assert.deepStrictEqual(M.classTimes(day, school.concat(mtg)), { first: 510, last: 990 });
+  assert.strictEqual(M.tripsFor(day, school.concat(mtg), H).length, 1);
+  assert.strictEqual(M.rowsFor(d, trips[0], H, { est: 12, walk: true }).length, 0);
+  assert.strictEqual(M.rowsFor(d, trips[0], H, { est: 300, far: true }).length, 0);
+  assert.strictEqual(M.rowsFor(d, trips[0], H, { est: 12 }).length, 2);
 });
 console.log(n + ' passed');
 

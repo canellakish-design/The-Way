@@ -1424,6 +1424,15 @@ function dayRows(d, plan, isToday){
         lane: LANE.ride });
     }
   }
+  // The fuel on the bike belongs to its ride: one longer card, never a second row that reads as a second ride.
+  for (const fr of rows.filter(r => r.meal && r.meal.slot === "on the bike")){
+    const ride = rows.filter(r => r !== fr && !r.meal && !r.feed && !r.open && !r.rx && r.start != null && (r.wid || r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride)
+        && !/weight|lift|strength|^run$|walk|hike/i.test(r.sport || "") && fr.start >= r.start - 30 && fr.start < r.end)
+      .sort((a, b) => Math.abs(a.start - fr.start) - Math.abs(b.start - fr.start))[0];
+    if (!ride) continue;
+    ride.fuel = { detail: fr.detail, bars: fr.bars || "", meal: fr.meal, desc: fr.desc || null };
+    rows.splice(rows.indexOf(fr), 1);
+  }
   return rows.sort((a,b)=> (a.start-b.start) || (a.end-b.end));
 }
 
@@ -1685,7 +1694,7 @@ function dayCard(d, plan, nowMin, rec, solo){
     const notGoing = r.attend && r.attend !== "go";
     return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${r.clash ? " clashed" : ""}${notGoing ? ` notgoing att-${r.attend}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ attend:r.attend||null, akey:r.akey||null, skey:r.skey||null, title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${r.bars || ""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}${notGoing ? `<span class="attline">${r.attend === "maybe" ? "Maybe · " : r.attend === "no" ? "Not going · " : "For info · "}<button class="attbtn" data-att="go" data-akey="${attr(r.akey || "")}">Going</button>${r.attend === "maybe" ? ` <button class="attbtn" data-att="no" data-akey="${attr(r.akey || "")}">Not going</button>` : ""}</span>` : ""}${r.clash ? `<span class="clash">Clashes with ${esc(r.clash.with)}${r.clash.fix_min != null && (r.wid || r.edit) ? ` <button class="clashfix" ${r.wid ? `data-fixw="${attr(r.wid)}"` : `data-fixx="${attr(r.edit)}"`} data-date="${attr(d.date)}" data-at="${String(Math.floor(r.clash.fix_min / 60)).padStart(2, "0")}:${String(r.clash.fix_min % 60).padStart(2, "0")}">Move to ${esc(fmtMinLocal(r.clash.fix_min))}</button>` : r.clash.both_fixed ? " · pick one" : ""}</span>` : r.clash_by ? `<span class="clash soft">${esc(r.clash_by)} is on top of this</span>` : ""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${r.bars || ""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}${notGoing ? `<span class="attline">${r.attend === "maybe" ? "Maybe · " : r.attend === "no" ? "Not going · " : "For info · "}<button class="attbtn" data-att="go" data-akey="${attr(r.akey || "")}">Going</button>${r.attend === "maybe" ? ` <button class="attbtn" data-att="no" data-akey="${attr(r.akey || "")}">Not going</button>` : ""}</span>` : ""}${r.clash ? `<span class="clash">Clashes with ${esc(r.clash.with)}${r.clash.fix_min != null && (r.wid || r.edit) ? ` <button class="clashfix" ${r.wid ? `data-fixw="${attr(r.wid)}"` : `data-fixx="${attr(r.edit)}"`} data-date="${attr(d.date)}" data-at="${String(Math.floor(r.clash.fix_min / 60)).padStart(2, "0")}:${String(r.clash.fix_min % 60).padStart(2, "0")}">Move to ${esc(fmtMinLocal(r.clash.fix_min))}</button>` : r.clash.both_fixed ? " · pick one" : ""}</span>` : r.clash_by ? `<span class="clash soft">${esc(r.clash_by)} is on top of this</span>` : ""}${r.fuel ? rideFuelHTML(r.fuel, isToday, state) : ""}</span>
       <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? (g.zone > 0 ? `Z1 +${g.zone}%` : `Z1 low ${-g.zone}%`) : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -2897,6 +2906,14 @@ function complianceHTML(c, food){
 // (max: the biggest macro of any meal), so a small breakfast reads small beside dinner.
 function mealFat(m){ return m.fat_g != null ? m.fat_g : m.kcal == null ? null : Math.max(0, Math.round((m.kcal - 4 * (m.carbs_g || 0) - 4 * (m.protein_g || 0)) / 9)); }
 function mealScale(meals){ return Math.max(1, ...(meals || []).map(m => Math.max(m.carbs_g || 0, m.protein_g || 0, mealFat(m) || 0))); }
+// The ride's fuel, inside its card: what to drink on the bike, its bars, and its own log button (or how it went).
+function rideFuelHTML(f, isToday, state){
+  const mt = f.meal && f.meal.match, logged = f.meal && f.meal.logged;
+  const TONE = { green: "hu-go", yellow: "hu-hold", red: "hu-stop" };
+  const tag = logged ? `<span class="hu-chip ${mt ? TONE[mt.key] || "hu-dim" : "hu-dim"}"${mt && mt.word ? ` title="${attr(mt.word)}"` : ""}>${esc(mt ? (mt.key === "green" ? "✓ on plan" : String(mt.word || "logged").slice(0, 18)) : "logged")}</span>`
+    : isToday ? `<button class="rxlog" data-meallog="on the bike">log</button>` : `<span class="hu-chip hu-dim">${state === "past" ? "nothing logged" : "plan"}</span>`;
+  return `<span class="ridefuel"><span class="rfhead"><span class="rfl">On the bike</span>${tag}</span><span class="small rfd">${esc(f.detail || "")}</span>${f.bars || ""}</span>`;
+}
 function mealBars(v, max, ate){
   const M = [["carbs", v.carbs_g, "var(--carb)"], ["protein", v.protein_g, "var(--red)"], ["fat", v.fat_g, "var(--fat)"]];
   return `<span class="mealbars${ate ? " ate" : ""}" role="img" aria-label="${attr(`${ate ? "eaten" : "plan"}: ${M.map(([l, g]) => `${l} ${Math.round(g || 0)} g`).join(", ")}`)}">${M.map(([l, g, col]) => { const a = Math.round(g || 0);
