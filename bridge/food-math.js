@@ -311,6 +311,23 @@ function placeSnacks(meals, opts) {
     m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
     prev = m;
   }
+  // At school a meal is the dining hall (Harry, 13 Nov: "when I'm at school, I can usually grab lunch in the
+  // dining hall"): a meal between the drive in to McDonogh and the drive home says so, and is never "pack it".
+  const inSchool = (() => {
+    const bs = busy.slice().sort((a, b) => a.start - b.start);
+    const inn = bs.find(b => /^drive to mcdonogh/i.test(String(b.name || '')));
+    if (!inn) return null;
+    const out = bs.find(b => b.start >= inn.end && /^drive (home|to )/i.test(String(b.name || '')) && !/mcdonogh/i.test(String(b.name || '')));
+    return { start: inn.end, end: out ? out.start : (bed - 60) };
+  })();
+  if (inSchool) for (const m of out) {
+    const t = mmin(m);
+    if (t == null || m.slot === 'on the bike' || m.extra || t < inSchool.start || t >= inSchool.end) continue;
+    const words = String(m.what || '').replace(/\s*Pack it:[^.]*\.\s*$/, '').replace(/\s*$/, '');
+    if (/dining hall/i.test(words)) continue;
+    m.place_note = 'In the dining hall at school.';
+    m.what = `${words} ${m.place_note}`.trim();
+  }
   // B: nothing in the 4 hours before a lift or a hard ride
   for (const s of (o.sessions || []).filter(x => x.kind === 'lift' || x.kind === 'hard')) {
     const fed = out.some(m => !m.extra && (m.kcal || 0) > 0 && mmin(m) != null && mmin(m) >= s.start - 240 && mmin(m) < s.start);
