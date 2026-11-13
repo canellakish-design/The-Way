@@ -1530,7 +1530,7 @@ function briefHTML(b, x){
    Row one: green ride outside, amber marginal, red indoors. Row two: green
    free, red busy. White boxes span both rows over every free stretch: the
    windows a workout can go in. Tap one and the builder opens at that time. ---- */
-let WX = {}, WGRADE = {}, FUELV = {}, BTS = {}, WBK = {}, WSLEEP = {};   // WSLEEP: a planned session that cuts sleep (sleep-window.js)   // WBK: each planned ride's buckets, its plan and what was ridden against it
+let WX = {}, WGRADE = {}, FUELV = {}, BTS = {}, WBK = {}, WSLEEP = {}, SUGGEST = {};   // SUGGEST: the recommended rides (suggest.js), by date   // WSLEEP: a planned session that cuts sleep (sleep-window.js)   // WBK: each planned ride's buckets, its plan and what was ridden against it
 // the conditions grade, A+ to F, from the hours a ride covers (scores come from the bridge, weather.js)
 const GLETTERS = [[97,"A+"],[92,"A"],[88,"A−"],[84,"B+"],[79,"B"],[74,"B−"],[69,"C+"],[63,"C"],[57,"C−"],[50,"D+"],[40,"D"],[0,"F"]];
 // ride (optional): { L, woods, from, to } re-scores the light over the ride's own minutes (pwa/light.js), so a ride
@@ -1710,6 +1710,7 @@ function dayCard(d, plan, nowMin, rec, solo){
   return `<div class="card day${isToday?" is-today":""}${solo?" day-solo":""}">
     <div class="dayhead"><h4>${esc(d.label)}</h4><a class="dayprint" href="${DEFAULT_API}/print/day?date=${esc(d.date)}&auto=1" target="_blank" rel="noopener">print</a></div>
     ${chips?`<div class="chips">${chips}</div>`:""}
+    ${suggestCardHTML(SUGGEST[d.date])}
     <ul class="agenda hsched${solo?" agenda-big":""}">${items || `<li class="lane-open"><span class="t"></span><span class="n">Nothing scheduled</span><span class="tag">clear</span></li>`}</ul>
     <div class="small">${foot}</div>
     <details class="addev"><summary>+ add to the calendar</summary>
@@ -2608,6 +2609,8 @@ V.today = async function(){
       ]);
       keepD("/schedule?days=15&back=7", s); keepD("/plan", plan); keepD("/weather/outlook", wx);
       applyDay(s, plan, wx, true);
+      // the recommended rides (suggest.js): kept by the five-minute run, read here, drawn as the blue card
+      bridge("/suggest/week").then(x => { SUGGEST = x || {}; repaint(); }).catch(()=>{});
 
       // Say plainly which lanes are actually feeding this page.
       const src = s.sources || {};
@@ -2753,6 +2756,11 @@ V.today = async function(){
       if (ml){ e.stopPropagation(); e.preventDefault(); location.hash = "#food?log=" + encodeURIComponent(ml.dataset.meallog); return; }
       const rx = e.target.closest("[data-supplog]");
       if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); const med = /^med:/.test(rx.dataset.supplog); bridge(med ? "/meds/taken" : "/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog.replace(/^med:/, "") })}).then(()=> view.__syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
+      const sgb = e.target.closest("[data-sugg]");
+      if (sgb){ e.stopPropagation(); e.preventDefault(); sgb.disabled = true;
+        bridge("/suggest", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ date: sgb.dataset.date, answer: sgb.dataset.sugg }) })
+          .then(x => { SUGGEST[sgb.dataset.date] = x; view.__syncAll(x.status === "yes" ? "ride added" : "kept indoors"); }).catch(err => { sgb.disabled = false; sgb.textContent = err.message.slice(0, 30); });
+        return; }
       const at = e.target.closest("[data-att]");
       if (at){ e.stopPropagation(); e.preventDefault(); at.disabled = true;
         const body = at.dataset.skey ? { series: at.dataset.skey, mode: at.dataset.att } : { key: at.dataset.akey, mode: at.dataset.att };
@@ -2909,6 +2917,20 @@ function complianceHTML(c, food){
 // (max: the biggest macro of any meal), so a small breakfast reads small beside dinner.
 function mealFat(m){ return m.fat_g != null ? m.fat_g : m.kcal == null ? null : Math.max(0, Math.round((m.kcal - 4 * (m.carbs_g || 0) - 4 * (m.protein_g || 0)) / 9)); }
 function mealScale(meals){ return Math.max(1, ...(meals || []).map(m => Math.max(m.carbs_g || 0, m.protein_g || 0, mealFat(m) || 0))); }
+// The recommended ride (suggest.js): a blue card, yes or no. Yes turns the planned indoor ride into this one
+// outdoors; no keeps the indoor ride. Once answered it says what was chosen, briefly.
+function suggestCardHTML(sg){
+  if (!sg || !sg.status) return "";
+  const r = sg.route || {};
+  if (sg.status === "yes") return `<div class="suggest done"><span class="sgk">Recommended ride · yes</span> ${esc(r.name || "")} at ${esc(sg.at || "")}. Bike on tonight's packing list.</div>`;
+  if (sg.status !== "open") return "";
+  return `<div class="suggest"><div class="sgk">Recommended ride based on your route</div>
+    <div class="sgname">${r.type === "mtb" ? "Mountain bike" : "Road"}: ${esc(r.name || "")}</div>
+    <div class="small">${esc(sg.at)}–${esc(sg.until)} · ${esc(sg.why || "")}</div>
+    ${r.detail ? `<div class="small">${esc(r.detail)}${r.url ? ` · <a href="${attr(r.url)}" target="_blank" rel="noopener">see it</a>` : ""}</div>` : ""}
+    <div class="small">In place of ${esc(sg.ride_name || "the indoor ride")}. Bring the bike.</div>
+    <div class="sgbtns"><button class="sgyes" data-sugg="yes" data-date="${attr(sg.date)}" aria-label="Yes, add it">✓</button><button class="sgno" data-sugg="no" data-date="${attr(sg.date)}" aria-label="No, keep the indoor ride">✕</button></div></div>`;
+}
 // The ride's fuel, inside its card: what to drink on the bike, its bars, and its own log button (or how it went).
 function rideFuelHTML(f, isToday, state){
   const mt = f.meal && f.meal.match, logged = f.meal && f.meal.logged;
