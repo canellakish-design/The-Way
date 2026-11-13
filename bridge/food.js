@@ -312,14 +312,16 @@ async function guidelinesFor(date) {
       let busy = [];
       try {
         const ev = await require('./calendar').eventsBetween(date, date);
-        busy = (ev || []).filter(e => !e.allDay && e.start && e.end && ['coaching', 'work', 'busy', 'travel'].includes(e.category) && tz.keyOf(new Date(e.start)) === date)
-          .map(e => ({ start: tz.minutesOf(new Date(e.start)), end: tz.minutesOf(new Date(e.end)), name: String(e.summary || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').slice(0, 40) }))
-          .filter(b => b.end > b.start);
+        // the day's blocks (dayplan.js): classes, coaching from its arrival, the drives, travel, family, his own blocks
+        busy = require('./dayplan').blocksOf(ev, { date, categories: new Set(['coaching', 'work', 'busy', 'travel', 'commute', 'family']) })
+          .map(b => Object.assign(b, { name: String(b.name || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').replace(/^Bethesda Premier Cup: /, '').replace(/ · \d+ min.*$/, '').slice(0, 40) }));
       } catch (e) { busy = []; }
       const ss = sessions.filter(s => F.toMin(s.time) != null && !s.done).map(s => ({ start: F.toMin(s.time), end: F.toMin(s.time) + (s.minutes || 60), name: String(s.name || '').replace(/\s*[·(].*$/, ''),
         kind: /weight|strength/i.test(String(s.sport || '')) || /\b(push|pull|upper|legs|lift)\b/i.test(String(s.name || '')) ? (/kettlebell\s*blast|pump/i.test(String(s.name || '')) ? 'easy' : 'lift')
           : /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i.test(String(s.name || '')) ? 'hard' : 'easy' }));
-      return F.placeSnacks(plan, { busy, sessions: ss, wake: win ? win.wake : null, bed: win ? win.bed : null });
+      // a meal is never during a session either (the bottle on the bike is the ride, and stays)
+      const inSession = ss.map(x => ({ start: x.start, end: x.end, name: x.name }));
+      return F.placeSnacks(plan, { busy: busy.concat(inSession), sessions: ss, wake: win ? win.wake : null, bed: win ? win.bed : null });
     })(),
     sessions: sessions.map(s => { const r = rxOf(s); return { name: s.name, minutes: s.minutes, tss: s.tss, done: !!s.done, time: s.time || null, sport: s.sport || null,
       slid_from: s.slid_from || null, awaiting: s.awaiting || null, evidence: s.evidence || null, start_at: s.start_at || null, end_at: s.end_at || null,

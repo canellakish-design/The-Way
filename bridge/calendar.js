@@ -689,6 +689,20 @@ async function scheduleReport(q) {
               if (x.after_session) { const sm = S.toMin(x.time); e.start_min = sm; e.end_min = sm + (e.minutes || 10); e.from = fmtMin(sm); e.to = fmtMin(e.end_min); e.detail = `${e.detail ? e.detail + ' · ' : ''}after the session`; }
             }
           } catch (e) { /* the times stand */ }
+          // one thing at a time (dayplan.js): a dose inside a class, a game, a drive or his own block moves just
+          // before it (else just after), and a workout or his own block over something fixed is marked with the
+          // nearest free time that fits
+          try {
+            const DP = require('./dayplan');
+            const blocks = DP.blocksOf(day.events, { categories: new Set(['work', 'coaching', 'commute', 'travel', 'family', 'busy']) });
+            for (const e of day.events.filter(e => e.kind === 'supplement' && e.source === 'rx' && !e.taken)) {
+              const p = DP.placeDose(e.start_min, e.minutes || 10, blocks, SWin ? SWin.wake : null);
+              if (!p.moved) continue;
+              e.start_min = p.min; e.end_min = p.min + (e.minutes || 10); e.from = fmtMin(e.start_min); e.to = fmtMin(e.end_min);
+              e.detail = `${e.detail ? e.detail + ' · ' : ''}${p.why}`;
+            }
+            DP.markClashes(day.events, SWin);
+          } catch (e) { /* the day stands */ }
           day.events.sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
         }
       } catch (e) { /* the day stands without them */ }
