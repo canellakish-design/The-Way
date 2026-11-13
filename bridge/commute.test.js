@@ -76,4 +76,23 @@ ok('the alerts: a heads-up when traffic is heavy and leaving is half an hour off
   const g = M.decide(780, 820, { min: 41, usual_min: 40 }, 40, {}, 'Maryland SoccerPlex');
   assert.strictEqual(g.title, 'Time to leave for Maryland SoccerPlex');
 });
+ok('a drive for everything with a real place: a doctor, dinner out; none for a call, home, campus, a route name, TBD', () => {
+  const s = Object.assign({}, S, { home: { lat: 38.98, lon: -76.55, label: '1915 Towne Centre Boulevard, Annapolis, MD 21401' } });
+  const e = (summary, location, o) => Object.assign({ summary, location, category: 'busy', allDay: false, start: at(day, 10, 0), end: at(day, 11, 0) }, o || {});
+  assert.strictEqual(M.isTrip(e('Dentist', '12 Main St, Annapolis, MD'), s), true);
+  assert.strictEqual(M.isTrip(e('Dinner', 'Carrol\'s Creek Cafe, Annapolis'), s), true);
+  assert.strictEqual(M.isTrip(e('Staff call', 'https://zoom.us/j/123'), s), false);
+  assert.strictEqual(M.isTrip(e('Faculty meeting', 'A104'), s), false, 'a campus room stretches the school day instead');
+  assert.strictEqual(M.isTrip(e('Ride', 'Butler side roads'), s), false, 'a route name is no address');
+  assert.strictEqual(M.isTrip(e('Lunch', 'TBD'), s), false);
+  assert.strictEqual(M.isTrip(e('Home', '1915 Towne Centre Blvd'), s), false);
+  assert.strictEqual(M.isTrip(e('IDP call', 'Indian Creek, Crownsville, MD'), s), true, 'a meeting with a real place is a trip');
+  assert.strictEqual(M.isTrip(e('Dance Concert', 'McDonogh Theatre, Owings Mills', { category: 'info' }), s), false, 'not going: no drive');
+  const t = M.tripsFor(day, [e('Dentist', '12 Main St, Annapolis, MD', { start: at(day, 17, 0), end: at(day, 18, 0) })], s);
+  assert.strictEqual(t[0].kind, 'errand'); assert.strictEqual(t[0].label, 'Dentist', 'a street address is labelled by the event');
+  assert.strictEqual(M.rowsFor(day, t[0], s, { est: 20, skip: 'walk' }).length, 0, 'a walk from home: no drive');
+  const camp = [ev('(CP) World History I (Sec. E1)', 8, 30, 9, 30), { summary: 'Faculty meeting', location: 'A104', category: 'work', allDay: false, start: at(day, 15, 30), end: at(day, 16, 30) }];
+  assert.strictEqual(M.classTimes(day, camp).last, 990, 'the meeting in A104 keeps him on campus to 4:30');
+});
 console.log(n + ' passed');
+
