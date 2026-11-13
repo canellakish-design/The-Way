@@ -303,7 +303,11 @@ function placeSnacks(meals, opts) {
     const byStart = busy.slice().sort((a, b) => a.start - b.start);
     const ref = nt < t ? byStart.find(b => b.start >= nt + 30) : byStart.filter(b => b.end <= nt).sort((a, b) => a.end - b.end).pop();
     m.moved_from = m.time; m.time = toHM(nt); delete m.at_min;
-    m.place_note = ref ? `${nt < t ? 'Before' : 'After'} ${ref.name || 'the block'}.` : (nt < t ? 'Earlier: the day is full later.' : 'Later: the day is full before.');
+    // away from home (after a drive out, before the drive back): pack it
+    const out = byStart.filter(b => b.end <= nt + 1).pop();
+    const away = out && /^drive to /i.test(String(out.name || '')) && !/mcdonogh/i.test(String(out.name || ''));
+    m.place_note = away ? `Pack it: at ${String(out.name).replace(/^drive to /i, '').replace(/ · .*$/, '')}${ref && ref.start > nt ? `, before ${ref.name}` : ''}.`
+      : ref ? `${nt < t ? 'Before' : 'After'} ${ref.name || 'the block'}.` : (nt < t ? 'Earlier: the day is full later.' : 'Later: the day is full before.');
     m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
     prev = m;
   }

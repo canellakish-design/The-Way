@@ -249,7 +249,10 @@ function windowsForDate(events, dateStr, extraBusy) {
   if (dayEvents.some(e => e.allDay)) {
     return { windows: [], available_min: 0, travel: dayEvents.some(e => e.category === 'travel') };
   }
-  const busy = dayEvents.map(e => [tz.minutesOf(new Date(e.start)), tz.minutesOf(new Date(e.end))])
+  // a workout planned in a free window keeps the changeover (dayplan.js): 20 minutes to shower before the next
+  // thing, 15 to change and set up after the last one
+  const CH = require('./dayplan').CHANGE.training;
+  const busy = dayEvents.map(e => [tz.minutesOf(new Date(e.start)) - CH.after, tz.minutesOf(new Date(e.end)) + CH.before])
     .concat(extraBusy || []).sort((a, b) => a[0] - b[0]);
 
   const windows = [];

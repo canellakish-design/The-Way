@@ -21,6 +21,19 @@ const FIXED = new Set(['work', 'coaching', 'commute', 'travel', 'family', 'sleep
 const MOVABLE = new Set(['busy', 'training']);
 const RANK = c => FIXED.has(c) ? 2 : c === 'busy' ? 1 : c === 'training' ? 0 : -1;
 
+// Changeover (Harry, 13 Nov: "this concept of the change over time … needs to be built into the code generally").
+// Going from one thing to another takes time when the clothes or the place change: into a workout, 15 minutes to
+// change and set up (after a drive, a class, a game); out of one, 20 to shower and change before the next thing.
+// The same kind back to back (two classes, two games on one field) needs none, and a drive's own arrival is its
+// changeover into the event (the "Arrive by" time). Every placer reads this one rule: the clash marks, the free
+// windows workouts are planned in (calendar.js), and the fixes.
+const CHANGE = { training: { before: 15, after: 20 } };
+function changeover(a, b) {   // minutes needed between a ending and b starting
+  if (!a || !b || a.category === b.category) return 0;
+  const after = (CHANGE[a.category] || {}).after || 0, before = (CHANGE[b.category] || {}).before || 0;
+  return Math.max(after, before);
+}
+
 // "Arrive by 1:40 PM" in a game's notes
 function arriveBy(text) {
   const m = /arrive\s+by\s+(\d{1,2}):(\d{2})\s*([ap])\.?m/i.exec(String(text || ''));
@@ -42,7 +55,11 @@ function blocksOf(events, o) {
       s = tz.minutesOf(new Date(e.start)); en = tz.minutesOf(new Date(e.end));
     }
     if (s == null || en == null || en <= s) continue;
-    if (e.category === 'coaching') { const a = arriveBy(e.description); if (a != null && a < s && s - a <= 180) s = a; }
+    if (e.category === 'coaching') {
+      // in the way from its "Arrive by" time; for a meal (o.eat) from the warm-up, half an hour before it starts
+      if (o && o.eat) s = s - 30;
+      else { const a = arriveBy(e.description); if (a != null && a < s && s - a <= 180) s = a; }
+    }
     out.push({ start: s, end: en, name: String(e.summary || '').replace(/^Coaching · /, '').slice(0, 50), category: e.category });
   }
   return out.sort((a, b) => a.start - b.start);
@@ -98,21 +115,29 @@ function markClashes(rows, win) {
   for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
     const a = R[i], b = R[j];
     const as = effStart(a), bs = effStart(b);
-    if (!(as < b.end_min && a.end_min > bs)) continue;
+    // over each other, or too close to change between (a 4:15 ride when the drive home ends at 4:14)
+    const over = as < b.end_min && a.end_min > bs;
+    const gapAB = bs - a.end_min, gapBA = as - b.end_min;
+    const tight = !over && ((gapAB >= 0 && gapAB < changeover(a, b)) || (gapBA >= 0 && gapBA < changeover(b, a)));
+    if (!over && !tight) continue;
     const ra = RANK(a.category), rb = RANK(b.category);
     const mover = ra < rb ? a : rb < ra ? b : null, other = mover === a ? b : mover === b ? a : null;
-    if (!mover) { for (const [x, y] of [[a, b], [b, a]]) x.clash = x.clash || { with: y.summary, fix_min: null, both_fixed: true }; continue; }
+    if (!mover) { if (tight) continue; for (const [x, y] of [[a, b], [b, a]]) x.clash = x.clash || { with: y.summary, fix_min: null, both_fixed: true }; continue; }
     if (mover.clash && mover.clash.fix_min != null) continue;
-    // the fix: the nearest time that touches nothing fixed, nothing of his own, and no other workout
+    // the fix: the nearest time that touches nothing fixed, nothing of his own, and no other workout, with the
+    // changeover kept on both sides of each
     const len = mover.end_min - mover.start_min;
-    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r), end: r.end_min }));
+    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r) - changeover(mover, r), end: r.end_min + changeover(r, mover) }));
     const earliest = mover.category === 'training' ? wake + 60 : wake;
     const latest = mover.category === 'training' ? bed - 60 : bed;
     const fix = nearestFree(mover.start_min, len, blocks, earliest, latest);
-    mover.clash = { with: other.summary, fix_min: fix };
+    // the changeover that is short: the mover's before the other thing, or after it
+    const moverFirst = effStart(mover) < effStart(other);
+    const need = moverFirst ? changeover(mover, other) : changeover(other, mover);
+    mover.clash = tight ? { with: other.summary, fix_min: fix, tight: true, need, side: moverFirst ? 'before' : 'after' } : { with: other.summary, fix_min: fix };
     other.clash_by = other.clash_by || mover.summary;
   }
   return rows;
 }
 
-module.exports = { FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
+module.exports = { CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
