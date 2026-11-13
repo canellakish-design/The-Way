@@ -306,6 +306,7 @@ function scheduleForDate(events, dateStr) {
       summary: e.summary, category: e.category, allDay: false,
       source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, sport: e.sport || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
       detail: e.detail || null, edit: e.source === 'commute' ? null : editKey(e),
+      attend: e.attend || null, attend_by: e.attend_by || null, attend_key: e.attend_key || null, series_key: e.series_key || null, orig_category: e.orig_category || null,
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
     };
@@ -595,7 +596,9 @@ async function eventsBetween(firstKey, lastKey) {
   const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
   const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
   // the drive to McDonogh and home on class days (commute.js)
-  return require('./commute').withCommutes(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)));
+  // what he is going to (attend.js): the rest stays as information, blocking nothing
+  const A = await require('./attend').load().catch(() => null);
+  return require('./commute').withCommutes(require('./attend').apply(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)), A));
 }
 
 async function scheduleReport(q) {
@@ -649,7 +652,9 @@ async function scheduleReport(q) {
           category: classify(e.summary, d.manual, calDefault) };
       });
       // a special schedule on the Upper School calendar re-times that day's classes (classes.js)
-      const days = scheduleDays(await require('./commute').withCommutes(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d))), n, iv.days, back);
+      // what he is going to (attend.js): the rest stays on the day as information, blocking nothing
+      const A = await require('./attend').load().catch(() => null);
+      const days = scheduleDays(await require('./commute').withCommutes(require('./attend').apply(require('./classes').applySpecialSchedules(mineOnly(liveEvents.concat(applyOverrides(snapEvents, d.overrides)), d)), A)), n, iv.days, back);
       // The supplements, as rows tied to the day's rides: beetroot before the
       // first ride, bicarbonate before a hard one, magnesium in the evening.
       // Derived, never stored, so they follow a ride that moves and never
