@@ -112,10 +112,10 @@ function venueTrips(date, events, s) {
     const coaching = e.category === 'coaching', game = coaching && GAME.test(String(e.summary || ''));
     const k = venueKey(e.location), have = out.find(g => g.key === k);
     if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; continue; }
-    // the place's name, or the event's when the place is only a street address ("Dr. Patel" over "12 Main St")
-    const place = venueName(e.location), byTitle = !coaching && /^\d/.test(place);   // coaching keeps its venue's name
-    const label = byTitle ? String(e.summary || place).replace(/^Coaching · /, '').split(/[:·(|]/)[0].trim().slice(0, 40) || place : place;
-    out.push({ key: k, location: e.location, label, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
+    // the place's name, or the event's when the place is only a street address ("Physio" over "12 West St")
+    const place = venueName(e.location), byTitle = /^\d/.test(place) && !coaching;
+    const title = String(e.summary || '').replace(/\s*[|·].*$/, '').trim().slice(0, 40);
+    out.push({ key: k, location: e.location, label: byTitle && title ? title : place, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
   }
   return out;
 }
@@ -126,7 +126,7 @@ function tripsFor(date, events, s, nextEvents) {
   const trips = [];
   const times = classTimes(date, events);
   if (times) trips.push({ id: 'school', kind: 'school', label: SCHOOL.label, dest: SCHOOL, arrive: times.first - s.arrive_before, back: times.last + s.leave_after });
-  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'errand', label: g.label, dest: g.location, arrive: g.arrive, back: g.end + 15 });
+  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', label: g.label, dest: g.location, arrive: g.arrive, back: g.end + (g.coaching ? 15 : 5) });
   return trips.sort((a, b) => a.arrive - b.arrive);
 }
 // No time to get home between two trips: the first keeps no drive home, the second leaves from the first place.
@@ -134,7 +134,7 @@ function tripsFor(date, events, s, nextEvents) {
 function chain(trips, store, s) {
   const est = (t, leg) => { const c = store && store[t.id]; return (c && c[leg] && c[leg].min) || (c && c.est) || (t.kind === 'school' ? s.usual_min : null); };
   // a place that turned out to be a walk from home, or a wrong match far away, is no trip
-  const out = trips.filter(t => !(store && store[t.id] && store[t.id].skip)).map(t => Object.assign({}, t));
+  const out = trips.filter(t => !(store && store[t.id] && (store[t.id].walk || store[t.id].far))).map(t => Object.assign({}, t));
   for (let i = 1; i < out.length; i++) {
     const a = out[i - 1], b = out[i];
     if (a.back == null || est(b, 'to') == null) continue;   // a venue not looked up yet: no guess
@@ -154,7 +154,8 @@ function heavy(r, usual) {
 function rowsFor(date, trip, s, c, overnight) {
   const usual = trip.kind === 'school' ? s.usual_min : (c && c.est) || null;
   const toMin = (c && c.to && c.to.min) || usual, homeMin = (c && c.home && c.home.min) || usual;
-  if (!toMin || (c && c.skip)) return [];   // a venue not looked up yet (no guess on the calendar), or a walk
+  if (!toMin) return [];   // a venue not looked up yet: no guess on the calendar
+  if (c && (c.walk || c.far)) return [];   // a walk from home, or a far-off wrong match: no drive on the calendar
   const note = r => r && r.min ? `${r.min} min in traffic${r.usual_min && r.min - r.usual_min >= 5 ? `, ${r.min - r.usual_min} over the usual` : ''}` : `about ${usual} min`;
   const hv = r => r && heavy(r, trip.kind === 'school' ? s.usual_min : null) ? ' · heavy traffic' : '';
   const base = { category: 'commute', source: 'commute', calendar: 'The Way', account: 'the way', allDay: false, blocking: true };
@@ -243,17 +244,19 @@ async function refresh(date, events) {
   const raw = tripsFor(date, evs, s);
   if (!raw.length) return null;
   const store = await getJSON(`commute-${date}`, {}).catch(() => ({})) || {};
-  const fresh = (x, from) => x && x.at && Date.now() - Date.parse(x.at) < 3 * 3600e3 && (x.from || 'home') === (from || 'home');
+  // today's drives are re-read every 20 minutes, the days ahead every 3 hours; a moved event at once (x.for)
+  const ttl = date === tz.todayKey() ? 20 * 60e3 : 3 * 3600e3;
+  const fresh = (x, from, when) => x && x.at && Date.now() - Date.parse(x.at) < ttl && (x.from || 'home') === (from || 'home') && (!when || x.for === when);
   for (const t of chain(raw, store, s)) {
     const c = store[t.id] = store[t.id] || {};
     let p, o = home; try { p = await placeOf(t.dest); if (t.from) o = await placeOf(t.from_dest); } catch (e) { continue; }
-    const km = kmBetween(home, p);
-    c.skip = km < WALK_KM ? 'walk' : (t.kind === 'errand' && km > FAR_KM) ? 'far' : null;   // a walk, or a wrong match
-    if (c.skip) continue;
     c.est = Math.round(kmBetween(o, p) * 1.3 / 75 * 60 + 10);   // no traffic yet: the straight line at highway pace
+    c.walk = !t.from && kmBetween(home, p) < WALK_KM;
+    c.far = t.kind === 'event' && kmBetween(home, p) > FAR_KM;
+    if (c.walk || c.far) continue;
     if (!trafficKey()) continue;
-    if (!fresh(c.to, t.from)) { const r = await route(o, p, { arriveAt: new Date(iso(date, t.arrive)) }).catch(() => null); c.to = r ? Object.assign(r, { from: t.from || 'home' }) : (c.to || null); }
-    if (t.back != null && !fresh(c.home)) c.home = await route(p, home, { departAt: new Date(iso(date, t.back)) }).catch(() => c.home || null);
+    if (!fresh(c.to, t.from, t.arrive)) { const r = await route(o, p, { arriveAt: new Date(iso(date, t.arrive)) }).catch(() => null); c.to = r ? Object.assign(r, { from: t.from || 'home', for: t.arrive }) : (c.to || null); }
+    if (t.back != null && !fresh(c.home, null, t.back)) { const r = await route(p, home, { departAt: new Date(iso(date, t.back)) }).catch(() => null); c.home = r ? Object.assign(r, { for: t.back }) : (c.home || null); }
   }
   await setJSON(`commute-${date}`, store).catch(() => {});
   return store;
@@ -285,11 +288,10 @@ async function check(now) {
   const evs = await require('./calendar').eventsBetween(date, tomorrow).catch(() => []);
   // the readings for the calendar: today's and tomorrow's trips, kept fresh
   const store = await refresh(date, evs).catch(() => null) || {};
-  // once an evening, the week ahead: venues looked up and the drives predicted, so the calendar has them
-  if (nowMin >= 18 * 60 && nowMin < 18 * 60 + 5) {
-    const week = await require('./calendar').eventsBetween(tomorrow, tz.shiftKey(date, 6)).catch(() => []);
-    for (let i = 1; i < 7; i++) await refresh(tz.shiftKey(date, i), week).catch(() => null);
-  }
+  // kept up to date by itself: one day of the six ahead is re-read on each five-minute run, the week every half hour
+  const ahead = (Math.floor(nowMin / 5) % 6) + 1, aday = tz.shiftKey(date, ahead);
+  const aevs = ahead === 1 ? evs : await require('./calendar').eventsBetween(aday, aday).catch(() => []);
+  await refresh(aday, aevs).catch(() => null);
   if (!s.notify || !trafficKey()) return { skipped: !s.notify ? 'notifications off' : 'no traffic key (TOMTOM_API_KEY)' };
   const trips = chain(tripsFor(date, evs, s), store, s);
   const log = await getJSON('commute-sent', { date, sent: {} });
@@ -301,6 +303,7 @@ async function check(now) {
     if (nowMin < t.arrive - Math.max(150, expect + 75) || nowMin > t.arrive) continue;
     const byDate = { [date]: trips, [tz.shiftKey(date, -1)]: tripsFor(tz.shiftKey(date, -1), evs, s) };
     const on = overnightFor(date, t, store, byDate); if (on && on.out) continue;   // already there from the night before
+    if (c.walk || c.far) continue;
     let place, origin = home; try { place = await placeOf(t.dest); if (t.from) origin = await placeOf(t.from_dest); } catch (e) { continue; }
     const r = await route(origin, place, {}).catch(() => null);
     if (!r) continue;
@@ -340,7 +343,7 @@ async function status() {
   const trips = chain(tripsFor(date, evs, s), store, s).map(t => ({ trip: t.label, kind: t.kind, in_by: hm(t.arrive),
     rows: rowsFor(date, t, s, store[t.id], null).map(r => ({ summary: r.summary, detail: r.detail, from: hm(tz.minutesOf(new Date(r.start))), to: hm(tz.minutesOf(new Date(r.end))) })) }));
   const ahead = [];
-  for (let i = 1; i < 7; i++) { const d = tz.shiftKey(date, i); for (const g of venueTrips(d, evs, s)) ahead.push({ date: d, label: tz.labelOf(d), venue: g.label, kind: g.game ? 'game' : g.coaching ? 'training' : 'errand', in_by: hm(g.arrive) }); }
+  for (let i = 1; i < 7; i++) { const d = tz.shiftKey(date, i); for (const g of venueTrips(d, evs, s)) ahead.push({ date: d, label: tz.labelOf(d), venue: g.label, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', in_by: hm(g.arrive) }); }
   const log = await getJSON('commute-sent', { date: null, sent: {} }).catch(() => ({ sent: {} }));
   return { home: s.home ? { label: s.home.label } : null, school: SCHOOL.label, arrive_before: s.arrive_before, leave_after: s.leave_after, usual_min: s.usual_min,
     notify: s.notify, off: !!s.off, traffic: !!trafficKey(), today: trips, coaching_ahead: ahead, sent_today: log.date === date ? log.sent : {} };

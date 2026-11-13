@@ -355,3 +355,9 @@ ul.agenda.hsched .tag .tdel{min-height:0}
 /* the day's printed sheet (bridge/print.js) */
 .dayhead{display:flex;justify-content:space-between;align-items:baseline}
 .dayprint{font-family:var(--mono);font-size:10.5px;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted);text-decoration:none}
+/* the fuel on the bike, inside its ride's card */
+ul.agenda.hsched .ridefuel{display:block; margin-top:10px; padding-top:8px; border-top:1px dashed var(--line)}
+ul.agenda.hsched .ridefuel .rfhead{display:flex; align-items:center; justify-content:space-between; gap:8px}
+ul.agenda.hsched .ridefuel .rfl{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
+ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
+
