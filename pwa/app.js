@@ -2925,7 +2925,10 @@ function suggestCardHTML(sg){
     <div class="sgname">${r.type === "mtb" ? "Mountain bike" : "Road"}: ${esc(r.name || "")}</div>
     <div class="small">${esc(sg.at)}–${esc(sg.until)} · ${esc(sg.why || "")}</div>
     ${r.detail ? `<div class="small">${esc(r.detail)}${r.url ? ` · <a href="${attr(r.url)}" target="_blank" rel="noopener">see it</a>` : ""}</div>` : ""}
-    <div class="small">In place of ${esc(sg.ride_name || "the indoor ride")}. Bring the bike.</div>
+    ${r.fit_note ? `<div class="small">${esc(r.fit_note)}</div>` : ""}
+    ${sg.loop && sg.loop.km ? `<div class="small">About ${esc(String(sg.loop.km))} km${sg.loop.maps ? ` · <a href="${attr(sg.loop.maps)}" target="_blank" rel="noopener">open the loop</a>` : ""}${sg.loop.gpx ? ` · <a href="${DEFAULT_API}/suggest/gpx?date=${attr(sg.date)}">GPX for the Garmin</a>` : ""}</div>` : ""}
+    ${sg.wet ? `<div class="small">It rained: the trails are left out today.</div>` : ""}
+    <div class="small">In place of ${esc(sg.ride_name || "the indoor ride")}. Bring the bike.${sg.date > localDateKey() ? " Answer by 8 p.m. tonight so it makes the packing list." : ""}</div>
     <div class="sgbtns"><button class="sgyes" data-sugg="yes" data-date="${attr(sg.date)}" aria-label="Yes, add it">✓</button><button class="sgno" data-sugg="no" data-date="${attr(sg.date)}" aria-label="No, keep the indoor ride">✕</button></div></div>`;
 }
 // The ride's fuel, inside its card: what to drink on the bike, its bars, and its own log button (or how it went).
