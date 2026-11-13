@@ -360,4 +360,13 @@ ul.agenda.hsched .ridefuel{display:block; margin-top:10px; padding-top:8px; bord
 ul.agenda.hsched .ridefuel .rfhead{display:flex; align-items:center; justify-content:space-between; gap:8px}
 ul.agenda.hsched .ridefuel .rfl{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted)}
 ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
+/* the recommended ride (suggest.js): a blue card above the day, yes or no */
+.suggest{margin:10px 0; padding:12px 14px; border:2px solid #4AA3FF; background:rgba(74,163,255,.12)}
+.suggest .sgk{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#4AA3FF}
+.suggest .sgname{font-size:17px; font-weight:700; margin:4px 0 2px}
+.suggest .small{margin-top:2px}
+.suggest .sgbtns{display:flex; gap:10px; margin-top:10px}
+.suggest .sgbtns button{flex:1; font-size:22px; padding:8px 0; border:2px solid #4AA3FF; background:transparent; color:var(--ink)}
+.suggest .sgbtns .sgyes{background:#4AA3FF; color:#000}
+.suggest.done{border-width:1px; padding:8px 12px; font-size:13px}
 

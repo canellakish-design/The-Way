@@ -123,6 +123,22 @@ function venueTrips(date, events, s) {
 }
 const coachingTrips = (date, events, s) => venueTrips(date, events, s).filter(g => g.coaching);
 const awayGames = (date, events, s) => coachingTrips(date, events, s).filter(g => g.game && !g.home_field);
+// A planned ride with a place (suggest.js: a recommended ride he said yes to) is a trip like an event: the drive
+// there from wherever he is, and home after it.
+async function withPlaces(evs) {
+  const dates = [...new Set((evs || []).filter(e => e && e.start).map(e => tz.keyOf(new Date(e.start))))];
+  if (!dates.length) return evs || [];
+  let d; try { d = await getJSON('plan-workouts', { workouts: {} }); } catch (e) { return evs; }
+  const extra = [];
+  for (const w of Object.values(d.workouts || {})) {
+    if (!w || !w.location || !w.time || !dates.includes(w.date) || w.done) continue;
+    const [h, mi] = w.time.split(':').map(Number), mins = Math.round((w.steps || []).reduce((a, x) => a + (x.dur_s || 0), 0) / 60) || 60;
+    const [y, mo, dd] = w.date.split('-').map(Number);
+    const st = tz.zonedToUTC(y, mo, dd, h, mi);
+    extra.push({ summary: w.name, category: 'training', location: w.location, allDay: false, start: st.toISOString(), end: new Date(st.getTime() + mins * 60000).toISOString(), source: 'plan-place', workout_id: w.id });
+  }
+  return (evs || []).concat(extra);
+}
 // Every trip of a day: { id, kind, label, dest (school point or venue text), arrive (min), back (min) or null }
 function tripsFor(date, events, s, nextEvents) {
   const trips = [];
@@ -184,8 +200,9 @@ async function withCommutes(events) {
   let s; try { s = await settings(); } catch (e) { return evs; }
   if (s.off) return evs;
   const dates = [...new Set(evs.filter(e => e && !e.allDay && e.start).map(e => tz.keyOf(new Date(e.start))))].sort();
+  const withP = await withPlaces(evs).catch(() => evs);
   const byDate = {};
-  for (const d of dates) byDate[d] = tripsFor(d, evs, s);
+  for (const d of dates) byDate[d] = tripsFor(d, withP, s);
   const out = evs.slice();
   // the stored readings for every day with a trip, read at once
   const stores = {};
@@ -242,7 +259,7 @@ const kmBetween = (a, b) => { const R = 6371, t = x => x * Math.PI / 180; const 
 async function refresh(date, events) {
   const s = await settings(), home = homeOf(s);
   if (!home) return null;
-  const evs = events || await require('./calendar').eventsBetween(date, date).catch(() => []);
+  const evs = await withPlaces(events || await require('./calendar').eventsBetween(date, date).catch(() => [])).catch(() => events || []);
   const raw = tripsFor(date, evs, s);
   if (!raw.length) return null;
   const store = await getJSON(`commute-${date}`, {}).catch(() => ({})) || {};
@@ -287,7 +304,7 @@ async function check(now) {
   if (!home) return { skipped: 'no home set' };
   const date = tz.todayKey(), p = tz.parts(now || new Date()), nowMin = p.h * 60 + p.mi;
   const tomorrow = tz.shiftKey(date, 1);
-  const evs = await require('./calendar').eventsBetween(date, tomorrow).catch(() => []);
+  const evs = await withPlaces(await require('./calendar').eventsBetween(date, tomorrow).catch(() => [])).catch(() => []);
   // the readings for the calendar: today's and tomorrow's trips, kept fresh
   const store = await refresh(date, evs).catch(() => null) || {};
   // kept up to date by itself: one day of the six ahead is re-read on each five-minute run, the week every half hour
@@ -340,7 +357,7 @@ async function save(b) {
 
 async function status() {
   const s = await settings(), date = tz.todayKey();
-  const evs = await require('./calendar').eventsBetween(date, tz.shiftKey(date, 6)).catch(() => []);
+  const evs = await withPlaces(await require('./calendar').eventsBetween(date, tz.shiftKey(date, 6)).catch(() => [])).catch(() => []);
   const store = await refresh(date, evs).catch(() => null) || {};
   const trips = chain(tripsFor(date, evs, s), store, s).map(t => ({ trip: t.label, kind: t.kind, in_by: hm(t.arrive),
     rows: rowsFor(date, t, s, store[t.id], null).map(r => ({ summary: r.summary, detail: r.detail, from: hm(tz.minutesOf(new Date(r.start))), to: hm(tz.minutesOf(new Date(r.end))) })) }));
@@ -357,4 +374,4 @@ function attach(app) {
   app.post('/commute', async (req, res) => { if (!auth(req, res)) return; try { res.json(await save(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, withCommutes, rowsFor, tripsFor, chain, coachingTrips, venueTrips, isTrip, atHome, classTimes, awayGames, arriveBy, overnightFor, decide, heavy, check, refresh, route, settings, SCHOOL, DEF };
+module.exports = { attach, withPlaces, withCommutes, rowsFor, tripsFor, chain, coachingTrips, venueTrips, isTrip, atHome, classTimes, awayGames, arriveBy, overnightFor, decide, heavy, check, refresh, route, settings, SCHOOL, DEF };

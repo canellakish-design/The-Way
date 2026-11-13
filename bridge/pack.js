@@ -19,7 +19,14 @@ function listFrom(meals) {
 }
 async function packFor(date) {
   const g = await require('./food').guidelinesFor(date);
-  return { date, items: listFrom(g.meals) };
+  const items = listFrom(g.meals);
+  // a recommended ride he said yes to (suggest.js): the bike goes in the car
+  try {
+    const d = await getJSON('plan-workouts', { workouts: {} });
+    for (const w of Object.values(d.workouts || {})) if (w && w.date === date && w.suggested && w.location && !w.done)
+      items.unshift({ slot: 'bike', time: w.time, at: tz.hm12(w.time), where: w.suggested.name, line: `Bike, helmet, shoes, kit and two bottles: ${w.name} at ${tz.hm12(w.time)}, ${w.suggested.near ? `after ${w.suggested.near}` : 'on the way'}.` });
+  } catch (e) { /* the meals stand */ }
+  return { date, items };
 }
 // 8 p.m.: tomorrow's list to the phone, once
 async function nightPack(now) {

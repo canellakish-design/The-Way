@@ -76,6 +76,9 @@ function clean(body, prev, earliest) {
     // a library note's head line follows the sport: road notes for a road ride, trainer notes on the trainer
     notes: notesFor(String(b.notes != null ? b.notes : (p.notes || '')).slice(0, 2000), SPORTS.includes(b.sport) ? b.sport : (p.sport || 'Ride')),
     route_id: b.route_id != null ? String(b.route_id).replace(/\D/g, '').slice(0, 12) || null : (p.route_id || null),
+    // where the ride starts when it is not at home (suggest.js: a recommended ride near a game); the drives follow it
+    location: b.location === null ? null : b.location != null ? String(b.location).slice(0, 200) : (p.location || null),
+    suggested: b.suggested === null ? null : b.suggested && typeof b.suggested === 'object' ? b.suggested : (p.suggested || null),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
     course: b.course === null ? null : b.course && typeof b.course === 'object' ? {
       id: String(b.course.id || '').slice(0, 60) || null, name: String(b.course.name || '').slice(0, 80) || null,
