@@ -155,6 +155,18 @@ async function eventsFrom(t, cal, timeMin, timeMax) {
   return j.items || [];
 }
 
+// The day reads Google's calendars as last synced when that is under ten minutes old (Harry, 13 Nov: the coach
+// timed out). Reading all thirty calendars took eight seconds on every request; the five-minute reminders run
+// (netlify/functions/reminders.mjs) keeps the copy fresh, so a page or the coach gets it at once.
+const FRESH_MS = 10 * 60 * 1000;
+let syncing = null;
+async function syncIfStale(maxAge) {
+  const d = await db();
+  const age = d.synced_at ? Date.now() - Date.parse(d.synced_at) : Infinity;
+  if (d.accounts.length && age < (maxAge == null ? FRESH_MS : maxAge)) return d;
+  if (!syncing) syncing = sync().finally(() => { syncing = null; });
+  return syncing;
+}
 async function sync() {
   const d = await db();
   if (!d.accounts.length) throw new Error('calendar not connected — visit /gcal/auth');
@@ -604,7 +616,7 @@ async function eventsBetween(firstKey, lastKey) {
 async function scheduleReport(q) {
       const n = Math.min(21, Math.max(1, parseInt(q.days, 10) || 7));
       const back = Math.min(7, Math.max(0, parseInt(q.back, 10) || 0));
-      const d = await sync().catch(async () => await db());
+      const d = await syncIfStale(q && q.fresh ? 0 : null).catch(async () => await db());
       const firstKey = tz.shiftKey(tz.todayKey(), -back);
       const lastKey = tz.shiftKey(tz.todayKey(), n - back - 1);
       const intervals = require('./intervals');
@@ -853,7 +865,7 @@ function attach(app) {
     res.json({ ok: true, removed: before - d.accounts.length, accounts: d.accounts.map(a => a.id) }); });
   app.get('/availability', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const d = await sync().catch(async () => await db());
+      const d = await syncIfStale().catch(async () => await db());
       if (!d.accounts.length) return res.json({ connected: false });
       const { sleepLatest } = require('./whoop');
       const s = await sleepLatest({ sync: false }).catch(() => null);
@@ -897,7 +909,7 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
   app.get('/availability/today', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const d = await sync().catch(async () => await db());
+      const d = await syncIfStale().catch(async () => await db());
       if (!d.accounts.length) return res.json({ connected: false });
       const key = tz.todayKey();
       const day = windowsForDate(d.events, key);
@@ -910,5 +922,5 @@ function attach(app) {
         ...recommendToday(day, rec, w ? w.remaining : null) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { mineOnly, NOT_MINE, attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
+module.exports = { syncIfStale, mineOnly, NOT_MINE, attach, classify, windowsForDate, weekAvailability, recommendToday, eventsBetween,
   trainingHours, connected, scheduleForDate, scheduleDays, scheduleReport, dateKey, addEvent, removeEvent, pushLocal, editEvent, deleteAny, editKey, hideEvent, unhideEvent, hiddenEvents, sharedCalendar, applyOverrides };

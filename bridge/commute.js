@@ -150,9 +150,12 @@ async function withCommutes(events) {
   const byDate = {};
   for (const d of dates) byDate[d] = tripsFor(d, evs, s);
   const out = evs.slice();
+  // the stored readings for every day with a trip, read at once
+  const stores = {};
+  await Promise.all(dates.filter(d => byDate[d].length).map(async d => { stores[d] = await getJSON(`commute-${d}`, {}).catch(() => ({})) || {}; }));
   for (const date of dates) {
     if (!byDate[date].length) continue;
-    const store = await getJSON(`commute-${date}`, {}).catch(() => ({})) || {};
+    const store = stores[date] || {};
     for (const trip of chain(byDate[date], store, s)) out.push(...rowsFor(date, trip, s, store[trip.id], overnightFor(date, trip, store, byDate)));
   }
   return out;
