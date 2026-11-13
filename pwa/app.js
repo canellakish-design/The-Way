@@ -1338,7 +1338,7 @@ function dayRows(d, plan, isToday){
     title: e.summary, detail: e.detail || e.location || "",
     lane: LANE[e.source] || LANE.calendar, wid: e.workout_id || null, lid: e.local_id || null, edit: e.edit || null,
     desc: e.description || null, location: e.location || null, calendar: e.calendar || null, source: e.source || "calendar", sport: e.sport || null,
-    rx: e.rx_key || null, taken: !!e.taken
+    rx: e.rx_key || null, taken: !!e.taken, clash: e.clash || null, clash_by: e.clash_by || null
   }));
   // The hub: today's card carries what the other tabs decided. From Food
   // and Live, the feeding window before each session and the meals that
@@ -1677,9 +1677,9 @@ function dayCard(d, plan, nowMin, rec, solo){
     const rideIt = r.wid && r.source === "plan" && !/weight|lift|strength|^run$|walk|hike/i.test(r.sport || "") && !(g && (g.logged || g.band === "green" || g.ridden)) && d.date >= (n => `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`)(new Date())
       ? `<a class="rideit" href="#player?id=${encodeURIComponent(r.wid)}">Ride it</a>` : "";
     const mealTag = r.meal ? (r.meal.logged ? (r.meal.match ? chip(r.meal.match.key === "green" ? "✓ on plan" : shortWord(r.meal.match), TONE[r.meal.match.key], r.meal.match.word) : chip("logged", "")) : (isToday ? `<button class="rxlog" data-meallog="${esc(r.meal.slot)}">log</button>` : chip(state === "past" ? "nothing logged" : "plan", ""))) : null;
-    return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
+    return `<li class="${r.lane.cls} ${state} xrow${st ? ` st-${st}` : ""}${r.clash ? " clashed" : ""}${g ? ` graded ${g.band}` : ""}${bt ? " medalled" : ""}${r.meal && r.meal.match ? ` match ${r.meal.match.key}` : ""}" data-s="${r.start}" data-e="${r.end}" data-x="${attr(JSON.stringify({ title:r.title, from:r.from, to:r.to, desc:r.desc||null, location:r.location||null, calendar:r.calendar||null, wid:r.wid||null, source:r.source||null, edit:r.edit||null, date:d.date, start:r.start, end:r.end, bt: bt ? bt.bt : null, ride: bt ? bt.name : null, href: r.href||null }))}">
       <span class="t">${esc(r.from)}<br>${esc(r.to)}</span>
-      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${r.bars || ""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}</span>
+      <span class="n">${(fv=>fv&&!(g&&g.logged)?`<span class="fdot ${fv.band}" title="fuel ${fv.pct}%, legs ${fv.legs_pct}%"></span>`:"")(r.wid&&FUELV[d.date+"|"+r.title])}${wxh ? gradeBadge(condGrade(hoursOver(WX[d.date], r.start, r.end), rideOf(WX[d.date], r))) : ""}${bt ? MEDAL : ""}${(r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride) && !r.rx && !r.meal && !r.open ? kindIcon(r.title, r.sport) : ""}${esc(r.title)}${r.detail?`<span class="small"> ${esc(r.detail)}</span>`:""}${r.bars || ""}${zb}${r.wid && WBK[r.wid] && window.Buckets ? Buckets.miniHTML(WBK[r.wid]) : ""}${r.wid && WSLEEP[r.wid] ? `<span class="small sleepflag"> · ${esc(WSLEEP[r.wid])}</span>` : ""}${r.clash ? `<span class="clash">Clashes with ${esc(r.clash.with)}${r.clash.fix_min != null && (r.wid || r.edit) ? ` <button class="clashfix" ${r.wid ? `data-fixw="${attr(r.wid)}"` : `data-fixx="${attr(r.edit)}"`} data-date="${attr(d.date)}" data-at="${String(Math.floor(r.clash.fix_min / 60)).padStart(2, "0")}:${String(r.clash.fix_min % 60).padStart(2, "0")}">Move to ${esc(fmtMinLocal(r.clash.fix_min))}</button>` : r.clash.both_fixed ? " · pick one" : ""}</span>` : r.clash_by ? `<span class="clash soft">${esc(r.clash_by)} is on top of this</span>` : ""}</span>
       <span class="tag">${r.rx ? (r.taken ? chip("✓ taken", "good") : (isToday ? `<button class="rxlog" data-supplog="${esc(r.rx)}">log</button>` : `<span class="ltag">rx</span>`)) : mealTag ? mealTag : gradeWord ? chip(g.zone ? (g.zone > 0 ? `Z1 +${g.zone}%` : `Z1 low ${-g.zone}%`) : gradeWord, TONE[g.band], gradeWord) : state==="now" ? chip("now", "good") : state==="next" ? chip("next", "") : `<span class="ltag">${esc(r.lane.tag)}</span>`}${rideIt}${r.wid?`<button class="tdel" data-delw="${esc(r.wid)}" aria-label="Remove">${TRASH}</button>`:r.edit?`<button class="tdel" data-delx="${attr(r.edit)}" aria-label="Remove">${TRASH}</button>`:""}</span></li>`;
   }).join("");
   const open = d.available_min ? durLabel(d.available_min)+" open" : "no window";
@@ -2735,6 +2735,14 @@ V.today = async function(){
       if (ml){ e.stopPropagation(); e.preventDefault(); location.hash = "#food?log=" + encodeURIComponent(ml.dataset.meallog); return; }
       const rx = e.target.closest("[data-supplog]");
       if (rx){ e.stopPropagation(); rx.disabled = true; if (window.primeSound) primeSound(); const med = /^med:/.test(rx.dataset.supplog); bridge(med ? "/meds/taken" : "/food/supplement",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ key: rx.dataset.supplog.replace(/^med:/, "") })}).then(()=> view.__syncAll("logged")).catch(err => { rx.disabled = false; rx.textContent = err.message.slice(0, 30); }); return; }
+      // a clash's one-tap fix (dayplan.js): the workout or his own block to the nearest free time that fits
+      const fx = e.target.closest("[data-fixw],[data-fixx]");
+      if (fx){ e.stopPropagation(); e.preventDefault(); fx.disabled = true; fx.textContent = "moving…";
+        const req = fx.dataset.fixw
+          ? bridge("/workouts/" + encodeURIComponent(fx.dataset.fixw), { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ time: fx.dataset.at }) })
+          : bridge("/gcal/event", { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ key: fx.dataset.fixx, date: fx.dataset.date, start: fx.dataset.at }) });
+        req.then(()=> view.__syncAll("moved")).catch(err => { fx.disabled = false; fx.textContent = err.message.slice(0, 40); });
+        return; }
       const b = e.target.closest("[data-delw]"); if (!b) return;
       e.preventDefault();
       if (!confirm("Take this session off the calendar?")) return;

@@ -79,7 +79,20 @@ async function dueToday(date) {
   const doc = await getJSON('food-' + date, { entries: [] }).catch(() => ({ entries: [] }));
   const tookSupp = k => (doc.entries || []).some(e => e && e.supplement && e.key === k);
   const meds = (await require('./meds').today()).due.map(m => ({ kind: 'med', key: m.key, name: m.name, short: m.short, time: m.time, why: '', taken: m.taken }));
-  return shiftAfter(plan.supps.map(x => Object.assign({}, x, { taken: tookSupp(x.key) })).concat(meds), plan.sessions).sort((a, b) => a.time.localeCompare(b.time));
+  const items = shiftAfter(plan.supps.map(x => Object.assign({}, x, { taken: tookSupp(x.key) })).concat(meds), plan.sessions);
+  // and out of classes, games, drives and his own blocks, as the Day page shows it (dayplan.js placeDose)
+  try {
+    const DP = require('./dayplan');
+    const ev = await require('./calendar').eventsBetween(date, date);
+    const blocks = DP.blocksOf(ev, { date, categories: new Set(['work', 'coaching', 'commute', 'travel', 'family', 'busy']) });
+    const win = await require('./sleep-window').get().catch(() => null);
+    for (const x of items) {
+      const t = toMin(x.time); if (t == null || x.taken) continue;
+      const p = DP.placeDose(t, 10, blocks, win ? win.wake : null);
+      if (p.moved) { x.moved_from = x.moved_from || x.time; x.time = toHM(p.min); }
+    }
+  } catch (e) { /* the times stand */ }
+  return items.sort((a, b) => a.time.localeCompare(b.time));
 }
 // the notification for the items due at one time
 function payloadFor(date, items) {

@@ -285,18 +285,27 @@ function placeSnacks(meals, opts) {
   const o = opts || {}, out = (meals || []).map(m => Object.assign({}, m));
   const wake = o.wake != null ? o.wake : 6 * 60 + 30, bed = o.bed != null ? o.bed : 22 * 60 + 30;
   const busy = (o.busy || []).filter(b => b.end > b.start);
-  const mainBefore = t => out.filter(m => m.slot !== 'snack' && !m.extra && (m.kcal || 0) > 150 && mmin(m) != null && mmin(m) < t).map(mmin).sort((a, b) => b - a)[0];
-  // A: out of the busy blocks
-  for (const m of out) {
-    if (m.slot !== 'snack' || mmin(m) == null) continue;
-    const t = mmin(m), b = busy.find(x => t >= x.start && t < x.end);
-    if (!b) continue;
-    const prev = mainBefore(t), early = b.start - 30, late = b.end + 5;
-    const nt = early >= wake && (prev == null || early >= prev + 60) ? early : late <= bed - 60 ? late : null;
-    if (nt == null) continue;
+  // A: one thing at a time (Harry, 13 Nov: "How can I eat lunch while I'm coaching a game?"). Every meal, not
+  // only the snack, goes in free time: out of classes, coaching (from its arrival), the drives and the sessions
+  // (o.busy; dayplan.js), to the free half hour nearest its planned time, an hour and a quarter after the main
+  // meal before it (an hour around a snack). The bottle on the bike is the ride itself and stays.
+  const D = require('./dayplan');
+  const isMain = m => m.slot !== 'snack' && !m.gap_snack && (m.kcal || 0) > 150;
+  let prev = null;
+  for (const m of out.filter(x => mmin(x) != null).sort((a, b) => mmin(a) - mmin(b))) {
+    if (m.slot === 'on the bike' || m.extra) continue;
+    const t = mmin(m);
+    const earliest = Math.max(wake, prev ? mmin(prev) + (isMain(prev) && isMain(m) ? 75 : 60) : wake);
+    if (D.freeAt(t, 30, busy) && t >= earliest) { prev = m; continue; }
+    const nt = D.nearestFree(Math.max(t, earliest), 30, busy, earliest, bed - 30);
+    if (nt == null || nt === t) { prev = m; continue; }
+    // what it is before or after: the next block after the new time, or the last one before it
+    const byStart = busy.slice().sort((a, b) => a.start - b.start);
+    const ref = nt < t ? byStart.find(b => b.start >= nt + 30) : byStart.filter(b => b.end <= nt).sort((a, b) => a.end - b.end).pop();
     m.moved_from = m.time; m.time = toHM(nt); delete m.at_min;
-    m.place_note = `${nt < b.start ? 'Before' : 'After'} ${b.name || 'the block'}.`;
+    m.place_note = ref ? `${nt < t ? 'Before' : 'After'} ${ref.name || 'the block'}.` : (nt < t ? 'Earlier: the day is full later.' : 'Later: the day is full before.');
     m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
+    prev = m;
   }
   // B: nothing in the 4 hours before a lift or a hard ride
   for (const s of (o.sessions || []).filter(x => x.kind === 'lift' || x.kind === 'hard')) {
