@@ -340,6 +340,24 @@ function placeSnacks(meals, opts) {
   }
   return out.sort((a, b) => mmin(a) - mmin(b));
 }
+// The high-performance rules (Harry, 13 Nov: "high performance nutrition rules … that will help me succeed in
+// these workouts"; his heart rate does not get up when he is underfuelled):
+//   1. no deficit on a hard day: VO2, threshold, 40/20s eat to maintenance
+//   2. the carbs around a hard day: the day before holds at least 3 g/kg (a planned floor); on the hard day, if
+//      yesterday's logged carbs came in under it, the meal before the session is 20 g bigger and he is told why
+// o: { hard_today, hard_tomorrow, kg, yesterday_carbs_g, yesterday_logged }; returns what to change and why.
+const CARB_FLOOR_BEFORE_HARD = 3;   // g/kg
+function performanceRules(o) {
+  const x = o || {}, kg = x.kg > 40 ? x.kg : PROFILE.kg, floor = Math.round(CARB_FLOOR_BEFORE_HARD * kg / 5) * 5;
+  const out = { deficit: undefined, carb_floor_g: null, pre_ride_extra_g: 0, notes: [] };
+  if (x.hard_today) { out.deficit = 0; out.notes.push('Hard session today: no deficit, eat to maintenance so the heart rate can get up.'); }
+  if (x.hard_tomorrow) { out.carb_floor_g = floor; out.notes.push(`Hard session tomorrow: at least ${floor} g carbs today.`); }
+  if (x.hard_today && (x.yesterday_logged || 0) >= 2 && x.yesterday_carbs_g != null && x.yesterday_carbs_g < floor) {
+    out.pre_ride_extra_g = 20;
+    out.notes.push(`Yesterday came in at ${Math.round(x.yesterday_carbs_g)} g carbs, under ${floor}: glycogen is likely low. The meal before the session is 20 g bigger; expect the heart rate to come up slower.`);
+  }
+  return out;
+}
 function carbLoad(meals, opts) {
   const o = opts || {}, f = o.load_for;
   if (!f) return meals;
@@ -536,12 +554,15 @@ function mealPlanOf(day, sessions, target, sleep) {
 // One rule, read by the plan, the cue and the library's notes.
 function onBike(mins, hard) {
   const hours = Math.round(mins / 60 * 10) / 10;
+  // (Harry, 13 Nov, the high-performance rules: every ride over 75 minutes is fed, easy ones too, with fluid and salt)
+  const drink = ' Drink 500 to 750 ml an hour; Tailwind carries the salt (300 to 600 mg sodium an hour).';
+  if (hard && mins > 60) return { what: `Tailwind, 2 scoops a bottle: 60 g carbs an hour for ${hours} h. A hard session is always fed.${drink}`, carbs: r5(60 * hours) };
   if (hard) return { what: 'One bottle of Tailwind, 2 scoops: 50 g carbs. A hard session is always fed.', carbs: 50 };
   if (mins < 45) return { what: 'Water. Nothing to eat under 45 minutes.', carbs: 0 };
   if (mins < 75) return { what: 'Water, a mouthful of Tailwind if you want it. Nothing is needed.', carbs: 0 };
-  if (mins < 120) return { what: `Tailwind, 1 scoop a bottle: about 30 g carbs an hour for ${hours} h.`, carbs: r5(30 * hours) };
-  if (mins <= 150) return { what: `Tailwind, 2 scoops a bottle, and a fig bar each hour: 60 g carbs an hour for ${hours} h.`, carbs: r5(60 * hours) };
-  return { what: `Past 2.5 h the gut takes 90 g an hour if it is glucose and fructose together: Tailwind plus fig bars or dates, for ${hours} h.`, carbs: r5(90 * hours) };
+  if (mins < 120) return { what: `Tailwind, 1 scoop a bottle: about 30 g carbs an hour for ${hours} h.${drink}`, carbs: r5(30 * hours) };
+  if (mins <= 150) return { what: `Tailwind, 2 scoops a bottle, and a fig bar each hour: 60 g carbs an hour for ${hours} h.${drink}`, carbs: r5(60 * hours) };
+  return { what: `Past 2.5 h the gut takes 90 g an hour if it is glucose and fructose together: Tailwind plus fig bars or dates, for ${hours} h.${drink}`, carbs: r5(90 * hours) };
 }
 
 // The slot a photo belongs to: the nearest planned meal within 90 minutes,
@@ -1078,5 +1099,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { performanceRules, fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
