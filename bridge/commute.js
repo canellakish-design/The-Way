@@ -82,6 +82,8 @@ function arriveBy(text) {
 }
 const venueKey = loc => String(loc || '').toLowerCase().replace(/\s+/g, ' ').trim();
 const venueName = loc => String(loc || '').split(',')[0].trim().slice(0, 40);
+// one place however the calendar writes it: "…, MD, USA" and "…, MD" are the same park (Harry's Wed 18 Nov practice and staff meeting)
+const placeKey = loc => venueKey(loc).replace(/,?\s*(usa|united states( of america)?)\s*$/, '').replace(/\s+\d{5}(-\d{4})?\b/g, '').replace(/[,\s]+$/, '');
 const isHomeVenue = (loc, s) => (s.home_venues || []).some(v => v && venueKey(loc).includes(String(v).toLowerCase()));
 const onCampus = e => !!(e && !e.allDay && e.location && CAMPUS.test(String(e.location)) && !VIRTUAL.test(String(e.location)) && e.category !== 'info');
 // home itself, by its street number and street ("1915 Towne Centre")
@@ -110,7 +112,7 @@ function venueTrips(date, events, s) {
     const start = tz.minutesOf(new Date(e.start)), end = tz.minutesOf(new Date(e.end));
     const arrive = arriveBy(e.description) ?? (start - s.arrive_before);
     const coaching = e.category === 'coaching', game = coaching && GAME.test(String(e.summary || ''));
-    const k = venueKey(e.location), have = out.find(g => g.key === k);
+    const k = placeKey(e.location), have = out.find(g => g.key === k);
     if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; continue; }
     // the place's name, or the event's when the place is only a street address ("Physio" over "12 West St")
     const place = venueName(e.location), byTitle = /^\d/.test(place) && !coaching;
