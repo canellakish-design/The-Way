@@ -42,14 +42,14 @@ ok('the rows: sized by the traffic reading, the usual drive for school until one
 });
 ok('no time to get home between school and practice: no drive home, practice driven from school', () => {
   const early = Object.assign({}, practice, { start: at(day, 16, 30), end: at(day, 18, 0) });   // in by 4:15
-  const t = M.chain(M.tripsFor(day, school.concat(early), S), { 'go:1130 anne chambers way, crownsville, md, usa': { est: 40 } }, S);
+  const t = M.chain(M.tripsFor(day, school.concat(early), S), { 'go:1130 anne chambers way, crownsville, md': { est: 40 } }, S);
   assert.strictEqual(t[0].back, null); assert.strictEqual(t[1].from, 'school');
   const rows = M.rowsFor(day, t[1], S, { to: { min: 45 } });
   assert.ok(/from McDonogh/.test(rows[0].detail), rows[0].detail);
   const unknown = M.chain(M.tripsFor(day, school.concat(early), S), {}, S);   // the venue not looked up: school keeps its drive home
   assert.strictEqual(unknown[0].back, 930);
   const evening = Object.assign({}, practice, { start: at(day, 19, 0), end: at(day, 20, 30) });   // in by 6:45: home first
-  const late = M.chain(M.tripsFor(day, school.concat(evening), S), { 'go:1130 anne chambers way, crownsville, md, usa': { est: 40 } }, S);
+  const late = M.chain(M.tripsFor(day, school.concat(evening), S), { 'go:1130 anne chambers way, crownsville, md': { est: 40 } }, S);
   assert.strictEqual(late[0].back, 930); assert.ok(!late[1].from);
 });
 ok('a far venue two days running: no drive home the first night, none out the next morning', () => {
@@ -92,7 +92,7 @@ ok('driving to everything: any event with a place is a trip; calls, home, campus
   assert.strictEqual(trips[0].arrive, 9 * 60 + 45); assert.strictEqual(trips[0].back, 11 * 60 + 5);
   const lib = 'Liberty Sports Park, Prince Georges Boulevard, Upper Marlboro, MD, USA';
   const pr2 = shift(ev('U16 G MARYLAND UNITED ECNL - Practice', 18, 0, 19, 30, { category: 'coaching', location: lib }));
-  const staff = shift(ev('U13 to U18 Girls Staff Meeting (in person)', 20, 30, 21, 30, { category: 'work', location: lib }));
+  const staff = shift(ev('U13 to U18 Girls Staff Meeting (in person)', 20, 30, 21, 30, { category: 'work', location: lib.replace(/, USA$/, '') }));   // the same park, written without ", USA"
   const lt = M.tripsFor(d, [pr2, staff], H);
   assert.strictEqual(lt.length, 1); assert.strictEqual(lt[0].back, 21 * 60 + 30 + 15);
   const bare = M.tripsFor(d, [shift(ev('Physio', 8, 0, 9, 0, { category: 'busy', location: '12 West St, Annapolis, MD' }))], H);
