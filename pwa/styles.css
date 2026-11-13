@@ -953,4 +953,12 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 .clash{display:block; margin-top:4px; font-size:12px; color:var(--red)}
 .clash.soft{color:var(--amber)}
 .clashfix{margin:0 0 0 6px; padding:2px 8px; font-size:11px; border:1px solid var(--red); background:transparent; color:var(--ink)}
+/* what he is going to (attend.js): the rest stays on the day, dimmed, blocking nothing */
+.xrow.notgoing{opacity:.5}
+.xrow.notgoing.att-maybe{opacity:.8; border-left-style:dashed}
+.attline{display:block; margin-top:4px; font-size:12px; color:var(--muted)}
+.attbtn{margin:0 0 0 4px; padding:2px 8px; font-size:11px; border:1px solid var(--line); background:transparent; color:var(--ink)}
+.attrow{margin:6px 0}
+.attlist li{display:flex; justify-content:space-between; align-items:center; gap:8px}
+.attlist .gbtns button{padding:4px 8px; font-size:11px}
 

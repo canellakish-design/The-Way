@@ -9,7 +9,9 @@ export default async () => {
     const r = await require('../../bridge/push.js').reminders();
     // the drive to school: live traffic on a class morning, "leave now" to the phone (bridge/commute.js)
     const commute = await require('../../bridge/commute.js').check().catch(e => ({ error: e.message }));
-    return new Response(JSON.stringify(Object.assign({}, r, { commute })), { headers: { 'Content-Type': 'application/json' } });
+    // 8 p.m.: tomorrow's maybes, going or not (bridge/attend.js)
+    const attend = await require('../../bridge/attend.js').nightCheck().catch(e => ({ error: e.message }));
+    return new Response(JSON.stringify(Object.assign({}, r, { commute, attend })), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
