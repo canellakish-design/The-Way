@@ -85,4 +85,15 @@ ok('lunch on a game day away: eaten at the field before warm-ups (packed), not a
   assert.strictEqual(lunch.time, '12:00', JSON.stringify(lunch));
   assert.ok(/^Pack it: at Maryland SoccerPlex, before .*VDA/.test(lunch.what), lunch.what);
 });
+ok('a school day: lunch is the dining hall, between classes, never packed', () => {
+  const busy = [{ start: m(7, 25), end: m(8, 15), name: 'Drive to McDonogh', category: 'commute' },
+    { start: m(8, 30), end: m(9, 30), name: 'World History I (Sec. E1)', category: 'work' }, { start: m(10, 25), end: m(11, 25), name: 'World History I (Sec. F2)', category: 'work' },
+    { start: m(12, 50), end: m(13, 50), name: 'World History I (Sec. G1)', category: 'work' }, { start: m(14, 5), end: m(14, 55), name: 'Drive home', category: 'commute' }];
+  const r = F.placeSnacks([{ time: '06:45', slot: 'breakfast', kcal: 400 }, { time: '13:00', slot: 'lunch', kcal: 650 }, { time: '18:30', slot: 'dinner', kcal: 800 }], { busy, wake: 390, bed: 1350 });
+  const lunch = r.find(x => x.slot === 'lunch');
+  assert.ok(lunch.time >= '11:25' && lunch.time < '12:50', lunch.time);
+  assert.ok(/In the dining hall at school\.$/.test(lunch.what) && !/Pack it/.test(lunch.what), lunch.what);
+  assert.ok(!/dining hall/.test(r.find(x => x.slot === 'dinner').what || ''), 'dinner is at home');
+});
 console.log(n + ' passed');
+
