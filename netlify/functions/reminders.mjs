@@ -13,7 +13,9 @@ export default async () => {
     const commute = await require('../../bridge/commute.js').check().catch(e => ({ error: e.message }));
     // 8 p.m.: tomorrow's maybes, going or not (bridge/attend.js)
     const attend = await require('../../bridge/attend.js').nightCheck().catch(e => ({ error: e.message }));
-    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend })), { headers: { 'Content-Type': 'application/json' } });
+    // 8 p.m.: what to pack for tomorrow (bridge/pack.js)
+    const pack = await require('../../bridge/pack.js').nightPack().catch(e => ({ error: e.message }));
+    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend, pack })), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }

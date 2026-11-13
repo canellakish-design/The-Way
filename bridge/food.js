@@ -296,8 +296,15 @@ async function guidelinesFor(date) {
   let rx = null, fctx = {};
   try { const FW = require('./fuel-week'); fctx = await FW.contextFor(date, kg || F.PROFILE.kg, ftp); rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, fctx); } catch (e) { rx = F.fuelRx(sessions, kg || F.PROFILE.kg, ftp, {}); }
   const day = rx.day;
-  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, cm: body.cm, age: body.age, deficit, rx });
-  if (why) t.deficit_note = why;
+  // the high-performance rules (food-math performanceRules): no deficit on a hard day, the carbs around one
+  const hardToday = sessions.some(s => !s.done && /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i.test(String(s.name || '')));
+  let yC = null, yN = 0;
+  if (hardToday) { try { const y = await getJSON(dayKey(tz.shiftKey(date, -1)), { entries: [] }); const es = (y.entries || []).filter(e => e && !e.supplement); yN = es.length; yC = es.reduce((a, e) => a + (e.carbs_g || 0), 0); } catch (e) { yC = null; } }
+  const perf = F.performanceRules({ hard_today: hardToday, hard_tomorrow: !!(fctx && fctx.hard_tomorrow), kg: kg || F.PROFILE.kg, yesterday_carbs_g: yC, yesterday_logged: yN });
+  const t = F.targets(day, F.workoutKcal(burn || sessions, ftp), { kg, cm: body.cm, age: body.age, deficit: perf.deficit != null ? perf.deficit : deficit, rx });
+  if (perf.carb_floor_g && t.carbs_g < perf.carb_floor_g) { const add = perf.carb_floor_g - t.carbs_g; t.carbs_g = perf.carb_floor_g; t.kcal = Math.round((t.kcal + add * 4) / 10) * 10; }
+  if (why && perf.deficit == null) t.deficit_note = why;
+  if (perf.notes.length) t.deficit_note = (t.deficit_note ? t.deficit_note + ' ' : '') + perf.notes.join(' ');
   if (t.deficit_trimmed) t.deficit_note = (t.deficit_note ? t.deficit_note + '; ' : '') + `deficit eased by ${t.deficit_trimmed} kcal to keep carbs at ${t.per_kg.carbs} g/kg for the work`;
   const rideNotes = sessions.filter(s => s.notes && /EAT/.test(s.notes)).map(s => ({ name: s.name, notes: s.notes }));
   const today = date === tz.todayKey();
@@ -308,6 +315,9 @@ async function guidelinesFor(date) {
     meals: await (async () => {
       const win = await require('./sleep-window').get().catch(() => null);
       const plan = F.mealPlan(day, sessions, t, win, { load_for: fctx && fctx.hard_tomorrow_am, kg: kg || F.PROFILE.kg });
+      // yesterday short of carbs before a hard session: the meal before it is 20 g bigger (performanceRules)
+      if (perf.pre_ride_extra_g) { const pre = plan.filter(m => m.slot === 'before').sort((a, b) => F.toMin(b.time) - F.toMin(a.time))[0] || plan.find(m => m.slot === 'breakfast');
+        if (pre) { pre.carbs_g = (pre.carbs_g || 0) + perf.pre_ride_extra_g; pre.kcal = (pre.kcal || 0) + perf.pre_ride_extra_g * 4; pre.what = `${String(pre.what || '').replace(/\s*$/, '')} Plus ${perf.pre_ride_extra_g} g: yesterday was short.`.trim(); } }
       // the snack rules (food-math placeSnacks): the day's coaching, classes and work, and its sessions
       let busy = [];
       try {

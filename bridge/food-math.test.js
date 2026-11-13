@@ -649,5 +649,22 @@ ok('each meal carries its fat: given, or what the calories leave after the carbs
   const rows = F.dayMeals([{ time: '09:00', slot: 'breakfast', kcal: 575, carbs_g: 70, protein_g: 45, what: 'Oats.' }], []);
   assert.strictEqual(rows[0].fat_g, 13);
 });
+ok('the high-performance rules: no deficit on a hard day, 3 g/kg the day before one, 20 g more before it when yesterday was short', () => {
+  const easy = F.performanceRules({ kg: 98 });
+  assert.strictEqual(easy.deficit, undefined); assert.strictEqual(easy.carb_floor_g, null); assert.strictEqual(easy.notes.length, 0);
+  const hard = F.performanceRules({ hard_today: true, kg: 98, yesterday_carbs_g: 310, yesterday_logged: 4 });
+  assert.strictEqual(hard.deficit, 0); assert.strictEqual(hard.pre_ride_extra_g, 0, '310 g is over the 295 g floor');
+  const before = F.performanceRules({ hard_tomorrow: true, kg: 98 });
+  assert.strictEqual(before.carb_floor_g, 295); assert.ok(/at least 295 g/.test(before.notes[0]));
+  const short = F.performanceRules({ hard_today: true, kg: 98, yesterday_carbs_g: 180, yesterday_logged: 3 });
+  assert.strictEqual(short.pre_ride_extra_g, 20); assert.ok(/180 g carbs, under 295/.test(short.notes[1]), short.notes.join(' '));
+  assert.strictEqual(F.performanceRules({ hard_today: true, kg: 98, yesterday_carbs_g: 40, yesterday_logged: 1 }).pre_ride_extra_g, 0, 'one photo is not a day');
+});
+ok('fuel on the bike: every ride over 75 minutes, with fluid and salt; a hard one past an hour 60 g an hour', () => {
+  assert.strictEqual(F.onBike(90).carbs, 45); assert.ok(/500 to 750 ml an hour/.test(F.onBike(90).what));
+  assert.strictEqual(F.onBike(40, true).carbs, 50);
+  assert.strictEqual(F.onBike(90, true).carbs, 90); assert.ok(/60 g carbs an hour/.test(F.onBike(90, true).what));
+  assert.strictEqual(F.onBike(60).carbs, 0);
+});
 console.log(n + ' passed');
 
