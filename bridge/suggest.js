@@ -41,7 +41,8 @@ async function routesNear(p) {
     for (const sg of (j && j.segments) || []) {
       if (!sg.start_latlng || (sg.distance || 0) < 1200) continue;
       const climb = (sg.climb_cat || sg.climb_category || 0), grade = sg.avg_grade || sg.average_grade || 0;
-      routes.push({ type: 'road', name: sg.name, lat: sg.start_latlng[0], lon: sg.start_latlng[1], km: Math.round((sg.distance || 0) / 100) / 10, grade: Math.round(grade * 10) / 10, climb,
+      routes.push({ type: 'road', name: sg.name, lat: sg.start_latlng[0], lon: sg.start_latlng[1], end: sg.end_latlng ? { lat: sg.end_latlng[0], lon: sg.end_latlng[1] } : null,
+        km: Math.round((sg.distance || 0) / 100) / 10, grade: Math.round(grade * 10) / 10, climb,
         detail: `${Math.round((sg.distance || 0) / 100) / 10} km${grade >= 2 ? ` at ${Math.round(grade * 10) / 10}%` : ''}${climb > 0 ? `, a Cat ${5 - climb > 0 ? 5 - climb : 'HC'} climb` : ''}: one of the most ridden segments here (Strava)`,
         url: `https://www.strava.com/segments/${sg.id}`, score: 10 + climb * 3 + Math.min(4, (sg.distance || 0) / 2000) });
     }
@@ -53,10 +54,13 @@ async function routesNear(p) {
       const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent('mountain bike trail')}.json?key=${encodeURIComponent(k)}&lat=${p.lat}&lon=${p.lon}&radius=${NEAR_KM * 1000}&limit=6&countrySet=US`);
       const j = r.ok ? await r.json() : {};
       for (const x of j.results || []) {
-        const name = (x.poi && x.poi.name) || (x.address && x.address.freeformAddress); if (!name || !x.position) continue;
-        routes.push({ type: 'mtb', name, lat: x.position.lat, lon: x.position.lon, address: x.address && x.address.freeformAddress,
-          detail: `Trails ${x.dist != null ? `${Math.round(x.dist / 100) / 10} km` : 'near'} from where you are`, url: `https://www.google.com/maps/dir/?api=1&destination=${x.position.lat},${x.position.lon}`,
-          score: 12 - Math.min(6, (x.dist || 0) / 2000) });
+        const name = (x.poi && x.poi.name) || ''; if (!name || !x.position) continue;
+        const kind = trailKind(name, (x.poi && x.poi.categories) || []);
+        if (!kind) continue;   // a bike shop, a store, a road: not a place to ride
+        routes.push({ type: kind, name, lat: x.position.lat, lon: x.position.lon, address: x.address && x.address.freeformAddress,
+          detail: kind === 'path' ? 'A paved or gravel path: flat, no traffic' : `Mountain-bike trails ${x.dist != null ? `${Math.round(x.dist / 100) / 10} km` : 'near'} from where you are`,
+          url: `https://www.google.com/maps/dir/?api=1&destination=${x.position.lat},${x.position.lon}`,
+          score: (kind === 'mtb' ? 12 : 10) - Math.min(6, (x.dist || 0) / 2000) });
       }
     }
   } catch (e) { /* the road may still answer */ }
@@ -67,6 +71,16 @@ async function routesNear(p) {
   return cache[key].routes;
 }
 
+// What TomTom found, read (Harry, 13 Nov, point 6: "East Coast Greenway" is a path, not mountain-bike trails, and a
+// bike shop is not a place to ride): 'mtb' | 'path' | null.
+function trailKind(name, cats) {
+  const n = String(name || ''), c = (cats || []).join(' ').toLowerCase();
+  if (/\b(shop|store|sales|repair|rental|cycles|cyclery|bikes? (inc|co|llc)|outfitters?|sports)\b/i.test(n) || /shop|store|retail/.test(c)) return null;
+  if (/greenway|rail[- ]?trail|towpath|\bpath\b|bikeway|canal|parkway trail|w&od|\bb&a\b|multi[- ]?use|\bmup\b/i.test(n)) return 'path';
+  if (/mountain bike|\bmtb\b|singletrack|trail(s|head)?\b|state park|park\b|forest|preserve|recreation area|wildlife|farm/i.test(n) || /park|recreation|forest|trail/.test(c)) return 'mtb';
+  return null;
+}
+
 // ---- the fit (pure, tested) ------------------------------------------------------------------------------
 // o: { ride: {minutes, name}, trip: {label, back (min, when he is free there)}, route: {lat, lon}, place: {lat,lon},
 //      sunset_min, hours: [{hour, rain_pct, feels_f}] }  → { start, end, why } | { no: reason }
@@ -75,23 +89,84 @@ function fit(o) {
   const driveTo = o.place && o.route ? Math.round(kmBetween(o.place, o.route) * 1.3 / 40 * 60) : 0;   // to the start, local roads
   const change = 15;                                                                                    // into kit (dayplan.js changeover)
   const start = Math.ceil((o.trip.back + driveTo + change) / 5) * 5, end = start + mins;
-  if (o.sunset_min != null && end > o.sunset_min) return { no: `not enough light: done ${tz.hm12(hmOf(end))}, sunset ${tz.hm12(hmOf(o.sunset_min))}` };
-  const hrs = (o.hours || []).filter(h => h.hour >= Math.floor(start / 60) && h.hour <= Math.floor((end - 1) / 60));
+  let short = null;
+  if (o.sunset_min != null && end > o.sunset_min) {
+    // point 5: November light is short; a shorter ride that ends by sunset beats none (an hour at least)
+    const fits = Math.floor((o.sunset_min - 10 - start) / 5) * 5;
+    if (fits < 60) return { no: `not enough light: done ${tz.hm12(hmOf(end))}, sunset ${tz.hm12(hmOf(o.sunset_min))}` };
+    short = fits;
+  }
+  const endF = short ? start + short : end;
+  const hrs = (o.hours || []).filter(h => h.hour >= Math.floor(start / 60) && h.hour <= Math.floor((endF - 1) / 60));
   if (hrs.some(h => (h.rain_pct || 0) >= 40)) return { no: 'rain likely' };
   const temp = hrs.length ? Math.round(hrs.reduce((a, h) => a + (h.temp_f != null ? h.temp_f : h.feels_f || 0), 0) / hrs.length) : null;
   if (temp != null && temp < MIN_F) return { no: `${temp}°F: under ${MIN_F}` };
   // a nice day: the ride's hours grade B or better (weather.js), or the grade is not known
   const g = o.grade !== undefined ? o.grade : (hrs.some(h => h.cscore != null) ? require('./weather').gradeRide(hrs) : null);
   if (g && g.score < MIN_GRADE) return { no: `the weather grades ${g.letter}, under a B` };
-  return { start, end, drive_min: driveTo, grade: g ? g.letter : null,
-    why: `after ${o.trip.label}${temp != null ? `, ${temp}°F` : ''}${g ? `, weather ${g.letter}` : ''}${o.sunset_min != null ? `, back before sunset (${tz.hm12(hmOf(o.sunset_min))})` : ''}` };
+  return { start, end: endF, drive_min: driveTo, grade: g ? g.letter : null, shortened: short ? mins - short : 0,
+    why: `after ${o.trip.label}${temp != null ? `, ${temp}°F` : ''}${g ? `, weather ${g.letter}` : ''}${o.sunset_min != null ? `, back before sunset (${tz.hm12(hmOf(o.sunset_min))})` : ''}${short ? `; ${short} min, not ${mins}, for the light` : ''}` };
 }
-// the one to offer: a mountain-bike ride when the planned ride says so or a trail is close, else the best road climb
-function pick(routes, ride) {
-  const wantsDirt = /mountain|mtb|trail|gravel/i.test(String((ride && ride.name) || ''));
-  const dirt = routes.filter(r => r.type === 'mtb'), road = routes.filter(r => r.type === 'road');
-  if (wantsDirt && dirt.length) return dirt[0];
-  return road[0] && (!dirt[0] || road[0].score >= dirt[0].score) ? road[0] : dirt[0] || null;
+// The one to offer, fitted to the workout (point 2) and the ground (point 3):
+//   hard (VO2, threshold, 40/20s)  a climb of 0.8 to 3 km at 4% or more: one rep up, roll down to recover
+//   easy (Zone 1, Zone 2)          a path or a flat popular road (under 2%): a climb is not Zone 1
+//   mountain bike planned          trails
+// Dirt is skipped after rain (wet: rain_in the 36 hours before, 0.1 in or more): trails close and tear up.
+function rideKind(ride) {
+  const n = String((ride && ride.name) || '');
+  if (/mountain|mtb|singletrack|handling/i.test(n)) return 'mtb';
+  if (/vo2|40\s*\/\s*20|threshold|interval|sweet|race|over[- ]?under/i.test(n)) return 'hard';
+  return 'easy';
+}
+function pick(routes, ride, o) {
+  const wet = !!(o && o.wet), kind = rideKind(ride);
+  const R = (routes || []).filter(r => !(wet && r.type === 'mtb'));
+  const by = f => R.filter(f).sort((a, b) => b.score - a.score)[0] || null;
+  const isClimb = r => r.type === 'road' && ((r.climb || 0) > 0 || (r.grade || 0) >= 4);
+  let best = null, note = '';
+  if (kind === 'mtb') { best = by(r => r.type === 'mtb'); note = best ? 'Trails for the handling ride.' : ''; }
+  if (!best && kind === 'hard') { best = by(r => isClimb(r) && (r.km || 0) >= 0.8 && (r.km || 0) <= 3); note = best ? `The reps on it: one climb a rep, roll back down to recover.` : ''; }
+  if (!best && kind !== 'hard') { best = by(r => r.type === 'path') || by(r => r.type === 'road' && !isClimb(r)); note = best ? (best.type === 'path' ? 'Flat and car-free: easy to hold Zone 1.' : 'Flat: easy to hold Zone 1.') : ''; }
+  if (!best && kind === 'easy') { best = by(r => r.type === 'mtb'); note = best ? 'Easy on the trails: keep the heart rate down on the climbs.' : ''; }
+  if (!best) return null;
+  return Object.assign({}, best, { fit_note: note, ride_kind: kind });
+}
+
+// ---- the loop (point 1): a ride, not just a segment ------------------------------------------------------------
+// Road: from the segment's start, up it, out to a turn point and back to the start, about the planned length (TomTom
+// bicycle routing). The turn point sits off the segment's middle so the three legs make a triangle of that length.
+// A path is out and back; trails are ridden as the trail system goes (the trailhead is the route). Kept as points,
+// served as GPX for the Garmin (/suggest/gpx) and as Google Maps directions.
+const SPEED = { road: 24, path: 18, mtb: 12 };   // km/h at Zone 1-2
+function turnPoint(a, b, perimeterKm) {
+  const L = kmBetween(a, b), half = L / 2;
+  const d = Math.sqrt(Math.max(0, ((perimeterKm - L) / 2) ** 2 - half * half));   // height of the triangle off the segment
+  const midLat = (a.lat + b.lat) / 2, midLon = (a.lon + b.lon) / 2;
+  const kx = 111.32 * Math.cos(midLat * Math.PI / 180), ky = 110.57;
+  const vx = (b.lon - a.lon) * kx, vy = (b.lat - a.lat) * ky, len = Math.hypot(vx, vy) || 1;
+  return { lat: midLat + (vx / len) * d / ky, lon: midLon - (vy / len) * d / kx };   // a right angle off the segment
+}
+async function loopFor(route, minutes) {
+  const k = String(process.env.TOMTOM_API_KEY || '').trim();
+  const km = Math.round(SPEED[route.type] * minutes / 60);
+  if (!k || route.type !== 'road' || !route.end) return { km, gpx: false };
+  const start = { lat: route.lat, lon: route.lon };
+  const C = turnPoint(start, route.end, km / 1.25);   // roads wind: a quarter longer than the straight lines
+  const pts = [start, route.end, C, start].map(x => `${x.lat.toFixed(5)},${x.lon.toFixed(5)}`).join(':');
+  const r = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/${pts}/json?key=${encodeURIComponent(k)}&travelMode=bicycle&routeType=thrilling&hilliness=normal&windingness=normal`);
+  if (!r.ok) return { km, gpx: false };
+  const j = await r.json(), rt = j.routes && j.routes[0];
+  if (!rt) return { km, gpx: false };
+  const points = rt.legs.flatMap(l => l.points || []);
+  const step = Math.max(1, Math.ceil(points.length / 1500));
+  return { km: Math.round(rt.summary.lengthInMeters / 100) / 10, gpx: true, points: points.filter((_, i) => i % step === 0).map(x => [Math.round(x.latitude * 1e5) / 1e5, Math.round(x.longitude * 1e5) / 1e5]),
+    maps: `https://www.google.com/maps/dir/?api=1&travelmode=bicycling&origin=${start.lat},${start.lon}&destination=${start.lat},${start.lon}&waypoints=${route.end.lat},${route.end.lon}|${C.lat.toFixed(5)},${C.lon.toFixed(5)}` };
+}
+function gpxOf(sg) {
+  const pts = (sg.loop && sg.loop.points) || [];
+  const esc = x => String(x || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="The Way" xmlns="http://www.topografix.com/GPX/1/1"><trk><name>${esc(sg.route && sg.route.name)}</name><trkseg>` +
+    pts.map(p => `<trkpt lat="${p[0]}" lon="${p[1]}"></trkpt>`).join('') + `</trkseg></trk></gpx>`;
 }
 
 // ---- a day's suggestion ---------------------------------------------------------------------------------------
@@ -115,10 +190,17 @@ async function workOut(date) {
   }
   if (!best) return { none: 'nothing far from home today' };
   // near the place, else on the way home: three quarters, half, a quarter of the way back
+  // point 3: the ground: rain in the 36 hours before the ride (the outlook carries the past days)
+  let wet = false;
+  try { const o = await require('./weather').outlook(tz.shiftKey(date, -2), date); const hrs = [];
+    for (const k of [tz.shiftKey(date, -1), date]) for (const h of ((o.days || {})[k] || {}).hours || []) hrs.push(Object.assign({ day: k }, h));
+    const startH = Math.floor(best.t.back / 60);
+    const rain = hrs.filter(h => (h.day === date && h.hour < startH) || (h.day !== date && h.hour >= startH - 12)).reduce((a, h) => a + (h.rain_in || 0), 0);
+    wet = rain >= 0.1; } catch (e) { wet = false; }
   let route = null;
   for (const f of [0, 0.25, 0.5, 0.75]) {
     const at = { lat: best.p.lat + (home.lat - best.p.lat) * f, lon: best.p.lon + (home.lon - best.p.lon) * f };
-    route = pick(await routesNear(at), ride);
+    route = pick(await routesNear(at), ride, { wet });
     if (route) { route.on_the_way = f > 0; break; }
   }
   if (!route) return { none: 'no known routes near' };
@@ -127,8 +209,9 @@ async function workOut(date) {
   const f = fit({ ride: { minutes: Math.round(((ride.steps || []).reduce((a, x) => a + (x.dur_s || 0), 0) / 60) || 60), name: ride.name }, trip: best.t, route, place: best.p, sunset_min: sunset, hours: day ? day.hours : [] });
   if (f.no) return { none: f.no };
   if (route.on_the_way) f.why = f.why.replace(/^after /, `on the way home from `);
+  const loop = await loopFor(route, f.end - f.start).catch(() => ({ km: null, gpx: false }));
   return { status: 'open', date, ride_id: ride.id, ride_name: ride.name, ride_minutes: f.end - f.start, start: hmOf(f.start), end: hmOf(f.end), at: tz.hm12(hmOf(f.start)), until: tz.hm12(hmOf(f.end)),
-    route, near: best.t.label, why: f.why, drive_min: f.drive_min, made: new Date().toISOString() };
+    route, near: best.t.label, why: f.why, drive_min: f.drive_min, wet, loop, made: new Date().toISOString() };
 }
 async function get(date, fresh) {
   const k = `suggest-${date}`;
@@ -161,7 +244,7 @@ async function answer(date, ans) {
     await setJSON('commute-places', places).catch(() => {});
     await W.update(sg.ride_id, { time: sg.start, sport: 'Ride', location: where, suggested: { type: sg.route.type, name: sg.route.name, url: sg.route.url, near: sg.near, was: { time: w.time, sport: w.sport, name: w.name } },
       name: `${sg.route.type === 'mtb' ? 'MTB' : 'Road'}: ${sg.route.name} · ${sg.ride_minutes} min`,
-      notes: `Recommended ride based on your route: ${sg.why}. ${sg.route.detail}. ${sg.route.url}\n\n${String(w.notes || '').slice(0, 1200)}` });
+      notes: `Recommended ride based on your route: ${sg.why}. ${sg.route.detail}. ${sg.route.fit_note || ''}${sg.loop && sg.loop.km ? ` About ${sg.loop.km} km.` : ''}${sg.loop && sg.loop.maps ? ` The loop: ${sg.loop.maps}` : ` ${sg.route.url}`}\n\n${String(w.notes || '').slice(0, 1200)}` });
   }
   sg.status = ans === 'yes' ? 'yes' : 'no'; sg.answered = new Date().toISOString();
   await setJSON(k, sg);
@@ -170,6 +253,14 @@ async function answer(date, ans) {
 // the five-minute run: today and the next day, worked out once and kept
 async function tick(now) {
   const date = tz.todayKey(), p = tz.parts(now || new Date());
+  // point 4: the bike has to be in the car, so tomorrow's idea goes to the phone at 7:30 p.m., before the 8 p.m. list
+  if (p.h === 19 && p.mi >= 30 && p.mi < 35) {
+    const t = await get(tz.shiftKey(date, 1)).catch(() => null), log = await getJSON('suggest-sent', {}).catch(() => ({})) || {};
+    if (t && t.status === 'open' && log.date !== date) {
+      await require('./push').send({ title: 'Ride idea for tomorrow', body: `${t.route.name}, ${t.at}–${t.until}, ${t.why}. Tap ✓ or ✕ on the Day page by 8 p.m. so the bike makes the packing list.`, tag: 'way-suggest', items: [], url: '/#today' }).catch(() => null);
+      await setJSON('suggest-sent', { date, at: new Date().toISOString() }).catch(() => {});
+    }
+  }
   if (p.mi % 30 >= 5) return { skipped: 'every half hour' };
   const out = {};
   for (const d of [date, tz.shiftKey(date, 1)]) { const x = await get(d).catch(e => ({ error: e.message })); out[d] = x.status || x.none || x.error; }
@@ -182,5 +273,10 @@ function attach(app) {
   app.get('/suggest/week', wrap(() => week()));
   app.get('/suggest', wrap(req => get(/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : tz.todayKey(), req.query.fresh === '1')));
   app.post('/suggest', wrap(req => { const b = req.body || {}; return answer(String(b.date || ''), String(b.answer || '')); }));
+  // the loop as a GPX file: open it on the phone and share it to Garmin Connect, or import it on the computer
+  app.get('/suggest/gpx', async (req, res) => { if (!auth(req, res)) return;
+    const sg = await getJSON(`suggest-${String(req.query.date || '')}`, null).catch(() => null);
+    if (!sg || !sg.loop || !sg.loop.points) return res.status(404).send('no route');
+    res.set('Content-Type', 'application/gpx+xml'); res.set('Content-Disposition', `attachment; filename="${String(sg.route.name || 'ride').replace(/[^\w -]/g, '').slice(0, 40)}.gpx"`); res.send(gpxOf(sg)); });
 }
-module.exports = { attach, fit, pick, get, week, answer, tick, routesNear, AWAY_KM };
+module.exports = { attach, fit, pick, rideKind, trailKind, turnPoint, gpxOf, get, week, answer, tick, routesNear, AWAY_KM };
