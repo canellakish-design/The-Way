@@ -274,8 +274,12 @@ async function deficitFor(date) {
       const fit = await getJSON('fitness', { wellness: [] });
       hrvState = require('./scores-math').hrvGuide((fit.wellness || []).filter(w => w.date !== date), rec ? rec.hrv : null).state;
     } catch (e) { hrvState = null; }
-    const sleepH = s && s.sleep && !s.sleep.nap && s.sleep.hours != null ? Number(s.sleep.hours) : null;
-    return deficitFromBody({ recovery: rec && rec.score != null ? rec.score : null, hrv_state: hrvState, sleep_h: sleepH });
+    let sleepH = s && s.sleep && !s.sleep.nap && s.sleep.hours != null ? Number(s.sleep.hours) : null;
+    let recovery = rec && rec.score != null ? rec.score : null;
+    // a number given by hand wins for its date (wellness.js): the WHOOP screenshot over a watch that came off in
+    // the night (Harry, 13 Nov: WHOOP 6.4 h, the watch 3.6 h, and the day halved its deficit for the 3.6)
+    try { const m = ((await require('./wellness').all()).days || {})[date]; if (m) { if (m.sleep_h != null) sleepH = m.sleep_h; if (m.recovery != null) recovery = m.recovery; } } catch (e) { /* the watch's reading stands */ }
+    return deficitFromBody({ recovery, hrv_state: hrvState, sleep_h: sleepH });
   } catch (e) { /* no reading: the deficit stands */ }
   return { deficit: undefined, why: null };
 }
