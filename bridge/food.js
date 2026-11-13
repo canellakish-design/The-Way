@@ -313,7 +313,10 @@ async function guidelinesFor(date) {
       try {
         const ev = await require('./calendar').eventsBetween(date, date);
         // the day's blocks (dayplan.js): classes, coaching from its arrival, the drives, travel, family, his own blocks
-        busy = require('./dayplan').blocksOf(ev, { date, categories: new Set(['coaching', 'work', 'busy', 'travel', 'commute', 'family']) })
+        // a meal waits only for what keeps his hands busy: driving, classes, a game from its warm-up, travel. His own
+        // desk blocks (Cycle 3 Planning) and the hour at the field before warm-ups are times he can eat (Harry, 13 Nov:
+        // "lunch" had drifted to 5:45p behind a planning block, the drive, the game and the ride)
+        busy = require('./dayplan').blocksOf(ev, { date, eat: true, categories: new Set(['coaching', 'work', 'travel', 'commute']) })
           .map(b => Object.assign(b, { name: String(b.name || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').replace(/^Bethesda Premier Cup: /, '').replace(/ · \d+ min.*$/, '').slice(0, 40) }));
       } catch (e) { busy = []; }
       const ss = sessions.filter(s => F.toMin(s.time) != null && !s.done).map(s => ({ start: F.toMin(s.time), end: F.toMin(s.time) + (s.minutes || 60), name: String(s.name || '').replace(/\s*[·(].*$/, ''),

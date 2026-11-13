@@ -26,7 +26,10 @@ ok('his own block over the drive and the game: marked, with the nearest free hou
   assert.strictEqual(plan.clash.fix_min, m(10, 57) - 90, 'just before he leaves: 9:27');
   assert.ok(!rows.find(r => r.category === 'commute').clash, 'the drive is fixed: it is not the one to move');
   assert.ok(rows.find(r => r.category === 'commute').clash_by);
-  assert.ok(!rows.find(r => r.workout_id === 'w2').clash, 'the ride starts after the drive home: no clash');
+  // the ride starts two minutes after the drive home ends: too tight to change, moved to 15 minutes after it
+  const ride = rows.find(r => r.workout_id === 'w2');
+  assert.ok(ride.clash && ride.clash.tight && ride.clash.need === 15 && ride.clash.side === 'after', JSON.stringify(ride.clash));
+  assert.strictEqual(ride.clash.fix_min, m(16, 28));
 });
 ok('a ride over a concert moves, and two fixed things both get the mark with no fix', () => {
   const sat = [row('Pull and calves', 'training', m(17, 15), m(18, 10)), row('Z1 60 min · Life Time bike', 'training', m(18, 15), m(19, 15), { workout_id: 'w3' }),
@@ -61,5 +64,25 @@ ok('every meal out of the blocks: lunch during the game goes before he leaves, a
   assert.strictEqual(r.find(x => x.slot === 'dinner').time, '18:30', 'dinner was free: it stays');
   const nothing = F.placeSnacks(meals, { busy: [], wake: 390, bed: 1350 });
   assert.strictEqual(nothing.find(x => x.slot === 'lunch').time, '13:00');
+});
+ok('changeover: into a workout 15 minutes, out of one 20, none between two of a kind', () => {
+  assert.strictEqual(D.changeover({ category: 'commute' }, { category: 'training' }), 15);
+  assert.strictEqual(D.changeover({ category: 'training' }, { category: 'coaching' }), 20);
+  assert.strictEqual(D.changeover({ category: 'work' }, { category: 'work' }), 0);
+  assert.strictEqual(D.changeover({ category: 'commute' }, { category: 'coaching' }), 0, 'the drive arrives by the arrival time');
+  const rows = [row('Practice', 'coaching', m(17, 30), m(19)), row('Z1 60', 'training', m(16, 20), m(17, 20), { workout_id: 'w' })];
+  D.markClashes(rows, { wake: 390, bed: 1350 });
+  assert.ok(rows[1].clash.tight && rows[1].clash.side === 'before' && rows[1].clash.need === 20, JSON.stringify(rows[1].clash));
+  assert.strictEqual(rows[1].clash.fix_min, m(16, 10), 'done by 5:10: 20 minutes to shower before practice');
+});
+ok('lunch on a game day away: eaten at the field before warm-ups (packed), not after the ride', () => {
+  const evs = friday().map(r => Object.assign({}, r));
+  evs.splice(2, 1, row('Cycle 3 Planning', 'busy', m(9, 27), m(10, 57)));   // moved before the drive
+  const busy = D.blocksOf(evs, { eat: true, categories: new Set(['coaching', 'work', 'travel', 'commute']) })
+    .map(b => Object.assign(b, { name: b.name.replace(/ · \d+ min.*$/, '') })).concat([{ start: m(16, 15), end: m(17, 45), name: 'Z1 trainer' }]);
+  const r = F.placeSnacks([{ time: '08:55', slot: 'breakfast', kcal: 370 }, { time: '13:00', slot: 'lunch', kcal: 665 }, { time: '18:30', slot: 'dinner', kcal: 900 }], { busy, wake: 390, bed: 1350 });
+  const lunch = r.find(x => x.slot === 'lunch');
+  assert.strictEqual(lunch.time, '12:00', JSON.stringify(lunch));
+  assert.ok(/^Pack it: at Maryland SoccerPlex, before .*VDA/.test(lunch.what), lunch.what);
 });
 console.log(n + ' passed');
