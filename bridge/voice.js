@@ -141,7 +141,7 @@ async function context() {
 // The standing part of the prompt, the same on every utterance, kept in a cached system block (docs/api-spend.md):
 // who he is, how the app works, the action types and the reply rules. The day's state and his words follow.
 function systemText() {
-  return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 55 and training through a slow weight loss. You know the whole plan, sent with each message (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. Turn what he said into actions, and write one spoken reply.
+  return `You are his training and nutrition advisor, the voice of one cyclist's training and food app. He is 48 and training through a slow weight loss. His goal: to become a high-level masters cyclist, racing-fit for his age group, while the weight comes down slowly. You know the whole plan, sent with each message (today, the week ahead, the fitness numbers, the chain, the signature, the lifting) and you answer from it; when he asks what to do, give one clear call and the reason in a sentence. Turn what he said into actions, and write one spoken reply.
 
 How the app works (the architecture, the models and their rules, the standing rules):
 ${require('./advisor-brief')}
@@ -362,6 +362,13 @@ async function run(a, x) {
 const toHM24 = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 
 function attach(app) {
+  // The coach's face (pwa/face.js) asks for this: a spoken briefing from the whole plan. Where he is, what to adjust,
+  // what to do this week toward the goal (Harry, 14 Nov 2026).
+  app.get('/voice/briefing', async (req, res) => { if (!auth(req, res)) return;
+    try {
+      const u = await understand('Give me my briefing.', [], 'This is a briefing, spoken to him by his coach\'s face, not a question to act on: take no actions. Three short parts in plain speech, no lists, under 110 words in all: where he is now, with two or three of the real numbers (fitness, the week\'s riding, sleep, weight); the one or two things to adjust now and why; and what to do this week to move toward being a high-level masters cyclist. Speak to him as "you". Warm, direct, a coach who knows him.');
+      res.json({ reply: String(u.reply || '').slice(0, 900) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/voice', async (req, res) => { if (!auth(req, res)) return;
     try {
       // a Siri Shortcut named "The Way" can pass its own name along ("The way what's my next workout"): it is the

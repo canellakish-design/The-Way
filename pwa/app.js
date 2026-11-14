@@ -150,6 +150,7 @@ function speak(t){
     u.onstart = ()=>{ __ttsSpeaking = true; };
     u.onend = ()=>{ __ttsSpeaking = false; };
     u.onerror = ()=>{ __ttsSpeaking = false; };
+    if (window.Face) Face.speaking(u);   // the coach's face moves with the words when it is open (face.js)
     speechSynthesis.speak(u);
   }catch(e){}
 }

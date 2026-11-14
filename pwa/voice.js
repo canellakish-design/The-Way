@@ -26,7 +26,7 @@ function sheet(){
   if (s) return s;
   s = document.createElement("div"); s.id = "voiceSheet"; s.hidden = true;
   s.innerHTML = `<div class="vbox">
-    <div class="vhead"><span class="eyebrow">Coach</span><span class="vlinks">${SR ? `<button class="linkish" id="vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="vNew">new conversation</button><button class="vx" id="vClose" aria-label="Close">×</button></span></div>
+    <div class="vhead"><span class="eyebrow">Coach</span><span class="vlinks">${SR ? `<button class="linkish" id="vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="vFace">face</button><button class="linkish" id="vNew">new conversation</button><button class="vx" id="vClose" aria-label="Close">×</button></span></div>
     <div class="vthread" id="vThread"></div>
     <div class="vheard" id="vHeard"></div>
     <div class="vrow">${SR ? `<button class="primary big vhold" id="vHold">Hold to talk</button>` : ""}<button class="big" id="vType">Type</button></div>
@@ -38,6 +38,8 @@ function sheet(){
   document.getElementById("vClose").onclick = close;
   const hb = document.getElementById("vHey"); if (hb) hb.onclick = ()=> setHey(!heyOn);
   drawHey();
+  // the coach's face (face.js): opens and gives the briefing, where you are, what to adjust, what comes next
+  document.getElementById("vFace").onclick = ()=>{ close(); if (window.Face) Face.briefing(); };
   document.getElementById("vNew").onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
   document.getElementById("vSend").onclick = ()=>{ if (window.primeSound) primeSound(); send(document.getElementById("vText").value.trim()); };
   document.getElementById("vType").onclick = ()=>{ const b = document.getElementById("vTypeBox"); b.hidden = !b.hidden; if (!b.hidden) document.getElementById("vText").focus(); };
