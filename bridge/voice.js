@@ -78,7 +78,15 @@ async function context() {
     // where each one is done (where.js): the lift at Life Time, a ride outside or, in bad weather, in the pain cave
     const todayEv = ((sched && sched.days) || []).find(d => d.date === today), evOf = s => todayEv && (todayEv.events || []).find(e => e.category === 'training' && e.summary === s.name);
     const whereOf = s => { if (s.done) return ''; const e = evOf(s), pl = e ? e.place : require('./where').placeOf({ sport: s.sport, name: s.name }); return pl ? `, ${pl === 'pain cave' ? 'in the pain cave at home' : pl === 'Life Time' ? 'at Life Time' : pl === 'home' ? 'at home' : 'outside'}${e && e.indoor ? ` (not outside: ${e.indoor.why})` : ''}` : ''; };
-    if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${whereOf(s)}${s.done ? ' (done)' : ' (planned)'}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
+    // each session against the clock (Harry, 14 Nov 2026, 4:09p: the coach said the 3:15p lift "starts now": "Time of
+    // day is off"): how long until it starts, how long it has been going, or that its time has passed
+    const dur = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}` : `${m} min`;
+    const whenOf = s => { if (!s.time) return 'planned, no time set'; const st = (+s.time.slice(0, 2)) * 60 + (+s.time.slice(3, 5)), en = st + (s.minutes || 60);
+      const endHM = tz.hm12(String(Math.floor(en / 60) % 24).padStart(2, '0') + ':' + String(en % 60).padStart(2, '0'));
+      return nowMin < st - 5 ? `planned, starts in ${dur(st - nowMin)}` : nowMin <= st + 5 ? 'planned, starts now'
+        : nowMin < en ? `planned: it began ${dur(nowMin - st)} ago and runs until ${endHM}; not logged yet, he may be in it`
+        : `planned: its time has passed (it was to end at ${endHM}, ${dur(nowMin - en)} ago); not logged yet`; };
+    if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${whereOf(s)}${s.done ? ' (done)' : ` (${whenOf(s)})`}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
     else lines.push('No training today: no ride, no run, no lift. Do not name one.');
     // naps (naps.js): the one offered today after a short night, or the one he took
     { const todayEv2 = ((sched && sched.days) || []).find(d => d.date === today), naps = todayEv2 ? (todayEv2.events || []).filter(e => e.kind === 'nap') : [];
@@ -178,6 +186,8 @@ Action types:
   a ride or workout screen, a chart, his bike, his position on it, a tyre, a part, a route or anything else: a question; read it as his coach and say what you would change.
   a body part, a rash, a swelling or an injury: say what you can see, never a diagnosis, and say plainly when it is one for a doctor.
   Never describe what is not in the photo. If it is too dark, cut off or unreadable, say so and ask for another.
+- THE CLOCK: every answer is as of the time given at the top of the day's state. Say "starts now" only of something marked "starts now"; a session marked as begun is under way, and one whose time has passed is over (ask if he did it, never say it is starting). An earlier answer of yours in this conversation was true when you gave it and may be out of date: never repeat its times as if they were now.
+- "Repeat", "say that again", "what did you say": give the same information again, but as it stands at the time now (what has started, ended or is next has moved on since), in fresh words.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …". A question or a remark about food already in the journal ("why is my lunch score low", "was that enough carbs", "that was a good lunch") is a question, never a meal or a drink: nothing new was eaten, so nothing is logged.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
 Fill every field: "" or 0 where it does not apply.
