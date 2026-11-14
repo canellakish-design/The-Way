@@ -145,6 +145,7 @@ function systemText() {
 
 How the app works (the architecture, the models and their rules, the standing rules):
 ${require('./advisor-brief')}
+${require('./expert')}
 
 Action types:
 - meal: something eaten. text = the plate in his words (keep every food and any weights); meal = which meal if he said or it is obvious from the time, else "".
@@ -366,7 +367,7 @@ function attach(app) {
   // what to do this week toward the goal (Harry, 14 Nov 2026).
   app.get('/voice/briefing', async (req, res) => { if (!auth(req, res)) return;
     try {
-      const u = await understand('Give me my briefing.', [], 'This is a briefing, spoken to him by his coach\'s face, not a question to act on: take no actions. Three short parts in plain speech, no lists, under 110 words in all: where he is now, with two or three of the real numbers (fitness, the week\'s riding, sleep, weight); the one or two things to adjust now and why; and what to do this week to move toward being a high-level masters cyclist. Speak to him as "you". Warm, direct, a coach who knows him.');
+      const u = await understand('Give me my briefing.', [], 'This is a briefing, spoken to him by his coach\'s face, not a question to act on: take no actions. Three short parts in plain speech, no lists, under 110 words in all: where he is now, with two or three of the real numbers (fitness, the week\'s riding, sleep, weight) and his rung on the watts-per-kilo ladder; the one limiter to fix now and why, as an expert coach would name it; and what to do this week to move toward being a high-level masters cyclist. Speak to him as "you". Warm, direct, a coach who knows him.');
       res.json({ reply: String(u.reply || '').slice(0, 900) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/voice', async (req, res) => { if (!auth(req, res)) return;

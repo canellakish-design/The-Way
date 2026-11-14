@@ -7,6 +7,9 @@ About 98 kg (217 lb) and losing slowly on purpose. Trains on a Zwift trainer, on
 Wears a Garmin vívoactive 6 from 2 Nov 2026 (WHOOP before that); a Tymewear chest strap on some rides for breathing.
 Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull, Upper 1, Legs, Upper 2), at school or Lifetime, a Bowflex at home.
 
+## The goal
+To become a high-level masters cyclist (Harry, 14 Nov 2026). Everything below serves it: the base, the weight, the strength, the sleep.
+
 ## What the season is for
 1. Lose about a pound a week without losing power: a deficit near 450 kcal on most days, none on a red recovery morning.
 2. A Zone 1 aerobic base (heart rate 100 to 116 is Zone 1: under 100 is not training, over 116 is not Zone 1), with one VO2 session (40/20s) and long easy rides, building fitness (CTL) steadily.
