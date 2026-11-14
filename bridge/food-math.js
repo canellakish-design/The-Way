@@ -299,10 +299,12 @@ function placeSnacks(meals, opts) {
     // out at 5:15, after the ride): half an hour after the meal before it is enough, it ends by the session's
     // start, and with no room it folds into the meal before it (that meal is then the fuel for the session).
     if (m.slot === 'before' && !m.gap_snack) {
-      const sess = (o.sessions || []).filter(x => x.start > t).sort((a, b) => a.start - b.start)[0];
-      const lo = Math.max(wake, prev ? mmin(prev) + 30 : wake), hi = sess ? sess.start : bed - 30;
-      if (D.freeAt(t, 30, busy) && t >= lo) { prev = m; continue; }
-      const nb = D.nearestFree(Math.max(t, lo), 30, busy, lo, hi);
+      // its session: the next one, or the one its planned time has landed inside (a dawn ride that starts before his
+      // usual waking: he is up for it, so the shake sits half an hour ahead of it, not after it; 14 Nov 2026)
+      const sess = (o.sessions || []).filter(x => (x.end != null ? x.end : x.start + 1) > t).sort((a, b) => a.start - b.start)[0];
+      const hi = sess ? sess.start : bed - 30, lo0 = Math.max(wake, prev ? mmin(prev) + 30 : wake), lo = sess && !prev ? Math.min(lo0, hi - 30) : lo0;
+      if (D.freeAt(t, 30, busy) && t >= lo && t + 30 <= hi) { prev = m; continue; }
+      const nb = D.nearestFree(Math.min(Math.max(t, lo), Math.max(lo, hi - 30)), 30, busy, lo, hi);
       if (nb != null) { if (nb !== t) { m.moved_from = m.time; m.time = toHM(nb); delete m.at_min; } prev = m; continue; }
       if (prev) { prev.kcal = (prev.kcal || 0) + (m.kcal || 0); prev.carbs_g = (prev.carbs_g || 0) + (m.carbs_g || 0); prev.protein_g = (prev.protein_g || 0) + (m.protein_g || 0);
         prev.what = `${String(prev.what || '').replace(/\s*$/, '')} This is also the fuel for ${sess ? sess.name : 'the session'}: no time for a snack before it.`.trim(); m._folded = true; }
@@ -451,7 +453,7 @@ function mealPlanOf(day, sessions, target, sleep) {
 
   if (start < 11 * 60) {
     // Morning ride: breakfast before it (or nothing before a dawn ride), the post-ride meal, then the day.
-    if (early) out.push(meal(Math.max(WAKE, start - 45), 'before', day === 'high'
+    if (early) out.push(meal(Math.max(Math.min(WAKE, start - 30), start - 45), 'before', day === 'high'
       ? `Small and quick before ${name}: a banana or two rice cakes with honey.`
       : `Coffee and a Huel shake (20 g protein) before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
     else out.push(bfast(start - gap, name));
