@@ -37,7 +37,8 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
     const R = (d.events || []).filter(e => !e.allDay && e.start_min != null && e.end_min > e.start_min && ['work', 'coaching', 'commute', 'travel', 'family', 'busy', 'training'].includes(e.category));
     for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
       const a = R[i], b = R[j];
-      if (a.start_min < b.end_min && a.end_min > b.start_min && !(a.clash || b.clash || a.clash_by || b.clash_by) && !(a.category === 'work' && b.category === 'work') && !(a.category === 'coaching' && b.category === 'coaching') && d.date >= (s.days.find(x => x.today) || {}).date)
+      const lap = Math.min(a.end_min, b.end_min) - Math.max(a.start_min, b.start_min), wobble = lap <= 5 && [a.category, b.category].includes('commute') && [a.category, b.category].includes('busy');   // traffic, his own block
+      if (a.start_min < b.end_min && a.end_min > b.start_min && !wobble && !(a.clash || b.clash || a.clash_by || b.clash_by) && !(a.category === 'work' && b.category === 'work') && !(a.category === 'coaching' && b.category === 'coaching') && d.date >= (s.days.find(x => x.today) || {}).date)
         fail(`${d.date}: "${a.summary.slice(0, 30)}" and "${b.summary.slice(0, 30)}" overlap with no mark`);
     }
     notes.push(`${d.date}: ${meals.length} meals, ${blocks.length} blocks`);

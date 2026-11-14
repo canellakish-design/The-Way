@@ -118,7 +118,9 @@ function markClashes(rows, win) {
     // over each other, or too close to change between (a 4:15 ride when the drive home ends at 4:14)
     // a drive's edges move a few minutes with the traffic: an overlap of five minutes or less with one is not a clash
     const lap = Math.min(a.end_min, b.end_min) - Math.max(as, bs);
-    const over = as < b.end_min && a.end_min > bs && !((a.category === 'commute' || b.category === 'commute') && lap <= 5);
+    // (his own blocks only: a workout needs its changeover, so for a workout any overlap counts)
+    const wobble = lap <= 5 && ((a.category === 'commute' && b.category === 'busy') || (b.category === 'commute' && a.category === 'busy'));
+    const over = as < b.end_min && a.end_min > bs && !wobble;
     const gapAB = bs - a.end_min, gapBA = as - b.end_min;
     const tight = !over && ((gapAB >= 0 && gapAB < changeover(a, b)) || (gapBA >= 0 && gapBA < changeover(b, a)));
     if (!over && !tight) continue;
@@ -130,8 +132,9 @@ function markClashes(rows, win) {
     // changeover kept on both sides of each
     const len = mover.end_min - mover.start_min;
     // ten minutes of slack beside a drive, so the next traffic reading does not bring the clash back
+    // (on top of the changeover: a workout is put 25 minutes after a drive, and moved again only under 15)
     const slack = r => (r.category === 'commute' ? 10 : 0);
-    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r) - Math.max(slack(r), changeover(mover, r)), end: r.end_min + Math.max(slack(r), changeover(r, mover)) }));
+    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r) - slack(r) - changeover(mover, r), end: r.end_min + slack(r) + changeover(r, mover) }));
     const earliest = mover.category === 'training' ? wake + 60 : wake;
     const latest = mover.category === 'training' ? bed - 60 : bed;
     const fix = nearestFree(mover.start_min, len, blocks, earliest, latest);
