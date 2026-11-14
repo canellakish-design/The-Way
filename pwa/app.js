@@ -1386,6 +1386,8 @@ window.TRASH = TRASH;
 // the gold medal: a breakthrough ride (signature.js), tap the row for the story
 const MEDAL = '<svg class="medal" viewBox="0 0 24 24" width="18" height="18" aria-label="Breakthrough" role="img"><path d="M8 2h3l1.5 4L14 2h3l-3.5 7h-3z" fill="#c8102e"/><path d="M13 2h3l-3.5 7" fill="#8b0a1f"/><circle cx="12" cy="15.5" r="6.5" fill="#f0c040" stroke="#b8860b" stroke-width="1.2"/><circle cx="12" cy="15.5" r="4.2" fill="none" stroke="#fff3b0" stroke-width=".8" opacity=".8"/><path d="M12 11.9l1.1 2.2 2.4.35-1.75 1.7.4 2.4L12 17.4l-2.15 1.15.4-2.4-1.75-1.7 2.4-.35z" fill="#b8860b"/></svg>';
 window.MEDAL = MEDAL;
+// What a meal slot is called on the page (Harry, 14 Nov 2026: "that should say pre workout snack not Before")
+const slotName = s => s === "before" ? "pre-workout snack" : s === "after" ? "post-workout meal" : (s || "");
 function dayRows(d, plan, isToday){
   // the clock read from the minutes, so an end past midnight reads 12:30a whatever the server's string says
   const rows = (d.events||[]).map(e=>({
@@ -1423,7 +1425,8 @@ function dayRows(d, plan, isToday){
       const logged = (m.logged || []).length > 0, mt = logged && m.match ? m.match : null;
       // a logged meal sits at the time it was eaten; a slot after midnight (next_day, at_min 1500 for 1:00a) sits at the end of today and reads "1:00a"
       const a = !logged && m.next_day && Number.isFinite(m.at_min) ? m.at_min : hm(logged && m.time_logged ? m.time_logged : m.time); if (a == null) continue;
-      const what = String(m.what || "").split(/(?<=\.)\s/)[0].slice(0, 70);
+      // the first sentence whole (the row wraps): never cut in the middle of a word ("…23 g short on c")
+      const what = (x => x.length <= 200 ? x : x.slice(0, x.slice(0, 198).lastIndexOf(" ")) + "…")(String(m.what || "").split(/(?<=\.)\s/)[0]);
       // logged: the plate as eaten with its numbers, the plan's in brackets; not yet: the plan
       const ate = logged ? (f.entries || []).filter(e => (m.logged || []).includes(e.id) && !e.supplement) : [];
       const ateText = ate.length ? `${ate.map(e => e.name).join(", ")} · ${mt ? `${mt.kcal} kcal · ${mt.carbs_g}C · ${mt.protein_g}P` : ""} (plan ${m.kcal} · ${m.carbs_g}C · ${m.protein_g}P)` : null;
@@ -1431,7 +1434,7 @@ function dayRows(d, plan, isToday){
       const sumE = k => ate.reduce((s, e) => s + (e[k] || 0), 0);
       const bars = ate.length ? mealBars({ carbs_g: sumE("carbs_g"), protein_g: sumE("protein_g"), fat_g: sumE("fat_g") }, Math.max(mscale, sumE("carbs_g"), sumE("protein_g"), sumE("fat_g")), true)
         : m.kcal ? mealBars({ carbs_g: m.carbs_g, protein_g: m.protein_g, fat_g: mealFat(m) }, mscale) : "";
-      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: `${m.slot}${m.carb ? ` · ${m.carb.word}` : ""}${m.slot === nextSlot && !logged ? " · next" : ""}`, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
+      rows.push({ start: a, end: a + 30, from: fmtMinLocal(a), to: fmtMinLocal(a + 30), title: `${slotName(m.slot)}${m.carb ? ` · ${m.carb.word}` : ""}${m.slot === nextSlot && !logged ? " · next" : ""}`, detail: ateText || `${what}${m.kcal ? ` · ${m.kcal} kcal · ${m.carbs_g}C${m.protein_g ? ` · ${m.protein_g}P` : ""}` : ""}`,
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, bars, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
     // the bedtime note (alcohol in the evening costs water overnight): its own row before bed, from 8 p.m.
@@ -2619,7 +2622,7 @@ V.today = async function(){
       const then = rows.find(r => isSession(r) && r.start > nx.start && r.start - nx.start <= 240 && !done(r));
       if (then) tail += ` · then ${then.title} at ${then.from}`;
     }
-    const name = nx.meal ? nx.meal.slot : nx.feed ? nx.title.replace(/:.*$/, "") : nx.title;
+    const name = nx.meal ? slotName(nx.meal.slot) : nx.feed ? nx.title.replace(/:.*$/, "") : nx.title;
     el.innerHTML = `<span class="hu-lab">Next</span><span class="dn">${esc(name)} ${esc(when)}<span class="dnt">${esc(tail)}</span></span><span class="dgo" aria-hidden="true">›</span>`;
     el.hidden = false;
     el.onclick = ev => { ev.preventDefault(); const li = document.querySelector(`#dayList li[data-s="${nx.start}"]`); if (li) li.scrollIntoView({ behavior: "smooth", block: "center" }); };

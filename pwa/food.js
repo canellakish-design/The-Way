@@ -29,7 +29,7 @@ const toneC = t => t==="good"?"var(--green)":t==="warn"?"var(--amber)":t==="bad"
 const FIT = { yes:{word:"fits", tone:"good"}, partly:{word:"partly", tone:"warn"}, no:{word:"miss", tone:"bad"} };
 const MEALS = ["breakfast","lunch","dinner","snack","on the bike"];
 // the slot an entry was given when it was logged, in words: one name on the verdict, the card and the Day row
-const slotWord = s => s === "after" ? "post-ride" : s === "before" ? "pre-ride" : (s || "");
+const slotWord = s => s === "after" ? "post-workout meal" : s === "before" ? "pre-workout snack" : (s || "");
 
 /* ---- pieces shared with the front page ---- */
 function fitBadge(a){ const f = FIT[a && a.fits] || FIT.partly; return `<span class="fit" style="color:${toneC(f.tone)};border-color:${toneC(f.tone)}">${f.word}</span>`; }
@@ -444,7 +444,7 @@ V.food = async function(){
           : `<div class="small">This plate: ${a.protein_source?"protein ✓":"no real protein"} · carbs ${esc(a.carbs||"?")} · ${a.vegetables?"vegetables or fruit ✓":"no vegetables"}${a.processed?" · ultra-processed":""}</div>`}
         ${isToday?`<div class="jfix">
           <div class="row2"><span><label>Name</label><input class="fxName" value="${esc(e.name)}"></span>
-            <span><label>Meal</label><select class="fxMeal">${e.slot === "before" ? `<option value="snack" selected>pre-ride</option>` : ""}${MEALS.map(m=>`<option ${e.slot !== "before" && m===(MEALS.includes(e.slot) ? e.slot : e.meal)?"selected":""}>${m}</option>`).join("")}</select></span></div>
+            <span><label>Meal</label><select class="fxMeal">${e.slot === "before" ? `<option value="snack" selected>pre-workout snack</option>` : ""}${MEALS.map(m=>`<option ${e.slot !== "before" && m===(MEALS.includes(e.slot) ? e.slot : e.meal)?"selected":""}>${m}</option>`).join("")}</select></span></div>
           <div class="row2"><span><label>kcal</label><input class="fxK" type="number" value="${e.kcal}"></span><span><label>carbs g</label><input class="fxC" type="number" value="${e.carbs_g}"></span></div>
           <div class="row2"><span><label>protein g</label><input class="fxP" type="number" value="${e.protein_g}"></span><span><label>fat g</label><input class="fxF" type="number" value="${e.fat_g}"></span></div>
           <label>Fit</label><select class="fxFit">${["yes","partly","no"].map(f=>`<option ${f===a.fits?"selected":""}>${f}</option>`).join("")}</select>
