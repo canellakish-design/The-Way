@@ -352,7 +352,7 @@
           todayU: last ? `${last.score != null ? `score ${last.score}` : ""}${last.manual ? `${last.score != null ? " · " : ""}${last.manual}` : ""}` : "" }) + `
         <div class="ln-chart">
           ${nights.length ? barsSVG(nights.map(n => ({ v: n.hours, label: dayLong(n.date), short: dayShort(n.date) })), { max: 10, line: 7, lineLabel: "7 h", aria: "hours asleep each night", col: it => it.v >= 7 ? "var(--green)" : it.v >= 6.25 ? "var(--amber)" : "var(--red)" }) : `<div class="small">No nights from the watch yet.</div>`}
-          ${nights.length ? `<details class="why"><summary>each night</summary><ul class="agenda totals">${nights.slice().reverse().map(n => `<li><span class="n">${esc(dayLong(n.date))}${n.manual ? ` <span class="small">· ${esc(n.manual)}</span>` : ""}</span><span class="tag"><b style="color:${TC[n.hours >= 7 ? "good" : n.hours >= 6.25 ? "warn" : "bad"]}">${n.hours} h</b>${n.score != null ? ` · score ${n.score}` : ""}</span></li>`).join("")}</ul></details>` : ""}</div>
+          ${nights.length ? `<details class="why"><summary>each night</summary><ul class="agenda totals">${nights.slice().reverse().map(n => `<li><span class="n">${esc(dayLong(n.date))}${n.manual ? ` <span class="small">· ${esc(n.manual)}</span>` : ""}${n.nap_min ? ` <span class="small">· ${n.night_hours} h + ${n.nap_min} min nap</span>` : ""}</span><span class="tag"><b style="color:${TC[n.hours >= 7 ? "good" : n.hours >= 6.25 ? "warn" : "bad"]}">${n.hours} h</b>${n.score != null ? ` · score ${n.score}` : ""}</span></li>`).join("")}</ul></details>` : ""}</div>
         <div class="ln-sec"><span class="hu-lab">Tonight</span></div>
         <div class="hu-fields two">
           <div class="hu-field"><span class="k">Bed tonight</span><span class="n">${esc(hm12(bedHM))}</span></div>
@@ -367,10 +367,22 @@
           <div class="row2"><span><label>Hours asleep</label><input id="slH" type="number" step="0.05" inputmode="decimal" placeholder="7.5"></span><span><label>Sleep score</label><input id="slS" type="number" inputmode="numeric" placeholder="80"></span></div>
           <div class="row2"><span><label>From</label><select id="slSrc"><option>Garmin</option><option>WHOOP</option><option>by hand</option></select></span><span><label>&nbsp;</label><button class="primary" id="slGo">Save the night</button></span></div>
           <span class="small" id="slMsg"></span></details>
+        <details class="ln-fold"><summary>Add a nap</summary>
+          <div class="small">A nap counts toward that day's sleep. After a night under 7 hours the Day page offers one between 1 and 3 p.m.: 20 to 30 minutes, never after 3.</div>
+          <div class="row2"><span><label>Minutes</label><input id="npM" type="number" inputmode="numeric" placeholder="25"></span><span><label>Began at (optional)</label><input id="npT" type="time"></span></div>
+          <div class="row2"><span><label>&nbsp;</label><button class="primary" id="npGo">Save the nap</button></span><span></span></div>
+          <span class="small" id="npMsg"></span>
+          <div id="npList" class="small"></div></details>
         ${whyHTML(L)}`;
       document.getElementById("slGo").onclick = async ()=>{ const h = +document.getElementById("slH").value, sc = +document.getElementById("slS").value; const m = document.getElementById("slMsg");
         if (!(h > 0 && h <= 16)) { m.textContent = "Hours asleep, like 7.5."; return; }
         m.textContent = "saving…"; try{ await bridge("/wellness", { method: "POST", headers: J, body: JSON.stringify({ sleep_h: h, sleep_score: sc || undefined, source: document.getElementById("slSrc").value }) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
+      document.getElementById("npGo").onclick = async ()=>{ const mins = Math.round(+document.getElementById("npM").value), t = document.getElementById("npT").value, m = document.getElementById("npMsg");
+        if (!(mins >= 5 && mins <= 180)) { m.textContent = "Minutes, like 25."; return; }
+        m.textContent = "saving…"; try{ await bridge("/naps", { method: "POST", headers: J, body: JSON.stringify({ minutes: mins, time: t || undefined }) }); await draw(); }catch(e){ m.textContent = String(e.message).replace(/^bridge \d+ — /, ""); } };
+      bridge("/naps").then(r => { const box = document.getElementById("npList"); if (!box) return; const ns = (r.naps || []).slice().reverse();
+        box.innerHTML = ns.length ? `<ul class="agenda totals">${ns.map(x => `<li><span class="n">${esc(dayLong(x.date))} · ${esc(hm12(x.time))}</span><span class="tag"><b>${x.minutes} min</b> <button class="linkish" data-napdel="${esc(x.id)}">remove</button></span></li>`).join("")}</ul>` : "";
+        box.querySelectorAll("[data-napdel]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/naps/" + encodeURIComponent(b.dataset.napdel), { method: "DELETE" }); }catch(e){} await draw(); }); }).catch(()=>{});
       el.querySelectorAll("[data-supp]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/food/supplement", { method: "POST", headers: J, body: JSON.stringify({ key: b.dataset.supp }) }); }catch(e){} await draw(); });
       el.querySelectorAll("[data-woke]").forEach(b => b.onclick = async ()=>{ b.disabled = true; try{ await bridge("/nights", { method: "POST", headers: J, body: JSON.stringify({ woke: b.dataset.woke === "1" }) }); }catch(e){} await draw(); });
     }, first);

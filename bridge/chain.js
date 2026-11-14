@@ -325,6 +325,10 @@ async function report() {
   let weight = null;
   try { weight = await require('./weighin').state(); } catch (e) { weight = null; }
 
+  // last night as the watch (or his own entry) gave it, kept for the Day page's nap offer (naps.js); then the naps:
+  // a nap counts toward its day, the night kept apart
+  try { const ln = nights.length && nights[nights.length - 1].date === today ? nights[nights.length - 1] : null; if (ln && ln.counted) await setJSON('sleep-last', { date: today, hours: ln.hours, at: Date.now() }); } catch (e) { /* the offer waits */ }
+  try { const NP = require('./naps'); nights = NP.withNaps(nights, await NP.minutesByDate()); } catch (e) { /* the nights stand */ }
   const sleepWeek = r1(avg(nights.filter(n => n.counted).map(n => n.hours)));
   // last night is the record dated today; an older one is the watch not synced yet, not tonight's number
   const lastNight = nights.length && nights[nights.length - 1].date === today ? nights[nights.length - 1] : null;
@@ -345,8 +349,8 @@ async function report() {
         unit: 'placed', from: today, to: tz.shiftKey(today, 6), week_label: planWeekLabel(today),
         basis: `how much of the seven days ahead (${planWeekLabel(today)}) is placed on the calendar, not how much of it is done (that is the Calendar's "done of plan"): minutes of riding against ${PLAN_RIDE_MIN} (half the mark), five lifts placed (three tenths), and every ride given a start time (two tenths); 80 green, 50 amber` };
     })(),
-    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${rxToday && rxToday.magnesium_last_night ? ' · Mg ✓' : ''}`, unit: 'h a night', nights: nights.slice(-7),
-      rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu; magnesium an hour before bed rides along' },
+    sleep: { week: sleepWeek, state: stateOf('sleep', sleepWeek), today: lastNight ? lastNight.hours : null, today_word: `${lastNight && lastNight.score != null ? `score ${lastNight.score}${lastNight.manual ? ` · ${lastNight.manual}` : ''}` : (lastNight ? (lastNight.manual ? `from ${lastNight.manual}` : 'last night') : notSynced ? 'no sync yet' : 'no watch')}${lastNight && lastNight.nap_min ? ` · incl. ${lastNight.nap_min} min nap` : ''}${rxToday && rxToday.magnesium_last_night ? ' · Mg ✓' : ''}`, unit: 'h a night', nights: nights.slice(-7),
+      rx: { magnesium: rxWeek.magnesium, last_night: rxToday ? rxToday.magnesium_last_night : null, tonight: rxLine('sleep') }, basis: 'hours asleep per night, from the Garmin through intervals.icu, plus any nap he logs that day; magnesium an hour before bed rides along' },
     // The Macros box shows what the Food page prints at its top, read from the same day report on every
     // call: today's kcal against the day's target, and protein against its target. (The compliance
     // average stays for the chain's verdict, but it is not on the box: its macro half bottoms out at 0
