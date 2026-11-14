@@ -1231,13 +1231,15 @@ const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 
 const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 function chainHTML(){
   // three fields a row with an arrow between each, the arrow out of a row's last field wrapping round to the next
-  // row; each arrow wears the colour of the link it leaves, a cross where the chain breaks. Weight sits beside the verdict.
+  // row; each arrow wears the colour of the link it leaves, a cross where the chain breaks. Weight ends it.
   const field = ([ck, k, label]) => `<button class="score clink" data-k="${k}" data-ck="${ck}" data-week="none"><span class="ck"><span>${label}</span><span class="cmark" aria-hidden="true"></span></span><span class="cval"><span class="cnum">—</span><span class="cweek">7 days</span><span class="ctr" hidden></span></span><span class="ctoday"><span class="ctw">today</span><b class="ctn">—</b></span></button>`;
   const arrow = ck => `<span class="carrow" data-k="${ck}" aria-hidden="true"><i>${ARROW}</i></span>`;
   const rows = []; for (let i = 0; i < CHAIN.length; i += 3) rows.push(CHAIN.slice(i, i + 3));
   const out = rows.map((r, ri) => {
     const cells = r.map((l, i) => `${i ? arrow(r[i - 1][0]) : ""}${field(l)}`).join("");
-    const verdict = r.length < 3 ? `${arrow(r[r.length - 1][0])}<div class="cverdict"><span class="ck">The chain</span><span class="cvw" id="chainWord">&nbsp;</span></div>` : "";
+    // no verdict box beside Weight (Harry, 14 Nov 2026: "I don't need that box … I can see it visually with the
+    // boxes"): the colours and the arrows are the verdict
+    const verdict = "";
     const wrap = ri < rows.length - 1 ? `<div class="carrow cwrap" data-k="${r[r.length - 1][0]}" aria-hidden="true">${WRAP_ARROW}<i></i></div>` : "";
     return cells + verdict + wrap;
   }).join("");
