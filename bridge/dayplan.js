@@ -167,7 +167,10 @@ const ownKey = k => /^l:/.test(String(k)) || /^g:[^@:]+@mdunitedfc\.org:[^:]+$/i
 // …and his alone: a meeting, a call or anything with guests or a video link has other people waiting on its time.
 // The Way never moves those; they keep their mark and he decides (the IDP meetings with a Meet link, 14 Nov 2026).
 const WITH_PEOPLE = /\b(meetings?|calls?|1\s*[:x-]\s*1|one[- ]on[- ]one|interviews?|seminars?|trainings?|discussions?|sessions?|webinars?|appointments?|appt|conference|lunch|dinner|coffee)\b/i;
-const solo = e => !e.with_others && !WITH_PEOPLE.test(String(e.summary || ''));
+// …nor anything that happens at a place (a game at a field, a booking, an appointment somewhere): he is expected there at
+// that time. The U18 game he added at the SoccerPlex was moved to 8:45p (14 Nov 2026); an event with a location stays.
+const GAME_WORDS = /\b(games?|match(es)?|scrimmage|tournament|cup|showcase|practice|kick-?off|vs\.?)\b/i;
+const solo = e => !e.with_others && !e.location && !WITH_PEOPLE.test(String(e.summary || '')) && !GAME_WORDS.test(String(e.summary || ''));
 function movesFor(days, today, nowMin, workouts) {
   const out = [];
   for (const day of days || []) {

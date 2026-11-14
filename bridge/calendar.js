@@ -54,6 +54,9 @@ const fmtMin = m => tz.fmtMin(m);
 const RULES = [
   ['training', /\b(ride|zwift|train|workout|interval|z2|hiit|kettlebell|gym)\b/i],
   ['coaching', /\bcoach/i],
+  // a game is a club commitment whoever is on the bench (Harry, 14 Nov 2026: a U18 game he added himself read as his
+  // own free block and was moved to 8:45p): a league name, an age group, or "vs" in the title
+  ['coaching', /\b(ecnl|scrimmage|tournament|showcase|invitational)\b|\bU-?1\d\b|\bvs\.?\s+\S/i],
   ['commute',  /\b(commute|drive to|drive home)\b/i],
   ['work',     /\b(school|class|teach|meeting|work|mcdonogh)\b/i],
   ['family',   /\b(family|dinner with|birthday|kids?)\b/i],
