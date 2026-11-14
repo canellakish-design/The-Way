@@ -113,11 +113,11 @@ function venueTrips(date, events, s) {
     const arrive = arriveBy(e.description) ?? (start - s.arrive_before);
     const coaching = e.category === 'coaching', game = coaching && GAME.test(String(e.summary || ''));
     const k = placeKey(e.location), have = out.find(g => g.key === k);
-    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; have.point = have.point || e.point || null; continue; }
+    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; have.point = have.point || e.point || null; have.ride = have.ride || e.source === 'plan-place'; continue; }
     // the place's name, or the event's when the place is only a street address ("Physio" over "12 West St")
     const place = venueName(e.location), byTitle = /^\d/.test(place) && !coaching;
     const title = String(e.summary || '').replace(/\s*[|·].*$/, '').trim().slice(0, 40);
-    out.push({ key: k, location: e.location, point: e.point || null, label: e.point && e.point.label ? String(e.point.label).slice(0, 40) : byTitle && title ? title : place, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
+    out.push({ key: k, location: e.location, point: e.point || null, ride: e.source === 'plan-place', label: e.point && e.point.label ? String(e.point.label).slice(0, 40) : byTitle && title ? title : place, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
   }
   return out;
 }
@@ -145,7 +145,7 @@ function tripsFor(date, events, s, nextEvents) {
   const trips = [];
   const times = classTimes(date, events);
   if (times) trips.push({ id: 'school', kind: 'school', label: SCHOOL.label, dest: SCHOOL, arrive: times.first - s.arrive_before, back: times.last + s.leave_after });
-  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', label: g.label, dest: g.point || g.location, arrive: g.arrive, back: g.end + (g.coaching ? 15 : 5) });
+  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', label: g.label, dest: g.point || g.location, arrive: g.arrive, back: g.end + (g.coaching ? 15 : g.ride ? 20 : 5) });   // after a ride: 20 minutes to change and load the bike (dayplan's changeover)
   return trips.sort((a, b) => a.arrive - b.arrive);
 }
 // No time to get home between two trips: the first keeps no drive home, the second leaves from the first place.
