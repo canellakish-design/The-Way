@@ -945,7 +945,7 @@ function attach(app) {
       }
       const entry = await addPhoto({ text: b.text, meal: b.meal });
       res.json({ ok: true, entry, day: await dayReport(entry.date) });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+    } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message, not_food: e.not_food || undefined }); } });
 
   app.post('/food/photo', async (req, res) => { if (!auth(req, res)) return;
     try {
