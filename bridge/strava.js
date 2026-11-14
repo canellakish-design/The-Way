@@ -74,7 +74,8 @@ async function apiFetch(pathname) {
   const d = await db();
   const t = await tok(d);
   const r = await fetch(API + pathname, { headers: { Authorization: 'Bearer ' + t } });
-  if (!r.ok) throw new Error('strava ' + r.status + ' on ' + pathname.split('?')[0]);
+  // with Strava's own reason (which permission is missing, a rate limit), so a refusal can be read
+  if (!r.ok) { const why = await r.text().catch(() => ''); throw new Error('strava ' + r.status + ' on ' + pathname.split('?')[0] + (why ? ': ' + why.replace(/\s+/g, ' ').slice(0, 220) : '')); }
   return r.json();
 }
 
