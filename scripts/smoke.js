@@ -53,6 +53,11 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
       const n = titles.filter(t => /^(breakfast|lunch|dinner|after|before|snack)\b/.test(t)).length;
       if (n < 2) fail(`the Day page shows ${n} meals on ${step}`);
       notes.push(`page, ${step}: ${titles.length} rows, ${n} meals`);
+      // only real blocks show a start and an end, and no two of them overlap on the page without a mark
+      // (Harry, 14 Nov: a logged breakfast drawn 6:43–7:13 ran into the eye drops and the 7:02 drive)
+      const blocks = await p.$$eval('#dayList li.xrow', xs => xs.filter(x => !x.classList.contains('notgoing')).map(x => ({ s: +x.dataset.s, e: +x.dataset.e, two: !!x.querySelector('.t br'), marked: x.classList.contains('clashed') || !!x.querySelector('.clash'), name: (x.querySelector('.n') ? x.querySelector('.n').innerText.split('\n')[0] : '').slice(0, 30) })).filter(b => b.two));
+      for (let i = 0; i < blocks.length; i++) for (let j = i + 1; j < blocks.length; j++) { const a = blocks[i], b = blocks[j];
+        if (Math.min(a.e, b.e) - Math.max(a.s, b.s) > 5 && !a.marked && !b.marked) fail(`page, ${step}: "${a.name}" and "${b.name}" overlap with no mark`); }
       const next = await p.$('#dayNext:not([disabled])'); if (!next) break; await next.click(); await p.waitForTimeout(6000);
     }
     if (errs.length) fail('page errors: ' + errs.slice(0, 3).join(' | '));
