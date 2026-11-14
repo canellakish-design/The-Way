@@ -4,12 +4,17 @@
 // natural voice instead, and the face's mouth follows the sound itself (pwa/app.js CoachVoice, pwa/face.js).
 //   GET  /voice/speak            { on, voice }           whether the natural voice is set up
 //   POST /voice/speak { text }   { audio_b64, mime }     the words as speech (mp3); 503 { off: true } with no key
-// COACH_VOICE picks the voice (default onyx: low, calm). Text is capped at 1,200 characters a call.
+// COACH_VOICE picks the voice (default onyx: low, calm), COACH_ACCENT its accent (default English). Text is capped
+// at 1,200 characters a call.
 // ============================================================
 const MAX = 1200;
 const key = () => String(process.env.OPENAI_API_KEY || '').trim();
 const voice = () => String(process.env.COACH_VOICE || 'onyx').trim().toLowerCase();
-const STYLE = 'A calm, direct cycling coach who knows this athlete well: warm, confident, unhurried. Numbers said clearly.';
+// The accent (Harry, 14 Nov 2026: "Can the voice have an English accent?"): English by default; COACH_ACCENT in
+// Netlify changes it ("American", "Scottish", …) or, set to "none", leaves the voice as it comes.
+const ACCENTS = { english: 'Accent: British English, a natural southern English (received pronunciation) accent, never exaggerated.' };
+const accent = () => { const a = String(process.env.COACH_ACCENT || 'English').trim(); return /^(none|off)$/i.test(a) ? '' : ACCENTS[a.toLowerCase()] || `Accent: ${a.slice(0, 40)}, natural, never exaggerated.`; };
+const style = () => `A calm, direct cycling coach who knows this athlete well: warm, confident, unhurried. Numbers said clearly. ${accent()}`.trim();
 
 // what is read aloud: no markdown, no links, times and units as a person says them
 function clean(text) {
@@ -25,7 +30,7 @@ async function speech(text) {
   const k = key(); if (!k) return null;
   const input = clean(text); if (!input) return null;
   const call = body => fetch('https://api.openai.com/v1/audio/speech', { method: 'POST', headers: { Authorization: 'Bearer ' + k, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  let r = await call({ model: 'gpt-4o-mini-tts', voice: voice(), input, instructions: STYLE, response_format: 'mp3' });
+  let r = await call({ model: 'gpt-4o-mini-tts', voice: voice(), input, instructions: style(), response_format: 'mp3' });
   if (!r.ok && r.status !== 401 && r.status !== 429) r = await call({ model: 'tts-1', voice: voice(), input, response_format: 'mp3' });   // the older model, where the new one is not offered
   if (!r.ok) { const e = new Error(r.status === 401 ? 'the voice key was refused (OPENAI_API_KEY)' : 'the voice service answered ' + r.status); e.status = 502; throw e; }
   return { audio_b64: Buffer.from(await r.arrayBuffer()).toString('base64'), mime: 'audio/mpeg', voice: voice(), chars: input.length };
@@ -41,4 +46,4 @@ function attach(app) {
       res.json(out);
     } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 }
-module.exports = { attach, clean, speech, MAX };
+module.exports = { attach, clean, speech, style, MAX };
