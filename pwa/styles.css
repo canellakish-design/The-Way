@@ -963,4 +963,14 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 .attrow{margin:6px 0}
 .attlist li{display:flex; justify-content:space-between; align-items:center; gap:8px}
 .attlist .gbtns button{padding:4px 8px; font-size:11px}
+/* the coach's face (face.js) */
+#faceSheet{position:fixed; inset:0; z-index:60; background:rgba(3,6,10,.92); display:flex; align-items:center; justify-content:center}
+#faceSheet[hidden]{display:none}
+.facebox{position:relative; width:min(420px, 100vw - 32px); text-align:center}
+.facewrap{cursor:pointer}
+.facesvg{width:100%; height:auto; display:block; border:1px solid #1e3a52; box-shadow:0 0 40px rgba(95,211,255,.15)}
+.facecap{margin:12px 0; min-height:3em; font-size:15px; line-height:1.4; color:var(--ink)}
+.facex{position:absolute; top:-54px; right:0; z-index:2}
+.facesvg .fhud{font:600 9px/1 var(--mono, ui-monospace, Menlo, monospace); letter-spacing:.18em; fill:#5fd3ff; opacity:.85}
+.facecap{font-family:var(--mono, ui-monospace, Menlo, monospace); font-size:13px; text-align:left; color:#bfeaff; background:#06121c; border:1px solid #1e3a52; padding:10px 12px}
 
