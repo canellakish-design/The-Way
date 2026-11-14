@@ -1400,9 +1400,21 @@ function dayRows(d, plan, isToday){
     for (const sx of (HUB.food.sessions || [])){
       if (!sx.done || !sx.time) continue;
       const a = hhmmToMin(sx.time); if (a == null) continue;
-      const held = rows.some(r => (r.source === "plan" || r.source === "intervals") && r.start != null && Math.abs(r.start - a) <= 45);
-      if (held) continue;
+      const held = rows.some(r => (r.source === "plan" || r.source === "intervals") && r.start != null && Math.abs(r.start - a) <= 45 && !r.moved_to_ride);
       const b = a + (sx.minutes || 60);
+      // the planned ride it was (Harry, 13 Nov: "when a ride is done, just move the ride to the actual time … you
+      // don't need to have two completed rides"): the planned card moves to when it was ridden and is the one card
+      const nm = t => String(t || "").toLowerCase().replace(/^zwift - intervals icu: /, "").replace(/\s+/g, " ").trim();
+      const twin = rows.filter(r => (r.source === "plan" || r.source === "intervals") && r.start != null && !r.moved_to_ride && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title)
+          && (nm(r.title) === nm(sx.name) || (r.wid && WGRADE[r.wid] && WGRADE[r.wid].ridden) || Math.abs(r.start - a) <= 45))
+        .sort((x, y) => Math.abs(x.start - a) - Math.abs(y.start - a))[0];
+      if (twin){
+        if (Math.abs(twin.start - a) > 5) twin.detail = `${twin.detail ? twin.detail + " · " : ""}planned ${twin.from}`;
+        twin.planned_start = twin.start; twin.planned_end = twin.end;
+        twin.start = a; twin.end = b; twin.from = fmtMinLocal(a); twin.to = fmtMinLocal(b); twin.moved_to_ride = true;
+        continue;
+      }
+      if (held) continue;
       rows.push({ start: a, end: b, from: fmtMinLocal(a), to: fmtMinLocal(b), title: sx.name.replace(/^Zwift - Intervals icu: /i, ""), detail: `${sx.minutes} min · ridden`, lane: LANE.ride, source: "ride", desc: null });
     }
   }
@@ -1412,6 +1424,10 @@ function dayRows(d, plan, isToday){
     const sm = b.time ? (+b.time.slice(0,2))*60 + (+b.time.slice(3,5)) : 9*60, mins = b.minutes || 60;
     rows.push({ start: sm, end: sm + mins, from: fmtMinLocal(sm), to: fmtMinLocal(sm + mins), title: b.name, detail: `${mins} min · ridden`, lane: LANE.plan || LANE.calendar, source: "strava", bt: b, desc: null });
   }
+  // a ride already done is where it was: no clash marks on it, and none on what it once overlapped
+  const doneRide = r => r.moved_to_ride || (r.wid && WGRADE[r.wid] && (WGRADE[r.wid].ridden || WGRADE[r.wid].logged));
+  const doneTitles = new Set(rows.filter(doneRide).map(r => r.title));
+  for (const r of rows){ if (doneRide(r)) { r.clash = null; r.clash_by = null; } else if (r.clash_by && doneTitles.has(r.clash_by)) r.clash_by = null; }
   (d.windows||[]).forEach(w=> rows.push({
     start: w.start_min, end: w.end_min, from: w.from, to: w.to,
     title: "Open — " + durLabel(w.minutes), detail: w.slot || "",
@@ -1430,7 +1446,7 @@ function dayRows(d, plan, isToday){
   // The fuel on the bike belongs to its ride: one longer card, never a second row that reads as a second ride.
   for (const fr of rows.filter(r => r.meal && r.meal.slot === "on the bike")){
     const ride = rows.filter(r => r !== fr && !r.meal && !r.feed && !r.open && !r.rx && r.start != null && (r.wid || r.source === "plan" || r.source === "intervals" || r.source === "ride" || r.lane === LANE.ride)
-        && !/weight|lift|strength|^run$|walk|hike/i.test(r.sport || "") && fr.start >= r.start - 30 && fr.start < r.end)
+        && !/weight|lift|strength|^run$|walk|hike/i.test(r.sport || "") && ((fr.start >= r.start - 30 && fr.start < r.end) || (r.planned_start != null && fr.start >= r.planned_start - 30 && fr.start < r.planned_end)))
       .sort((a, b) => Math.abs(a.start - fr.start) - Math.abs(b.start - fr.start))[0];
     if (!ride) continue;
     ride.fuel = { detail: fr.detail, bars: fr.bars || "", meal: fr.meal, desc: fr.desc || null };
