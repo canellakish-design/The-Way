@@ -877,13 +877,19 @@ V.zones = async function(){
    The weight training: two sessions that alternate, each exercise with the
    target the last time worked out (double progression), logged set by set;
    strength over time as an estimated one-rep max; the history. */
-let __liftRest = null;
+let __liftRest = null, __liftRestUntil = null;   // the rest timer, and when it ends (kept with the session in progress)
 V.lift = async function(){
   clearInterval(__liftRest);
   view.innerHTML = `<span class="eyebrow">Lift</span><div id="liftPage"><div class="card"><div class="small">reaching the bridge…</div></div></div>`;
   let L = null;
   try{ L = await bridge("/lifts"); }catch(e){ document.getElementById("liftPage").innerHTML = `<div class="card"><div class="small">bridge unreachable — ${esc(e.message)}</div></div>`; return; }
-  const p = Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||"")); const key = L.templates.some(t => t.key === p.t) ? p.t : L.next;
+  // A session in progress is kept on the phone (Harry, 14 Nov 2026: "if I log a rep, a set, and I go somewhere else
+  // … I want that set to be still logged when I go back to it"): every tick, weight, rep count and the notes, per
+  // session and day, until it is saved. Coming back to the Lift page with no session named opens the one under way.
+  const liftDay = (n => `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, "0")}-${String(n.getDate()).padStart(2, "0")}`)(new Date());
+  const draftOf = k => { try{ const d = JSON.parse(localStorage.getItem("way-lift-draft:" + k) || "null"); return d && d.date === liftDay ? d : null; }catch{ return null; } };
+  const underWay = () => { let best = null; for (const t of L.templates) { const d = draftOf(t.key); if (d && (d.sets || []).some(ex => (ex || []).some(x => x.on)) && (!best || d.at > best.d.at)) best = { k: t.key, d }; } return best ? best.k : null; };
+  const p = Object.fromEntries(new URLSearchParams(location.hash.split("?")[1]||"")); const key = L.templates.some(t => t.key === p.t) ? p.t : (underWay() || L.next);
   const T = L.templates.find(t => t.key === key);
   const others = L.templates.filter(t => t.key !== key);
   const today = localDateKey();
@@ -975,6 +981,7 @@ V.lift = async function(){
     clearInterval(__liftRest); page.querySelectorAll(".lrest").forEach(r => { r.hidden = true; r.classList.remove("over"); });
     const el = li.querySelector(".lrest"); if (!el || !secs) return;
     const end = Date.now() + secs * 1000;
+    __liftRestUntil = { i: [...page.querySelectorAll(".lex")].indexOf(li), end, word: nextWord };
     const paint = ()=>{ if (!document.body.contains(el)){ clearInterval(__liftRest); return; } const left = Math.max(0, Math.round((end - Date.now()) / 1000));
       el.hidden = false; el.classList.toggle("over", !left); el.innerHTML = left ? `<span class="hu-lab">Rest</span><b>${mmss(left)}</b><span>${esc(nextWord)}</span>` : `<span class="hu-lab">Rest over</span><b>Go</b><span>${esc(nextWord)}</span>`;
       if (!left){ clearInterval(__liftRest); try{ navigator.vibrate && navigator.vibrate(200); }catch{} } };
@@ -991,10 +998,35 @@ V.lift = async function(){
     if (nxt){ openEx(nxt); startRest(nxt, +li.dataset.rest, "then set 1 of this one"); }
     else { li.classList.remove("open"); li.querySelector(".lexhead").setAttribute("aria-expanded", false); startRest(li, 0, ""); }
   });
+  // ---- the session in progress: kept on every change, put back when the page is drawn again ----
+  const draftKey = "way-lift-draft:" + key;
+  const keepDraft = ()=>{ try{
+    const lis = [...page.querySelectorAll(".lex")];
+    const sets = lis.map(li => [...li.querySelectorAll(".lset")].map(sp => ({ lb: (sp.querySelector(".llb") || {}).value ?? null, reps: (sp.querySelector(".lreps") || {}).value ?? null, on: !!(sp.querySelector(".ltick") || { classList: { contains: () => false } }).classList.contains("on") })));
+    const openI = lis.findIndex(li => li.classList.contains("open"));
+    localStorage.setItem(draftKey, JSON.stringify({ date: liftDay, at: Date.now(), sets, notes: (document.getElementById("lNotes") || {}).value || "", open: openI, rest: __liftRestUntil && __liftRestUntil.end > Date.now() ? __liftRestUntil : null }));
+  }catch{} };
+  { const d = draftOf(key);
+    if (d && Array.isArray(d.sets)) {
+      const lis = [...page.querySelectorAll(".lex")]; let any = false;
+      lis.forEach((li, i) => { const rows = [...li.querySelectorAll(".lset")], saved = d.sets[i] || [];
+        rows.forEach((sp, k) => { const x = saved[k]; if (!x) return; const lb = sp.querySelector(".llb"), rp = sp.querySelector(".lreps"), tk = sp.querySelector(".ltick");
+          if (lb && x.lb != null && x.lb !== "") lb.value = x.lb; if (rp && x.reps != null && x.reps !== "") rp.value = x.reps;
+          if (tk && x.on) { tk.classList.add("on"); tk.setAttribute("aria-pressed", "true"); any = true; } });
+        const ticks = [...li.querySelectorAll(".ltick")], done = ticks.filter(x => x.classList.contains("on")).length;
+        li.classList.toggle("complete", ticks.length > 0 && done === ticks.length); const dn = li.querySelector(".ldone"); if (dn) dn.textContent = done ? ` · ${done}/${ticks.length}` : ""; });
+      if (d.notes && document.getElementById("lNotes")) document.getElementById("lNotes").value = d.notes;
+      if (any) { const nxt = lis.find(x => !x.classList.contains("complete")); if (nxt) openEx(nxt); else lis.forEach(x => { x.classList.remove("open"); x.querySelector(".lexhead").setAttribute("aria-expanded", false); });
+        const m0 = document.getElementById("lMsg"); if (m0) m0.textContent = "Picked up where you left off.";
+        // a rest still counting when he left is still counting
+        if (d.rest && d.rest.end > Date.now() && lis[d.rest.i]) startRest(lis[d.rest.i], Math.round((d.rest.end - Date.now()) / 1000), d.rest.word || ""); }
+    } }
+  page.addEventListener("click", e => { if (e.target.closest(".ltick, .lsb, .lexhead")) setTimeout(keepDraft, 0); });
+  page.addEventListener("input", e => { if (e.target.closest(".llb, .lreps, #lNotes")) keepDraft(); });
   document.getElementById("lSave").onclick = async ()=>{
     const btn = document.getElementById("lSave"), msg = document.getElementById("lMsg"); btn.disabled = true;
     const exercises = [...document.querySelectorAll("#liftPage .lex")].map(li => { const e = T.exercises[+li.dataset.i]; return { name: e.name, sets: [...li.querySelectorAll(".lset")].map(sp => ({ reps: +(sp.querySelector(".lreps")||{}).value || 0, lb: +((sp.querySelector(".llb")||{}).value) || 0 })) }; });
-    try{ await bridge("/lifts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ template: key, exercises, notes: document.getElementById("lNotes").value })}); msg.textContent = "Saved."; location.hash = "#lift"; V.lift(); }
+    try{ await bridge("/lifts",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ template: key, exercises, notes: document.getElementById("lNotes").value })}); try{ localStorage.removeItem(draftKey); }catch{} msg.textContent = "Saved."; location.hash = "#lift"; V.lift(); }
     catch(e){ msg.textContent = e.message; btn.disabled = false; }
   };
   // a day and a time, picked, never typed into a prompt; 12-hour text is read too, and nothing is dropped in silence
