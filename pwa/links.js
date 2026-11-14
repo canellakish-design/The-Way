@@ -368,7 +368,7 @@
           <div class="row2"><span><label>From</label><select id="slSrc"><option>Garmin</option><option>WHOOP</option><option>by hand</option></select></span><span><label>&nbsp;</label><button class="primary" id="slGo">Save the night</button></span></div>
           <span class="small" id="slMsg"></span></details>
         <details class="ln-fold"><summary>Add a nap</summary>
-          <div class="small">A nap counts toward that day's sleep at half its length (45 minutes at most): an hour at night is worth more. After a night under 7 hours the Day page offers one between 1 and 3 p.m.: 20 to 30 minutes, never after 3.</div>
+          <div class="small">A nap counts toward that day's sleep: the first 30 minutes in full, half of the rest, 45 minutes at most. After a night under 7 hours the Day page offers one between 1 and 3 p.m.: 20 to 30 minutes, never after 3.</div>
           <div class="row2"><span><label>Minutes</label><input id="npM" type="number" inputmode="numeric" placeholder="25"></span><span><label>Began at (optional)</label><input id="npT" type="time"></span></div>
           <div class="row2"><span><label>&nbsp;</label><button class="primary" id="npGo">Save the nap</button></span><span></span></div>
           <span class="small" id="npMsg"></span>
