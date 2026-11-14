@@ -116,7 +116,7 @@ ok('a recommended ride straight after a game: driven from the game to the trailh
   const rows = t.flatMap(x => M.rowsFor(d, x, S, store[x.id]));
   assert.deepStrictEqual(rows.map(r => r.summary), ['Drive to Maryland SoccerPlex · 61 min', 'Drive to Schaeffer Farms Mountain Bike Park · 12 min', 'Drive home · 58 min']);
   const mins = r => [tz.minutesOf(new Date(r.start)), tz.minutesOf(new Date(r.end))];
-  assert.deepStrictEqual(mins(rows[1]), [13 * 60 + 53, 14 * 60 + 5]); assert.strictEqual(mins(rows[2])[0], 15 * 60 + 40);
+  assert.deepStrictEqual(mins(rows[1]), [13 * 60 + 53, 14 * 60 + 5]); assert.strictEqual(mins(rows[2])[0], 15 * 60 + 55, '20 minutes after the ride to load the bike');
 });
 console.log(n + ' passed');
 
