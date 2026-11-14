@@ -164,5 +164,17 @@ ok('nothing stays on top of anything: a workout over something fixed is moved to
   assert.strictEqual(C.classify('Bethesda Premier Cup: U18 ECNL vs Pittsburgh Riverhounds', null, null), 'coaching');
   assert.strictEqual(C.classify('U17 vs Baltimore Celtic', null, null), 'coaching'); assert.strictEqual(C.classify('Cycle 3 Planning', null, null), 'busy');
 });
+ok('the seam between two back-to-back games: a dose wanted mid-game sits there, not hours earlier', () => {
+  const b = D.blocksOf([
+    { category: 'commute', summary: 'Drive to Maryland SoccerPlex', start_min: m(9, 15), end_min: m(10, 15) },
+    { category: 'coaching', summary: 'U18 ECNL vs Pittsburgh Riverhounds', start_min: m(10, 30), end_min: m(12) },
+    { category: 'coaching', summary: 'Coaching · U17 ECNL vs Baltimore Celtic', start_min: m(12), end_min: m(13, 45) }]);
+  assert.deepStrictEqual(D.seams(b).map(x => x.min), [m(12)]);
+  const p = D.placeDose(m(11, 50), 10, b, 390);                 // beetroot, two and a half hours before a 2:20p ride
+  assert.strictEqual(p.min, m(12)); assert.ok(/between U18 .* and U17/.test(p.why), p.why);
+  // a dose wanted long before the seam still goes ahead of the drive
+  assert.ok(D.placeDose(m(9, 30), 10, b, 390).min < m(9, 15));
+  assert.deepStrictEqual(D.seams(b.slice(0, 2)), []);
+});
 console.log(n + ' passed');
 

@@ -687,5 +687,28 @@ ok('fuel on the bike: every ride over 75 minutes, with fluid and salt; a hard on
   assert.strictEqual(F.onBike(90, true).carbs, 90); assert.ok(/60 g carbs an hour/.test(F.onBike(90, true).what));
   assert.strictEqual(F.onBike(60).carbs, 0);
 });
+ok('two games back to back, then a drive and a ride: lunch is packed and eaten between the games, not at 5:51p', () => {
+  const D = require('./dayplan'), mm = (h, x) => h * 60 + (x || 0);
+  const ev = [
+    { category: 'commute', summary: 'Drive to Maryland SoccerPlex · 60 min', start_min: mm(9, 15), end_min: mm(10, 15) },
+    { category: 'coaching', summary: 'Bethesda Premier Cup: U18 ECNL vs Pittsburgh Riverhounds', start_min: mm(10, 30), end_min: mm(12) },
+    { category: 'coaching', summary: 'Coaching · Bethesda Premier Cup: U17 ECNL vs Baltimore Celtic (Field 6)', start_min: mm(12), end_min: mm(13, 45) },
+    { category: 'commute', summary: 'Drive to Schaeffer Farms', start_min: mm(13, 59), end_min: mm(14, 5) },
+    { category: 'commute', summary: 'Drive home · 61 min', start_min: mm(15, 55), end_min: mm(16, 56) }
+  ];
+  const busy = D.blocksOf(ev, { eat: true, categories: new Set(['coaching', 'work', 'travel', 'commute']) }).concat([{ start: mm(14, 20), end: mm(15, 35), name: 'MTB' }, { start: mm(17, 21), end: mm(17, 51), name: 'Kettlebell Blast B' }]);
+  const meals = [
+    { time: '08:45', slot: 'breakfast', kcal: 500, carbs_g: 18, protein_g: 40 },
+    { time: '12:30', slot: 'lunch', kcal: 920, carbs_g: 39, protein_g: 45, what: 'Lunch.' },
+    { time: '19:35', slot: 'dinner', kcal: 850, carbs_g: 105, protein_g: 50 }
+  ];
+  const r = F.placeSnacks(meals, { busy, sessions: [{ start: mm(14, 20), end: mm(15, 35), name: 'MTB', kind: 'easy' }], wake: 390, bed: 1350 });
+  const lunch = r.find(m => m.slot === 'lunch');
+  assert.strictEqual(lunch.time, '12:00', JSON.stringify(lunch)); assert.ok(lunch.seam);
+  assert.ok(/Pack it: eat at the field between .*U18.* and .*U17/.test(lunch.what), lunch.what);
+  // one game alone has no seam: the meal goes to the nearest free half hour, as before
+  const one = F.placeSnacks(meals, { busy: busy.filter(b => !/U18/.test(b.name)), sessions: [], wake: 390, bed: 1350 }).find(m => m.slot === 'lunch');
+  assert.ok(!one.seam && one.time !== '12:00', JSON.stringify(one));
+});
 console.log(n + ' passed');
 

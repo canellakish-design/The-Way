@@ -316,6 +316,17 @@ function placeSnacks(meals, opts) {
     // no free half hour that far from the meal before it (practice, then a meeting until ten): the spacing gives
     // way before the meal sits inside something (Harry, 13 Nov: "Make sure stuff like that doesn't happen again")
     if (nt == null && !D.freeAt(t, 30, busy)) nt = D.nearestFree(t, 30, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
+    // A main meal that would land more than two and a half hours from its time (two games back to back, then a drive
+    // and a ride: lunch at 5:51p; Harry, 14 Nov 2026) is packed and eaten at the field between the games instead.
+    if (isMain(m) && (nt == null || Math.abs(nt - t) > 150)) {
+      const sm = D.seams(busy).filter(x => x.min >= earliest && x.min <= bed - 30).sort((a, b) => Math.abs(a.min - t) - Math.abs(b.min - t))[0];
+      if (sm && (nt == null || Math.abs(sm.min - t) < Math.abs(nt - t))) {
+        if (sm.min !== t) { m.moved_from = m.time; m.time = toHM(sm.min); delete m.at_min; }
+        m.seam = true; m.place_note = `Pack it: eat at the field between ${sm.after} and ${sm.before}.`;
+        m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
+        prev = m; continue;
+      }
+    }
     if (nt == null || nt === t) { prev = m; continue; }
     // what it is before or after: the next block after the new time, or the last one before it
     const byStart = busy.slice().sort((a, b) => a.start - b.start);
