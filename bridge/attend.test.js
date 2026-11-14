@@ -34,4 +34,14 @@ ok('the narrowest answer wins: this one, then every one like it, then the calend
   assert.strictEqual(T.apply([concert], C)[0].category, 'info', 'the calendar says go, this one says no');
   assert.strictEqual(T.modeOf(ev('Advisory Time', 'Upper School', 'work'), C).mode, 'go');
 });
+ok('marked Free in Google: information, not on his day; his own answer still wins; never a class, never an all-day one', () => {
+  const A = { calendars: {}, events: {}, series: {} };
+  const idp = ev('IDP Meetings | U13 ECNL (Darrell)', ' Personal Events', 'busy', { free: true, gid: 'abc', calendar_id: 'h@mdunitedfc.org' });
+  assert.deepStrictEqual(T.modeOf(idp, A), { mode: 'info', by: 'free' });
+  const x = T.apply([idp], A)[0]; assert.strictEqual(x.category, 'info'); assert.strictEqual(x.orig_category, 'busy');
+  assert.strictEqual(T.modeOf(idp, { calendars: {}, series: {}, events: { 'g:h@mdunitedfc.org:abc': 'go' } }).mode, 'go', 'he said he is going to this one');
+  assert.strictEqual(T.modeOf(ev('(CP) World History I (Sec. E1)', ' Personal Events', 'work', { free: true }), A).mode, 'go');
+  assert.strictEqual(T.modeOf(ev('Bethesda Premier Cup', ' Personal Events', 'coaching', { free: true, allDay: true }), A).mode, 'go');
+  assert.strictEqual(T.modeOf(ev('Cycle 3 Planning', ' Personal Events', 'busy'), A).mode, 'go');
+});
 console.log(n + ' passed');
