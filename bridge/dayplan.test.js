@@ -23,7 +23,7 @@ ok('his own block over the drive and the game: marked, with the nearest free hou
   const rows = D.markClashes(friday(), { wake: 390, bed: 1350 });
   const plan = rows.find(r => r.summary === 'Cycle 3 Planning');
   assert.ok(plan.clash && /Drive to Maryland SoccerPlex/.test(plan.clash.with), JSON.stringify(plan.clash));
-  assert.strictEqual(plan.clash.fix_min, m(10, 57) - 90, 'just before he leaves: 9:27');
+  assert.strictEqual(plan.clash.fix_min, m(10, 57) - 90 - 10, 'before he leaves, with ten minutes of slack for the traffic: 9:17');
   assert.ok(!rows.find(r => r.category === 'commute').clash, 'the drive is fixed: it is not the one to move');
   assert.ok(rows.find(r => r.category === 'commute').clash_by);
   // the ride starts two minutes after the drive home ends: too tight to change, moved to 15 minutes after it
@@ -129,8 +129,15 @@ ok('nothing stays on top of anything: a workout over something fixed is moved to
     day('2026-11-16', [ride('e', m(16), m(17, 5), { clash: { with: 'Practice', fix_min: m(17, 5), tight: true } })])];
   const mv = D.movesFor(days, '2026-11-14', m(10, 30), W);
   assert.deepStrictEqual(mv.map(x => [x.id, x.date, x.from, x.to]), [['a', '2026-11-14', '14:20', '15:17'], ['e', '2026-11-16', '16:00', '17:05']]);
+  assert.strictEqual(mv[0].kind, 'workout');
   assert.strictEqual(mv[1].tight, true);
   assert.strictEqual(D.movesFor([day('2026-11-14', [ride('a', m(14, 20), null)])], '2026-11-14', m(10), W).length, 0, 'two fixed things, no fix: nothing to move');
+  // his own block moves too; one on a shared calendar never does
+  const own = { category: 'busy', summary: 'Cycle 3 Planning', start_min: m(11, 15), end_min: m(12, 45), edit: 'g:harry.c@mdunitedfc.org:abc123', clash: { with: 'Drive to Maryland SoccerPlex', fix_min: m(9, 17) } };
+  const shared = Object.assign({}, own, { edit: 'g:mcdonogh.org_x@group.calendar.google.com:zzz' });
+  const ev = D.movesFor([day('2026-11-15', [own]), day('2026-11-16', [shared])], '2026-11-14', m(10), W);
+  assert.deepStrictEqual(ev.map(x => [x.kind, x.key, x.from, x.to]), [['event', 'g:harry.c@mdunitedfc.org:abc123', '11:15', '09:17']]);
+  assert.strictEqual(D.ownKey('l:ev_1'), true); assert.strictEqual(D.ownKey('o:uid'), false);
 });
 console.log(n + ' passed');
 
