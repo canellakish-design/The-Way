@@ -15,6 +15,9 @@
   const params = () => new URLSearchParams(location.hash.split("?")[1] || "");
   const FTMS = 0x1826, BIKE_DATA = 0x2ad2, CONTROL = 0x2ad9, CPS = 0x1818;
   const LS = { trainer: "way-player-trainer", strap: "way-player-strap", breath: "way-player-breath" };
+  // On an easy ride the heart rate leads and the player aims for 110 (Harry, 14 Nov 2026: "it creeped below 100 at
+  // times. I'd like to be more in like the 110 range"): 108 to 112 is on target, 116 is still the ceiling.
+  const HR_Z1_AIM = 110, HR_AIM_BAND = 2;
   const HR_Z1 = 116, HR_Z2 = 138, HR_Z1_LO = 100;        // Zone 1 is 100 to 116 (a floor as well as a ceiling); VT2 139
   const RAW_CAP_EACH = 4000, RAW_CAP_ALL = 12000;        // raw strap values kept per ride, for decoding breathing later
   const lsGet = k => { try{ return localStorage.getItem(k); }catch{ return null; } };
@@ -548,32 +551,54 @@
   function idxAt(r, wt){ for (let k = 0; k < r.intervals.length; k++){ const x = r.intervals[k]; if (wt >= x.start_s && wt < x.start_s + x.dur_s) return k; } return r.intervals.length; }
   const cur = () => ride ? ride.intervals[idxAt(ride, ride.wt)] || null : null;
   const ergActive = iv => !!(ride && ride.erg && iv && (iv.target_w != null || iv.kind === "hr"));
+  // The band a step is ridden to by heart rate, or null. A heart-rate step has its own; a steady Zone 1 step given
+  // in watts (up to 72% of FTP, ten minutes or longer: the body of a Z1 trainer ride, not a warm-up or the rest
+  // between efforts) is led by the heart too, from the planned watts: the watts are where it starts, not a cap.
+  // aim: the heart rate the watts are moved toward (110 in Zone 1, the middle of any other band).
+  function hrBand(iv){
+    if (!iv || !ride) return null;
+    const z1 = b => b.hi <= HR_Z1 && b.lo >= 90;
+    if (iv.kind === "hr" && iv.target_hr){ const b = iv.target_hr; return { lo: b.lo, hi: b.hi, aim: z1(b) ? Math.min(HR_Z1_AIM, b.hi - HR_AIM_BAND) : Math.round((b.lo + b.hi) / 2), z1: z1(b), watts: false }; }
+    if (iv.kind === "power" && iv.target_w != null && iv.target_w_end == null && iv.dur_s >= 600 && iv.target_w <= ride.ftp * 0.72) return { lo: HR_Z1_LO, hi: HR_Z1, aim: HR_Z1_AIM, z1: true, watts: true };
+    return null;
+  }
+  const hrLed = iv => !!hrBand(iv);
   // A heart-rate interval (target_hr, no watts) is ridden in ERG at watts the heart rate chooses: the first one
   // starts from a seed (threshold power for a VO2 band, 60% of FTP for Zone 1) and every 20 s the watts move
   // 8 W toward the band, 12 W in the first minute of the first such interval; the watts found carry into the next
   // heart-rate interval, so the first effort calibrates and the rest ride what it learned. Bounded to half and
   // 1.3 times the seed, so a dropped strap can never run the trainer away.
-  const seekSeed = (iv, ftp) => iv.target_hr && iv.target_hr.lo >= 130 ? Math.round(ftp * 1.17) : iv.target_hr && iv.target_hr.hi <= HR_Z1 ? Math.round(ftp * 0.6) : Math.round(ftp * 0.85);
+  const seekSeed = (iv, ftp) => iv.kind === "power" && iv.target_w != null ? iv.target_w : iv.target_hr && iv.target_hr.lo >= 130 ? Math.round(ftp * 1.17) : iv.target_hr && iv.target_hr.hi <= HR_Z1 ? Math.round(ftp * 0.6) : Math.round(ftp * 0.85);
+  // what was learned is kept apart for easy riding and for hard efforts: the watts a VO2 effort found never start a Zone 1 step
+  const seekKey = iv => { const b = hrBand(iv); return b && b.z1 ? "seekWz1" : "seekW"; };
   function seekWatts(iv){
-    if (!ride.seek || ride.seek.k !== idxAt(ride, ride.wt)){ const seed = seekSeed(iv, ride.ftp); const w = ride.seekW != null ? ride.seekW : seed; ride.seek = { k: idxAt(ride, ride.wt), seed, w, first: ride.seekW == null, steps: 0 }; }
+    if (!ride.seek || ride.seek.k !== idxAt(ride, ride.wt)){ const seed = seekSeed(iv, ride.ftp), key = seekKey(iv); const w = ride[key] != null ? ride[key] : seed; ride.seek = { k: idxAt(ride, ride.wt), seed, w, first: ride[key] == null, steps: 0, key }; }
     return ride.seek.w;
   }
   function seekStep(iv){
-    const s = ride.seek; if (!s || !iv || iv.kind !== "hr") return;
+    const band = hrBand(iv), s = ride.seek; if (!band) return;
+    if (!s || s.k !== idxAt(ride, ride.wt)){ seekWatts(iv); return; }
     const into = ride.wt - iv.start_s;
-    // the first effort searches from 20 s in; a later one rides what was learned and waits 75 s for the heart to catch up from the rest before it moves
-    if (into < (s.first ? 20 : 75) || into % 20 !== 0) return;
+    // the first effort searches from 20 s in; a later one rides what was learned and waits 75 s for the heart to catch up from the rest before it moves.
+    // In Zone 1 the heart is slow to settle: nothing moves for the first two minutes, then a look every 30 s.
+    const every = band.z1 ? 30 : 20, wait = band.z1 ? (s.first ? 120 : 90) : (s.first ? 20 : 75);
+    if (into < wait || into % every !== 0) return;
     const hr = now() - L.hrAt <= 3000 ? L.hr : null; if (hr == null) return;
-    const lo = iv.target_hr.lo, hi = iv.target_hr.hi, big = s.first && into <= 60 ? 12 : 8;
+    // toward the aim: outside the band a full step, inside it a small one, within two beats of the aim nothing; over the ceiling always down
+    const big = !band.z1 && s.first && into <= 60 ? 12 : 8, d = hr - band.aim;
     let w = s.w;
-    if (hr < lo) w += big; else if (hr > hi) w -= 8;
-    w = Math.max(Math.round(s.seed * 0.5), Math.min(Math.round(s.seed * 1.3), w));
-    if (w !== s.w){ s.w = w; s.steps++; ride.seekW = w; syncErg(); }
-    else if (hr >= lo && hr <= hi) ride.seekW = w;
+    if (hr > band.hi) w -= 8;
+    else if (hr < band.lo) w += big;
+    else if (band.z1 && d < -HR_AIM_BAND) w += 4;
+    else if (band.z1 && d > HR_AIM_BAND) w -= 4;
+    // bounds, so a dropped strap or a wrong reading can never run the trainer away: half the start at least; in Zone 1 up to 85% of FTP, else 1.3 times the start
+    w = Math.max(Math.round(s.seed * 0.5), Math.min(band.z1 ? Math.round(ride.ftp * 0.85) : Math.round(s.seed * 1.3), w));
+    if (w !== s.w){ s.w = w; s.steps++; ride[s.key || "seekW"] = w; syncErg(); }
+    else if (Math.abs(d) <= HR_AIM_BAND || (!band.z1 && hr >= band.lo && hr <= band.hi)) ride[s.key || "seekW"] = w;
   }
   function targetNow(){
     const iv = cur(); if (!iv) return null;
-    if (iv.kind === "hr") return Math.max(0, Math.round(seekWatts(iv) * (1 + ride.bias / 100)));
+    if (hrLed(iv) && (iv.kind === "hr" || now() - L.hrAt <= 15000)) return Math.max(0, Math.round(seekWatts(iv) * (1 + ride.bias / 100)));   // a watts step is led by the heart only while the strap is heard
     if (iv.target_w == null) return null;
     const f = iv.target_w_end != null ? (ride.wt - iv.start_s) / iv.dur_s : 0;
     const w = iv.target_w + ((iv.target_w_end != null ? iv.target_w_end : iv.target_w) - iv.target_w) * f;
@@ -618,7 +643,7 @@
     r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
     if (r.edge){ const a = r.samples[r.samples.length - 1]; edgeDo(r.edge.second({ t: r.samples.length, wt: r.wt, w: a[1], hr: a[3], cad: a[2] })); }
     r.wt += 1;
-    if (iv && iv.kind === "hr") seekStep(iv);
+    if (hrLed(iv)) seekStep(iv);
     const k2 = idxAt(r, r.wt);
     const left = iv ? iv.start_s + iv.dur_s - r.wt : null;
     if (iv && left === 3 && r.intervals[k + 1]) beep(880, 0.15);
@@ -864,7 +889,7 @@
     $("plPos").textContent = r.state === "paused" ? "Paused" : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
     $("plLbl").textContent = iv ? iv.label + (iv.rep ? " · " + iv.rep : "") : "Ride on, or End to save";
     $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
-    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? "" : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
+    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? (hrLed(iv) && now() - L.hrAt <= 15000 ? ` · holding HR ${HR_Z1_AIM}` : "") : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
     $("fH").className = "n";   // numbers are ink; the heart rate's bucket is the bar beside it
