@@ -972,3 +972,25 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 .facesvg .fhud{font:600 9px/1 var(--mono, ui-monospace, Menlo, monospace); letter-spacing:.18em; fill:#5fd3ff; opacity:.85}
 .facecap{font-family:var(--mono, ui-monospace, Menlo, monospace); font-size:13px; text-align:left; color:#bfeaff; background:#06121c; border:1px solid #1e3a52; padding:10px 12px}
 
+/* the Coach page, all in one (14 Nov 2026): the face at the top on the left, what it says and its two buttons beside it;
+   the conversation under it, then one box to ask, hold to talk or research; the researched answers below */
+.ch-top{display:flex; justify-content:space-between; align-items:baseline; gap:10px}
+.ch-top .vlinks{display:flex; gap:12px}
+.ch-top .linkish{font-size:12px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:0; font-weight:400}
+.chface.faceinline{display:flex; gap:12px; align-items:stretch; margin:8px 0 12px}
+.chface.faceinline .facewrap{flex:0 0 132px}
+.chface.faceinline .facesvg{box-shadow:0 0 24px rgba(95,211,255,.12)}
+.chface.faceinline .facecol{flex:1; min-width:0; display:flex; flex-direction:column}
+.chface.faceinline .facecap{margin:0; flex:1; min-height:0; max-height:136px; overflow:auto; font-size:12.5px}
+.chface.faceinline .vrow{margin:8px 0 0}
+.chface.faceinline .vrow button{flex:1; padding:8px 6px; font-size:12px}
+@media (min-width:700px){ .chface.faceinline .facewrap{flex-basis:180px} .chface.faceinline .facecap{max-height:190px; font-size:13.5px} }
+.ch-conv{max-height:44vh}
+.ch-ask .ch-row{display:flex; gap:8px; flex-wrap:wrap}
+.ch-ask .ch-row button{flex:1 1 auto; min-height:44px}
+.ch-ask .vhold{min-height:44px}
+.ch-h3{font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin:18px 0 4px; font-weight:600}
+.chface.faceinline .vrow button{white-space:nowrap}
+/* on the Coach page the box has its own Hold to talk: the round button would sit on top of it */
+body:has(#chFace) #micBtn{display:none}
+#p_vHeard:empty{min-height:0; margin:0}

@@ -5,10 +5,13 @@
    the collar, a ring of light behind it. It blinks, and while the coach speaks its mouth moves with the words
    (the speech's word boundaries, or a steady chatter where the phone gives none) and the lines glow brighter.
    Window.Face: open(), close(), briefing() (asks /voice/briefing and speaks it), speaking(utterance) (app.js speak
-   hands every utterance here, so any spoken reply moves the face when it is open). */
+   hands every utterance here, so any spoken reply moves the face when it is open).
+   14 Nov 2026 ("combine all of these coach features", the face always at the top): the face lives at the top of the
+   Coach page (coach.js calls Face.mount), not in a sheet of its own. Opening it anywhere else goes to the Coach page;
+   caption(text) puts any answer under it as it is spoken. */
 (function(){
   const NS = "http://www.w3.org/2000/svg";
-  let sheet = null, talking = false, own = false, open = 0, target = 0, raf = 0, lastWord = 0;
+  let host = null, pending = false, talking = false, own = false, open = 0, target = 0, raf = 0, lastWord = 0;
 
   function svg(){
     return `<svg viewBox="0 0 300 380" class="facesvg" role="img" aria-label="Your coach">
@@ -80,7 +83,8 @@
     return `M${150 - w} 230 Q150 ${229 - o * 2} ${150 + w} 230 Q150 ${230 + d} ${150 - w} 230 Z`;
   }
   function frame(t){
-    if (!sheet || sheet.hidden) { raf = 0; return; }
+    const sheet = live() ? host : null;
+    if (!sheet) { raf = 0; talking = false; return; }
     // a word opens the mouth; between words it settles; with no word events, a steady chatter while speaking
     // the coach's own voice (app.js CoachVoice): the mouth follows the loudness of the sound itself
     const lvl = window.CoachVoice ? CoachVoice.level() : null;
@@ -102,40 +106,47 @@
     const st = sheet.querySelector(".fstate"); if (st) st.textContent = talking ? "SPEAKING" : "ONLINE";
     raf = requestAnimationFrame(frame);
   }
+  // the face is on screen: mounted on the Coach page, and that page is the one showing
+  const alive = () => location.hash.replace(/^#/, "").split("?")[0] === "coach";
+  const live = () => !!(host && host.isConnected && alive());
   function blink(){
-    if (!sheet || sheet.hidden) return;
-    const e = sheet.querySelector(".feyes");
+    if (!live()) return;
+    const e = host.querySelector(".feyes");
     if (e) { e.setAttribute("transform", "translate(0 148) scale(1 0.1) translate(0 -148)"); setTimeout(() => e.removeAttribute("transform"), 120); }
     setTimeout(blink, 2500 + Math.random() * 3500);
   }
-  function build(){
-    if (sheet) return sheet;
-    sheet = document.createElement("div"); sheet.id = "faceSheet"; sheet.hidden = true;
-    sheet.innerHTML = `<div class="facebox">
-      <button class="vx facex" aria-label="Close">×</button>
-      <div class="facewrap">${svg()}</div>
-      <div class="facecap" id="faceCap">Tap for your briefing.</div>
-      <div class="vrow"><button class="primary" id="faceBrief">Where am I?</button><button id="faceStop">Stop</button></div>
-    </div>`;
-    document.body.appendChild(sheet);
-    sheet.querySelector(".facex").onclick = close;
-    sheet.querySelector(".facewrap").onclick = () => briefing();
-    document.getElementById("faceBrief").onclick = () => briefing();
-    document.getElementById("faceStop").onclick = () => { try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; };
-    sheet.addEventListener("click", e => { if (e.target === sheet) close(); });
-    return sheet;
-  }
-  function tickClock(){ if (!sheet || sheet.hidden) return; const c = sheet.querySelector(".fclock"); if (c) { const d = new Date(); c.textContent = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); } setTimeout(tickClock, 10000); }
+  function tickClock(){ if (!live()) return; const c = host.querySelector(".fclock"); if (c) { const d = new Date(); c.textContent = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }); } setTimeout(tickClock, 10000); }
   // the caption types out like a terminal, about as fast as it is spoken
-  let typing = 0;
-  function typeOut(el, text){
-    const my = ++typing; el.textContent = ""; let i = 0;
-    const step = () => { if (my !== typing) return; i = Math.min(text.length, i + 2); el.textContent = text.slice(0, i) + (i < text.length ? "▌" : ""); if (i < text.length) setTimeout(step, 28); };
+  // It writes to whichever caption is on screen at each step (the page can redraw mid-sentence after a log), and the
+  // last thing said is kept, so a redrawn page shows it again rather than the opening line.
+  let typing = 0, said = "";
+  function typeOut(_el, text){
+    said = text;
+    const my = ++typing; let i = 0;
+    const step = () => { if (my !== typing) return; i = Math.min(text.length, i + 2); const el = capEl(); if (el) el.textContent = text.slice(0, i) + (i < text.length ? "▌" : ""); if (i < text.length) setTimeout(step, 28); };
     step();
   }
-  function openFace(){ const s = build(); s.hidden = false; if (!raf) raf = requestAnimationFrame(frame); setTimeout(blink, 1200); tickClock(); }
-  function close(){ if (sheet) sheet.hidden = true; try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; }
-  // every utterance app.js speaks comes here: the face moves with it while it is open
+  const capEl = () => live() ? host.querySelector("[data-cap]") : null;
+  function stop(){ try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; }
+  // the face at the top of the Coach page: the face on the left, what it says and its two buttons beside it
+  function mount(el){
+    if (!el) return;
+    el.classList.add("faceinline");
+    el.innerHTML = `<div class="facewrap" title="Where am I?">${svg()}</div>
+      <div class="facecol"><div class="facecap" data-cap>${esc(said || 'Tap "Where am I?" for your briefing, or ask below.')}</div>
+        <div class="vrow"><button class="primary" data-brief>Where am I?</button><button data-stop>Stop</button></div></div>`;
+    host = el;
+    el.querySelector(".facewrap").onclick = () => briefing();
+    el.querySelector("[data-brief]").onclick = () => briefing();
+    el.querySelector("[data-stop]").onclick = stop;
+    if (!raf) raf = requestAnimationFrame(frame);
+    setTimeout(blink, 1200); tickClock();
+    if (pending) { pending = false; setTimeout(briefing, 250); }
+  }
+  // anywhere else, the face is on the Coach page
+  function openFace(){ if (!alive()) location.hash = "#coach"; else if (!raf && live()) raf = requestAnimationFrame(frame); }
+  function close(){ stop(); }
+  // every utterance app.js speaks comes here: the face moves with it while it is on screen
   function speaking(u){
     if (!u) return;
     const was = { start: u.onstart, end: u.onend, err: u.onerror, b: u.onboundary };
@@ -144,17 +155,22 @@
     u.onerror = e => { talking = false; if (was.err) was.err(e); };
     u.onboundary = e => { if (e.name === "word" || e.name === undefined) { lastWord = performance.now(); target = 0.55 + Math.random() * 0.45; setTimeout(() => { target = 0.15; }, 140); } if (was.b) was.b(e); };
   }
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   async function briefing(){
-    openFace();
-    const cap = document.getElementById("faceCap"), b = document.getElementById("faceBrief");
-    if (window.primeSound) try { primeSound(); } catch (e) {}
+    if (window.primeSound) try { primeSound(); } catch (e) {}   // the tap that asked unlocks the sound
+    if (!live()) { pending = true; location.hash = "#coach"; return; }
+    const cap = capEl(), b = host.querySelector("[data-brief]");
     typeOut(cap, "> reading your numbers…"); if (b) b.disabled = true;
     try {
       const r = await bridge("/voice/briefing");
-      typeOut(cap, r.reply || "Nothing to say yet.");
+      typeOut(capEl(), r.reply || "Nothing to say yet.");
       if (r.reply && typeof speak === "function") speak(r.reply);
-    } catch (e) { cap.textContent = e.message; }
+    } catch (e) { const c = capEl(); if (c) c.textContent = e.message; }
     if (b) b.disabled = false;
   }
-  window.Face = { open: openFace, close, briefing, speaking };
+  // an answer from the conversation, under the face as it is spoken
+  function caption(text){ if (text) typeOut(capEl(), String(text)); }
+  window.Face = { open: openFace, close, briefing, speaking, mount, caption, stop };
+  // the Coach page drew before this file loaded: put the face in it now
+  if (alive()) mount(document.getElementById("chFace"));
 })();
