@@ -166,6 +166,7 @@ function attach(app) {
       d.tokens = { access_token: j.access_token, refresh_token: j.refresh_token,
         expires_at: Date.now() + j.expires_in * 1000 };
       d.athlete_id = j.athlete ? j.athlete.id : d.athlete_id;
+      d.scope = String(req.query.scope || '') || d.scope || null;   // what he granted, kept so a refusal can be explained
       try {
         await setJSON('strava', d);
       } catch (se) {
@@ -214,7 +215,7 @@ function attach(app) {
 
   app.get('/strava/status', async (req, res) => { if (!auth(req, res)) return;
     const d = await db();
-    res.json({ connected: !!d.tokens, athlete_id: d.athlete_id, subscription_id: d.subscription_id, has_activity: !!d.latest }); });
+    res.json({ connected: !!d.tokens, athlete_id: d.athlete_id, subscription_id: d.subscription_id, has_activity: !!d.latest, scope: d.scope || null }); });
 
   app.get('/strava/sync', async (req, res) => { if (!auth(req, res)) return;
     try { await syncLatest(); res.json({ ok: true, ...(await latestActivity()) }); }

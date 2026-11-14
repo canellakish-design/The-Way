@@ -64,6 +64,26 @@ async function routesNear(p, o) {
       }
     }
   } catch (e) { errors.tomtom = e.message; /* the road may still answer */ }
+  // the signed routes: OpenStreetMap's named cycling and mountain-bike routes that pass within 12 km (no key, no
+  // permission; Strava's segment search has been refusing this app). The start is where he is; the link is its map.
+  try {
+    const q = `[out:json][timeout:8];(relation(around:12000,${p.lat},${p.lon})[route=bicycle][name];relation(around:12000,${p.lat},${p.lon})[route=mtb][name];);out tags 30;`;
+    let j = null, last = null;
+    for (const url of ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter']) {
+      const ac = new AbortController(); const timer = setTimeout(() => ac.abort(), 7000);
+      try { const r = await fetch(url, { method: 'POST', signal: ac.signal, headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
+        if (!r.ok) throw new Error('overpass ' + r.status); j = await r.json(); break; } catch (e) { last = e; } finally { clearTimeout(timer); }
+    }
+    if (!j) throw last || new Error('no map service answered');
+    for (const el of j.elements || []) {
+      const t = el.tags || {}, name = t.name; if (!name || routes.some(r => r.name.toLowerCase() === name.toLowerCase())) continue;
+      const type = t.route === 'mtb' ? 'mtb' : (trailKind(name, []) === 'path' ? 'path' : 'road');
+      const km = parseFloat(String(t.distance || '').replace(',', '.')) || null, net = { ncn: 3, rcn: 2, lcn: 1 }[t.network] || 0;
+      routes.push({ type, name, lat: p.lat, lon: p.lon, km, osm: true,
+        detail: `${type === 'mtb' ? 'A marked mountain-bike route' : type === 'path' ? 'A marked path: flat, mostly car-free' : 'A signed cycling route on the road'}${km ? `, ${Math.round(km)} km in all` : ''}, passing near where you are (OpenStreetMap)`,
+        url: `https://www.openstreetmap.org/relation/${el.id}`, score: (type === 'mtb' ? 9 : 8) + net });
+    }
+  } catch (e) { errors.osm = e.message; }
   routes.sort((a, b) => b.score - a.score);
   cache[key] = { at: new Date().toISOString(), routes: routes.slice(0, 12), errors };
   if (o && o.debug) o.debug.errors = errors;
