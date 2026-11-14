@@ -90,7 +90,8 @@ let __ttsSpeaking = false, __lastSpoken = "";
    call primeSound() as they are pressed and the chime plays when the
    answer comes back. */
 let __audio = null;
-function primeSound(){ try{ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; if (!__audio) __audio = new AC(); if (__audio.state === "suspended") __audio.resume(); }catch{} }
+function primeSound(){ try{ if (typeof CoachVoice !== "undefined") CoachVoice.unlock(); }catch{}
+  try{ const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; if (!__audio) __audio = new AC(); if (__audio.state === "suspended") __audio.resume(); }catch{} }
 function playCheer(){
   try{
     primeSound(); const a = __audio; if (!a) return;
@@ -146,23 +147,42 @@ window.celebrate = celebrate; window.primeSound = primeSound;
 // The coach's own voice (bridge/tts.js): a natural voice when a key is set in Netlify, played through the page's
 // audio (unlocked by the tap that asked), with its loudness read off the sound so the face's mouth follows the real
 // words (face.js). With no key, no sound unlocked, or any failure: the phone's voice, as before.
-const CoachVoice = { on: null, src: null, analyser: null, buf: null,
-  stop(){ try{ if (this.src) { this.src.onended = null; this.src.stop(); } }catch{} this.src = null; __ttsSpeaking = false; },
+// Played as media (an <audio> element), not through Web Audio (Harry, 13 Nov: "The voice didn't work": an iPhone on
+// silent mutes Web Audio, and plays media). The element is unlocked by the tap that asked (primeSound); the sound
+// is decoded once for its loudness curve, read at the element's clock, so the mouth still follows the real words.
+const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
+const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, last: null,
+  // called inside a tap: the phone lets this element play later without another tap
+  unlock(){ try{ if (navigator.audioSession) navigator.audioSession.type = "playback"; }catch{}
+    try{ if (!this.el) { this.el = new Audio(); this.el.preload = "auto"; this.el.setAttribute("playsinline", ""); }
+      if (!this.playing) { this.el.src = SILENT_WAV; const p = this.el.play(); if (p && p.catch) p.catch(()=>{}); } }catch{} },
+  stop(){ try{ if (this.el) { this.el.onended = null; this.el.onerror = null; this.el.pause(); } }catch{}
+    if (this.url) { try{ URL.revokeObjectURL(this.url); }catch{} this.url = null; }
+    this.playing = false; this.env = null; __ttsSpeaking = false; },
   // 0 to 1, how loud the voice is right now; null when it is not this voice speaking
-  level(){ if (!this.src || !this.analyser) return null; const b = this.buf || (this.buf = new Uint8Array(this.analyser.fftSize)); this.analyser.getByteTimeDomainData(b);
-    let s = 0; for (let i = 0; i < b.length; i++) { const v = (b[i] - 128) / 128; s += v * v; } return Math.min(1, Math.sqrt(s / b.length) * 4.5); },
+  level(){ if (!this.playing || !this.el) return null;
+    if (!this.env) return 0.3 + 0.35 * Math.abs(Math.sin(performance.now() / 95));   // no curve: a steady chatter
+    return Math.min(1, (this.env[Math.floor(this.el.currentTime * 50)] || 0) * 4.5); },
   async say(t){
-    if (this.on === false || !__audio || __audio.state !== "running") throw new Error("phone voice");
+    if (this.on === false) { this.last = "phone"; throw new Error("phone voice"); }
     let r; try{ r = await bridge("/voice/speak", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text: t }) }); }
-    catch(e){ if (/503|no voice key/i.test(e.message)) this.on = false; throw e; }
+    catch(e){ if (/503|no voice key/i.test(e.message)) this.on = false; this.last = "phone: " + e.message.slice(0, 60); throw e; }
     this.on = true;
     const bin = atob(r.audio_b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const audio = await new Promise((ok, no) => __audio.decodeAudioData(bytes.buffer, ok, no));
+    // the loudness curve, fifty readings a second (decoding works whatever the silent switch says)
+    let env = null;
+    try{ const AC = window.AudioContext || window.webkitAudioContext; const ctx = __audio || (AC ? (__audio = new AC()) : null);
+      if (ctx) { const audio = await new Promise((ok, no) => ctx.decodeAudioData(bytes.buffer.slice(0), ok, no));
+        const ch = audio.getChannelData(0), win = Math.max(1, Math.floor(audio.sampleRate / 50)); env = [];
+        for (let i = 0; i < ch.length; i += win) { let q = 0; const n = Math.min(win, ch.length - i); for (let j = 0; j < n; j++) q += ch[i + j] * ch[i + j]; env.push(Math.sqrt(q / n)); } } }catch{ env = null; }
     this.stop();
-    const src = __audio.createBufferSource(); src.buffer = audio;
-    if (!this.analyser) { this.analyser = __audio.createAnalyser(); this.analyser.fftSize = 512; this.analyser.connect(__audio.destination); }
-    src.connect(this.analyser); src.onended = () => { if (this.src === src) { this.src = null; __ttsSpeaking = false; } };
-    this.src = src; __ttsSpeaking = true; src.start();
+    const el = this.el || (this.el = new Audio());
+    this.url = URL.createObjectURL(new Blob([bytes], { type: r.mime || "audio/mpeg" }));
+    el.src = this.url; this.env = env; this.playing = true; __ttsSpeaking = true;
+    el.onended = () => this.stop();
+    el.onerror = () => this.stop();
+    try{ await el.play(); this.last = "natural"; }
+    catch(e){ this.stop(); this.last = "phone: " + String(e.name || e.message).slice(0, 60); throw e; }
   } };
 window.CoachVoice = CoachVoice;
 // asked once at load, so a phone with no key set goes straight to its own voice with no wait

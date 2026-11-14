@@ -9,7 +9,11 @@
    Chrome). No speech support, or a tablet that will not listen: the same
    sheet takes typing, and the keyboard's own microphone key dictates into
    it. A short tap on the round button opens or closes the thread.
-   Loads after app.js and uses its globals: bridge, esc, speak, nav. */
+   Loads after app.js and uses its globals: bridge, esc, speak, nav.
+   14 Nov 2026 ("combine all of these coach features"): the conversation lives on the Coach page, under the
+   coach's face (coach.js mounts it there: voiceBits.mount). A tap on the round button goes to that page; a hold
+   talks from anywhere, and the answer is there. The page's own copies of the thread, the heard words, the status
+   and Hey Coach (ids p_vThread, p_vHeard, p_vStatus, p_vHold, p_vHey) stand in for the old sheet's. */
 (function(){
 
 const J = {"Content-Type":"application/json"};
@@ -21,6 +25,8 @@ let history = [];
 try{ history = JSON.parse(sessionStorage.getItem("way-voice-thread") || "[]"); }catch{ history = []; }
 const keep = ()=>{ try{ sessionStorage.setItem("way-voice-thread", JSON.stringify(history.slice(-20))); }catch{} };
 
+const onCoach = () => location.hash.replace(/^#/, "").split("?")[0] === "coach";
+const $ = id => (onCoach() && document.getElementById("p_" + id)) || document.getElementById(id);
 function sheet(){
   let s = document.getElementById("voiceSheet");
   if (s) return s;
@@ -51,16 +57,17 @@ function sheet(){
   return s;
 }
 
-function status(t){ const el = document.getElementById("vStatus"); if (el) el.textContent = t || ""; }
+function status(t){ const el = $("vStatus"); if (el) el.textContent = t || ""; }
 function drawThread(){
-  const el = document.getElementById("vThread"); if (!el) return;
+  const el = $("vThread"); if (!el) return;
   el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
-    || `<div class="small">Hold to talk. Or turn on Hey Coach and start with "Coach".</div>`;
+    || `<div class="small">${onCoach() ? "Ask below, type or hold to talk. The coach answers out loud and can log or change things for you." : `Hold to talk. Or turn on Hey Coach and start with "Coach".`}</div>`;
   el.scrollTop = el.scrollHeight;
 }
-function open(){ const s = sheet(); s.hidden = false; drawThread(); }
+// the conversation is on the Coach page: going there is opening it
+function open(){ if (!onCoach()) location.hash = "#coach"; else drawThread(); }
 function close(){ abortListening(); const s = document.getElementById("voiceSheet"); if (s) s.hidden = true; }
-function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.classList.toggle("live", on); const h = document.getElementById("vHold"); if (h){ h.classList.toggle("live", on); h.textContent = on ? "Listening… let go to send" : "Hold to talk"; } }
+function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.classList.toggle("live", on); for (const h of [document.getElementById("vHold"), document.getElementById("p_vHold")]) if (h){ h.classList.toggle("live", on); h.textContent = on ? "Listening… let go to send" : "Hold to talk"; } }
 
 /* ---- push to talk ----
    One recogniser for the page, reused. Safari refuses a second start()
@@ -77,7 +84,7 @@ function ensureRec(){
   rec.onresult = (e)=>{
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript; }
-    const heard = document.getElementById("vHeard"); if (heard) heard.textContent = (finalText + interim).trim();
+    const heard = $("vHeard"); if (heard) heard.textContent = (finalText + interim).trim();
   };
   rec.onerror = (e)=>{
     const k = e.error;
@@ -88,7 +95,7 @@ function ensureRec(){
   };
   rec.onend = ()=>{
     state = "idle"; listening = false; setMic(false);
-    const heard = document.getElementById("vHeard");
+    const heard = $("vHeard");
     const t = (finalText || (heard && heard.textContent) || "").trim();
     const toss = discard; discard = false; finalText = "";
     if (!toss && t) send(t);
@@ -106,7 +113,7 @@ function startListening(){
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
   finalText = ""; discard = false;
-  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
+  const heard = $("vHeard"); if (heard) heard.textContent = "";
   state = "starting";
   try{ ensureRec().start(); }
   catch(err){
@@ -156,8 +163,8 @@ async function send(text){
   if (sending) return;
   sending = true;
   open();
-  const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
-  const typed = document.getElementById("vText"); if (typed) typed.value = "";
+  const heard = $("vHeard"); if (heard) heard.textContent = "";
+  const typed = $("vText"); if (typed) typed.value = "";
   history.push({ role: "user", text }); keep(); drawThread();
   status("Thinking…");
   try{
@@ -166,6 +173,7 @@ async function send(text){
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
+    if (r.reply && window.Face && Face.caption) Face.caption(r.reply);   // under the face, as it is said
     const cheer = (r.actions||[]).find(a => a.celebrate);
     if (cheer && typeof celebrate === "function") celebrate({ slot: cheer.slot || null });
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
@@ -184,7 +192,7 @@ let heyOn = false, heyRec = null, heyPaused = false, heyArmedUntil = 0;
 try{ heyOn = localStorage.getItem("way-hey") === "1"; }catch{}
 const WAKE = /^\s*(?:hey|ok|okay)?\s*coach\b[\s,.:!?-]*(.*)$/i;
 function drawHey(){
-  const hb = document.getElementById("vHey"); if (hb) hb.textContent = "Hey Coach: " + (heyOn ? "on" : "off");
+  for (const hb of [document.getElementById("vHey"), document.getElementById("p_vHey")]) if (hb) hb.textContent = "Hey Coach: " + (heyOn ? "on" : "off");
   const m = document.getElementById("micBtn"); if (m) m.classList.toggle("hey", heyOn);
 }
 function toast(t){
@@ -238,10 +246,21 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) heySt
 const b = document.createElement("button");
 b.id = "micBtn"; b.type = "button"; b.setAttribute("aria-label", "Hold to talk to the training and nutrition advisor");
 b.innerHTML = `<svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path fill="currentColor" d="M12 15a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v5a4 4 0 0 0 4 4zm6-4a6 6 0 0 1-12 0H4a8 8 0 0 0 7 7.93V22h2v-3.07A8 8 0 0 0 20 11h-2z"/></svg>`;
-if (SR) wireHold(b, ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else open(); });
-else b.onclick = ()=>{ const s = document.getElementById("voiceSheet"); if (s && !s.hidden) close(); else { open(); const t = document.getElementById("vTypeBox"); if (t) t.hidden = false; } };
+// a tap: the Coach page (the face, the conversation, the box to type in); a hold: talk from wherever you are
+const toCoach = ()=>{ if (!onCoach()) location.hash = "#coach"; else { const t = document.getElementById("chText"); if (t) t.focus(); } };
+if (SR) wireHold(b, toCoach);
+else b.onclick = toCoach;
 document.body.appendChild(b);
 drawHey(); if (heyOn) heyStart();
 
-window.voiceBits = { open, close, send, supported: !!SR, setHey };
+// the Coach page's conversation: its hold button, Hey Coach, new conversation, the thread drawn
+function mount(){
+  if (!onCoach()) return;
+  const h = document.getElementById("p_vHold"); if (h && SR && !h.__wired){ h.__wired = true; wireHold(h); }
+  const hb = document.getElementById("p_vHey"); if (hb){ if (!SR) hb.hidden = true; else hb.onclick = ()=> setHey(!heyOn); }
+  const nw = document.getElementById("p_vNew"); if (nw) nw.onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
+  drawHey(); drawThread();
+}
+window.voiceBits = { open, close, send, supported: !!SR, setHey, mount };
+mount();   // the Coach page drew before this file loaded
 })();

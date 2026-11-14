@@ -2,7 +2,14 @@
 /* THE WAY — the coach (#coach). Ask anything about training and food; the coach reads the whole site
    and the current research before it answers (bridge/coach.js). A question runs for a minute or more,
    so the page shows what the coach is reading while it works, then the call it makes (spoken), the
-   written answer and its sources. Loads after app.js and uses its globals: V, view, bridge, esc, speak. */
+   written answer and its sources. Loads after app.js and uses its globals: V, view, bridge, esc, speak.
+   14 Nov 2026 ("combine all of these coach features"; the face always at the top): one Coach page for all of it.
+     the face (face.js)       at the top, with "Where am I?" and what it is saying under it
+     one box                  Ask: the quick conversation (voice.js: answers out loud in a sentence, can log or
+                              change things); Hold to talk; Research it: the deep answer with sources (below)
+     the conversation         the quick back and forth, newest at the bottom
+     researched answers       the long answers with their sources, as before
+   The round button anywhere in the app comes here on a tap and talks on a hold. */
 (function(){
   const J = { "Content-Type": "application/json" };
   const alive = () => location.hash.split("?")[0] === "#coach";
@@ -24,15 +31,27 @@
   const clock = iso => { const d = new Date(iso); if (isNaN(d)) return ""; let h = d.getHours(); const ap = h < 12 ? "a" : "p"; h = h % 12 || 12; return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${h}:${String(d.getMinutes()).padStart(2, "0")}${ap}`; };
 
   V.coach = async function(){
-    view.innerHTML = `<div class="fd-ttl"><h2 class="fd-h">Coach</h2></div>
+    const SR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+    view.innerHTML = `<div class="fd-ttl ch-top"><h2 class="fd-h">Coach</h2><span class="vlinks">${SR ? `<button class="linkish" id="p_vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="p_vNew">new conversation</button></span></div>
+      <div class="chface" id="chFace"></div>
+      <div class="vthread ch-conv" id="p_vThread"></div>
+      <div class="vheard" id="p_vHeard"></div>
       <div class="ch-ask">
-        <textarea id="chText" rows="2" aria-label="Ask your coach" placeholder="Ask anything"></textarea>
-        <div class="ch-row"><button class="primary" id="chGo">Ask</button></div>
+        <textarea id="chText" rows="2" aria-label="Ask your coach" placeholder="Ask anything, or tell it what you did"></textarea>
+        <div class="ch-row"><button class="primary" id="chGo">Ask</button>${SR ? `<button class="vhold" id="p_vHold">Hold to talk</button>` : ""}<button id="chDeep" title="A longer answer: the coach reads the whole site and the research first (a minute or more)">Research it</button></div>
+        <div class="small" id="p_vStatus"></div>
       </div>
       <div id="chLive"></div>
+      <h3 class="ch-h3">Researched answers</h3>
       <div id="chThread"></div>
       <details class="why" id="chNoteFold"><summary>the coach's notebook</summary><div id="chNotes" class="small">loading…</div></details>`;
-    const box = document.getElementById("chText"), go = document.getElementById("chGo"), live = document.getElementById("chLive");
+    const box = document.getElementById("chText"), go = document.getElementById("chDeep"), quick = document.getElementById("chGo"), live = document.getElementById("chLive");
+    if (window.Face && Face.mount) Face.mount(document.getElementById("chFace"));
+    if (window.voiceBits && voiceBits.mount) voiceBits.mount();
+    // Ask: the quick conversation, spoken (voice.js); Enter sends it, Shift+Enter is a new line
+    const askQuick = () => { const t = box.value.trim(); if (!t) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t); box.value = ""; };
+    quick.onclick = askQuick;
+    box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuick(); } });
 
     const drawThread = async () => {
       let th = null; try { th = await bridge("/coach/thread"); } catch {}
@@ -66,6 +85,7 @@
           live.innerHTML = turnHTML(job.text, job.say, job.answer, job.sources, "just now", true);
           drawThread();   // the earlier ones fold away under it
           if (job.say && typeof speak === "function") speak(job.say);
+          if (job.say && window.Face && Face.caption) Face.caption(job.say);
           go.disabled = false; drawNotes(); return;
         }
         if (job && job.status === "error"){ live.innerHTML += `<div class="small hu-stop">The coach hit an error: ${esc(job.error || "")}. Ask again.</div>`; go.disabled = false; return; }
