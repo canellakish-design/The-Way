@@ -806,6 +806,10 @@ async function addPhoto(body) {
     micros: null, micros_matched_pct: null, micros_unknown: [],
     fluid_ml: Math.max(0, Math.min(3000, Math.round(a.fluid_ml || 0))), drink: String(a.drink || '').slice(0, 40) || null
   };
+  // Nothing was eaten or drunk: words that were a question or a remark, not food (Harry, 14 Nov 2026: "Question about
+  // your lunch score (no new food)" was saved into his lunch at 0 kcal). Words alone that read as no food are never
+  // saved; a photo always is.
+  if (!images.length && F.notFood(entry, written)) { const err = new Error('Nothing to log: that read as a question or a note, not food or a drink.'); err.status = 422; err.not_food = true; throw err; }
   // A bottle or a glass on its own is a drink: it counts for hydration, not as a meal the rules judge.
   entry.drink_only = entry.fluid_ml > 0 && entry.kcal < 60 && !entry.assessment.protein_source && entry.carbs_g < 15;
   // the plan as it stood when this was eaten, from the row the day showed: a meal is graded against that, never against a plan redrawn later in the day

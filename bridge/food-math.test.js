@@ -288,6 +288,26 @@ ok('mealMatch: one grade from macros and the rules; a wrap that hits the macros 
   assert.strictEqual(noAssess.key, 'green');
 });
 
+ok('words that were not food are never saved: a question, or "no new food"; water and black coffee are kept', () => {
+  assert.strictEqual(F.notFood({ name: 'Question about your lunch score (no new food)', kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, fluid_ml: 0, ingredients: [] }, 'why is my lunch score low'), true);
+  assert.strictEqual(F.notFood({ name: 'meal', kcal: 0, carbs_g: 0, protein_g: 0, fat_g: 0, fluid_ml: 0, ingredients: [] }, 'that was a good lunch'), true);
+  assert.strictEqual(F.notFood({ name: 'Water', kcal: 0, fluid_ml: 500, ingredients: [] }, 'a glass of water'), false);
+  assert.strictEqual(F.notFood({ name: 'Black coffee', kcal: 2, fluid_ml: 240 }, 'black coffee'), false);
+  assert.strictEqual(F.notFood({ name: 'Chipotle bowl', kcal: 870, carbs_g: 72, protein_g: 81 }, 'Should I count the Chipotle bowl I had?'), false, 'real food is kept however it is asked');
+});
+ok('rollForward: a lunch over on calories and protein but short on carbs leaves the snack its carbs, and says so (never "a protein bite")', () => {
+  const plan = [{ slot: 'lunch', time: '13:40', kcal: 670, carbs_g: 95, protein_g: 50, what: 'Protein with rice' }, { slot: 'before', time: '14:06', kcal: 250, carbs_g: 25, protein_g: 20, what: 'A snack before Pull' }, { slot: 'dinner', time: '17:55', kcal: 940, carbs_g: 39, protein_g: 45, what: 'Dinner' }];
+  const r = F.rollForward(plan, [{ slot: 'lunch', kcal: 870, carbs_g: 72, protein_g: 81 }]), b = r.find(m => m.slot === 'before');
+  assert.strictEqual(b.carbs_g, 50, 'its own 25 g and the 23 g the lunch missed'); assert.strictEqual(b.protein_g, 0); assert.strictEqual(b.kcal, 200);
+  assert.ok(!b.covered_by, 'not covered: the carbs are still owed'); assert.ok(/23 g short on carbs: 50 g of carbs here/.test(b.what) && /no more protein needed/.test(b.what) && !/protein bite/.test(b.what), b.what);
+  assert.strictEqual(b.rolled_from.carbs_short_g, 23);
+  // over on everything: the snack is covered, and no protein is suggested when none is left
+  const all = F.rollForward(plan, [{ slot: 'lunch', kcal: 950, carbs_g: 130, protein_g: 80 }]).find(m => m.slot === 'before');
+  assert.strictEqual(all.covered_by, 'lunch'); assert.ok(/nothing more is needed/.test(all.what), all.what);
+  // over on calories from fat alone, carbs and protein on plan: the snack keeps its own carbs and protein
+  const fat = F.rollForward(plan, [{ slot: 'lunch', kcal: 900, carbs_g: 95, protein_g: 50 }]).find(m => m.slot === 'before');
+  assert.ok(!fat.covered_by && fat.carbs_g === 25 && fat.protein_g === 20 && /only the carbs are left here: 25 g/.test(fat.what) && !/protein bite/.test(fat.what), fat.what);
+});
 ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a low-carb slot and a far slot roll nothing', () => {
   const plan = [
     { slot: 'breakfast', time: '08:00', kcal: 335, carbs_g: 20, protein_g: 30, low_carb: true, what: 'eggs' },
@@ -305,7 +325,8 @@ ok('rollForward: a post-ride meal that ran over leaves lunch a protein plate; a 
   assert.strictEqual(bike.kcal, 0); assert.ok(!bike.rolled_from);
   assert.ok(after.rolled_out && after.rolled_out.to === 'lunch');
   // 140 kcal and 11 g carbs off lunch; the 16 g of protein the sushi missed lands there with its calories
-  assert.strictEqual(lunch.plan_kcal, 450); assert.strictEqual(lunch.kcal, 375); assert.strictEqual(lunch.carbs_g, 30); assert.strictEqual(lunch.protein_g, 65);
+  assert.strictEqual(lunch.plan_kcal, 450); assert.strictEqual(lunch.kcal, 380);   // never under its own 30 g carbs and 65 g protein
+   assert.strictEqual(lunch.carbs_g, 30); assert.strictEqual(lunch.protein_g, 65);
   assert.ok(/Lighter/.test(lunch.what), lunch.what);
   assert.ok(!lunch.covered_by);
   assert.strictEqual(dinner.kcal, 670); assert.ok(!dinner.rolled_from);                        // too far from lunch, and lunch has nothing logged
