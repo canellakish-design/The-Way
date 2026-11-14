@@ -295,6 +295,19 @@ function placeSnacks(meals, opts) {
   for (const m of out.filter(x => mmin(x) != null).sort((a, b) => mmin(a) - mmin(b))) {
     if (m.slot === 'on the bike' || m.extra) continue;
     const t = mmin(m);
+    // The meal before a session stays before it (Harry, 14 Nov: the ride moved to 4:15 and its pre-ride snack came
+    // out at 5:15, after the ride): half an hour after the meal before it is enough, it ends by the session's
+    // start, and with no room it folds into the meal before it (that meal is then the fuel for the session).
+    if (m.slot === 'before' && !m.gap_snack) {
+      const sess = (o.sessions || []).filter(x => x.start > t).sort((a, b) => a.start - b.start)[0];
+      const lo = Math.max(wake, prev ? mmin(prev) + 30 : wake), hi = sess ? sess.start : bed - 30;
+      if (D.freeAt(t, 30, busy) && t >= lo) { prev = m; continue; }
+      const nb = D.nearestFree(Math.max(t, lo), 30, busy, lo, hi);
+      if (nb != null) { if (nb !== t) { m.moved_from = m.time; m.time = toHM(nb); delete m.at_min; } prev = m; continue; }
+      if (prev) { prev.kcal = (prev.kcal || 0) + (m.kcal || 0); prev.carbs_g = (prev.carbs_g || 0) + (m.carbs_g || 0); prev.protein_g = (prev.protein_g || 0) + (m.protein_g || 0);
+        prev.what = `${String(prev.what || '').replace(/\s*$/, '')} This is also the fuel for ${sess ? sess.name : 'the session'}: no time for a snack before it.`.trim(); m._folded = true; }
+      continue;
+    }
     const earliest = Math.max(wake, prev ? mmin(prev) + (isMain(prev) && isMain(m) ? 75 : 60) : wake);
     if (D.freeAt(t, 30, busy) && t >= earliest) { prev = m; continue; }
     let nt = D.nearestFree(Math.max(t, earliest), 30, busy, earliest, bed - 30);
@@ -324,6 +337,7 @@ function placeSnacks(meals, opts) {
     const out = bs.find(b => b.start >= inn.end && /^drive (home|to )/i.test(String(b.name || '')) && !/mcdonogh/i.test(String(b.name || '')));
     return { start: inn.end, end: out ? out.start : (bed - 60) };
   })();
+  for (let i = out.length - 1; i >= 0; i--) if (out[i]._folded) out.splice(i, 1);
   if (inSchool) for (const m of out) {
     const t = mmin(m);
     if (t == null || m.slot === 'on the bike' || m.extra || t < inSchool.start || t >= inSchool.end) continue;

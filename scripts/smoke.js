@@ -30,6 +30,9 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
       const t = toMin(m.time), hit = blocks.find(b => t < b.e && t + 30 > b.s);
       if (hit) fail(`${d.date}: ${m.slot} at ${hm(t)} is inside "${hit.name.slice(0, 40)}"`);
     }
+    // a meal "before" a session is before one: a training session starts after it
+    const trains = (d.events || []).filter(e => e.category === 'training' && e.start_min != null);
+    for (const m of meals) if (m.slot === 'before' && !(m.logged || []).length && !trains.some(e => e.start_min >= toMin(m.time) + 20)) fail(`${d.date}: the "before" meal at ${hm(toMin(m.time))} has no session after it`);
     // overlaps among what he goes to must carry a mark
     const R = (d.events || []).filter(e => !e.allDay && e.start_min != null && e.end_min > e.start_min && ['work', 'coaching', 'commute', 'travel', 'family', 'busy', 'training'].includes(e.category));
     for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {

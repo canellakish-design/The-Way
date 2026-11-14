@@ -106,5 +106,18 @@ ok('practice, then a meeting until ten: dinner is packed between them, and the s
   assert.ok(!busy.some(b => t < b.end && t + 30 > b.start), 'the snack at ' + snack.time + ' is clear of everything');
   assert.ok(t >= m(19, 45) && t <= m(20), snack.time);
 });
+ok('the meal before a session stays before it: moved earlier when the ride moves, folded into lunch when there is no room', () => {
+  const sessions = [{ start: m(15, 15), end: m(16, 10), name: 'Pull', kind: 'lift' }, { start: m(16, 15), end: m(17, 15), name: 'Z1 60 min', kind: 'easy' }];
+  const busy = [{ start: m(12, 30), end: m(13, 36), name: 'Drive home' }].concat(sessions.map(x => ({ start: x.start, end: x.end, name: x.name })));
+  const plan = () => [{ time: '13:00', slot: 'lunch', kcal: 670, carbs_g: 95, protein_g: 50, what: 'Rice and chicken.' }, { time: '14:15', slot: 'before', kcal: 250, carbs_g: 25, protein_g: 20, what: 'Something light.' }, { time: '18:30', slot: 'dinner', kcal: 900 }];
+  const r = F.placeSnacks(plan(), { busy, sessions, wake: 390, bed: 1350 });
+  const pre = r.find(x => x.slot === 'before');
+  assert.ok(pre && F.toMin(pre.time) >= m(14, 6) && F.toMin(pre.time) + 30 <= m(15, 15), pre && pre.time);
+  // no room at all between lunch and the lift: it folds into lunch
+  const tight = F.placeSnacks(plan(), { busy: busy.concat([{ start: m(13, 40), end: m(15, 15), name: 'Meeting' }]), sessions, wake: 390, bed: 1350 });
+  assert.ok(!tight.some(x => x.slot === 'before'), 'no pre-ride snack after the ride');
+  const lunch = tight.find(x => x.slot === 'lunch');
+  assert.strictEqual(lunch.kcal, 920); assert.ok(/also the fuel for Pull/.test(lunch.what), lunch.what);
+});
 console.log(n + ' passed');
 
