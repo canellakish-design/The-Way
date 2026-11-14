@@ -14,14 +14,14 @@ const cad = (lo, hi) => ({ lo, hi: hi == null ? lo : hi });
 const pc = (lo, hi) => ({ type: 'power', lo, hi: hi == null ? lo : hi });
 
 const EAT = {
-  short: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: if it goes to 117, drop the bias 5% and stay there.
+  short: `ZONE 1 on the trainer: the player starts at 105 to 120 W and then holds your heart rate near 110 (108 to 112), moving the watts itself; never over 116. In Zwift or with no strap: 105 to 120 W, and drop the bias 5% if the heart rate goes to 117.
 
 EAT
 Before: low carb breakfast, under 20 g of carbs, 30 g protein (eggs, Greek yogurt, a smoothie). Zone 1 needs no carbs before it.
 On the bike: water. Nothing to eat under 75 minutes.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: normal.`,
-  mid: `ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: at 117, drop the bias 5%.
+  mid: `ZONE 1 on the trainer: the player starts at 105 to 120 W and holds your heart rate near 110 (108 to 112), never over 116. With no strap: 105 to 120 W, bias down 5% at 117.
 
 EAT
 Before: low carb breakfast, under 20 g of carbs, 30 g protein, 1 to 2 hours before. Zone 1 needs no carbs before it.
@@ -67,7 +67,7 @@ const z1 = min => min >= 90
   : [step('Settle', m(5), pc(50, 58), cad(85, 95)), step('Zone one', m(min - 8), pc(60, 68), cad(85, 95)), step('Easy', m(3), pc(50))];
 // 90 and 105 minutes are road rides (heart-rate led), so their note says so.
 const ROAD_HEAD = 'ZONE 1 on the road: heart rate under 116 the whole ride. Flat route. If it climbs, the watts come down.';
-const TRAINER_HEAD = 'ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: at 117, drop the bias 5%.';
+const TRAINER_HEAD = 'ZONE 1 on the trainer: the player starts at 105 to 120 W and holds your heart rate near 110 (108 to 112), never over 116. With no strap: 105 to 120 W, bias down 5% at 117.';
 const roadHead = t => t.replace(/^ZONE 1 on the trainer:[^\n]*/, ROAD_HEAD);
 const z1Notes = min => min >= 120 ? EAT.long : min >= 90 ? roadHead(EAT.mid) : min >= 75 ? EAT.mid : EAT.short;
 // Step for step the same as Zwift's own "40/20's #1", so the copy intervals.icu
@@ -112,6 +112,8 @@ function notesFor(notes, sport) {
   const t = String(notes || '');
   if (sport === 'Ride' && /^ZONE 1 on the trainer:[^\n]*/.test(t)) return t.replace(/^ZONE 1 on the trainer:[^\n]*/, ROAD_HEAD);
   if (sport === 'VirtualRide' && t.startsWith(ROAD_HEAD)) return TRAINER_HEAD + t.slice(ROAD_HEAD.length);
+  // a trainer ride saved before the player held the heart rate near 110 still carries the old "ERG holds 105 to 120 W" line: it reads the new way
+  if (sport === 'VirtualRide' && /^ZONE 1 on the trainer: ERG holds[^\n]*/.test(t)) return t.replace(/^ZONE 1 on the trainer:[^\n]*/, TRAINER_HEAD);
   return t;
 }
 

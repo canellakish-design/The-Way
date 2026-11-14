@@ -180,7 +180,8 @@ ok('a library note follows the sport: a road Zone 1 says road and heart rate, a 
   assert.ok(road.notes.startsWith(ROAD_HEAD), road.notes.slice(0, 80)); assert.ok(!/trainer|ERG/.test(road.notes.split('\n')[0]));
   assert.ok(/EAT/.test(road.notes), 'the eating part stays');
   const back = notesFor(road.notes, 'VirtualRide');
-  assert.ok(/^ZONE 1 on the trainer: ERG/.test(back));
+  assert.ok(/^ZONE 1 on the trainer: the player .*heart rate near 110/.test(back));
+  assert.ok(/^ZONE 1 on the trainer: the player/.test(notesFor('ZONE 1 on the trainer: ERG holds 105 to 120 W. Heart rate still rules: at 117, drop the bias 5%.\nEAT: x', 'VirtualRide')), 'an older saved note reads the new way');
   assert.strictEqual(notesFor('My own words about the trainer.', 'Ride'), 'My own words about the trainer.');
   const z90 = LIBRARY.find(t => t.key === 'z1-90');
   assert.ok(/^ZONE 1 on the road/.test(z90.notes));
