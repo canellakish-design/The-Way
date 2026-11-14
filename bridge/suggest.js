@@ -127,7 +127,10 @@ function pick(routes, ride, o) {
   let best = null, note = '';
   if (kind === 'mtb') { best = by(r => r.type === 'mtb'); note = best ? 'Trails for the handling ride.' : ''; }
   if (!best && kind === 'hard') { best = by(r => isClimb(r) && (r.km || 0) >= 0.8 && (r.km || 0) <= 3); note = best ? `The reps on it: one climb a rep, roll back down to recover.` : ''; }
-  if (!best && kind !== 'hard') { best = by(r => r.type === 'path') || by(r => r.type === 'road' && !isClimb(r)); note = best ? (best.type === 'path' ? 'Flat and car-free: easy to hold Zone 1.' : 'Flat: easy to hold Zone 1.') : ''; }
+  // no climb the right size (flat country): a popular stretch of road two kilometres or more, steady enough to hold an effort
+  if (!best && kind === 'hard') { best = by(r => r.type === 'road' && !isClimb(r) && (r.km || 0) >= 2); note = best ? 'No climb the right size here: a steady stretch to hold the efforts on, easy riding between.' : ''; }
+  // an easy day: the most ridden flat thing, a popular road or a path, whichever scores higher
+  if (!best && kind !== 'hard') { best = by(r => r.type === 'path' || (r.type === 'road' && !isClimb(r))); note = best ? (best.type === 'path' ? 'Flat and car-free: easy to hold Zone 1.' : 'Flat and well ridden: easy to hold Zone 1.') : ''; }
   if (!best && kind === 'easy') { best = by(r => r.type === 'mtb'); note = best ? 'Easy on the trails: keep the heart rate down on the climbs.' : ''; }
   if (!best) return null;
   return Object.assign({}, best, { fit_note: note, ride_kind: kind });
