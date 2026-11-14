@@ -37,7 +37,9 @@
       <div class="ch-ask">
         ${SR ? `<button class="primary vhold" id="p_vHold">Hold to talk</button>` : ""}
         <div class="vheard" id="p_vHeard"></div>
-        <div class="ch-type"><textarea id="chText" rows="1" aria-label="Ask your coach" placeholder="Or type it here"></textarea><button id="chGo">Ask</button></div>
+        <div class="ch-type"><button id="chPhoto" class="ch-photo" aria-label="Send the coach a photo" title="Send the coach a photo"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><textarea id="chText" rows="1" aria-label="Ask your coach" placeholder="Or type it here"></textarea><button id="chGo">Ask</button></div>
+        <input type="file" id="chFile" accept="image/*" hidden>
+        <div class="ch-pick" id="chPick" hidden><img id="chPickImg" alt="the photo to send"><span class="small">Photo ready. Add a question, or just press Ask.</span><button class="linkish" id="chPickX">remove</button></div>
         <div class="ch-under"><span class="small" id="p_vStatus"></span><button class="linkish" id="chDeep" title="A longer answer: the coach reads the whole site and the research first (a minute or more)">Research it: the long answer</button></div>
       </div>
       <div class="vthread ch-conv" id="p_vThread"></div>
@@ -48,7 +50,20 @@
     if (window.Face && Face.mount) Face.mount(document.getElementById("chFace"));
     if (window.voiceBits && voiceBits.mount) voiceBits.mount();
     // Ask: the quick conversation, spoken (voice.js); Enter sends it, Shift+Enter is a new line
-    const askQuick = () => { const t = box.value.trim(); if (!t) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t); box.value = ""; };
+    // a photo for the coach (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze"): picked from the
+    // camera or the library, shrunk on the phone, sent with whatever is typed (or on its own)
+    let photo = null;
+    const pick = document.getElementById("chPick"), file = document.getElementById("chFile");
+    const clearPhoto = () => { photo = null; pick.hidden = true; file.value = ""; };
+    document.getElementById("chPhoto").onclick = () => { if (window.primeSound) primeSound(); file.click(); };
+    document.getElementById("chPickX").onclick = clearPhoto;
+    file.onchange = async () => { const f = file.files && file.files[0]; if (!f) return;
+      const st = document.getElementById("p_vStatus"); if (st) st.textContent = "Reading the photo…";
+      try { const [big, small] = await Promise.all([fileToBase64(f, 1568, 0.82), fileToBase64(f, 220, 0.6)]);
+        photo = { image_base64: big, media_type: "image/jpeg", thumb: "data:image/jpeg;base64," + small };
+        document.getElementById("chPickImg").src = photo.thumb; pick.hidden = false; if (st) st.textContent = ""; box.focus(); }
+      catch (e) { if (st) st.textContent = "That photo could not be read. Try another."; clearPhoto(); } };
+    const askQuick = () => { const t = box.value.trim(); if (!t && !photo) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t, photo || undefined); box.value = ""; clearPhoto(); };
     quick.onclick = askQuick;
     box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuick(); } });
     // the box grows with what is typed, up to a few lines

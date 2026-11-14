@@ -23,7 +23,7 @@ let rec = null, listening = false, finalText = "", sending = false;
 // the thread: what he said and what was answered, kept for the session
 let history = [];
 try{ history = JSON.parse(sessionStorage.getItem("way-voice-thread") || "[]"); }catch{ history = []; }
-const keep = ()=>{ try{ sessionStorage.setItem("way-voice-thread", JSON.stringify(history.slice(-20))); }catch{} };
+const keep = ()=>{ try{ const h = history.slice(-20), withImg = h.filter(x => x.img).slice(-6); sessionStorage.setItem("way-voice-thread", JSON.stringify(h.map(x => x.img && !withImg.includes(x) ? Object.assign({}, x, { img: null }) : x))); }catch{} };
 
 const onCoach = () => location.hash.replace(/^#/, "").split("?")[0] === "coach";
 const $ = id => (onCoach() && document.getElementById("p_" + id)) || document.getElementById(id);
@@ -58,7 +58,7 @@ function sheet(){
 }
 
 function status(t){ const el = $("vStatus"); if (el) el.textContent = t || ""; }
-const msgHTML = h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`;
+const msgHTML = h => `<div class="vmsg ${h.role}">${h.img ? `<img class="vphoto" src="${h.img}" alt="the photo you sent">` : ""}${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`;
 function drawThread(){
   const el = $("vThread"); if (!el) return;
   // the Coach page (14 Nov 2026: "Is there a way to clean this page up?"): the latest exchange under the box, what
@@ -197,18 +197,19 @@ async function whereAmI(){
   }catch{ return null; }
 }
 window.whereAmI = whereAmI;
-async function send(text){
-  if (!text) { status("Nothing to send."); return; }
+// photo: { image_base64, media_type, thumb } from the Coach page's Photo button (coach.js); the coach looks at it
+async function send(text, photo){
+  if (!text && !photo) { status("Nothing to send."); return; }
   if (sending) return;
   sending = true;
   open();
   const heard = $("vHeard"); if (heard) heard.textContent = "";
   const typed = $("vText"); if (typed) typed.value = "";
-  history.push({ role: "user", text }); keep(); drawThread();
-  status("Thinking…");
+  history.push({ role: "user", text: text || (photo ? "Photo" : ""), img: photo ? photo.thumb || null : null }); keep(); drawThread();
+  status(photo ? "Looking at the photo…" : "Thinking…");
   try{
     const coords = await whereAmI();
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", image: photo ? { image_base64: photo.image_base64, media_type: photo.media_type } : undefined, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
