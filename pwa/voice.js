@@ -104,7 +104,7 @@ function startListening(){
   heyPause();
   wantListen = true;
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
-  try{ speechSynthesis.cancel(); }catch{}
+  try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
   finalText = ""; discard = false;
   const heard = document.getElementById("vHeard"); if (heard) heard.textContent = "";
   state = "starting";
