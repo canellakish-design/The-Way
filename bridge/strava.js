@@ -145,8 +145,10 @@ function attach(app) {
     u.searchParams.set('client_id', CID);
     u.searchParams.set('redirect_uri', BASE + '/strava/callback');
     u.searchParams.set('response_type', 'code');
-    u.searchParams.set('approval_prompt', 'auto');
-    u.searchParams.set('scope', 'activity:read_all');
+    // 'read' as well as his activities: the popular segments near a place (suggest.js) are refused without it
+    // (Harry, 14 Nov: 401 on /segments/explore). 'force' shows the consent again so the new permission is granted.
+    u.searchParams.set('approval_prompt', 'force');
+    u.searchParams.set('scope', 'read,activity:read_all');
     u.searchParams.set('state', 'the-way-2026');
     res.redirect(u.toString());
   });

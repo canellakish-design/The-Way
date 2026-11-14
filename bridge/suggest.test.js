@@ -29,7 +29,10 @@ ok('fitted to the workout: a hard day gets a 1 to 3 km climb, Zone 1 a path or f
     { type: 'mtb', name: 'Schaeffer Farm', score: 11 }];
   assert.strictEqual(S.pick(routes, { name: 'VO2 4 × 4 min' }).name, 'Sugarloaf climb');
   assert.ok(/one climb a rep/.test(S.pick(routes, { name: 'VO2 4 × 4 min' }).fit_note));
-  assert.strictEqual(S.pick(routes, { name: 'Z1 trainer 90 min' }).name, 'C&O Canal Towpath');
+  assert.strictEqual(S.pick(routes, { name: 'Z1 trainer 90 min' }).name, 'Comus Road', 'the most ridden flat thing');
+  assert.strictEqual(S.pick(routes.filter(r => r.name !== 'Comus Road'), { name: 'Z1 trainer 90 min' }).name, 'C&O Canal Towpath');
+  const flat = S.pick(routes.filter(r => r.name !== 'Sugarloaf climb'), { name: 'VO2 4 × 4 min' });
+  assert.strictEqual(flat.name, 'Comus Road'); assert.ok(/steady stretch/.test(flat.fit_note), 'a hard day with no climb near: a steady road');
   assert.strictEqual(S.pick(routes, { name: 'Mountain bike handling, 75 min' }).name, 'Schaeffer Farm');
   assert.strictEqual(S.pick(routes, { name: 'Mountain bike handling, 75 min' }, { wet: true }).type !== 'mtb', true, 'wet: no trails');
   assert.strictEqual(S.rideKind({ name: '40/20s' }), 'hard'); assert.strictEqual(S.rideKind({ name: 'Z1 road 120 min' }), 'easy');
