@@ -54,4 +54,17 @@ ok('the lift at Life Time, then the ride in the pain cave: 15 minutes between th
   assert.ok(!rows[0].clash, 'the lift stays'); assert.ok(rows[1].clash && rows[1].clash.tight, JSON.stringify(rows[1].clash));
   assert.strictEqual(rows[1].clash.fix_min, m(16, 25));
 });
+ok('Start: the session takes the minute he pressed, and what follows today moves back behind it (15 minutes between two places)', () => {
+  const st = s => [{ dur_s: s * 60 }];
+  const day = [{ id: 'pull', sport: 'WeightTraining', name: 'Pull and calves', time: '15:15', steps: st(55) }, { id: 'z1', sport: 'VirtualRide', name: 'Z1 trainer 60 min', time: '16:25', steps: st(60) }, { id: 'kb', sport: 'WeightTraining', name: 'Kettlebell Blast B · home', time: '19:30', steps: st(30) }];
+  // he starts the lift at 4:11p, 56 minutes late: it ends 5:06p, the ride (at home) is 15 minutes on, rounded up to 5:25p; the evening session is untouched
+  assert.deepStrictEqual(WK.startPlan(day, 'pull', 16 * 60 + 11), [{ id: 'pull', time: '16:11' }, { id: 'z1', time: '17:25' }]);
+  // started early: nothing after it needs to move
+  assert.deepStrictEqual(WK.startPlan(day, 'pull', 15 * 60 + 5), [{ id: 'pull', time: '15:05' }]);
+  // the ride started late pushes the kettlebells only if it runs into them (same place: no gap needed)
+  assert.deepStrictEqual(WK.startPlan(day, 'z1', 18 * 60 + 50), [{ id: 'z1', time: '18:50' }, { id: 'kb', time: '19:50' }]);
+  // a start before 7 a.m. is a fact, kept as it is; planning one there is still refused
+  assert.strictEqual(WK.clean({ time: '06:40', started_at: '2026-11-20T11:40:00Z' }, { id: 'w', sport: 'Ride', name: 'Z1', date: '2026-11-20', time: '07:30', steps: [] }, '07:30', true).time, '06:40');
+  assert.throws(() => WK.clean({ time: '06:40' }, { id: 'w', sport: 'Ride', name: 'Z1', date: '2026-11-20', time: '07:30', steps: [] }, '07:30'), /before 7/);
+});
 console.log(n + ' passed');

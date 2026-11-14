@@ -1,6 +1,6 @@
 // The Way — service worker v44. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v268";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v270";   // bumped whenever the shell changes, so a held copy is dropped on activate
 const COACH = "the-way-coach-v1";   // the 3D coach's files: kept across shell updates
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {

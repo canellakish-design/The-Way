@@ -59,14 +59,14 @@ function nameForLength(name, steps) {
   if (!mins) return name;
   return String(name || '').replace(/^(.*?),\s*\d+\s*min\b/, (m0, head) => `${head}, ${mins} min`);
 }
-function clean(body, prev, earliest) {
+function clean(body, prev, earliest, fact) {   // fact: a start he has already made (the planning rules on times do not apply)
   const b = body || {}, p = prev || {}, first = earliest || EARLIEST;
   const date = isDate(b.date) ? b.date : (p.date || tz.todayKey());
   const askedTime = b.time === '' || b.time === null ? null : (isTime(b.time) ? b.time : (p.time || null));
   // never before 7 a.m., even kept from an old edit; a newly asked time not before an hour after waking
   // (a session already on the calendar at 7:00 keeps its time when edited, and the Day flags it)
-  if (askedTime && askedTime < '07:00') { const err = new Error(`No workouts before 7 a.m. (${tz.hm12(askedTime)} asked). The earliest start is ${tz.hm12(first)}.`); err.status = 400; throw err; }
-  if (askedTime && isTime(b.time) && b.time !== p.time && askedTime < first) { const err = new Error(`Sleep first: no workouts before ${tz.hm12(first)}, an hour after waking (${tz.hm12(askedTime)} asked).`); err.status = 400; throw err; }
+  if (!fact && askedTime && askedTime < '07:00') { const err = new Error(`No workouts before 7 a.m. (${tz.hm12(askedTime)} asked). The earliest start is ${tz.hm12(first)}.`); err.status = 400; throw err; }
+  if (!fact && askedTime && isTime(b.time) && b.time !== p.time && askedTime < first) { const err = new Error(`Sleep first: no workouts before ${tz.hm12(first)}, an hour after waking (${tz.hm12(askedTime)} asked).`); err.status = 400; throw err; }
   // never a ride at Life Time (Harry, 14 Nov 2026: "I will never ride my bike at lifetime"): he lifts there
   { const W2 = require('./where'), nw = { sport: SPORTS.includes(b.sport) ? b.sport : (p.sport || 'Ride'), name: b.name != null ? b.name : p.name, notes: b.notes != null ? b.notes : p.notes };
     if (W2.gymRide(nw) && (b.name != null || b.notes != null || b.sport != null || !p.id)) { const err = new Error('He never rides at Life Time: he lifts there. Plan the ride outside, or on the trainer in the pain cave.'); err.status = 400; throw err; } }
@@ -85,6 +85,8 @@ function clean(body, prev, earliest) {
     // a ride outside that the forecast sends to the pain cave (where.js): why; a new day, time or sport clears it
     indoor: b.indoor === null ? null : b.indoor && typeof b.indoor === 'object' ? { why: String(b.indoor.why || '').slice(0, 120), at: b.indoor.at || new Date().toISOString() }
       : ((isDate(b.date) && b.date !== p.date) || (isTime(b.time) && b.time !== p.time) || (b.sport != null && b.sport !== p.sport) ? null : (p.indoor || null)),
+    // when he pressed Start (POST /workouts/:id/start): the session's real start; a new day clears it
+    started_at: b.started_at === null ? null : typeof b.started_at === 'string' ? b.started_at.slice(0, 30) : (isDate(b.date) && b.date !== p.date ? null : (p.started_at || null)),
     // moved by The Way off something it was on top of (dayplan.js autoMove): from when, and off what; his own change of time clears it
     auto_moved: b.auto_moved && typeof b.auto_moved === 'object' ? b.auto_moved : (isTime(b.time) && b.time !== p.time ? null : (p.auto_moved || null)),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
@@ -596,7 +598,7 @@ async function plannedDays(from, to) {
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
-      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'), auto_moved: w.auto_moved || null, place: require('./where').placeOf(w), indoor: w.indoor || null,
+      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'), auto_moved: w.auto_moved || null, started_at: w.started_at || null, place: require('./where').placeOf(w), indoor: w.indoor || null,
       ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
     });
   }
@@ -708,6 +710,9 @@ function attach(app) {
     d.workouts[w.id] = w; await save(d);
     res.json(withMetrics(w, st)); });
 
+  app.post('/workouts/:id/start', async (req, res) => { if (!auth(req, res)) return;
+    try { const r = await start(req.params.id); if (!r) return res.status(404).json({ error: 'no such workout' }); res.json(Object.assign({ ok: true }, r)); }
+    catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.put('/workouts/:id', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db(); const prev = d.workouts[req.params.id];
     if (!prev) return res.status(404).json({ error: 'no such workout' });
@@ -752,11 +757,43 @@ async function create(body) {
 }
 
 // Change a planned session in place (the same path as PUT /workouts/:id):
+// Start (Harry, 14 Nov 2026: "I'm not starting these workouts exactly on the right exact minute … next to each
+// workout, I should be able to hit start, so it knows when I'm starting"). The session's time becomes the minute he
+// pressed, and what was planned after it today moves back behind it: each later session begins when the one
+// before ends, with 15 minutes between two places (the lift at Life Time, the ride at home). Pure: the day's
+// workouts, the one started, the minute → [{ id, time }] for every session whose time changes.
+function startPlan(list, id, nowMin) {
+  const X = require('./where'), hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+  const mins = w => Math.round(((w.steps || []).reduce((a, s) => a + (s.dur_s || 0), 0)) / 60) || 60, toMin = t => (+t.slice(0, 2)) * 60 + (+t.slice(3, 5));
+  const me = (list || []).find(w => w.id === id); if (!me) return [];
+  const out = [{ id: me.id, time: hm(nowMin) }];
+  let prev = Object.assign({}, me, { time: hm(nowMin) }), end = nowMin + mins(me);
+  // the sessions still to come today (not started, not this one), in order; one already under way or past is left
+  const later = (list || []).filter(w => w.id !== id && w.time && !w.started_at && toMin(w.time) + mins(w) > nowMin && toMin(w.time) >= toMin(me.time || hm(nowMin)) - 1).sort((a, b) => toMin(a.time) - toMin(b.time));
+  for (const w of later) {
+    const gap = X.apart(X.placeOf(prev), X.placeOf(w)) ? 15 : 0, need = Math.ceil((end + gap) / 5) * 5, st = toMin(w.time);
+    const at = st < need ? need : st;
+    if (at !== st) out.push({ id: w.id, time: hm(at) });
+    prev = Object.assign({}, w, { time: hm(at) }); end = at + mins(w);
+  }
+  return out;
+}
+async function start(id, now) {
+  const d = await db(); const me = d.workouts[id];
+  if (!me) return null;
+  const today = tz.todayKey(), p = tz.parts(now || new Date()), nowMin = p.h * 60 + p.mi;
+  if (me.date !== today) { const e = new Error('Start is for a session planned today.'); e.status = 400; throw e; }
+  const plan = startPlan(Object.values(d.workouts).filter(w => w && w.date === today), id, nowMin), moved = [];
+  for (const ch of plan) { const body = ch.id === id ? { time: ch.time, started_at: (now || new Date()).toISOString() } : { time: ch.time };
+    // the time is the fact here: the sleep-first earliest-start check is for planning, not for what he is already doing
+    const w = await update(ch.id, body, { started: true }).catch(e => ({ error: e.message })); moved.push({ id: ch.id, time: ch.time, name: (d.workouts[ch.id] || {}).name, error: w && w.error || undefined }); }
+  return { started: id, at: plan[0].time, moved };
+}
 // a session already on the Garmin or Zwift is re-sent so nothing is left different.
-async function update(id, body) {
+async function update(id, body, opts) {
   const st = await settings(); const d = await db(); const prev = d.workouts[id];
   if (!prev) return null;
-  let w = clean(body, prev, await earliestHM());
+  let w = clean(body, prev, await earliestHM(), !!(opts && opts.started));
   if (w.date !== prev.date) await restCheck(w, body);
   if (prev.sync && prev.sync.state === 'synced') {
     if (prev.date !== w.date) await unsyncOne(prev);
@@ -773,4 +810,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { playerRideAsDone, fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { startPlan, start, playerRideAsDone, fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
