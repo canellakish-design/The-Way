@@ -893,7 +893,7 @@ V.lift = async function(){
   const stepper = (cls, val, step, label, u) => `<span class="lstep"><button type="button" class="lsb" data-step="-${step}" aria-label="${step} ${label} less">−</button><input type="number" class="${cls}" inputmode="numeric" value="${val}" aria-label="${label}"><em>${u}</em><button type="button" class="lsb" data-step="${step}" aria-label="${step} ${label} more">+</button></span>`;
   const exHTML = (e, i) => { const timed = e.kind === "time" || e.kind === "reps";
     return `<li class="lex${i === 0 ? " open" : ""}" data-i="${i}" data-rest="${Math.round((e.rest_min || 0) * 60)}">
-      <button type="button" class="lexhead" aria-expanded="${i === 0}"><span class="n"><b>${esc(e.name)}</b><span class="hu-lab lsum">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${restLabel(e.rest_min)}<span class="ldone"></span></span></span>
+      <button type="button" class="lexhead" aria-expanded="${i === 0}"><span class="n"><b>${esc(e.name)}</b><span class="hu-lab lsum">${e.sets} × ${e.reps_lo}–${e.reps_hi}${e.kind==="time"?" s":""} · rest ${restLabel(e.rest_min)}<span class="ldone"></span></span>${e.desc ? `<span class="ldesc">${esc(e.desc)}</span>` : ""}</span>
         <span class="tag"><span class="hu-chip ${e.target.progress ? "hu-go" : e.target.back ? "hu-hold" : ""}">${timed ? e.target.reps + (e.kind==="time"?" s":" reps") : e.target.lb + " lb × " + e.target.reps}</span></span></button>
       <div class="lbody">
         <div class="small">${e.last ? `last: ${esc(dayFmt(e.last.date))}, ${e.last.sets.map(s => (s.lb ? s.lb + "×" : "") + s.reps).join(", ")}` : ""}</div>
