@@ -32,7 +32,9 @@ const isRide = w => w && /ride/i.test(String(w.sport || '')) && !/weight|lift|st
 async function routesNear(p, o) {
   const key = `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`;
   const cache = await getJSON('suggest-routes', {}).catch(() => ({})) || {};
-  if (!(o && o.fresh) && cache[key] && Date.now() - Date.parse(cache[key].at) < 7 * 864e5) return cache[key].routes;
+  // kept a week; half an hour when the map service was busy (429), so its routes are asked for again soon
+  const keepMs = c => (c.errors && c.errors.osm ? 30 * 60e3 : 7 * 864e5);
+  if (!(o && o.fresh) && cache[key] && Date.now() - Date.parse(cache[key].at) < keepMs(cache[key])) return cache[key].routes;
   const routes = [], errors = {};
   // the road: Strava's most popular segments in the box around the place; the climbs first
   try {
