@@ -60,12 +60,13 @@ function blocksOf(events, o) {
       s = tz.minutesOf(new Date(e.start)); en = tz.minutesOf(new Date(e.end));
     }
     if (s == null || en == null || en <= s) continue;
+    const real = s;
     if (e.category === 'coaching') {
       // in the way from its "Arrive by" time; for a meal (o.eat) from the warm-up, half an hour before it starts
       if (o && o.eat) s = s - 30;
       else { const a = arriveBy(e.description); if (a != null && a < s && s - a <= 180) s = a; }
     }
-    out.push({ start: s, end: en, name: String(e.summary || '').replace(/^Coaching · /, '').slice(0, 50), category: e.category });
+    out.push({ start: s, end: en, real, name: String(e.summary || '').replace(/^Coaching · /, '').slice(0, 50), category: e.category });
   }
   return out.sort((a, b) => a.start - b.start);
 }
@@ -77,6 +78,14 @@ function clusters(blocks, join) {
     if (last && b.start <= last.end + j) { last.end = Math.max(last.end, b.end); last.names.push(b.name); }
     else out.push({ start: b.start, end: b.end, names: [b.name] });
   }
+  return out;
+}
+// The seams of a day: the moment one game or practice ends and the next begins at once (two games back to back at one
+// complex; Harry, 14 Nov 2026: U18 at 10:30a and U17 at 12:00p, and lunch came out at 5:51p, nine hours after
+// breakfast). He is at the field with a few minutes between whistles: a packed meal or a dose can sit there.
+function seams(blocks) {
+  const bs = (blocks || []).filter(b => b.category === 'coaching').sort((a, b) => a.start - b.start), out = [];
+  for (let i = 0; i + 1 < bs.length; i++) { const a = bs[i], b = bs[i + 1], st = b.real != null ? b.real : b.start; if (Math.abs(st - a.end) <= 20 && a.name !== b.name) out.push({ min: a.end, after: a.name, before: b.name }); }
   return out;
 }
 const overlaps = (s, e, b) => s < b.end && e > b.start;
@@ -102,6 +111,9 @@ function placeDose(t, len, blocks, earliest) {
   const L = len || 10;
   for (const c of clusters(blocks, 10)) {
     if (!overlaps(t, t + L, c)) continue;
+    // between two games back to back, when that is within an hour and a half of the time it is wanted
+    const sm = seams(blocks).filter(x => x.min > c.start && x.min < c.end && Math.abs(x.min - t) <= 90 && (earliest == null || x.min >= earliest)).sort((a, b) => Math.abs(a.min - t) - Math.abs(b.min - t))[0];
+    if (sm) return { min: sm.min, moved: sm.min !== t, why: `between ${sm.after} and ${sm.before}` };
     const before = c.start - L - 5;
     if (earliest == null || before >= earliest) return { min: before, moved: true, why: `before ${c.names[0]}` };
     return { min: c.end + 10, moved: true, why: `after ${c.names[c.names.length - 1]}` };
@@ -220,4 +232,4 @@ function attach(app) {
   app.post('/dayplan/resolve', async (req, res) => { if (!auth(req, res)) return; try { res.json(await autoMove()); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, movesFor, ownKey, solo, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
+module.exports = { attach, movesFor, ownKey, solo, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt, seams };
