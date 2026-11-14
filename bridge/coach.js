@@ -11,7 +11,7 @@
 const crypto = require('crypto');
 const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
-const BRIEF = require('./coach-brief');
+const BRIEF = require('./coach-brief') + require('./expert');   // who he is and his rules, then the coach's craft (expert.js)
 const { LIBRARY } = require('./workout-library');
 
 const MODEL = process.env.COACH_MODEL || 'claude-opus-5-5';
