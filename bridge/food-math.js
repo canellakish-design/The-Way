@@ -907,14 +907,36 @@ function rollForward(meals, entries) {
     // protein the meal did not carry lands at the next slot (up to 25 g, with its calories), so the day's protein holds
     const proteinShort = Math.min(25, Math.max(0, (a.protein_g || 0) - sum('protein_g')));
     if (proteinShort >= 5) { b.protein_g += proteinShort; b.kcal += 4 * proteinShort; }
+    // carbs the meal did not carry land at the next slot too (up to 30 g), the same way (Harry, 14 Nov 2026: a lunch
+    // over on calories and protein but 23 g short on carbs was marked "carbs 24% under", and the snack after it said
+    // "covered by the lunch, which ran over; a protein bite": "You see the contradiction?"). The carbs are the fuel
+    // for the session ahead; calories over never cancel a carb shortfall.
+    const carbShort = b.low_carb ? 0 : Math.min(30, Math.max(0, (a.carbs_g || 0) - sum('carbs_g')));
+    if (carbShort >= 10) b.carbs_g += carbShort;
     if (b.carb_load) b.carbs_g = Math.max(b.carbs_g, b.carb_load.min_g || 0);   // a meal running over never takes the night-before carbs
-    b.kcal = r5(b.kcal); b.carbs_g = r5(b.carbs_g); b.protein_g = r5(b.protein_g);
-    b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g, protein_short_g: proteinShort };
-    if (b.plan_kcal > 0 && b.kcal < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = `covered by the ${aName}, which ran over; a protein bite if hungry.`; }
+    b.carbs_g = r5(b.carbs_g); b.protein_g = r5(b.protein_g);
+    const left = b.kcal;                                              // what the calories alone leave: the test for "covered"
+    b.kcal = r5(Math.max(b.kcal, 4 * (b.carbs_g + b.protein_g)));   // never fewer calories than its own carbs and protein
+    b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g, protein_short_g: proteinShort, carbs_short_g: carbShort >= 10 ? carbShort : 0 };
+    // what the slot says is written from what is left in it, never from the calories alone
+    const carbsLeft = b.carbs_g >= 15, proteinLeft = b.protein_g >= 10;
+    const carbFood = b.carbs_g >= 45 ? 'a banana and two rice cakes with honey' : b.carbs_g >= 30 ? 'a banana and a rice cake with honey' : 'a banana, or two rice cakes with honey';
+    if (carbShort >= 10 && carbsLeft) b.what = `The ${aName} covered the calories${over.protein_g >= 10 ? ' and the protein' : ''} but was ${Math.round(carbShort)} g short on carbs: ${b.carbs_g} g of carbs here (${carbFood})${proteinLeft ? `, with ${b.protein_g} g of protein` : '; no more protein needed'}.`;
+    else if (b.plan_kcal > 0 && left < 0.4 * b.plan_kcal && carbsLeft) b.what = `The ${aName} ran over, so only the carbs are left here: ${b.carbs_g} g (${carbFood})${proteinLeft ? '' : '; no more protein needed'}.`;
+    else if (b.plan_kcal > 0 && left < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = proteinLeft ? `covered by the ${aName}, which ran over; a protein bite if hungry.` : `covered by the ${aName}, which ran over: nothing more is needed here.`; }
     else if (over.carbs_g >= 20 && b.carbs_g <= 0.6 * (b.plan_carbs_g || 1)) b.what = `${b.protein_g} g of protein and vegetables; the ${aName} carried the starch.`;
     else if (over.kcal >= 60) b.what = `${b.what} Lighter: the ${aName} ran ${over.kcal} kcal over${proteinShort >= 5 ? `, and ${proteinShort} g short on protein, so protein first` : ''}.`;
   }
   return out;
+}
+
+// Words that were not food: nothing in them to eat or drink (no calories, no macros, no fluid), or the reader itself
+// named them a question or said there was no new food. A black coffee or a glass of water has fluid and is kept.
+function notFood(e, written) {
+  const empty = !(e.kcal > 0) && !(e.carbs_g > 0) && !(e.protein_g > 0) && !(e.fat_g > 0) && !(e.fluid_ml > 0);
+  const said = /\b(no new food|not food|nothing (new )?(to log|eaten|logged)|question about|no food (was )?(described|mentioned|logged))\b/i.test(String((e && e.name) || ''));
+  const asked = /\?\s*$/.test(String(written || '').trim()) || /^(why|how|what|when|should|can|could|is|are|was|were|did|does|do|explain|tell me)\b/i.test(String(written || '').trim());
+  return empty && (said || asked || !(e.ingredients && e.ingredients.length));
 }
 
 // Alcohol: counted in the calories, never on plan. One drink on a rest day is "partly";
@@ -1122,5 +1144,5 @@ function meterAngle(kcal) {
 // lb a week at a daily balance: 3,500 kcal a pound
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
-module.exports = { performanceRules, fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
+module.exports = { notFood, performanceRules, fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
   guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };

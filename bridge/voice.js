@@ -166,7 +166,7 @@ Action types:
 - note: anything about how he feels or slept, text = his words.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
-- question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …".
+- question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …". A question or a remark about food already in the journal ("why is my lunch score low", "was that enough carbs", "that was a good lunch") is a question, never a meal or a drink: nothing new was eaten, so nothing is logged.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
 Fill every field: "" or 0 where it does not apply.
 
@@ -249,7 +249,9 @@ async function run(a, x) {
       // the same words logged again within twenty minutes are the same food, said twice, unless he says it was more
       { const twin = await food.twinToday(a.text);   // one rule with the Food page's POST /food/text (food-math twinOf)
         if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; }
-      const e = await food.addPhoto({ text: a.text, meal: a.meal || undefined });
+      // a question or a remark is never a meal (food.js refuses words with nothing eaten in them)
+      let e; try { e = await food.addPhoto({ text: a.text, meal: a.meal || undefined }); }
+      catch (err) { if (err && err.not_food) return { ok: false, type: 'question', summary: 'Nothing logged: that was a question, not food.' }; throw err; }
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
       let celebrate = false, slot = null;
       try { const day = await food.dayReport(e.date); const m = (day.meals || []).find(x => (x.logged || []).includes(e.id)); slot = m ? m.slot : null; celebrate = !!(m && m.match && m.match.key === 'green' && (e.kcal || 0) >= 100); } catch (err) { celebrate = false; }
