@@ -34,16 +34,15 @@
     const SR = !!(window.SpeechRecognition || window.webkitSpeechRecognition);
     view.innerHTML = `<div class="fd-ttl ch-top"><h2 class="fd-h">Coach</h2><span class="vlinks">${SR ? `<button class="linkish" id="p_vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="p_vNew">new conversation</button></span></div>
       <div class="chface" id="chFace"></div>
-      <div class="vthread ch-conv" id="p_vThread"></div>
-      <div class="vheard" id="p_vHeard"></div>
       <div class="ch-ask">
-        <textarea id="chText" rows="2" aria-label="Ask your coach" placeholder="Ask anything, or tell it what you did"></textarea>
-        <div class="ch-row"><button class="primary" id="chGo">Ask</button>${SR ? `<button class="vhold" id="p_vHold">Hold to talk</button>` : ""}<button id="chDeep" title="A longer answer: the coach reads the whole site and the research first (a minute or more)">Research it</button></div>
-        <div class="small" id="p_vStatus"></div>
+        ${SR ? `<button class="primary vhold" id="p_vHold">Hold to talk</button>` : ""}
+        <div class="vheard" id="p_vHeard"></div>
+        <div class="ch-type"><textarea id="chText" rows="1" aria-label="Ask your coach" placeholder="Or type it here"></textarea><button id="chGo">Ask</button></div>
+        <div class="ch-under"><span class="small" id="p_vStatus"></span><button class="linkish" id="chDeep" title="A longer answer: the coach reads the whole site and the research first (a minute or more)">Research it: the long answer</button></div>
       </div>
+      <div class="vthread ch-conv" id="p_vThread"></div>
       <div id="chLive"></div>
-      <h3 class="ch-h3">Researched answers</h3>
-      <div id="chThread"></div>
+      <details class="why ch-fold" id="chResFold"><summary>researched answers<span id="chResN"></span></summary><div id="chThread"></div></details>
       <details class="why" id="chNoteFold"><summary>the coach's notebook</summary><div id="chNotes" class="small">loading…</div></details>`;
     const box = document.getElementById("chText"), go = document.getElementById("chDeep"), quick = document.getElementById("chGo"), live = document.getElementById("chLive");
     if (window.Face && Face.mount) Face.mount(document.getElementById("chFace"));
@@ -52,13 +51,16 @@
     const askQuick = () => { const t = box.value.trim(); if (!t) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t); box.value = ""; };
     quick.onclick = askQuick;
     box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuick(); } });
+    // the box grows with what is typed, up to a few lines
+    const grow = () => { box.style.height = "auto"; box.style.height = Math.min(140, box.scrollHeight + 2) + "px"; }; box.addEventListener("input", grow);
 
     const drawThread = async () => {
       let th = null; try { th = await bridge("/coach/thread"); } catch {}
       const el = document.getElementById("chThread"); if (!el || !alive()) return;
       const turns = (th && th.turns) || [], pairs = [];
       for (let i = 0; i < turns.length; i++) if (turns[i].role === "user" && turns[i + 1] && turns[i + 1].role === "assistant") { pairs.push([turns[i], turns[i + 1]]); i++; }
-      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a], i) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at), i === 0 && !live.innerHTML); }).join("") : "";
+      const nEl = document.getElementById("chResN"), fold = document.getElementById("chResFold"); if (nEl) nEl.textContent = pairs.length ? ` · ${pairs.length}` : ""; if (fold) fold.hidden = !pairs.length;
+      el.innerHTML = pairs.length ? pairs.reverse().map(([q, a], i) => { const s = split(a.text); return turnHTML(q.text, s.say, s.answer, null, clock(q.at), false); }).join("") : "";
     };
     const drawNotes = async () => {
       let nb = null; try { nb = await bridge("/coach/notebook"); } catch {}

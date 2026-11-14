@@ -997,3 +997,31 @@ main{padding-bottom:calc(112px + env(safe-area-inset-bottom, 0px))}
 body:has(#chFace) #micBtn{display:none}
 #p_vHeard:empty{min-height:0; margin:0}
 .movedline{display:block; margin-top:4px; font-size:12px; color:var(--muted)}
+
+/* ---- the Coach page, cleaned up, and the coach as a whole figure (14 Nov 2026) ---------------------------- */
+.chface.stage{position:relative; display:flex; justify-content:center; height:clamp(340px, 54vh, 560px); margin:8px 0 12px; overflow:hidden;
+  border:1px solid #1e3a52; box-shadow:0 0 34px rgba(95,211,255,.12);
+  background:linear-gradient(rgba(95,211,255,.06) 1px, transparent 1px) 0 0/16px 16px, linear-gradient(90deg, rgba(95,211,255,.06) 1px, transparent 1px) 0 0/16px 16px, #070b10}
+.chface.stage::after{content:""; position:absolute; inset:0; pointer-events:none; background:repeating-linear-gradient(rgba(0,0,0,.22) 0 1px, transparent 1px 3px)}
+.chface.stage .stagefig{height:100%; cursor:pointer; display:flex}
+.chface.stage .facesvg{height:100%; width:auto; max-width:100%; border:0; box-shadow:none; display:block}
+.stagehud{position:absolute; top:10px; z-index:2; display:flex; flex-direction:column; gap:5px; font:600 9.5px/1 var(--mono, ui-monospace, Menlo, monospace); letter-spacing:.18em; color:#5fd3ff; pointer-events:none}
+.stagehud.tl{left:12px} .stagehud.tr{right:12px; text-align:right; align-items:flex-end} .stagehud .dim{opacity:.6} .stagehud b{font-weight:600}
+.stagecap{position:absolute; left:0; right:0; bottom:0; z-index:2; padding:34px 16px 14px; text-align:center; font-size:16px; line-height:1.35; color:#eaf7ff; text-wrap:balance;
+  background:linear-gradient(transparent, rgba(4,8,12,.92) 46%); opacity:0; transition:opacity .25s; pointer-events:none; min-height:84px; display:flex; align-items:flex-end; justify-content:center}
+.chface.stage.hascap .stagecap{opacity:1}
+.stagebrief{position:absolute; left:50%; bottom:14px; transform:translateX(-50%); z-index:3; margin:0; white-space:nowrap; transition:opacity .2s}
+.chface.stage.hascap .stagebrief, .chface.stage.talking .stagebrief, .chface.stage.busy .stagebrief{opacity:0; pointer-events:none}
+.stagestop{position:absolute; right:10px; top:44px; z-index:3; margin:0; padding:6px 12px; font-size:11px; min-height:0; display:none}
+.chface.stage.talking .stagestop{display:block}
+.ch-ask{gap:8px} .ch-ask .vhold{width:100%; min-height:52px; margin:0}
+.ch-ask .vheard{min-height:0; margin:0; font-size:18px} .ch-ask .vheard:empty{display:none}
+.ch-type{display:flex; gap:8px; align-items:stretch} .ch-type textarea{flex:1; min-width:0; resize:none; min-height:44px} .ch-type button{margin:0; flex:0 0 auto; min-width:72px}
+.ch-under{display:flex; justify-content:space-between; align-items:baseline; gap:10px; min-height:18px; margin-top:-2px}
+.ch-under .linkish{margin-top:0; margin-bottom:0} .ch-type textarea{margin:0}
+.ch-under .linkish{font-size:12px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:0; font-weight:400; text-decoration:underline; margin-left:auto; white-space:nowrap}
+.ch-conv{max-height:none; overflow:visible; margin:10px 0 6px}
+.ch-conv .vmsg{max-width:92%} .ch-conv .ch-hint{color:var(--muted)}
+.ch-fold{margin-top:10px} .ch-fold > .vthread{max-height:none; margin-top:8px; opacity:.85}
+.vearlier{align-self:stretch}
+@media (prefers-reduced-motion: reduce){ .stagecap{transition:none} }

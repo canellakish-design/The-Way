@@ -58,8 +58,18 @@ function sheet(){
 }
 
 function status(t){ const el = $("vStatus"); if (el) el.textContent = t || ""; }
+const msgHTML = h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`;
 function drawThread(){
   const el = $("vThread"); if (!el) return;
+  // the Coach page (14 Nov 2026: "Is there a way to clean this page up?"): the latest exchange under the box, what
+  // came before folded away
+  if (onCoach()) {
+    const all = history.slice(-20); let cut = all.length - 1; while (cut > 0 && all[cut].role !== "user") cut--;
+    const last = all.slice(Math.max(0, cut)), before = all.slice(0, Math.max(0, cut));
+    el.innerHTML = (last.length ? last.map(msgHTML).join("") : `<div class="small ch-hint">Hold the button and talk, or type. The coach answers out loud and can log or change things for you.</div>`)
+      + (before.length ? `<details class="why ch-fold vearlier"><summary>earlier · ${before.filter(h => h.role === "user").length}</summary><div class="vthread">${before.map(msgHTML).join("")}</div></details>` : "");
+    return;
+  }
   el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
     || `<div class="small">${onCoach() ? "Ask below, type or hold to talk. The coach answers out loud and can log or change things for you." : `Hold to talk. Or turn on Hey Coach and start with "Coach".`}</div>`;
   el.scrollTop = el.scrollHeight;
@@ -84,27 +94,51 @@ function ensureRec(){
   rec.onresult = (e)=>{
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript; }
-    const heard = $("vHeard"); if (heard) heard.textContent = (finalText + interim).trim();
+    lastInterim = interim;
+    const heard = $("vHeard"); if (heard) heard.textContent = (carry + " " + finalText + interim).trim();
   };
   rec.onerror = (e)=>{
     const k = e.error;
     if (k === "aborted") return;                       // ours, on purpose
+    if (k === "not-allowed" || k === "service-not-allowed" || k === "audio-capture") fatal = true;
+    if (k === "no-speech" && holding) return;          // a pause while he holds: it keeps listening
     status(k === "not-allowed" || k === "service-not-allowed" ? "Microphone blocked. Settings → Safari → Microphone → Allow for this site, or type."
          : k === "audio-capture" ? "No microphone found. Type instead."
          : k === "no-speech" ? "Heard nothing. Hold the button and speak." : "Speech failed (" + k + "). Type it instead.");
   };
+  // The phone ends a listening session by itself at a pause, or after a while. While he is still holding the button
+  // that is not the end of what he is saying (Harry, 14 Nov 2026: "my sentences keep getting cut off … on the Hold
+  // to talk"): what was heard is kept and listening starts again at once. Only letting go sends it, all of it.
   rec.onend = ()=>{
-    state = "idle"; listening = false; setMic(false);
-    const heard = $("vHeard");
-    const t = (finalText || (heard && heard.textContent) || "").trim();
-    const toss = discard; discard = false; finalText = "";
-    if (!toss && t) send(t);
-    else if (!toss && !holding) status("Heard nothing. Hold the button and speak.");
-    // a hold began while this session was ending: start it now
-    if (wantListen && holding) startListening();
-    else heyResume();
+    state = "idle"; listening = false;
+    const got = (finalText + lastInterim).trim(); finalText = ""; lastInterim = "";
+    const toss = discard; discard = false;
+    if (toss) { carry = ""; setMic(false); if (wantListen && holding) startListening(); else heyResume(); return; }
+    carry = (carry + " " + got).trim();
+    if (holding && wantListen && !fatal && restarts < 40) { restarts++; setTimeout(resume, 60); return; }
+    finish();
   };
   return rec;
+}
+let carry = "", lastInterim = "", restarts = 0, fatal = false;
+// still holding: the next session, keeping what was heard so far
+function resume(){
+  if (!holding || !wantListen) { if (state === "idle" && carry) finish(); return; }
+  if (state !== "idle") return;
+  state = "starting";
+  try{ rec.start(); }
+  catch(err){ state = "idle"; if (/InvalidState|already/i.test(String(err && err.message))) { try{ rec.stop(); }catch{} return; } finish(); }
+}
+// he let go: send everything heard during the hold
+function finish(){
+  setMic(false);
+  const heard = $("vHeard"), t = carry.trim(); carry = "";
+  // let go after a word or two that ends mid-thought ("I am"): nothing to answer, so it is not sent
+  const words = t.split(/\s+/).filter(Boolean), cutOff = words.length && words.length <= 3 && /^(i|i'm|im|am|is|are|was|the|a|an|to|for|and|my|of|in|at|on|with|have|had|will|can|do|so|but|what|how|that|it|it's)$/i.test(words[words.length - 1].replace(/[.,!?]+$/, ""));
+  if (t && cutOff) { if (heard) heard.textContent = ""; status(`Only caught "${t}". Keep holding until you finish, then let go.`); }
+  else if (t) send(t);
+  else if (!fatal) status("Heard nothing. Hold the button and speak.");
+  heyResume();
 }
 function startListening(){
   if (!SR) return;
@@ -112,7 +146,7 @@ function startListening(){
   wantListen = true;
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
-  finalText = ""; discard = false;
+  finalText = ""; lastInterim = ""; carry = ""; restarts = 0; fatal = false; discard = false;
   const heard = $("vHeard"); if (heard) heard.textContent = "";
   state = "starting";
   try{ ensureRec().start(); }
@@ -122,12 +156,17 @@ function startListening(){
     status("Could not start the microphone: " + err.message);
   }
 }
+// Letting go: the microphone stays open a moment longer, so the last word, still being worked out, is not lost.
 function stopListening(){
   wantListen = false;
-  if (state === "listening" || state === "starting"){ state = "stopping"; try{ rec.stop(); }catch{ state = "idle"; } }
+  if (state === "listening" || state === "starting"){
+    state = "stopping";
+    setTimeout(()=>{ if (state !== "stopping") return; try{ rec.stop(); }catch{ state = "idle"; finish(); } }, 400);
+  }
+  else if (state === "idle") finish();                 // between two sessions: nothing is running, send what is kept
 }
 function abortListening(){
-  wantListen = false; discard = true;
+  wantListen = false; discard = true; carry = "";
   if (state !== "idle"){ state = "stopping"; try{ rec.abort(); }catch{ state = "idle"; } }
 }
 
@@ -261,6 +300,8 @@ function mount(){
   const nw = document.getElementById("p_vNew"); if (nw) nw.onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
   drawHey(); drawThread();
 }
-window.voiceBits = { open, close, send, supported: !!SR, setHey, mount };
+// something said outside the conversation (the briefing): kept in it, so the words are there to read
+function note(asked, reply){ if (asked) history.push({ role: "user", text: asked }); history.push({ role: "assistant", text: reply || "" }); keep(); drawThread(); }
+window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note };
 mount();   // the Coach page drew before this file loaded
 })();
