@@ -27,6 +27,9 @@ function placeOf(w) {
   if (outside(w)) return w.location ? null : w.indoor ? CAVE : 'outside';
   return null;
 }
+// the pain cave is at home: no walk between a trainer ride and the kettlebells
+const siteOf = p => p === CAVE || p === 'home' ? 'home' : p || null;
+const apart = (a, b) => !!(siteOf(a) && siteOf(b) && siteOf(a) !== siteOf(b));
 // a ride that names Life Time (its name or its notes): never planned
 const gymRide = w => isRide(w) && /life\s*time/i.test(`${(w && w.name) || ''} ${(w && w.notes) || ''}`);
 
@@ -81,4 +84,4 @@ function attach(app) {
       const d = await getJSON('plan-workouts', { workouts: {} }); const o = await require('./weather').outlook(today, tz.shiftKey(today, 3));
       res.json({ lifts: GYM, trainer: CAVE, min_f: MIN_F, rides: calls(d.workouts, o && o.days, today, p.h * 60 + p.mi) }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
-module.exports = { attach, placeOf, gymRide, badWeather, calls, check, tick, isLift, isRide, outside, GYM, CAVE, MIN_F, MIN_GRADE };
+module.exports = { attach, siteOf, apart, placeOf, gymRide, badWeather, calls, check, tick, isLift, isRide, outside, GYM, CAVE, MIN_F, MIN_GRADE };

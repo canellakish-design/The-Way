@@ -33,7 +33,7 @@ const CHANGE = { training: { before: 15, after: 20 } };
 const PLACE_CHANGE = 15;
 function changeover(a, b) {   // minutes needed between a ending and b starting
   if (!a || !b) return 0;
-  if (a.category === 'training' && b.category === 'training') return a.place && b.place && a.place !== b.place ? PLACE_CHANGE : 0;
+  if (a.category === 'training' && b.category === 'training') return require('./where').apart(a.place, b.place) ? PLACE_CHANGE : 0;
   if (a.category === b.category) return 0;
   const after = (CHANGE[a.category] || {}).after || 0, before = (CHANGE[b.category] || {}).before || 0;
   return Math.max(after, before);
@@ -178,7 +178,7 @@ function movesFor(days, today, nowMin, workouts) {
       if (!e.clash || e.clash.fix_min == null) continue;
       if (soon(e.start_min) || soon(e.clash.fix_min)) continue;            // started, or the fix is already past
       if (e.category === 'training' && e.workout_id) {
-        const w = (workouts || {})[e.workout_id]; if (!w || w.location) continue;
+        const w = (workouts || {})[e.workout_id]; if (!w || w.location || w.started_at) continue;   // a session he has started is where it is
         out.push({ kind: 'workout', id: w.id, date: day.date, name: w.name, from: w.time, to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
         break;
       }

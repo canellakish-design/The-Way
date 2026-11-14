@@ -81,7 +81,10 @@ async function context() {
     // each session against the clock (Harry, 14 Nov 2026, 4:09p: the coach said the 3:15p lift "starts now": "Time of
     // day is off"): how long until it starts, how long it has been going, or that its time has passed
     const dur = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}` : `${m} min`;
-    const whenOf = s => { if (!s.time) return 'planned, no time set'; const st = (+s.time.slice(0, 2)) * 60 + (+s.time.slice(3, 5)), en = st + (s.minutes || 60);
+    const whenOf = s => { if (!s.time) return 'planned, no time set';
+      // he pressed Start (workouts.js): that minute is the session's real start
+      { const e = evOf(s); if (e && e.started_at) { const st0 = (+s.time.slice(0, 2)) * 60 + (+s.time.slice(3, 5)), en0 = st0 + (s.minutes || 60), end0 = tz.hm12(String(Math.floor(en0 / 60) % 24).padStart(2, '0') + ':' + String(en0 % 60).padStart(2, '0'));
+        return nowMin < en0 ? `he pressed Start at ${tz.hm12(s.time)}: under way, ${dur(Math.max(0, nowMin - st0))} in, until about ${end0}` : `he pressed Start at ${tz.hm12(s.time)}; it should have finished about ${end0}; not logged yet`; } } const st = (+s.time.slice(0, 2)) * 60 + (+s.time.slice(3, 5)), en = st + (s.minutes || 60);
       const endHM = tz.hm12(String(Math.floor(en / 60) % 24).padStart(2, '0') + ':' + String(en % 60).padStart(2, '0'));
       return nowMin < st - 5 ? `planned, starts in ${dur(st - nowMin)}` : nowMin <= st + 5 ? 'planned, starts now'
         : nowMin < en ? `planned: it began ${dur(nowMin - st)} ago and runs until ${endHM}; not logged yet, he may be in it`
