@@ -1025,3 +1025,14 @@ body:has(#chFace) #micBtn{display:none}
 .ch-fold{margin-top:10px} .ch-fold > .vthread{max-height:none; margin-top:8px; opacity:.85}
 .vearlier{align-self:stretch}
 @media (prefers-reduced-motion: reduce){ .stagecap{transition:none} }
+
+/* the 3D coach (coach3d.js): his canvas fills the stage; the drawn figure is the stand-in until he is there */
+.chface.stage .stage3d{position:absolute; inset:0; z-index:1; cursor:pointer}
+.chface.stage .c3dholder{position:absolute; inset:0}
+.chface.stage .c3dholder canvas{display:block}
+.chface.stage .stagefig{position:relative; z-index:1}
+.chface.stage.has3d .stagefig{display:none}
+.chface.stage:not(.has3d) .stage3d{visibility:hidden}
+.chface.stage::before{content:""; position:absolute; left:50%; bottom:6%; width:74%; height:9%; transform:translateX(-50%); border-radius:50%; pointer-events:none;
+  background:radial-gradient(closest-side, rgba(95,211,255,.28), rgba(95,211,255,0)); z-index:0}
+.chface.stage.has3d{height:clamp(380px, 60vh, 620px)}

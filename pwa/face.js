@@ -8,6 +8,11 @@
    it speaks the mouth follows the loudness of the real voice, the head nods and turns, the brows lift on the
    stressed words, and the arms gesture (an open hand, both hands, a hand to the chest), with a small beat on each
    stressed syllable. What it is saying runs under it as subtitles, one sentence at a time, in step with the voice.
+   14 Nov 2026, later ("Anyway to make the coach more realistic": he chose a real 3D figure; "a man … in a suit",
+   "tanner with thick black glasses", "and a beard"): the stage now holds a 3D man (coach3d.js: three.js and the
+   TalkingHead library, the figure in avatar/coach.glb). This file gives him the words and, every frame, where the
+   voice is, so his mouth forms them; the drawn figure below stays as the stand-in while he loads and on a device
+   that cannot draw 3D. A tap on him moves between the whole figure and a closer view.
    Window.Face: mount(el) (the Coach page puts the stage at its top), open(), close(), briefing() (asks
    /voice/briefing and speaks it), speaking(utterance) (app.js hands the phone's own voice here), caption(text)
    (an answer from the conversation: its subtitles), stop(). */
@@ -126,6 +131,39 @@
     return `M${150 - w} 230 Q150 ${229 - o * 2} ${150 + w} 230 Q150 ${230 + d} ${150 - w} 230 Z`;
   }
 
+  // ---- the 3D figure (coach3d.js) -------------------------------------------------------------------
+  // Loaded once, the first time the Coach page is opened; its canvas lives in one holder that is moved into the
+  // stage each time the page is drawn, so he is not loaded again. is3d: he is on screen (the drawing is hidden).
+  const C3D_V = "1";
+  let holder = null, is3d = false, asked3d = false, closeUp = false;
+  const voiceState = () => {
+    const v = window.CoachVoice, own3 = !!(v && v.playing && v.el);
+    if (own3) { const d = v.el.duration; return { playing: true, t: v.el.currentTime, dur: d > 0 && isFinite(d) ? d : 0, env: v.env || null, level: v.level() }; }
+    if (!talking) return { playing: false };
+    const n = Math.max(1, said.length);
+    return { playing: true, frac: Math.min(1, (subChar >= 0 ? subChar : (performance.now() - subT0) / 62) / n), level: 0.25 + 0.6 * open };
+  };
+  function place3d(){
+    if (!holder || !host) return;
+    const slot = host.querySelector("[data-3d]"); if (!slot) return;
+    if (holder.parentNode !== slot) slot.appendChild(holder);
+    if (is3d) { host.classList.add("has3d"); window.Coach3D.pause(false); window.Coach3D.view(closeUp ? "upper" : "full"); }
+  }
+  function load3d(){
+    if (asked3d) { place3d(); return; }
+    asked3d = true;
+    try { const c = document.createElement("canvas"); if (!(c.getContext("webgl2") || c.getContext("webgl"))) return; } catch (e) { return; }
+    holder = document.createElement("div"); holder.className = "c3dholder";
+    place3d();
+    const go = () => { if (!window.Coach3D || !holder) return;
+      window.Coach3D.mount(holder, { url: "avatar/coach.glb?v=" + C3D_V, state: voiceState })
+        .then(() => { is3d = true; place3d(); if (said && talking) window.Coach3D.say(said); if (!live()) window.Coach3D.pause(true); })
+        .catch(e => { console.warn("3D coach:", e && e.message || e); is3d = false; if (holder && holder.parentNode) holder.parentNode.removeChild(holder); holder = null; }); };
+    if (window.Coach3D) go();
+    else { window.addEventListener("coach3d-ready", go, { once: true });
+      const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = () => { holder = null; }; document.head.appendChild(sc); }
+  }
+
   // ---- how it moves ---------------------------------------------------------------------------------
   // Each joint is a small spring toward where it wants to be, so nothing snaps and a gesture settles with a
   // trace of overshoot. Angles in degrees: sh shoulder, el elbow (the left arm opens with +, the right with -);
@@ -195,7 +233,7 @@
 
   function frame(t){
     const sheet = live() ? host : null;
-    if (!sheet) { raf = 0; talking = false; return; }
+    if (!sheet) { raf = 0; talking = false; if (is3d && window.Coach3D) window.Coach3D.pause(true); return; }
     // the coach's own voice (app.js CoachVoice): the mouth follows the loudness of the sound itself; the phone's
     // voice opens it on each word, or a steady chatter where the phone gives no word events
     const lvl = window.CoachVoice ? CoachVoice.level() : null;
@@ -207,7 +245,7 @@
     }
     open += (target - open) * 0.35;
     const m = sheet.querySelector(".fmouth"); if (m) m.setAttribute("d", mouthPath(Math.max(0, Math.min(1, open))));
-    move(t, sheet);
+    if (!is3d) move(t, sheet);   // the drawn stand-in; the 3D figure moves itself
     const ring = sheet.querySelector(".fring"); if (ring) { ring.setAttribute("opacity", talking ? (0.6 + 0.3 * Math.sin(t / 180)).toFixed(2) : "0.4"); ring.setAttribute("stroke-dashoffset", (-(t / 40) % 660).toFixed(1)); }
     const ring2 = sheet.querySelector(".fring2"); if (ring2) ring2.setAttribute("stroke-dashoffset", ((t / 55) % 660).toFixed(1));
     const circ = sheet.querySelector(".fcirc"); if (circ) circ.setAttribute("opacity", talking ? (0.75 + 0.25 * Math.sin(t / 120)).toFixed(2) : (0.5 + 0.08 * Math.sin(t / 1750)).toFixed(2));
@@ -250,7 +288,7 @@
     }
     return out;
   }
-  function setSubs(text){ said = String(text || ""); subs = chunks(said); subAt = -1; quiet = 0; subT0 = performance.now(); subChar = -1; note = ""; }
+  function setSubs(text){ said = String(text || ""); if (window.Coach3D) window.Coach3D.say(said); subs = chunks(said); subAt = -1; quiet = 0; subT0 = performance.now(); subChar = -1; note = ""; }
   function subtitles(t){
     const el = capEl(); if (!el) return;
     let text = note;
@@ -277,12 +315,16 @@
     el.classList.remove("faceinline"); el.classList.add("stage");
     el.innerHTML = `<div class="stagehud tl"><span>COACH // <b class="fstate">STANDBY</b></span><span class="dim">GOAL · MASTERS ELITE</span></div>
       <div class="stagehud tr"><span class="fclock">--:--</span><span class="dim fvoice"></span></div>
-      <div class="stagefig" title="Where am I?">${svg()}</div>
+      <div class="stage3d" data-3d></div>
+      <div class="stagefig">${svg()}</div>
       <div class="stagecap" data-cap aria-live="polite"></div>
       <button class="stagestop" data-stop>Stop</button>
       <button class="primary stagebrief" data-brief>Where am I?</button>`;
     host = el;
+    // a tap on him: the whole figure, or closer (the drawn stand-in gives the briefing, as before)
     el.querySelector(".stagefig").onclick = () => briefing();
+    el.querySelector("[data-3d]").onclick = () => { if (!is3d) return; closeUp = !closeUp; window.Coach3D.view(closeUp ? "upper" : "full"); };
+    load3d();
     el.querySelector("[data-brief]").onclick = () => briefing();
     el.querySelector("[data-stop]").onclick = stop;
     if (!raf) raf = requestAnimationFrame(frame);
@@ -305,7 +347,7 @@
     if (window.primeSound) try { primeSound(); } catch (e) {}   // the tap that asked unlocks the sound
     if (!live()) { pending = true; location.hash = "#coach"; return; }
     if (busy) return;
-    busy = true; subs = []; note = "Reading your numbers…"; host.classList.add("busy");
+    busy = true; subs = []; note = "Reading your numbers…"; host.classList.add("busy"); if (is3d) window.Coach3D.thinking(true);
     try {
       const r = await bridge("/voice/briefing");
       const reply = r.reply || "Nothing to say yet.";
@@ -313,7 +355,7 @@
       if (window.voiceBits && voiceBits.note) voiceBits.note("Where am I?", reply);   // kept in the conversation
       if (r.reply && typeof speak === "function") speak(r.reply);
     } catch (e) { note = String(e.message || e).slice(0, 120); setTimeout(() => { if (note && !talking) note = ""; }, 6000); }
-    busy = false; if (host) host.classList.remove("busy");
+    busy = false; if (host) host.classList.remove("busy"); if (is3d) window.Coach3D.thinking(false);
   }
   // an answer from the conversation: its subtitles, as it is spoken
   function caption(text){ if (text) setSubs(text); }

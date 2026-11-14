@@ -1,0 +1,15 @@
+{
+  "name": "the-way-coach3d",
+  "private": true,
+  "description": "Builds pwa/coach3d.js (the 3D coach: three.js + TalkingHead, bundled) and compresses the avatar. Run: npm install && npm run build",
+  "scripts": {
+    "build": "esbuild entry.mjs --bundle --format=esm --minify --target=safari16 --alias:three/addons/loaders/FBXLoader.js=./stubs/none.mjs --alias:three/addons/loaders/DRACOLoader.js=./stubs/none.mjs --alias:three/addons/libs/stats.module.js=./stubs/none.mjs --outfile=../../pwa/coach3d.js",
+    "avatar": "gltf-transform optimize avatar-src/coach.glb ../../pwa/avatar/coach.glb --compress meshopt --texture-compress webp --texture-size 1024 --simplify false --join false --flatten false --instance false --palette false --weld false"
+  },
+  "devDependencies": {
+    "@gltf-transform/cli": "^4.1.0",
+    "@met4citizen/talkinghead": "1.8.2",
+    "esbuild": "^0.24.0",
+    "three": "0.186.0"
+  }
+}
