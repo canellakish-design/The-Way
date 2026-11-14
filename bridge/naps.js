@@ -2,8 +2,11 @@
 // naps.js — naps (Harry, 14 Nov 2026: "Can naps improve my sleep score?" … "Yes build in Naps when appropriate and
 // I'll enter them manually on the way").
 // He enters a nap himself: on the Sleep page, by the Log button on the Day page's nap row, or by telling the coach
-// ("I napped 25 minutes"). A nap counts toward that day's sleep: the night that ended that morning plus the nap,
-// shown apart ("6.4 h + 25 min nap") and counted in the week's average (chain.js).
+// ("I napped 25 minutes"). A nap counts toward that day's sleep at half its length, 45 minutes of credit a day at most
+// (Harry, 14 Nov 2026: "should it count as the equivalent of 1 hour of sleep? I feel like 1 hour sleep is more
+// valuable than 1 hour nap"): the night has the long unbroken cycles of deep and REM sleep a nap mostly does not
+// reach, and a nap does not make up a short night in full. No study gives a conversion; half is a cautious rule.
+// Shown apart ("6.4 h + a 60 min nap, counted as 30") and counted in the week's average (chain.js).
 // When one is appropriate, the Day page offers it: after a night under 7 hours, a 25-minute nap in the first free
 // half hour between 1 and 3 p.m. when he is at home (not at school or at a field, not inside a class, a drive, a
 // game, his own block or a workout, and not in the 20 minutes before a workout). Never after 3 p.m.: a late or long
@@ -21,6 +24,8 @@ const KEY = 'naps';
 const NEED_H = 7;                            // a good night (chain.js): under this, a nap is offered
 const FROM = 13 * 60, UNTIL = 15 * 60;       // the nap ends by 3 p.m.
 const LEN = 25, SLOT = 30;                   // 25 minutes asleep, half an hour set aside
+const CREDIT = 0.5, CREDIT_MAX = 45;         // what a nap is worth toward the day's sleep: half, 45 minutes at most
+const creditOf = min => Math.min(CREDIT_MAX, Math.round((min || 0) * CREDIT));
 const hmOf = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 
 async function all() { const d = await getJSON(KEY, { naps: [] }); d.naps = Array.isArray(d.naps) ? d.naps : []; return d; }
@@ -43,9 +48,9 @@ async function remove(id) { const d = await all(); const n = d.naps.length; d.na
 function totals(naps) { const out = {}; for (const n of naps || []) if (n && n.date && n.minutes > 0) out[n.date] = (out[n.date] || 0) + n.minutes; return out; }
 async function minutesByDate() { return totals((await all()).naps); }
 
-// The nights with their naps: hours becomes the night plus the nap; night_hours keeps the night alone.
+// The nights with their naps: hours becomes the night plus the nap's credit; night_hours keeps the night alone.
 function withNaps(nights, byDate) {
-  return (nights || []).map(n => { const m = (byDate || {})[n.date] || 0; return m ? Object.assign({}, n, { night_hours: n.hours, nap_min: m, hours: Math.round((n.hours + m / 60) * 100) / 100 }) : n; });
+  return (nights || []).map(n => { const m = (byDate || {})[n.date] || 0, c = creditOf(m); return m ? Object.assign({}, n, { night_hours: n.hours, nap_min: m, nap_credit_min: c, hours: Math.round((n.hours + c / 60) * 100) / 100 }) : n; });
 }
 
 // Where a nap fits today, or null. events: the day's rows (start_min, end_min, category, summary);
@@ -72,7 +77,7 @@ function rowsFor(date, events, naps, o) {
   const fmt = require('./workouts').fmtMin;
   const mine = (naps || []).filter(n => n.date === date);
   if (mine.length) return mine.map(n => { const sm = (+n.time.slice(0, 2)) * 60 + (+n.time.slice(3, 5));
-    return Object.assign({ summary: `Nap · ${n.minutes} min`, detail: 'counts toward today\'s sleep', minutes: n.minutes, start_min: sm, end_min: sm + n.minutes, from: fmt(sm), to: fmt(sm + n.minutes), taken: true, nap_id: n.id }, base); });
+    return Object.assign({ summary: `Nap · ${n.minutes} min`, detail: `counts as ${creditOf(mine.reduce((a, x) => a + x.minutes, 0))} min toward today's sleep (a nap is worth half)`, minutes: n.minutes, start_min: sm, end_min: sm + n.minutes, from: fmt(sm), to: fmt(sm + n.minutes), taken: true, nap_id: n.id }, base); });
   const s = slotFor(events, o);
   if (!s) return [];
   return [Object.assign({ summary: `Nap · ${s.minutes} min`, detail: `${s.why}: set an alarm for ${s.minutes} minutes. Not after 3 p.m.`, minutes: SLOT, start_min: s.start, end_min: s.end, from: fmt(s.start), to: fmt(s.end), taken: false }, base)];
@@ -93,4 +98,4 @@ function attach(app) {
   app.delete('/naps/:id', async (req, res) => { if (!auth(req, res)) return;
     try { res.json({ ok: await remove(String(req.params.id)) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 }
-module.exports = { attach, all, add, remove, totals, minutesByDate, withNaps, slotFor, rowsFor, lastNight, NEED_H, FROM, UNTIL, LEN, SLOT };
+module.exports = { attach, creditOf, CREDIT, CREDIT_MAX, all, add, remove, totals, minutesByDate, withNaps, slotFor, rowsFor, lastNight, NEED_H, FROM, UNTIL, LEN, SLOT };
