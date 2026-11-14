@@ -143,7 +143,36 @@ function celebrate(opts){
   }catch{}
 }
 window.celebrate = celebrate; window.primeSound = primeSound;
+// The coach's own voice (bridge/tts.js): a natural voice when a key is set in Netlify, played through the page's
+// audio (unlocked by the tap that asked), with its loudness read off the sound so the face's mouth follows the real
+// words (face.js). With no key, no sound unlocked, or any failure: the phone's voice, as before.
+const CoachVoice = { on: null, src: null, analyser: null, buf: null,
+  stop(){ try{ if (this.src) { this.src.onended = null; this.src.stop(); } }catch{} this.src = null; __ttsSpeaking = false; },
+  // 0 to 1, how loud the voice is right now; null when it is not this voice speaking
+  level(){ if (!this.src || !this.analyser) return null; const b = this.buf || (this.buf = new Uint8Array(this.analyser.fftSize)); this.analyser.getByteTimeDomainData(b);
+    let s = 0; for (let i = 0; i < b.length; i++) { const v = (b[i] - 128) / 128; s += v * v; } return Math.min(1, Math.sqrt(s / b.length) * 4.5); },
+  async say(t){
+    if (this.on === false || !__audio || __audio.state !== "running") throw new Error("phone voice");
+    let r; try{ r = await bridge("/voice/speak", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text: t }) }); }
+    catch(e){ if (/503|no voice key/i.test(e.message)) this.on = false; throw e; }
+    this.on = true;
+    const bin = atob(r.audio_b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const audio = await new Promise((ok, no) => __audio.decodeAudioData(bytes.buffer, ok, no));
+    this.stop();
+    const src = __audio.createBufferSource(); src.buffer = audio;
+    if (!this.analyser) { this.analyser = __audio.createAnalyser(); this.analyser.fftSize = 512; this.analyser.connect(__audio.destination); }
+    src.connect(this.analyser); src.onended = () => { if (this.src === src) { this.src = null; __ttsSpeaking = false; } };
+    this.src = src; __ttsSpeaking = true; src.start();
+  } };
+window.CoachVoice = CoachVoice;
+// asked once at load, so a phone with no key set goes straight to its own voice with no wait
+try{ setTimeout(()=>{ if (typeof bridge === "function") bridge("/voice/speak").then(r => { CoachVoice.on = !!(r && r.on); }).catch(()=>{}); }, 1500); }catch{}
 function speak(t){
+  __lastSpoken = t;
+  try{ speechSynthesis.cancel(); }catch{}
+  CoachVoice.say(t).catch(()=> speakPhone(t));
+}
+function speakPhone(t){
   try{
     const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
     __lastSpoken = t;
@@ -273,7 +302,7 @@ function wireCoach(persona){
     text = text.trim(); if (!text) return;
     if (__ttsSpeaking){
       if (wordOverlap(text, __lastSpoken) > 0.5) return; // mic hearing the coach — ignore
-      speechSynthesis.cancel(); __ttsSpeaking = false;   // real barge-in
+      speechSynthesis.cancel(); CoachVoice.stop(); __ttsSpeaking = false;   // real barge-in
     }
     ask(text);
   };
@@ -296,7 +325,7 @@ function wireCoach(persona){
     } else {
       btn.textContent = "Start conversation"; btn.classList.remove("listening");
       if (rec){ rec.onend = null; try{ rec.stop(); }catch(e){} rec = null; }
-      speechSynthesis.cancel(); __ttsSpeaking = false;
+      speechSynthesis.cancel(); CoachVoice.stop(); __ttsSpeaking = false;
     }
   };
 }

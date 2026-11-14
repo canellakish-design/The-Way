@@ -8,7 +8,7 @@
    hands every utterance here, so any spoken reply moves the face when it is open). */
 (function(){
   const NS = "http://www.w3.org/2000/svg";
-  let sheet = null, talking = false, open = 0, target = 0, raf = 0, lastWord = 0;
+  let sheet = null, talking = false, own = false, open = 0, target = 0, raf = 0, lastWord = 0;
 
   function svg(){
     return `<svg viewBox="0 0 300 380" class="facesvg" role="img" aria-label="Your coach">
@@ -82,8 +82,14 @@
   function frame(t){
     if (!sheet || sheet.hidden) { raf = 0; return; }
     // a word opens the mouth; between words it settles; with no word events, a steady chatter while speaking
-    if (talking && t - lastWord > 260) target = 0.25 + 0.6 * Math.abs(Math.sin(t / 95)) * (0.6 + 0.4 * Math.sin(t / 37));
-    if (!talking) target = 0;
+    // the coach's own voice (app.js CoachVoice): the mouth follows the loudness of the sound itself
+    const lvl = window.CoachVoice ? CoachVoice.level() : null;
+    if (lvl != null) { talking = true; own = true; target = Math.min(1, lvl * 1.6); }
+    else {
+      if (own) { own = false; talking = false; }
+      if (talking && t - lastWord > 260) target = 0.25 + 0.6 * Math.abs(Math.sin(t / 95)) * (0.6 + 0.4 * Math.sin(t / 37));
+      if (!talking) target = 0;
+    }
     open += (target - open) * 0.35;
     const m = sheet.querySelector(".fmouth"); if (m) m.setAttribute("d", mouthPath(Math.max(0, Math.min(1, open))));
     const ring = sheet.querySelector(".fring"); if (ring) { ring.setAttribute("opacity", talking ? (0.6 + 0.3 * Math.sin(t / 180)).toFixed(2) : "0.4"); ring.setAttribute("transform", `rotate(${(t / 60) % 360} 150 150)`); }
@@ -115,7 +121,7 @@
     sheet.querySelector(".facex").onclick = close;
     sheet.querySelector(".facewrap").onclick = () => briefing();
     document.getElementById("faceBrief").onclick = () => briefing();
-    document.getElementById("faceStop").onclick = () => { try { speechSynthesis.cancel(); } catch (e) {} talking = false; };
+    document.getElementById("faceStop").onclick = () => { try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; };
     sheet.addEventListener("click", e => { if (e.target === sheet) close(); });
     return sheet;
   }
@@ -128,7 +134,7 @@
     step();
   }
   function openFace(){ const s = build(); s.hidden = false; if (!raf) raf = requestAnimationFrame(frame); setTimeout(blink, 1200); tickClock(); }
-  function close(){ if (sheet) sheet.hidden = true; try { speechSynthesis.cancel(); } catch (e) {} talking = false; }
+  function close(){ if (sheet) sheet.hidden = true; try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; }
   // every utterance app.js speaks comes here: the face moves with it while it is open
   function speaking(u){
     if (!u) return;
