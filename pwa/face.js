@@ -73,6 +73,7 @@
       <text x="22" y="30" class="fhud">COACH // <tspan class="fstate">STANDBY</tspan></text>
       <text x="278" y="30" class="fhud fclock" text-anchor="end">--:--</text>
       <text x="22" y="44" class="fhud" opacity=".6">GOAL · MASTERS ELITE</text>
+      <text x="278" y="44" class="fhud fvoice" text-anchor="end" opacity=".6"></text>
       <!-- the voice: a waveform that moves with the words -->
       <g class="fwave" transform="translate(150 290)">${Array.from({ length: 21 }, (_, i) => `<rect x="${(i - 10) * 6 - 1.5}" y="-1" width="3" height="2" rx="1" fill="#5fd3ff" filter="url(#fGlow)"/>`).join("")}</g>
       <rect width="300" height="380" fill="url(#fScan)" pointer-events="none"/>
@@ -104,6 +105,8 @@
       b.setAttribute("y", (-amp / 2).toFixed(1)); b.setAttribute("height", amp.toFixed(1)); });
     const scan = sheet.querySelector(".fscan"); if (scan) scan.setAttribute("y", (40 + ((t / 12) % 240)).toFixed(0));
     const st = sheet.querySelector(".fstate"); if (st) st.textContent = talking ? "SPEAKING" : "ONLINE";
+    // which voice spoke last: the coach's own, or the phone's (and why), so a silent phone can be told from a missing key
+    const vv = sheet.querySelector(".fvoice"); if (vv && window.CoachVoice && CoachVoice.last) vv.textContent = "VOICE · " + String(CoachVoice.last).toUpperCase();
     raf = requestAnimationFrame(frame);
   }
   // the face is on screen: mounted on the Coach page, and that page is the one showing
