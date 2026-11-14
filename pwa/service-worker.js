@@ -1,14 +1,23 @@
 // The Way — service worker v44. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v264";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v266";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const COACH = "the-way-coach-v1";   // the 3D coach's files: kept across shell updates
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
   e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== SHELL).map(k => caches.delete(k)))
+    Promise.all(keys.filter(k => k !== SHELL && k !== COACH).map(k => caches.delete(k)))
   ).then(() => self.clients.claim()));
 });
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
+  // the 3D coach's engine and figure (2.6 MB): fetched once, then served from the phone, so he is there at once.
+  // Their ?v= names the version; a new one is a new address and is fetched afresh.
+  if (e.request.method === "GET" && u.origin === self.location.origin && (u.pathname === "/coach3d.js" || u.pathname === "/avatar/coach.glb")) {
+    e.respondWith(caches.open(COACH).then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => {
+      if (r.ok && r.status === 200 && !(r.headers.get("content-type") || "").includes("html")) c.put(e.request, r.clone());
+      return r; }))));
+    return;
+  }
   const shellPaths = ["/", "/index.html", "/splash.js", "/ptr.js", "/app.js", "/plan.js", "/food.js", "/links.js", "/coach.js", "/ride.js", "/flags.js", "/voice.js", "/face.js", "/fit.js", "/buckets.js", "/light.js", "/edge.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
   if (shellPaths.includes(u.pathname)) {
     e.respondWith(fetch(e.request).then(r => {

@@ -135,7 +135,7 @@
   // Loaded once, the first time the Coach page is opened; its canvas lives in one holder that is moved into the
   // stage each time the page is drawn, so he is not loaded again. is3d: he is on screen (the drawing is hidden).
   const C3D_V = "1";
-  let holder = null, is3d = false, asked3d = false, closeUp = false;
+  let holder = null, is3d = false, asked3d = false, closeUp = false, loading3d = false;
   const voiceState = () => {
     const v = window.CoachVoice, own3 = !!(v && v.playing && v.el);
     if (own3) { const d = v.el.duration; return { playing: true, t: v.el.currentTime, dur: d > 0 && isFinite(d) ? d : 0, env: v.env || null, level: v.level() }; }
@@ -147,21 +147,26 @@
     if (!holder || !host) return;
     const slot = host.querySelector("[data-3d]"); if (!slot) return;
     if (holder.parentNode !== slot) slot.appendChild(holder);
-    if (is3d) { host.classList.add("has3d"); window.Coach3D.pause(false); window.Coach3D.view(closeUp ? "upper" : "full"); }
+    if (is3d) { host.classList.remove("wait3d"); host.classList.add("has3d"); window.Coach3D.pause(false); window.Coach3D.view(closeUp ? "upper" : "full"); }
+    // while he loads the stage is empty with a quiet "loading" mark: the drawn figure is not shown first (Harry,
+    // 14 Nov 2026: "The old coach comes up first"). It appears only if 3D cannot be had, or takes over 20 seconds.
+    else if (loading3d) host.classList.add("wait3d");
   }
+  const fail3d = () => { loading3d = false; is3d = false; if (holder && holder.parentNode) holder.parentNode.removeChild(holder); holder = null; if (host) host.classList.remove("wait3d"); };
   function load3d(){
     if (asked3d) { place3d(); return; }
     asked3d = true;
     try { const c = document.createElement("canvas"); if (!(c.getContext("webgl2") || c.getContext("webgl"))) return; } catch (e) { return; }
-    holder = document.createElement("div"); holder.className = "c3dholder";
+    holder = document.createElement("div"); holder.className = "c3dholder"; loading3d = true;
     place3d();
+    setTimeout(() => { if (loading3d && !is3d && host) host.classList.remove("wait3d"); }, 20000);
     const go = () => { if (!window.Coach3D || !holder) return;
       window.Coach3D.mount(holder, { url: "avatar/coach.glb?v=" + C3D_V, state: voiceState })
-        .then(() => { is3d = true; place3d(); if (said && talking) window.Coach3D.say(said); if (!live()) window.Coach3D.pause(true); })
-        .catch(e => { console.warn("3D coach:", e && e.message || e); is3d = false; if (holder && holder.parentNode) holder.parentNode.removeChild(holder); holder = null; }); };
+        .then(() => { is3d = true; loading3d = false; place3d(); if (said && talking) window.Coach3D.say(said); if (!live()) window.Coach3D.pause(true); })
+        .catch(e => { console.warn("3D coach:", e && e.message || e); fail3d(); }); };
     if (window.Coach3D) go();
     else { window.addEventListener("coach3d-ready", go, { once: true });
-      const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = () => { holder = null; }; document.head.appendChild(sc); }
+      const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = fail3d; document.head.appendChild(sc); }
   }
 
   // ---- how it moves ---------------------------------------------------------------------------------
@@ -316,6 +321,7 @@
     el.innerHTML = `<div class="stagehud tl"><span>COACH // <b class="fstate">STANDBY</b></span><span class="dim">GOAL · MASTERS ELITE</span></div>
       <div class="stagehud tr"><span class="fclock">--:--</span><span class="dim fvoice"></span></div>
       <div class="stage3d" data-3d></div>
+      <div class="stagewait" aria-hidden="true"><i></i><span>LOADING COACH</span></div>
       <div class="stagefig">${svg()}</div>
       <div class="stagecap" data-cap aria-live="polite"></div>
       <button class="stagestop" data-stop>Stop</button>
@@ -362,4 +368,7 @@
   window.Face = { open: openFace, close, briefing, speaking, mount, caption, stop };
   // the Coach page drew before this file loaded: put the coach in it now
   if (alive()) mount(document.getElementById("chFace"));
+  // on any other page: a few seconds after the app opens, his two files are fetched quietly (the service worker keeps
+  // them), so the first visit to the Coach page does not wait on them
+  else setTimeout(() => { try { fetch("coach3d.js?v=" + C3D_V).catch(() => {}); fetch("avatar/coach.glb?v=" + C3D_V).catch(() => {}); } catch (e) {} }, 6000);
 })();
