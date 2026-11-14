@@ -272,6 +272,8 @@ async function answer(date, ans) {
       name: `${sg.route.type === 'mtb' ? 'MTB' : 'Road'}: ${sg.route.name} · ${sg.ride_minutes} min`,
       notes: `Recommended ride based on your route: ${sg.why}. ${sg.route.detail}. ${sg.route.fit_note || ''}${sg.loop && sg.loop.km ? ` About ${sg.loop.km} km.` : ''}${sg.loop && sg.loop.maps ? ` The loop: ${sg.loop.maps}` : ` ${sg.route.url}`}\n\n${String(w.notes || '').slice(0, 1200)}` });
   }
+  // the drives follow at once: from the game to the start, home after the ride (commute.js)
+  if (ans === 'yes') await require('./commute').refresh(date).catch(() => null);
   sg.status = ans === 'yes' ? 'yes' : 'no'; sg.answered = new Date().toISOString();
   await setJSON(k, sg);
   return sg;

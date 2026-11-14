@@ -17,7 +17,9 @@ export default async () => {
     const pack = await require('../../bridge/pack.js').nightPack().catch(e => ({ error: e.message }));
     // every half hour: today's and tomorrow's recommended ride, worked out and kept (bridge/suggest.js)
     const suggest = await require('../../bridge/suggest.js').tick().catch(e => ({ error: e.message }));
-    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend, pack, suggest })), { headers: { 'Content-Type': 'application/json' } });
+    // nothing stays on top of anything: a workout over something fixed is moved to the nearest free time (bridge/dayplan.js)
+    const moved = /^(1|true|yes)$/i.test(String(process.env.THE_WAY_SANDBOX || '')) ? { skipped: 'sandbox' } : await require('../../bridge/dayplan.js').autoMove().catch(e => ({ error: e.message }));
+    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend, pack, suggest, moved })), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }

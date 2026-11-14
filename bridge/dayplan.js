@@ -140,4 +140,45 @@ function markClashes(rows, win) {
   return rows;
 }
 
-module.exports = { CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
+// Nothing stays on top of anything (Harry, 14 Nov 2026: "Whenever any event is 'on top' of another event you have to
+// move stuff around. Fix for this and all future days."). A workout that overlaps something fixed, or sits too tight
+// against it, is moved by The Way itself to the nearest free time that fits (the same fix the Day page used to offer
+// as a button), today's not-yet-started ones and every day ahead. One workout a day per pass; the next pass (the
+// five-minute run, or the Day page when it sees a mark) takes the next. A ride with a place of its own (a recommended
+// ride he said yes to) is left alone: its drives are fitted around it. Two fixed things over each other cannot be
+// moved: they keep their mark.
+// days: scheduleReport's days; workouts: the plan store's map; → [{ id, date, from, to, why }]
+function movesFor(days, today, nowMin, workouts) {
+  const out = [];
+  for (const day of days || []) {
+    if (day.date < today) continue;
+    const soon = m => day.date === today && m <= nowMin + 10;
+    for (const e of day.events || []) {
+      if (!e.clash || e.clash.fix_min == null || e.category !== 'training' || !e.workout_id) continue;
+      if (soon(e.start_min) || soon(e.clash.fix_min)) continue;            // started, or the fix is already past
+      const w = (workouts || {})[e.workout_id]; if (!w || w.location) continue;
+      const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+      out.push({ id: w.id, date: day.date, name: w.name, from: w.time, to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
+      break;
+    }
+  }
+  return out;
+}
+async function autoMove(now) {
+  const { getJSON } = require('./storage');
+  const s = await require('./calendar').scheduleReport({ days: 8 });
+  const p = tz.parts(now || new Date());
+  const d = await getJSON('plan-workouts', { workouts: {} });
+  const moves = movesFor(s.days, tz.todayKey(), p.h * 60 + p.mi, d.workouts), done = [];
+  for (const mv of moves) {
+    try { await require('./workouts').update(mv.id, { time: mv.to, auto_moved: { from: mv.from, why: String(mv.why || '').slice(0, 80), tight: mv.tight, at: new Date().toISOString() } }); done.push(mv); }
+    catch (e) { done.push(Object.assign({ error: e.message }, mv)); }
+  }
+  return { moved: done };
+}
+function attach(app) {
+  const { auth } = require('./fuel-log');
+  app.post('/dayplan/resolve', async (req, res) => { if (!auth(req, res)) return; try { res.json(await autoMove()); } catch (e) { res.status(500).json({ error: e.message }); } });
+}
+
+module.exports = { attach, movesFor, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };

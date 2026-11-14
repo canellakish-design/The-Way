@@ -119,5 +119,18 @@ ok('the meal before a session stays before it: moved earlier when the ride moves
   const lunch = tight.find(x => x.slot === 'lunch');
   assert.strictEqual(lunch.kcal, 920); assert.ok(/also the fuel for Pull/.test(lunch.what), lunch.what);
 });
+ok('nothing stays on top of anything: a workout over something fixed is moved to its fix, one a day; started ones, rides with a place and past days are left', () => {
+  const day = (date, events) => ({ date, events });
+  const ride = (id, s, fix, o) => Object.assign({ category: 'training', workout_id: id, start_min: s, end_min: s + 60, summary: id, clash: fix === undefined ? null : { with: 'Drive home · 62 min', fix_min: fix } }, o || {});
+  const W = { a: { id: 'a', name: 'Z1 60', time: '14:20' }, b: { id: 'b', name: 'Blast', time: '15:00' }, c: { id: 'c', name: 'MTB', time: '14:20', location: 'Schaeffer Farms, Germantown' }, d: { id: 'd', name: 'Z1', time: '09:00' }, e: { id: 'e', name: 'Z1', time: '16:00' } };
+  const days = [day('2026-11-13', [ride('e', m(16), m(17))]),                                       // yesterday: left
+    day('2026-11-14', [ride('d', m(9), m(10)), ride('a', m(14, 20), m(15, 17)), ride('b', m(15), m(16, 30))]),   // today at 10:30: d has started
+    day('2026-11-15', [ride('c', m(14, 20), m(15, 17))]),                                           // a ride with a place: left
+    day('2026-11-16', [ride('e', m(16), m(17, 5), { clash: { with: 'Practice', fix_min: m(17, 5), tight: true } })])];
+  const mv = D.movesFor(days, '2026-11-14', m(10, 30), W);
+  assert.deepStrictEqual(mv.map(x => [x.id, x.date, x.from, x.to]), [['a', '2026-11-14', '14:20', '15:17'], ['e', '2026-11-16', '16:00', '17:05']]);
+  assert.strictEqual(mv[1].tight, true);
+  assert.strictEqual(D.movesFor([day('2026-11-14', [ride('a', m(14, 20), null)])], '2026-11-14', m(10), W).length, 0, 'two fixed things, no fix: nothing to move');
+});
 console.log(n + ' passed');
 
