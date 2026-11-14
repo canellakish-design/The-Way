@@ -156,6 +156,13 @@ ok('nothing stays on top of anything: a workout over something fixed is moved to
   const idp = Object.assign({}, own, { summary: 'IDP Meetings | U13 ECNL (Darrell)' }), guests = Object.assign({}, own, { with_others: true });
   assert.strictEqual(D.movesFor([day('2026-11-15', [idp]), day('2026-11-16', [guests])], '2026-11-14', m(10), W).length, 0);
   assert.strictEqual(D.solo({ summary: 'Cycle 3 Planning' }), true); assert.strictEqual(D.solo({ summary: 'Hudl Training | Wyscout' }), false);
+  // a game, or anything at a place, is never moved (the U18 game he added at the SoccerPlex went to 8:45p, 14 Nov 2026)
+  const game = Object.assign({}, own, { summary: 'Bethesda Premier Cup: U18 ECNL vs Pittsburgh Riverhounds', location: 'Maryland SoccerPlex, 18031 Central Park Cir, Boyds, MD 20841' });
+  const placed = Object.assign({}, own, { location: 'Somewhere, 1 Main St' }), named = Object.assign({}, own, { summary: 'U18 game' });
+  assert.strictEqual(D.movesFor([day('2026-11-15', [game]), day('2026-11-16', [placed]), day('2026-11-17', [named])], '2026-11-14', m(10), W).length, 0);
+  const C = require('./calendar');
+  assert.strictEqual(C.classify('Bethesda Premier Cup: U18 ECNL vs Pittsburgh Riverhounds', null, null), 'coaching');
+  assert.strictEqual(C.classify('U17 vs Baltimore Celtic', null, null), 'coaching'); assert.strictEqual(C.classify('Cycle 3 Planning', null, null), 'busy');
 });
 console.log(n + ' passed');
 
