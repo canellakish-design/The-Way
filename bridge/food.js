@@ -729,7 +729,7 @@ function nextUp(g, entries, actual, macroNow, nowHM) {
   const late = F.toMin(nx.time) < F.toMin(nowHM) - 5;
   return { slot: nx.slot, time: nx.time, name: `${nx.slot}${nx.time ? ' at ' + tz.hm12(nx.time) : ''}`, what: nx.what,
     kcal: nx.kcal || 0, carbs_g: nx.carbs_g || 0, protein_g: nx.protein_g || 0, fat_g: fat, low_carb: !!nx.low_carb, late,
-    why: nx.rolled_from ? `next on the plan, lighter: the ${nx.rolled_from.slot === 'after' ? 'post-ride meal' : nx.rolled_from.slot} ran over` : late ? 'its time has come' : 'next on the plan',
+    why: nx.rolled_from ? `next on the plan, lighter: the ${nx.rolled_from.slot === 'after' ? 'post-workout meal' : nx.rolled_from.slot === 'before' ? 'pre-workout snack' : nx.rolled_from.slot} ran over` : late ? 'its time has come' : 'next on the plan',
     score_before: before, score_after: scoredAfter ? scoredAfter.overall : null,
     snap: nx.slot === 'before' || nx.slot === 'after' || nx.slot === 'on the bike' ? 'snack' : nx.slot };
 }

@@ -51,7 +51,7 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
     await p.goto(base + '/#today', { waitUntil: 'load' }); await p.waitForTimeout(9000);
     for (const step of ['today', 'tomorrow', 'the day after']) {
       const titles = await p.$$eval('#dayList li.xrow .n', xs => xs.map(x => x.innerText.split('\n')[0].toLowerCase()));
-      const n = titles.filter(t => /^(breakfast|lunch|dinner|after|before|snack)\b/.test(t)).length;
+      const n = titles.filter(t => /^(breakfast|lunch|dinner|after|before|snack|pre-workout snack|post-workout meal)\b/.test(t)).length;
       if (n < 2) fail(`the Day page shows ${n} meals on ${step}`);
       notes.push(`page, ${step}: ${titles.length} rows, ${n} meals`);
       // only real blocks show a start and an end, and no two of them overlap on the page without a mark

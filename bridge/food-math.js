@@ -898,7 +898,7 @@ function rollForward(meals, entries) {
     const sum = k => got.reduce((x, e) => x + (e[k] || 0), 0);
     const over = { kcal: Math.max(0, sum('kcal') - (a.kcal || 0)), carbs_g: Math.max(0, sum('carbs_g') - (a.carbs_g || 0)), protein_g: Math.max(0, sum('protein_g') - (a.protein_g || 0)) };
     if (over.kcal < 60 && over.carbs_g < 10 && over.protein_g < 10) continue;
-    const aName = a.slot === 'after' ? 'post-ride meal' : a.slot === 'before' ? 'pre-ride snack' : a.slot;
+    const aName = a.slot === 'after' ? 'post-workout meal' : a.slot === 'before' ? 'pre-workout snack' : a.slot;
     a.rolled_out = { to: b.slot, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g };
     // a slot that already holds food keeps the plan it was eaten under: only open slots are reshaped
     if (b.frozen) continue;
