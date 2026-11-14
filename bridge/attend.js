@@ -20,6 +20,7 @@ const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
 
 const GO_DEFAULT = [/^\s*personal events\s*$/i, /mcdonogh class schedule/i, /^u16 g maryland united ecnl$/i, /technical staff/i, /^hcanellakis@mcdonogh\.org$/i, /^cycling$/i];
+const CLASS = (() => { try { return new RegExp(require('./classes').TABLE.rest_day.match, 'i'); } catch (e) { return /\(Sec\. /; } })();
 const MAYBE = /\b(possible|tbd|tentative|maybe|if we qualify)\b/i;
 
 async function load() { return Object.assign({ calendars: {}, events: {}, series: {} }, await getJSON('attend', {}).catch(() => ({})) || {}); }
@@ -43,6 +44,10 @@ function modeOf(e, A) {
   if (k && A.events && A.events[k]) return { mode: A.events[k], by: 'event' };
   if (A.series && A.series[s]) return { mode: A.series[s], by: 'series' };
   const c = calendarMode(e.calendar, A);
+  // Marked Free in Google ("Show as: Free"): it does not take his time (Harry, 14 Nov 2026: "Yes, Free means not
+  // going"; the IDP meeting blocks he sets up for the coaches). A timed event only: all-day ones are Free by Google's
+  // default. Never a class. His own answer for the event or the series (above) still wins.
+  if (c === 'go' && e.free && !e.allDay && !CLASS.test(String(e.summary || ''))) return { mode: 'info', by: 'free' };
   if (c === 'go' && MAYBE.test(String(e.summary || ''))) return { mode: 'maybe', by: 'title' };
   return { mode: c, by: 'calendar' };
 }
