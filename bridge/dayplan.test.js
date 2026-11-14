@@ -29,7 +29,7 @@ ok('his own block over the drive and the game: marked, with the nearest free hou
   // the ride starts two minutes after the drive home ends: too tight to change, moved to 15 minutes after it
   const ride = rows.find(r => r.workout_id === 'w2');
   assert.ok(ride.clash && ride.clash.tight && ride.clash.need === 15 && ride.clash.side === 'after', JSON.stringify(ride.clash));
-  assert.strictEqual(ride.clash.fix_min, m(16, 28));
+  assert.strictEqual(ride.clash.fix_min, m(16, 38), '25 minutes after the drive: the changeover and ten of slack for the traffic');
 });
 ok('a ride over a concert moves, and two fixed things both get the mark with no fix', () => {
   const sat = [row('Pull and calves', 'training', m(17, 15), m(18, 10)), row('Z1 60 min · Life Time bike', 'training', m(18, 15), m(19, 15), { workout_id: 'w3' }),

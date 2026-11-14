@@ -61,8 +61,13 @@ const RULES = [
   ['travel',   /\b(flight|travel|trip|airport|hotel)\b/i],
   ['flexible', /\b(flexible|maybe|hold|tentative)\b/i],
 ];
+// His classes are school time whatever calendar they sit on (Harry, 14 Nov: they live on his personal calendar and
+// read as his own blocks; a class is fixed, never moved, and nothing is planned inside it): the timetable's pattern
+// (schedule-classes.json rest_day.match, "World History").
+const CLASS_RE = (() => { try { const m = require('./classes').TABLE.rest_day.match; return m ? new RegExp(m, 'i') : null; } catch (e) { return null; } })();
 function classify(summary, manual, calDefault) {
   if (manual && manual[summary]) return manual[summary];
+  if (CLASS_RE && CLASS_RE.test(String(summary || ''))) return 'work';
   // A dedicated calendar is stronger evidence than a title regex: everything
   // on "16 ECNL" is coaching, whatever the event happens to be called.
   if (calDefault) return calDefault;
