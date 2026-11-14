@@ -1048,3 +1048,10 @@ body:has(#chFace) #micBtn{display:none}
 .chface.stage.wait3d .stagewait i{width:34px; height:34px; border-radius:50%; border:2px solid rgba(95,211,255,.2); border-top-color:#5fd3ff; animation:ptrspin .8s linear infinite}
 @keyframes ptrspin{to{transform:rotate(360deg)}}
 .chface.stage.wait3d .stagebrief{opacity:0; pointer-events:none}
+
+/* a photo for the coach (coach.js, voice.js) */
+.ch-type .ch-photo{flex:0 0 auto; min-width:48px; padding:0 12px; display:flex; align-items:center; justify-content:center; margin:0}
+.ch-pick{display:flex; align-items:center; gap:10px; padding:6px 8px; border:1px solid var(--line)} .ch-pick[hidden]{display:none}
+.ch-pick img{width:44px; height:44px; object-fit:cover; display:block; border:1px solid var(--line)}
+.ch-pick .small{flex:1; min-width:0} .ch-pick .linkish{font-size:12px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:0; font-weight:400; text-decoration:underline; margin:0}
+.vmsg .vphoto{display:block; max-width:160px; max-height:160px; margin:0 0 6px; border:1px solid var(--line)}
