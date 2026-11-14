@@ -8,4 +8,9 @@ ok('what is read aloud: no markdown or links, times and units as a person says t
   assert.strictEqual(T.clean('x'.repeat(5000)).length, T.MAX);
   assert.strictEqual(T.clean(''), '');
 });
+ok('the accent: English unless COACH_ACCENT says otherwise; "none" leaves the voice as it comes', () => {
+  delete process.env.COACH_ACCENT; assert.ok(/British English/.test(T.style()), T.style());
+  process.env.COACH_ACCENT = 'Scottish'; assert.ok(/Accent: Scottish/.test(T.style()));
+  process.env.COACH_ACCENT = 'none'; assert.ok(!/Accent/.test(T.style())); delete process.env.COACH_ACCENT;
+});
 console.log(n + ' passed');
