@@ -93,7 +93,7 @@ async function context() {
     else lines.push('No training today: no ride, no run, no lift. Do not name one.');
     // naps (naps.js): the one offered today after a short night, or the one he took
     { const todayEv2 = ((sched && sched.days) || []).find(d => d.date === today), naps = todayEv2 ? (todayEv2.events || []).filter(e => e.kind === 'nap') : [];
-      if (naps.some(e => e.taken)) lines.push('NAP today, logged: ' + naps.filter(e => e.taken).map(e => `${e.minutes} min at ${e.from}`).join(', ') + '. A nap counts at half its length toward today\'s sleep (45 minutes at most): an hour at night is worth more than an hour napped.');
+      if (naps.some(e => e.taken)) lines.push('NAP today, logged: ' + naps.filter(e => e.taken).map(e => `${e.minutes} min at ${e.from}`).join(', ') + '. A nap counts toward today\'s sleep: its first 30 minutes in full, half of the rest, 45 minutes at most.');
       else if (naps.length) lines.push(`NAP: ${naps[0].detail.split(':')[0]}, short of 7. A 25 minute nap fits at ${naps[0].from}, at home; it must end by 3 p.m. Offer it when he asks about energy, sleep or the afternoon; he logs it himself by saying "I napped 25 minutes".`); }
     if (day.cue) lines.push('Where the day stands: ' + day.cue.text);
     if (day.guidelines && day.guidelines.length) lines.push("Today's eating rules: " + day.guidelines.map(g => g.text).join(' ').slice(0, 400));
@@ -179,7 +179,7 @@ Action types:
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - note: anything about how he feels or slept, text = his words.
-- nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep at half its length. A plan to nap later, or a question about napping, is a question, never a nap.
+- nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep (30 minutes in full, half of the rest, 45 at most). A plan to nap later, or a question about napping, is a question, never a nap.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
 - A PHOTO may come with his words (it is the image at the top of this turn). Look at it first. In the reply say in a few words what you see, then what it means for him today and the one thing to do. What to do with it:
@@ -376,7 +376,7 @@ async function run(a, x) {
     }
     case 'nap': {
       let nap; try { nap = await require('./naps').add({ minutes: a.minutes, time: a.time || undefined, date: a.date || undefined }); } catch (e) { return { ok: false, summary: e.message }; }
-      return { ok: true, summary: `Nap logged: ${nap.minutes} min at ${tz.hm12(nap.time)}. It counts as ${require('./naps').creditOf(nap.minutes)} min toward today's sleep (a nap is worth half).` };
+      return { ok: true, summary: `Nap logged: ${nap.minutes} min at ${tz.hm12(nap.time)}. It counts as ${require('./naps').creditOf(nap.minutes)} min toward today's sleep.` };
     }
     case 'wellness': {
       const W = require('./wellness');

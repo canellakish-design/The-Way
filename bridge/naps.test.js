@@ -27,15 +27,19 @@ ok('not at school, not inside anything, and not in the 20 minutes before a worko
   assert.strictEqual(N.slotFor(busy, { lastNightH: 5.9 }), null, '2:10 to 2:40 would end inside the 20 minutes before the ride');
   const busy2 = [ev('Cycle 3 Planning', 'busy', m(13), m(13, 40)), ev('Z1 trainer', 'training', m(14, 55), m(16))];
   assert.strictEqual(N.slotFor(busy2, { lastNightH: 5.9 }).start, m(13, 40));
+  // before a hard session the nap ends an hour ahead: with VO2 at 3:00p it must be over by 2:00p
+  assert.strictEqual(N.slotFor([ev('VO2 40/20s', 'training', m(15), m(15, 51))], { lastNightH: 5.9, nowMin: m(13, 20) }).start, m(13, 25));
+  assert.strictEqual(N.slotFor([ev('VO2 40/20s', 'training', m(15), m(15, 51))], { lastNightH: 5.9, nowMin: m(13, 30) }), null, 'no half hour left that ends by 2:00p');
+  assert.strictEqual(N.slotFor([ev('Z1 trainer 60 min', 'training', m(15), m(16))], { lastNightH: 5.9, nowMin: m(13, 30) }).start, m(13, 35), 'an easy ride needs only 20 minutes');
 });
-ok('a nap counts toward the day at half its length (45 minutes at most), the night kept apart; the row shows the nap taken', () => {
+ok('a nap counts toward the day (30 minutes in full, half of the rest, 45 at most), the night kept apart; the row shows the nap taken', () => {
   const nights = [{ date: '2026-11-13', hours: 7.2, counted: true }, { date: '2026-11-14', hours: 6.4, counted: true }];
   const by = N.totals([{ date: '2026-11-14', minutes: 25 }, { date: '2026-11-14', minutes: 20 }, { date: '2026-11-10', minutes: 30 }]);
   const w = N.withNaps(nights, by);
   assert.strictEqual(w[0].hours, 7.2); assert.ok(!w[0].nap_min);
-  // 45 minutes napped counts as 23: a nap is worth half
-  assert.strictEqual(w[1].hours, 6.78); assert.strictEqual(w[1].night_hours, 6.4); assert.strictEqual(w[1].nap_min, 45); assert.strictEqual(w[1].nap_credit_min, 23);
-  assert.strictEqual(N.creditOf(60), 30); assert.strictEqual(N.creditOf(25), 13); assert.strictEqual(N.creditOf(120), 45, 'never more than 45 minutes of credit');
+  // 45 minutes napped counts as 38: the first 30 in full, half of the other 15
+  assert.strictEqual(w[1].hours, 7.03); assert.strictEqual(w[1].night_hours, 6.4); assert.strictEqual(w[1].nap_min, 45); assert.strictEqual(w[1].nap_credit_min, 38);
+  assert.strictEqual(N.creditOf(25), 25, 'a short nap counts in full'); assert.strictEqual(N.creditOf(60), 45); assert.strictEqual(N.creditOf(120), 45, 'never more than 45 minutes of credit');
   const rows = N.rowsFor('2026-11-14', [], [{ id: 'n_1', date: '2026-11-14', time: '13:40', minutes: 25 }], { lastNightH: 6.4 });
   assert.strictEqual(rows.length, 1); assert.strictEqual(rows[0].taken, true); assert.strictEqual(rows[0].start_min, m(13, 40)); assert.strictEqual(rows[0].rx_key, 'nap');
   const offer = N.rowsFor('2026-11-14', [], [], { lastNightH: 6.4 });

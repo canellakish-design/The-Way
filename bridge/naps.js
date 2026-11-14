@@ -2,14 +2,18 @@
 // naps.js — naps (Harry, 14 Nov 2026: "Can naps improve my sleep score?" … "Yes build in Naps when appropriate and
 // I'll enter them manually on the way").
 // He enters a nap himself: on the Sleep page, by the Log button on the Day page's nap row, or by telling the coach
-// ("I napped 25 minutes"). A nap counts toward that day's sleep at half its length, 45 minutes of credit a day at most
+// ("I napped 25 minutes"). A nap counts toward that day's sleep: its first 30 minutes in full, half of the rest, 45 minutes a day at most
 // (Harry, 14 Nov 2026: "should it count as the equivalent of 1 hour of sleep? I feel like 1 hour sleep is more
 // valuable than 1 hour nap"): the night has the long unbroken cycles of deep and REM sleep a nap mostly does not
-// reach, and a nap does not make up a short night in full. No study gives a conversion; half is a cautious rule.
+// reach, and a nap does not make up a short night in full. After the research (14 Nov 2026, "Both"): alertness follows
+// total sleep in 24 hours however it is split (Mollicone & Dinges 2008), so the short nap the trials support counts in
+// full; past 30 minutes a nap is worth less (little REM, less deep sleep the next night, and naps of an hour or more
+// are the ones linked to worse health), so the rest counts half and nothing past 45 minutes of credit.
 // Shown apart ("6.4 h + a 60 min nap, counted as 30") and counted in the week's average (chain.js).
 // When one is appropriate, the Day page offers it: after a night under 7 hours, a 25-minute nap in the first free
 // half hour between 1 and 3 p.m. when he is at home (not at school or at a field, not inside a class, a drive, a
-// game, his own block or a workout, and not in the 20 minutes before a workout). Never after 3 p.m.: a late or long
+// game, his own block or a workout, not in the 20 minutes before a workout, and ended an hour before a hard one: the
+// trials find the lift from a nap comes more than an hour after waking). Never after 3 p.m.: a late or long
 // nap takes from the night. The research behind the lengths and the hours: BJSM 2023 meta-analysis of napping
 // (30 to 60 minutes helps performance and fatigue; a nap does not make up a short night in full), Lastella 2021
 // (20 to 90 minutes between 1 and 4 p.m.).
@@ -24,8 +28,9 @@ const KEY = 'naps';
 const NEED_H = 7;                            // a good night (chain.js): under this, a nap is offered
 const FROM = 13 * 60, UNTIL = 15 * 60;       // the nap ends by 3 p.m.
 const LEN = 25, SLOT = 30;                   // 25 minutes asleep, half an hour set aside
-const CREDIT = 0.5, CREDIT_MAX = 45;         // what a nap is worth toward the day's sleep: half, 45 minutes at most
-const creditOf = min => Math.min(CREDIT_MAX, Math.round((min || 0) * CREDIT));
+const FULL = 30, CREDIT = 0.5, CREDIT_MAX = 45;   // what a nap is worth toward the day's sleep: 30 minutes in full, half of the rest, 45 at most
+const creditOf = min => { const m = Math.max(0, min || 0); return Math.min(CREDIT_MAX, Math.round(Math.min(m, FULL) + Math.max(0, m - FULL) * CREDIT)); };
+const HARD = /vo2|40\s*\/\s*20|30\s*\/\s*15|threshold|race|interval|sweet\s*spot|\bftp\b|sprint/i;   // a hard session: the nap ends an hour before it
 const hmOf = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 
 async function all() { const d = await getJSON(KEY, { naps: [] }); d.naps = Array.isArray(d.naps) ? d.naps : []; return d; }
@@ -60,7 +65,7 @@ function slotFor(events, o) {
   if (h == null || !(h > 0) || h >= NEED_H) return null;
   const ev = (events || []).filter(e => e && !e.allDay && e.start_min != null && e.end_min > e.start_min);
   const blocks = ev.filter(e => ['work', 'coaching', 'commute', 'travel', 'family', 'busy', 'training'].includes(e.category))
-    .map(e => ({ start: e.start_min - (e.category === 'training' ? 20 : 0), end: e.end_min, coaching: e.category === 'coaching' }));
+    .map(e => ({ start: e.start_min - (e.category === 'training' ? (HARD.test(String(e.summary || '')) ? 60 : 20) : 0), end: e.end_min, coaching: e.category === 'coaching' }));
   const drives = ev.filter(e => e.category === 'commute').sort((a, b) => a.end_min - b.end_min);
   // at home: the last drive before then came home (or there has been none)
   const home = t => { const last = drives.filter(d => d.end_min <= t).pop(); return !last || /^drive home/i.test(String(last.summary || '')); };
@@ -77,7 +82,7 @@ function rowsFor(date, events, naps, o) {
   const fmt = require('./workouts').fmtMin;
   const mine = (naps || []).filter(n => n.date === date);
   if (mine.length) return mine.map(n => { const sm = (+n.time.slice(0, 2)) * 60 + (+n.time.slice(3, 5));
-    return Object.assign({ summary: `Nap · ${n.minutes} min`, detail: `counts as ${creditOf(mine.reduce((a, x) => a + x.minutes, 0))} min toward today's sleep (a nap is worth half)`, minutes: n.minutes, start_min: sm, end_min: sm + n.minutes, from: fmt(sm), to: fmt(sm + n.minutes), taken: true, nap_id: n.id }, base); });
+    return Object.assign({ summary: `Nap · ${n.minutes} min`, detail: `counts as ${creditOf(mine.reduce((a, x) => a + x.minutes, 0))} min toward today's sleep (the first 30 minutes in full, half of the rest)`, minutes: n.minutes, start_min: sm, end_min: sm + n.minutes, from: fmt(sm), to: fmt(sm + n.minutes), taken: true, nap_id: n.id }, base); });
   const s = slotFor(events, o);
   if (!s) return [];
   return [Object.assign({ summary: `Nap · ${s.minutes} min`, detail: `${s.why}: set an alarm for ${s.minutes} minutes. Not after 3 p.m.`, minutes: SLOT, start_min: s.start, end_min: s.end, from: fmt(s.start), to: fmt(s.end), taken: false }, base)];
@@ -98,4 +103,4 @@ function attach(app) {
   app.delete('/naps/:id', async (req, res) => { if (!auth(req, res)) return;
     try { res.json({ ok: await remove(String(req.params.id)) }); } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
 }
-module.exports = { attach, creditOf, CREDIT, CREDIT_MAX, all, add, remove, totals, minutesByDate, withNaps, slotFor, rowsFor, lastNight, NEED_H, FROM, UNTIL, LEN, SLOT };
+module.exports = { attach, creditOf, CREDIT, CREDIT_MAX, FULL, HARD, all, add, remove, totals, minutesByDate, withNaps, slotFor, rowsFor, lastNight, NEED_H, FROM, UNTIL, LEN, SLOT };
