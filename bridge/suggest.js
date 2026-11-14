@@ -29,11 +29,11 @@ const hmOf = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m %
 const isRide = w => w && /ride/i.test(String(w.sport || '')) && !/weight|lift|strength|kettlebell/i.test(String(w.name || ''));
 
 // ---- the routes near a place (kept a week per place) --------------------------------------------------------
-async function routesNear(p) {
+async function routesNear(p, o) {
   const key = `${p.lat.toFixed(2)},${p.lon.toFixed(2)}`;
   const cache = await getJSON('suggest-routes', {}).catch(() => ({})) || {};
-  if (cache[key] && Date.now() - Date.parse(cache[key].at) < 7 * 864e5) return cache[key].routes;
-  const routes = [];
+  if (!(o && o.fresh) && cache[key] && Date.now() - Date.parse(cache[key].at) < 7 * 864e5) return cache[key].routes;
+  const routes = [], errors = {};
   // the road: Strava's most popular segments in the box around the place; the climbs first
   try {
     const { apiFetch } = require('./strava');
@@ -46,7 +46,7 @@ async function routesNear(p) {
         detail: `${Math.round((sg.distance || 0) / 100) / 10} km${grade >= 2 ? ` at ${Math.round(grade * 10) / 10}%` : ''}${climb > 0 ? `, a Cat ${5 - climb > 0 ? 5 - climb : 'HC'} climb` : ''}: one of the most ridden segments here (Strava)`,
         url: `https://www.strava.com/segments/${sg.id}`, score: 10 + climb * 3 + Math.min(4, (sg.distance || 0) / 2000) });
     }
-  } catch (e) { /* no Strava: the dirt may still answer */ }
+  } catch (e) { errors.strava = e.message; /* no Strava: the dirt may still answer */ }
   // the dirt: mountain-bike trails and parks TomTom lists near it
   try {
     const k = String(process.env.TOMTOM_API_KEY || '').trim();
@@ -63,9 +63,10 @@ async function routesNear(p) {
           score: (kind === 'mtb' ? 12 : 10) - Math.min(6, (x.dist || 0) / 2000) });
       }
     }
-  } catch (e) { /* the road may still answer */ }
+  } catch (e) { errors.tomtom = e.message; /* the road may still answer */ }
   routes.sort((a, b) => b.score - a.score);
-  cache[key] = { at: new Date().toISOString(), routes: routes.slice(0, 8) };
+  cache[key] = { at: new Date().toISOString(), routes: routes.slice(0, 12), errors };
+  if (o && o.debug) o.debug.errors = errors;
   for (const k of Object.keys(cache)) if (Date.now() - Date.parse(cache[k].at) > 14 * 864e5) delete cache[k];
   await setJSON('suggest-routes', cache).catch(() => {});
   return cache[key].routes;
@@ -271,6 +272,10 @@ function attach(app) {
   const { auth } = require('./fuel-log');
   const wrap = fn => async (req, res) => { if (!auth(req, res)) return; try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } };
   app.get('/suggest/week', wrap(() => week()));
+  // what is known near a point, and what each source said (for looking into an empty suggestion)
+  app.get('/suggest/near', wrap(async req => { const dbg = {}; const lat = Number(req.query.lat), lon = Number(req.query.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) { const e = new Error('lat and lon'); e.status = 400; throw e; }
+    const routes = await routesNear({ lat, lon }, { fresh: true, debug: dbg }); return { routes, errors: dbg.errors || {} }; }));
   app.get('/suggest', wrap(req => get(/^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : tz.todayKey(), req.query.fresh === '1')));
   app.post('/suggest', wrap(req => { const b = req.body || {}; return answer(String(b.date || ''), String(b.answer || '')); }));
   // the loop as a GPX file: open it on the phone and share it to Garmin Connect, or import it on the computer
