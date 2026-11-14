@@ -79,6 +79,8 @@ function clean(body, prev, earliest) {
     // where the ride starts when it is not at home (suggest.js: a recommended ride near a game); the drives follow it
     location: b.location === null ? null : b.location != null ? String(b.location).slice(0, 200) : (p.location || null),
     suggested: b.suggested === null ? null : b.suggested && typeof b.suggested === 'object' ? b.suggested : (p.suggested || null),
+    // moved by The Way off something it was on top of (dayplan.js autoMove): from when, and off what; his own change of time clears it
+    auto_moved: b.auto_moved && typeof b.auto_moved === 'object' ? b.auto_moved : (isTime(b.time) && b.time !== p.time ? null : (p.auto_moved || null)),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
     course: b.course === null ? null : b.course && typeof b.course === 'object' ? {
       id: String(b.course.id || '').slice(0, 60) || null, name: String(b.course.name || '').slice(0, 80) || null,
@@ -588,7 +590,7 @@ async function plannedDays(from, to) {
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
-      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'),
+      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'), auto_moved: w.auto_moved || null,
       ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
     });
   }

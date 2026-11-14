@@ -266,6 +266,9 @@ async function refresh(date, events) {
   // today's drives are re-read every 20 minutes, the days ahead every 3 hours; a moved event at once (x.for)
   const ttl = date === tz.todayKey() ? 20 * 60e3 : 3 * 3600e3;
   const fresh = (x, from, when) => x && x.at && Date.now() - Date.parse(x.at) < ttl && (x.from || 'home') === (from || 'home') && (!when || x.for === when);
+  // twice: the first pass learns how far each place is, the second routes a trip from the place before it when
+  // there is no time to go home between them (a ride at the trailhead straight after a game)
+  for (let pass = 0; pass < 2; pass++)
   for (const t of chain(raw, store, s)) {
     const c = store[t.id] = store[t.id] || {};
     let p, o = home; try { p = await placeOf(t.dest); if (t.from) o = await placeOf(t.from_dest); } catch (e) { continue; }
