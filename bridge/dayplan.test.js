@@ -126,6 +126,13 @@ ok('a dawn ride that starts before his usual waking: the shake is half an hour a
   assert.strictEqual(r.find(x => x.slot === 'before').time, '05:30');
   assert.strictEqual(r.find(x => x.slot === 'breakfast').time, '07:00', 'breakfast straight after the ride, before the drive');
 });
+ok('the shake added before a hard session goes in free time: after class, before the drive home, not inside the drive', () => {
+  const vo2 = { start: m(11, 10), end: m(12, 1), name: 'VO2 40/20s', kind: 'hard' };
+  const busy = [{ start: m(7, 31), end: m(8, 15), name: 'Drive to McDonogh' }, { start: m(8, 30), end: m(9, 45), name: 'World History' }, { start: m(10), end: m(10, 44), name: 'Drive home' }, vo2];
+  const r = F.placeSnacks([{ slot: 'breakfast', time: '07:00', kcal: 770, what: 'Oats' }, { slot: 'lunch', time: '13:25', kcal: 910, protein_g: 45, carbs_g: 52, what: 'Lunch' }], { busy, sessions: [vo2], wake: 390, bed: 1350 });
+  const sh = r.find(x => x.gap_snack); assert.ok(sh, 'the shake is there');
+  const t = F.toMin(sh.time); assert.ok(!busy.some(b => t < b.end && t + 15 > b.start), sh.time); assert.ok(t < vo2.start);
+});
 ok('nothing stays on top of anything: a workout over something fixed is moved to its fix, one a day; started ones, rides with a place and past days are left', () => {
   const day = (date, events) => ({ date, events });
   const ride = (id, s, fix, o) => Object.assign({ category: 'training', workout_id: id, start_min: s, end_min: s + 60, summary: id, clash: fix === undefined ? null : { with: 'Drive home · 62 min', fix_min: fix } }, o || {});
