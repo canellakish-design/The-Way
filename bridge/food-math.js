@@ -351,8 +351,11 @@ function placeSnacks(meals, opts) {
   // B: nothing in the 4 hours before a lift or a hard ride
   for (const s of (o.sessions || []).filter(x => x.kind === 'lift' || x.kind === 'hard')) {
     const fed = out.some(m => !m.extra && (m.kcal || 0) > 0 && mmin(m) != null && mmin(m) >= s.start - 240 && mmin(m) < s.start);
-    const at = s.start - 60;
-    if (fed || at < wake) continue;
+    if (fed || s.start - 60 < wake) continue;
+    // in free time like every meal (14 Nov 2026: it sat inside the drive home before a moved VO2 session): the free
+    // half hour nearest an hour before, else a free quarter hour (a shake is quick), from waking to the session's start
+    const at0 = s.start - 60, at = D.nearestFree(at0, 30, busy, Math.max(wake, s.start - 180), s.start) ?? D.nearestFree(at0, 15, busy, Math.max(wake, s.start - 180), s.start);
+    if (at == null) continue;
     const next = out.filter(m => !m.extra && m.slot !== 'snack' && (m.kcal || 0) > SHAKE.kcal + 150 && mmin(m) != null && mmin(m) > s.start).sort((a, b) => mmin(a) - mmin(b))[0];
     out.push({ time: toHM(at), slot: 'before', kcal: SHAKE.kcal, carbs_g: SHAKE.carbs_g, protein_g: SHAKE.protein_g, low_carb: true, gap_snack: true,
       what: `Before ${s.name}: a Huel shake, about 20 g protein, so you don't ${s.kind === 'lift' ? 'lift' : 'ride hard'} on empty.` });
