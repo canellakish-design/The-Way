@@ -2682,7 +2682,7 @@ V.today = async function(){
       applyDay(s, plan, wx, true);
       // nothing stays on top of anything (dayplan.js autoMove): a workout over something fixed is moved now, not in five minutes
       try{ const todayK = (s.days.find(x => x.today) || {}).date;
-        if (s.days.some(dd => dd.date >= todayK && (dd.events || []).some(e => e.clash && e.clash.fix_min != null && e.workout_id)) && Date.now() - (window.__resolvedAt || 0) > 60000){
+        if (s.days.some(dd => dd.date >= todayK && (dd.events || []).some(e => e.clash && e.clash.fix_min != null && (e.workout_id || e.category === "busy"))) && Date.now() - (window.__resolvedAt || 0) > 60000){
           window.__resolvedAt = Date.now();
           bridge("/dayplan/resolve", { method:"POST", headers:{"Content-Type":"application/json"}, body:"{}" }).then(r => { if (r && (r.moved || []).some(m => !m.error)) view.__syncAll("moved"); }).catch(()=>{}); } }catch{}
       // the recommended rides (suggest.js): kept by the five-minute run, read here, drawn as the blue card

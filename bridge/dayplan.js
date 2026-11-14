@@ -116,7 +116,9 @@ function markClashes(rows, win) {
     const a = R[i], b = R[j];
     const as = effStart(a), bs = effStart(b);
     // over each other, or too close to change between (a 4:15 ride when the drive home ends at 4:14)
-    const over = as < b.end_min && a.end_min > bs;
+    // a drive's edges move a few minutes with the traffic: an overlap of five minutes or less with one is not a clash
+    const lap = Math.min(a.end_min, b.end_min) - Math.max(as, bs);
+    const over = as < b.end_min && a.end_min > bs && !((a.category === 'commute' || b.category === 'commute') && lap <= 5);
     const gapAB = bs - a.end_min, gapBA = as - b.end_min;
     const tight = !over && ((gapAB >= 0 && gapAB < changeover(a, b)) || (gapBA >= 0 && gapBA < changeover(b, a)));
     if (!over && !tight) continue;
@@ -127,7 +129,9 @@ function markClashes(rows, win) {
     // the fix: the nearest time that touches nothing fixed, nothing of his own, and no other workout, with the
     // changeover kept on both sides of each
     const len = mover.end_min - mover.start_min;
-    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r) - changeover(mover, r), end: r.end_min + changeover(r, mover) }));
+    // ten minutes of slack beside a drive, so the next traffic reading does not bring the clash back
+    const slack = r => (r.category === 'commute' ? 10 : 0);
+    const blocks = R.filter(r => r !== mover).map(r => ({ start: effStart(r) - Math.max(slack(r), changeover(mover, r)), end: r.end_min + Math.max(slack(r), changeover(r, mover)) }));
     const earliest = mover.category === 'training' ? wake + 60 : wake;
     const latest = mover.category === 'training' ? bed - 60 : bed;
     const fix = nearestFree(mover.start_min, len, blocks, earliest, latest);
@@ -148,18 +152,28 @@ function markClashes(rows, win) {
 // ride he said yes to) is left alone: its drives are fitted around it. Two fixed things over each other cannot be
 // moved: they keep their mark.
 // days: scheduleReport's days; workouts: the plan store's map; → [{ id, date, from, to, why }]
+// an event he owns: added in The Way (l:), or on his own Google calendar (g:<his address>:<id>), not a shared one
+const ownKey = k => /^l:/.test(String(k)) || /^g:[^@:]+@mdunitedfc\.org:[^:]+$/i.test(String(k));
 function movesFor(days, today, nowMin, workouts) {
   const out = [];
   for (const day of days || []) {
     if (day.date < today) continue;
     const soon = m => day.date === today && m <= nowMin + 10;
+    const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
     for (const e of day.events || []) {
-      if (!e.clash || e.clash.fix_min == null || e.category !== 'training' || !e.workout_id) continue;
+      if (!e.clash || e.clash.fix_min == null) continue;
       if (soon(e.start_min) || soon(e.clash.fix_min)) continue;            // started, or the fix is already past
-      const w = (workouts || {})[e.workout_id]; if (!w || w.location) continue;
-      const hm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
-      out.push({ id: w.id, date: day.date, name: w.name, from: w.time, to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
-      break;
+      if (e.category === 'training' && e.workout_id) {
+        const w = (workouts || {})[e.workout_id]; if (!w || w.location) continue;
+        out.push({ kind: 'workout', id: w.id, date: day.date, name: w.name, from: w.time, to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
+        break;
+      }
+      // his own block (Harry, 14 Nov: "Yes, move mine too"): one he made in The Way, or on his own Google calendar;
+      // never an event on a shared calendar (the school's, the club's, a team's)
+      if (e.category === 'busy' && e.edit && ownKey(e.edit)) {
+        out.push({ kind: 'event', key: e.edit, date: day.date, name: e.summary, from: hm(e.start_min), to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
+        break;
+      }
     }
   }
   return out;
@@ -171,14 +185,22 @@ async function autoMove(now) {
   const d = await getJSON('plan-workouts', { workouts: {} });
   const moves = movesFor(s.days, tz.todayKey(), p.h * 60 + p.mi, d.workouts), done = [];
   for (const mv of moves) {
-    try { await require('./workouts').update(mv.id, { time: mv.to, auto_moved: { from: mv.from, why: String(mv.why || '').slice(0, 80), tight: mv.tight, at: new Date().toISOString() } }); done.push(mv); }
+    try {
+      if (mv.kind === 'event') { const r = await require('./calendar').editEvent(mv.key, { date: mv.date, start: mv.to }); if (!r) throw new Error('no such event'); }
+      else await require('./workouts').update(mv.id, { time: mv.to, auto_moved: { from: mv.from, why: String(mv.why || '').slice(0, 80), tight: mv.tight, at: new Date().toISOString() } });
+      done.push(mv);
+    }
     catch (e) { done.push(Object.assign({ error: e.message }, mv)); }
   }
   return { moved: done };
 }
 function attach(app) {
   const { auth } = require('./fuel-log');
+  // what would be moved, without moving it
+  app.get('/dayplan/moves', async (req, res) => { if (!auth(req, res)) return;
+    try { const { getJSON } = require('./storage'); const s = await require('./calendar').scheduleReport({ days: 8 }); const p = tz.parts(new Date()); const d = await getJSON('plan-workouts', { workouts: {} });
+      res.json({ moves: movesFor(s.days, tz.todayKey(), p.h * 60 + p.mi, d.workouts) }); } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/dayplan/resolve', async (req, res) => { if (!auth(req, res)) return; try { res.json(await autoMove()); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, movesFor, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
+module.exports = { attach, movesFor, ownKey, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
