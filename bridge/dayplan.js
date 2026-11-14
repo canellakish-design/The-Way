@@ -28,8 +28,13 @@ const RANK = c => FIXED.has(c) ? 2 : c === 'busy' ? 1 : c === 'training' ? 0 : -
 // changeover into the event (the "Arrive by" time). Every placer reads this one rule: the clash marks, the free
 // windows workouts are planned in (calendar.js), and the fixes.
 const CHANGE = { training: { before: 15, after: 20 } };
+// Two sessions in two places (the lift at Life Time, then the ride in the pain cave at home: where.js) need the walk
+// and the change between them too.
+const PLACE_CHANGE = 15;
 function changeover(a, b) {   // minutes needed between a ending and b starting
-  if (!a || !b || a.category === b.category) return 0;
+  if (!a || !b) return 0;
+  if (a.category === 'training' && b.category === 'training') return a.place && b.place && a.place !== b.place ? PLACE_CHANGE : 0;
+  if (a.category === b.category) return 0;
   const after = (CHANGE[a.category] || {}).after || 0, before = (CHANGE[b.category] || {}).before || 0;
   return Math.max(after, before);
 }
@@ -125,7 +130,9 @@ function markClashes(rows, win) {
     const tight = !over && ((gapAB >= 0 && gapAB < changeover(a, b)) || (gapBA >= 0 && gapBA < changeover(b, a)));
     if (!over && !tight) continue;
     const ra = RANK(a.category), rb = RANK(b.category);
-    const mover = ra < rb ? a : rb < ra ? b : null, other = mover === a ? b : mover === b ? a : null;
+    // two workouts too tight between two places: the later one gives way (on top of each other they still ask him to pick)
+    const twoPlaces = tight && a.category === 'training' && b.category === 'training';
+    const mover = ra < rb ? a : rb < ra ? b : twoPlaces ? (as <= bs ? b : a) : null, other = mover === a ? b : mover === b ? a : null;
     if (!mover) { if (tight) continue; for (const [x, y] of [[a, b], [b, a]]) x.clash = x.clash || { with: y.summary, fix_min: null, both_fixed: true }; continue; }
     if (mover.clash && mover.clash.fix_min != null) continue;
     // the fix: the nearest time that touches nothing fixed, nothing of his own, and no other workout, with the

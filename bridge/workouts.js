@@ -67,6 +67,9 @@ function clean(body, prev, earliest) {
   // (a session already on the calendar at 7:00 keeps its time when edited, and the Day flags it)
   if (askedTime && askedTime < '07:00') { const err = new Error(`No workouts before 7 a.m. (${tz.hm12(askedTime)} asked). The earliest start is ${tz.hm12(first)}.`); err.status = 400; throw err; }
   if (askedTime && isTime(b.time) && b.time !== p.time && askedTime < first) { const err = new Error(`Sleep first: no workouts before ${tz.hm12(first)}, an hour after waking (${tz.hm12(askedTime)} asked).`); err.status = 400; throw err; }
+  // never a ride at Life Time (Harry, 14 Nov 2026: "I will never ride my bike at lifetime"): he lifts there
+  { const W2 = require('./where'), nw = { sport: SPORTS.includes(b.sport) ? b.sport : (p.sport || 'Ride'), name: b.name != null ? b.name : p.name, notes: b.notes != null ? b.notes : p.notes };
+    if (W2.gymRide(nw) && (b.name != null || b.notes != null || b.sport != null || !p.id)) { const err = new Error('He never rides at Life Time: he lifts there. Plan the ride outside, or on the trainer in the pain cave.'); err.status = 400; throw err; } }
   return {
     id: p.id || 'w_' + crypto.randomBytes(6).toString('hex'),
     date,
@@ -79,6 +82,9 @@ function clean(body, prev, earliest) {
     // where the ride starts when it is not at home (suggest.js: a recommended ride near a game); the drives follow it
     location: b.location === null ? null : b.location != null ? String(b.location).slice(0, 200) : (p.location || null),
     suggested: b.suggested === null ? null : b.suggested && typeof b.suggested === 'object' ? b.suggested : (p.suggested || null),
+    // a ride outside that the forecast sends to the pain cave (where.js): why; a new day, time or sport clears it
+    indoor: b.indoor === null ? null : b.indoor && typeof b.indoor === 'object' ? { why: String(b.indoor.why || '').slice(0, 120), at: b.indoor.at || new Date().toISOString() }
+      : ((isDate(b.date) && b.date !== p.date) || (isTime(b.time) && b.time !== p.time) || (b.sport != null && b.sport !== p.sport) ? null : (p.indoor || null)),
     // moved by The Way off something it was on top of (dayplan.js autoMove): from when, and off what; his own change of time clears it
     auto_moved: b.auto_moved && typeof b.auto_moved === 'object' ? b.auto_moved : (isTime(b.time) && b.time !== p.time ? null : (p.auto_moved || null)),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
@@ -590,7 +596,7 @@ async function plannedDays(from, to) {
       description: w.notes || null,
       category: 'training', source: 'plan', kind: w.sport === 'WeightTraining' ? 'lifting' : 'ride',
       calendar: 'The Way', allDay: !timed, blocking: false, minutes: mins || null,
-      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'), auto_moved: w.auto_moved || null,
+      workout_id: w.id, sport: w.sport || null, tss: m.tss || null, synced: !!(w.sync && w.sync.state === 'synced'), auto_moved: w.auto_moved || null, place: require('./where').placeOf(w), indoor: w.indoor || null,
       ...(timed ? { start_min: sm, end_min: sm + (mins || 60), from: fmtMin(sm), to: fmtMin(sm + (mins || 60)) } : {})
     });
   }
