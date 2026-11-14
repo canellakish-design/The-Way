@@ -1398,15 +1398,18 @@ function dayRows(d, plan, isToday){
   // and Live, the feeding window before each session and the meals that
   // touch the training (before, on the bike, after) plus the next one due;
   // the full plan stays on the Food tab.
-  if (isToday && HUB.food){
-    const f = HUB.food, hm = t => hhmmToMin(t);
+  // any day, not only today (Harry, 13 Nov, looking at tomorrow: "Where are the meals"): the day's own food plan,
+  // fetched when the day is opened (FOODDAY), with the meals placed around that day's games, drives and sessions
+  const fday = isToday ? HUB.food : (FOODDAY[d.date] && FOODDAY[d.date].v);
+  if (fday){
+    const f = fday, hm = t => hhmmToMin(t);
     for (const sx of (f.energy && f.energy.sessions || [])){
       if (!sx.feed || hm(sx.feed.from) == null) continue;
       const a = hm(sx.feed.from), b = Math.max(a + 30, hm(sx.feed.to) || a + 30);
       rows.push({ start: a, end: b, from: fmtMinLocal(a), to: fmtMinLocal(b), title: `Fuel for ${sx.name.replace(/,.*$/, "")}: ${sx.feed.g} g carbs`, detail: `bottle from ${hm12(sx.feed.bottle_from)}`, lane: LANE.food, source: "food", href: "#live", feed: true,
         desc: `${sx.feed.g} g of carbs between ${hm12(sx.feed.from)} and ${hm12(sx.feed.to)} puts the quick store at ${sx.need}% for the start${sx.ready_at && !sx.ready_now ? `; as things stand it is ready at ${hm12(sx.ready_at)}` : ""}.` });
     }
-    const nextSlot = f.suggestion && !f.suggestion.none ? f.suggestion.slot : null;
+    const nextSlot = isToday && f.suggestion && !f.suggestion.none ? f.suggestion.slot : null;
     const seen = new Set();
     const mscale = mealScale((f.meals || []).filter(m => m.kcal));
     // every meal of the day, so the morning is still there in the evening: logged ones carry their grade
@@ -1429,7 +1432,7 @@ function dayRows(d, plan, isToday){
         lane: LANE.food, source: "food", href: "#food", meal: { logged, match: mt, slot: m.slot }, bars, desc: logged ? `${why ? why + " " : ""}${mt && mt.macros ? `Macros: ${mt.macros.word}. Rules: ${mt.rules.word}.` : ""}`.trim() || null : (m.what || null) });
     }
     // the bedtime note (alcohol in the evening costs water overnight): its own row before bed, from 8 p.m.
-    const bn = f.hydration && f.hydration.bedtime_note;
+    const bn = isToday && f.hydration && f.hydration.bedtime_note;
     if (bn){ const a = 21 * 60 + 15; rows.push({ start: a, end: a + 15, from: fmtMinLocal(a), to: fmtMinLocal(a + 15), title: "before bed", detail: bn, lane: LANE.food, source: "food", href: "#hydration", desc: bn }); }
     // drinks with calories (a pint, a latte) never stand in for a meal, but they are in the day: their own row, graded
     const inSlot = new Set((f.meals || []).flatMap(m => m.logged || []));   // a bottle on the bike is in its slot's row already
@@ -1616,6 +1619,7 @@ function gradeBadge(g){ return g ? `<span class="cgrade ${g.tier}" title="${attr
 const hoursOver = (w, startMin, endMin) => w ? w.hours.filter(h => h.hour >= Math.floor(startMin/60) && h.hour < Math.max(Math.floor(startMin/60) + 1, Math.ceil(endMin/60))) : [];
 const rideOf = (wx, r) => wx && wx.light && window.Light ? { L: wx.light, woods: Light.isWoods(r.title, r.sport), from: r.start, to: r.end } : null;
 window.condGrade = condGrade; window.gradeBadge = gradeBadge; window.hoursOver = hoursOver; window.rideOf = rideOf;   // BTS: breakthrough rides by date (signature.js), for the medal on the day
+let FOODDAY = {};                                 // the food plan of a day other than today, by date: { at, v }
 let HUB = { food: null };                         // today's food answer, for the meal and feeding rows on the day card
 const H0 = 7, H1 = 21;   // no workouts before 7
 const hlbl = h0 => { const h = ((h0 % 24) + 24) % 24, x = h % 12 || 12; return x + (h < 12 ? "a" : "p"); };
@@ -2486,6 +2490,10 @@ V.today = async function(){
       ? cached.days[cached.todayIndex || 0].date : null;
     if (todayThere && cached.dateKey && todayThere !== cached.dateKey){ location.reload(); return; }
     const day = dayAt(offset);
+    // a day other than today: its food plan, asked for when it is opened and again after three minutes
+    if (day && !day.today){ const c = FOODDAY[day.date];
+      if (!c || Date.now() - c.at > 180000){ FOODDAY[day.date] = { at: Date.now(), v: c ? c.v : null };
+        bridge("/food/day?date=" + day.date).then(v => { FOODDAY[day.date] = { at: Date.now(), v }; const now = dayAt(offset); if (now && now.date === day.date) repaint(); }).catch(()=>{}); } }
     const list = document.getElementById("dayList");
     // Only today gets the live now-marker; on any other day a "now" band would
     // be pointing at a time that already passed or hasn't arrived.
