@@ -652,7 +652,7 @@ async function scheduleReport(q) {
         }
       } catch (e) { /* no plan store yet: the intervals.icu lane stands alone */ }
       // where each session is done (where.js), also for one planned only in intervals.icu
-      try { const X = require('./where'); for (const list of Object.values(iv.days || {})) for (const e of list || []) if (e && e.category === 'training' && e.place === undefined) e.place = X.placeOf({ sport: e.sport || (e.kind === 'lifting' ? 'WeightTraining' : null), name: e.summary }); } catch (e) { /* the place is a note, never a reason to fail */ }
+      try { const X = require('./where'); for (const list of Object.values(iv.days || {})) for (const e of list || []) if (e && e.category === 'training' && e.place === undefined) e.place = X.placeOf({ sport: e.sport || (e.kind === 'lifting' ? 'WeightTraining' : e.kind === 'ride' ? (/trainer|zwift|virtual|indoor|\berg\b/i.test(String(e.summary || '')) ? 'VirtualRide' : 'Ride') : null), name: e.summary }); } catch (e) { /* the place is a note, never a reason to fail */ }
       // iCal feeds sit alongside the OAuth accounts — same day, same shape.
       const icsMod = require('./ics');
       const ics = await icsMod.fetchAll(firstKey, lastKey)
