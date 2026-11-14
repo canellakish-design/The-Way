@@ -690,6 +690,7 @@ async function scheduleReport(q) {
         const todayKey = tz.todayKey();
         let todayEntries = [], yEntries = [];
         try { const { getJSON } = require('./storage'); todayEntries = ((await getJSON('food-' + todayKey, null)) || {}).entries || []; yEntries = ((await getJSON('food-' + tz.shiftKey(todayKey, -1), null)) || {}).entries || []; } catch (e) { /* no journal */ }
+        let napStore;
         for (const day of days) {
           const rides = (day.events || []).filter(e => e.category === 'training' && e.kind === 'ride' && e.start_min != null)
             .map(e => ({ name: e.summary, time: S.toHM(e.start_min), sport: 'Ride', done: false }));
@@ -733,6 +734,14 @@ async function scheduleReport(q) {
             }
             DP.markClashes(day.events, SWin);
           } catch (e) { /* the day stands */ }
+          // naps (naps.js): the ones he logged, and today, after a short night, the one offered between 1 and 3 p.m.
+          try {
+            const NP = require('./naps');
+            if (napStore === undefined) napStore = (await NP.all().catch(() => ({ naps: [] }))).naps;
+            const nowP = tz.parts(new Date());
+            const o = day.today ? { lastNightH: await NP.lastNight(day.date), nowMin: nowP.h * 60 + nowP.mi } : { lastNightH: null };
+            day.events.push(...NP.rowsFor(day.date, day.events, napStore, o));
+          } catch (e) { /* no naps */ }
           day.events.sort((a, b) => (a.start_min ?? 1e6) - (b.start_min ?? 1e6));
         }
       } catch (e) { /* the day stands without them */ }

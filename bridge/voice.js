@@ -35,7 +35,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -80,6 +80,10 @@ async function context() {
     const whereOf = s => { if (s.done) return ''; const e = evOf(s), pl = e ? e.place : require('./where').placeOf({ sport: s.sport, name: s.name }); return pl ? `, ${pl === 'pain cave' ? 'in the pain cave at home' : pl === 'Life Time' ? 'at Life Time' : pl === 'home' ? 'at home' : 'outside'}${e && e.indoor ? ` (not outside: ${e.indoor.why})` : ''}` : ''; };
     if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${whereOf(s)}${s.done ? ' (done)' : ' (planned)'}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
     else lines.push('No training today: no ride, no run, no lift. Do not name one.');
+    // naps (naps.js): the one offered today after a short night, or the one he took
+    { const todayEv2 = ((sched && sched.days) || []).find(d => d.date === today), naps = todayEv2 ? (todayEv2.events || []).filter(e => e.kind === 'nap') : [];
+      if (naps.some(e => e.taken)) lines.push('NAP today, logged: ' + naps.filter(e => e.taken).map(e => `${e.minutes} min at ${e.from}`).join(', ') + '. It counts toward today\'s sleep.');
+      else if (naps.length) lines.push(`NAP: ${naps[0].detail.split(':')[0]}, short of 7. A 25 minute nap fits at ${naps[0].from}, at home; it must end by 3 p.m. Offer it when he asks about energy, sleep or the afternoon; he logs it himself by saying "I napped 25 minutes".`); }
     if (day.cue) lines.push('Where the day stands: ' + day.cue.text);
     if (day.guidelines && day.guidelines.length) lines.push("Today's eating rules: " + day.guidelines.map(g => g.text).join(' ').slice(0, 400));
     { const nowM = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })(), toM = t => { const m = /^(\d{2}):(\d{2})$/.exec(t || ''); return m ? (+m[1]) * 60 + (+m[2]) : null; };
@@ -164,6 +168,7 @@ Action types:
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - note: anything about how he feels or slept, text = his words.
+- nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep. A plan to nap later, or a question about napping, is a question, never a nap.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …". A question or a remark about food already in the journal ("why is my lunch score low", "was that enough carbs", "that was a good lunch") is a question, never a meal or a drink: nothing new was eaten, so nothing is logged.
@@ -346,6 +351,10 @@ async function run(a, x) {
       d.notes = d.notes.slice(-200);
       await setJSON('voice-notes', d);
       return { ok: true, summary: 'Noted.' };
+    }
+    case 'nap': {
+      let nap; try { nap = await require('./naps').add({ minutes: a.minutes, time: a.time || undefined, date: a.date || undefined }); } catch (e) { return { ok: false, summary: e.message }; }
+      return { ok: true, summary: `Nap logged: ${nap.minutes} min at ${tz.hm12(nap.time)}. It counts toward today's sleep.` };
     }
     case 'wellness': {
       const W = require('./wellness');

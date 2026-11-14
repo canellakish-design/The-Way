@@ -57,6 +57,7 @@ require('./attend').attach(app);
 require('./pack').attach(app);
 require('./suggest').attach(app);
 require('./where').attach(app);
+require('./naps').attach(app);
 require('./tts').attach(app);
 require('./dayplan').attach(app);
 require('./meds').attach(app);
