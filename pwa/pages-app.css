@@ -370,3 +370,6 @@ ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
 .suggest .sgbtns .sgyes{background:#4AA3FF; color:#000}
 .suggest.done{border-width:1px; padding:8px 12px; font-size:13px}
 
+
+/* what each lift is, under its name (lifts.js DESC) */
+#liftPage .lexhead .ldesc{display:block; margin-top:6px; font-size:13px; line-height:1.4; font-weight:400; color:var(--muted); text-transform:none; letter-spacing:0; text-align:left; white-space:normal}

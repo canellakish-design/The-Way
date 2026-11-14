@@ -36,10 +36,38 @@ const tz = require('./tz');
 
 const BELLS = [18, 26, 35, 44, 53, 62, 70, 80, 88];     // the common kettlebell sizes, in pounds
 // ex(name, sets, lo, hi, kind, start, note, inc): kind bar | db | cable | bell | bowflex | reps | time; inc is the step in pounds
-const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' || kind === 'bar' || kind === 'cable' ? 10 : kind === 'db' ? 5 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
+// What each lift is: the muscles it trains and how it is done, shown under its name on the Lift page (Harry,
+// 14 Nov 2026: "Put a description under every lift"). The short cue and the at-home version stay in `note`.
+const DESC = {
+  'Incline barbell bench press': 'Upper chest and the front of the shoulders, with the triceps. On a bench set to about 30 degrees, grip just outside shoulder width, lower the bar to the upper chest and press it back up over the shoulders.',
+  'Barbell bench press': 'The whole chest, with the shoulders and triceps. Lying flat with your eyes under the bar, lower it to mid-chest and press it up and slightly back.',
+  'Dumbbell bench press': 'The chest, each side working on its own through a longer range than the bar allows. Lying flat, lower a dumbbell beside each side of the chest and press them up together.',
+  'Triceps pushdown': 'The triceps, the back of the upper arm. At a high cable, keep the upper arms still at your sides and straighten the elbows fully, then let the hands rise to chest height.',
+  'Barbell deadlift': 'The whole back of the body: hamstrings, glutes, lower and upper back, and grip. With the bar over mid-foot, hinge down to grip it with a flat back and stand up by pushing the floor away; lower it the same way.',
+  'Barbell row': 'The middle and upper back and the lats, with the biceps. Hinged forward with a flat back and the bar at arm\'s length, pull it to the lower ribs and lower it under control.',
+  'Lat pulldown': 'The lats, the wide muscles of the back, with the biceps. Seated with the thighs under the pad, pull the bar from overhead to the upper chest and let it rise until the arms are straight.',
+  'Standing calf raise': 'The calves. With the balls of the feet on a step or the machine\'s platform, lower the heels to a full stretch, then rise as high as you can.',
+  'Close-grip bench press': 'The triceps first, with the chest and shoulders. A bench press with the hands shoulder width apart: lower the bar to the lower chest with the elbows close to the body and press up.',
+  'One-arm dumbbell row': 'The lats and middle back, one side at a time. With one hand and knee on a bench and the back flat, pull the dumbbell from a straight arm up to the hip and lower it slowly.',
+  'Seated dumbbell press': 'The shoulders, with the triceps. Sitting upright with a dumbbell at each shoulder, press them overhead until the arms are straight and lower them to ear height.',
+  'Captain\'s chair leg raise': 'The abdominals and hip flexors. Held up on the forearm pads with your back against the rest, raise the knees (or straight legs) to hip height and lower them slowly.',
+  'Barbell back squat': 'The quads and glutes, with the whole trunk bracing. With the bar across the upper back and feet about shoulder width, sit down between the hips until the thighs pass parallel, then stand.',
+  'Leg press': 'The quads and glutes, without loading the back. Seated in the machine, lower the platform until the knees are well bent and press it away.',
+  'Romanian deadlift': 'The hamstrings and glutes. From standing with the bar at the thighs, push the hips back with soft knees and a flat back until the hamstrings are stretched, then stand tall.',
+  'Barbell overhead press': 'The shoulders and triceps, with the trunk holding you steady. Standing, press the bar from the collarbones straight overhead to locked arms and lower it back.',
+  'Dumbbell row': 'The lats and middle back, one side at a time. With one hand on a bench and the back flat, pull the dumbbell up to the hip and lower it slowly.',
+  'Alternating dumbbell curl': 'The biceps. Standing with a dumbbell in each hand, curl one to the shoulder with the elbow still, lower it, then the other.',
+  'Cable crunch': 'The abdominals, against weight. Kneeling under a high cable with the rope held beside your head, curl the trunk down, ribs toward hips, without sitting back.',
+  'Bowflex seated row': 'The middle back and lats. Sitting facing the rods with the chest up, pull the handles to your ribs and return under control.',
+  'Bowflex chest press': 'The chest, shoulders and triceps. Sitting with your back on the pad, press the handles forward until the arms are straight.',
+  'Kettlebell seated press': 'The shoulders. Sitting tall, press one bell from the shoulder to overhead and lower it; then the other side.',
+  'Kettlebell curl': 'The biceps. Holding one bell by the horns in both hands, curl it to the chest with the elbows at your sides.',
+  'Plank': 'The whole trunk. Forearms and toes on the floor, the body held in one straight line.'
+};
+const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, desc: DESC[name] || '', sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' || kind === 'bar' || kind === 'cable' ? 10 : kind === 'db' ? 5 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
 const TEMPLATES = [
   { key: 'push', name: 'Push', short: 'Push', minutes: 55, order: 1,
-    why: 'Chest, shoulders and triceps: incline bench, bench, dumbbell bench, triceps pushdown. At school or Lifetime.',
+    why: 'Chest, shoulders and triceps: incline bench, bench, dumbbell bench, triceps pushdown. At Life Time.',
     exercises: [
       // Harry, 9 Nov: the incline first, and 135 (the bar and a 45 a side) for 4 as its starting point
       ex('Incline barbell bench press', 3, 4, 6, 'bar', 135, 'Bench at 30 degrees. At home: Bowflex incline press.', 10),
@@ -489,4 +517,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, weekCount, weekCountPlaced, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
+module.exports = { DESC, attach, weekCount, weekCountPlaced, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN };
