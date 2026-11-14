@@ -104,5 +104,19 @@ ok('driving to everything: any event with a place is a trip; calls, home, campus
   assert.strictEqual(M.rowsFor(d, trips[0], H, { est: 300, far: true }).length, 0);
   assert.strictEqual(M.rowsFor(d, trips[0], H, { est: 12 }).length, 2);
 });
+ok('a recommended ride straight after a game: driven from the game to the trailhead (a point, no address lookup), home from the trail', () => {
+  const d = '2026-11-15', e2 = (summary, h1, m1, h2, m2, o) => Object.assign({ summary, start: at(d, h1, m1), end: at(d, h2, m2), allDay: false }, o || {});
+  const game = e2('Coaching · Bethesda Premier Cup: U17 ECNL vs Baltimore', 12, 0, 13, 45, { category: 'coaching', location: 'Maryland SoccerPlex, Central Park Cir, Boyds, MD' });
+  const ride = e2('MTB: Schaeffer Farms Mountain Bike Park · 75 min', 14, 20, 15, 35, { category: 'training', source: 'plan-place', location: 'Kingsview Village Avenue, Boyds, MD 20874', point: { lat: 39.142954, lon: -77.310437, label: 'Schaeffer Farms Mountain Bike Park' } });
+  const raw = M.tripsFor(d, [game, ride], S);
+  assert.strictEqual(raw.length, 2); assert.deepStrictEqual(raw[1].dest, ride.point); assert.strictEqual(raw[1].label, 'Schaeffer Farms Mountain Bike Park');
+  const store = { [raw[0].id]: { est: 60, to: { min: 61 }, home: { min: 62 } }, [raw[1].id]: { est: 12, to: { min: 12 }, home: { min: 58 } } };
+  const t = M.chain(raw, store, S);
+  assert.strictEqual(t[0].back, null, 'no drive home from the game'); assert.strictEqual(t[1].from, raw[0].id);
+  const rows = t.flatMap(x => M.rowsFor(d, x, S, store[x.id]));
+  assert.deepStrictEqual(rows.map(r => r.summary), ['Drive to Maryland SoccerPlex · 61 min', 'Drive to Schaeffer Farms Mountain Bike Park · 12 min', 'Drive home · 58 min']);
+  const mins = r => [tz.minutesOf(new Date(r.start)), tz.minutesOf(new Date(r.end))];
+  assert.deepStrictEqual(mins(rows[1]), [13 * 60 + 53, 14 * 60 + 5]); assert.strictEqual(mins(rows[2])[0], 15 * 60 + 40);
+});
 console.log(n + ' passed');
 

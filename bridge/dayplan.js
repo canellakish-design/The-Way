@@ -157,6 +157,10 @@ function markClashes(rows, win) {
 // days: scheduleReport's days; workouts: the plan store's map; → [{ id, date, from, to, why }]
 // an event he owns: added in The Way (l:), or on his own Google calendar (g:<his address>:<id>), not a shared one
 const ownKey = k => /^l:/.test(String(k)) || /^g:[^@:]+@mdunitedfc\.org:[^:]+$/i.test(String(k));
+// …and his alone: a meeting, a call or anything with guests or a video link has other people waiting on its time.
+// The Way never moves those; they keep their mark and he decides (the IDP meetings with a Meet link, 14 Nov 2026).
+const WITH_PEOPLE = /\b(meetings?|calls?|1\s*[:x-]\s*1|one[- ]on[- ]one|interviews?|seminars?|trainings?|discussions?|sessions?|webinars?|appointments?|appt|conference|lunch|dinner|coffee)\b/i;
+const solo = e => !e.with_others && !WITH_PEOPLE.test(String(e.summary || ''));
 function movesFor(days, today, nowMin, workouts) {
   const out = [];
   for (const day of days || []) {
@@ -173,7 +177,7 @@ function movesFor(days, today, nowMin, workouts) {
       }
       // his own block (Harry, 14 Nov: "Yes, move mine too"): one he made in The Way, or on his own Google calendar;
       // never an event on a shared calendar (the school's, the club's, a team's)
-      if (e.category === 'busy' && e.edit && ownKey(e.edit)) {
+      if (e.category === 'busy' && e.edit && ownKey(e.edit) && solo(e)) {
         out.push({ kind: 'event', key: e.edit, date: day.date, name: e.summary, from: hm(e.start_min), to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
         break;
       }
@@ -206,4 +210,4 @@ function attach(app) {
   app.post('/dayplan/resolve', async (req, res) => { if (!auth(req, res)) return; try { res.json(await autoMove()); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, movesFor, ownKey, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };
+module.exports = { attach, movesFor, ownKey, solo, autoMove, CHANGE, changeover, FIXED, MOVABLE, arriveBy, blocksOf, clusters, nearestFree, placeDose, markClashes, freeAt };

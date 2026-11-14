@@ -113,11 +113,11 @@ function venueTrips(date, events, s) {
     const arrive = arriveBy(e.description) ?? (start - s.arrive_before);
     const coaching = e.category === 'coaching', game = coaching && GAME.test(String(e.summary || ''));
     const k = placeKey(e.location), have = out.find(g => g.key === k);
-    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; continue; }
+    if (have) { have.arrive = Math.min(have.arrive, arrive); have.end = Math.max(have.end, end); have.game = have.game || game; have.coaching = have.coaching || coaching; have.point = have.point || e.point || null; continue; }
     // the place's name, or the event's when the place is only a street address ("Physio" over "12 West St")
     const place = venueName(e.location), byTitle = /^\d/.test(place) && !coaching;
     const title = String(e.summary || '').replace(/\s*[|·].*$/, '').trim().slice(0, 40);
-    out.push({ key: k, location: e.location, label: byTitle && title ? title : place, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
+    out.push({ key: k, location: e.location, point: e.point || null, label: e.point && e.point.label ? String(e.point.label).slice(0, 40) : byTitle && title ? title : place, arrive, end, game, coaching, home_field: isHomeVenue(e.location, s) });
   }
   return out;
 }
@@ -135,7 +135,8 @@ async function withPlaces(evs) {
     const [h, mi] = w.time.split(':').map(Number), mins = Math.round((w.steps || []).reduce((a, x) => a + (x.dur_s || 0), 0) / 60) || 60;
     const [y, mo, dd] = w.date.split('-').map(Number);
     const st = tz.zonedToUTC(y, mo, dd, h, mi);
-    extra.push({ summary: w.name, category: 'training', location: w.location, allDay: false, start: st.toISOString(), end: new Date(st.getTime() + mins * 60000).toISOString(), source: 'plan-place', workout_id: w.id });
+    const at = /destination=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(String((w.suggested && w.suggested.url) || ''));
+    extra.push({ point: at ? { lat: +at[1], lon: +at[2], label: (w.suggested && w.suggested.name) || w.location } : null, summary: w.name, category: 'training', location: w.location, allDay: false, start: st.toISOString(), end: new Date(st.getTime() + mins * 60000).toISOString(), source: 'plan-place', workout_id: w.id });
   }
   return (evs || []).concat(extra);
 }
@@ -144,7 +145,7 @@ function tripsFor(date, events, s, nextEvents) {
   const trips = [];
   const times = classTimes(date, events);
   if (times) trips.push({ id: 'school', kind: 'school', label: SCHOOL.label, dest: SCHOOL, arrive: times.first - s.arrive_before, back: times.last + s.leave_after });
-  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', label: g.label, dest: g.location, arrive: g.arrive, back: g.end + (g.coaching ? 15 : 5) });
+  for (const g of venueTrips(date, events, s)) trips.push({ id: 'go:' + g.key, kind: g.game ? 'game' : g.coaching ? 'training' : 'event', label: g.label, dest: g.point || g.location, arrive: g.arrive, back: g.end + (g.coaching ? 15 : 5) });
   return trips.sort((a, b) => a.arrive - b.arrive);
 }
 // No time to get home between two trips: the first keeps no drive home, the second leaves from the first place.
@@ -374,6 +375,13 @@ async function status() {
 function attach(app) {
   const { auth } = require('./fuel-log');
   app.get('/commute', async (req, res) => { if (!auth(req, res)) return; try { res.json(await status()); } catch (e) { res.status(500).json({ error: e.message }); } });
+  // one day's trips as the calendar will draw them, with what is stored for each (to see why a drive is missing)
+  app.get('/commute/day', async (req, res) => { if (!auth(req, res)) return;
+    try { const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? req.query.date : tz.todayKey(), s = await settings();
+      const evs = await withPlaces(await require('./calendar').eventsBetween(date, date).catch(() => [])).catch(() => []);
+      const store = (req.query.refresh ? await refresh(date, evs).catch(e => ({ error: e.message })) : await getJSON(`commute-${date}`, {}).catch(() => ({}))) || {};
+      res.json({ date, trips: chain(tripsFor(date, evs, s), store, s).map(t => ({ id: t.id, kind: t.kind, label: t.label, arrive: hm(t.arrive), back: t.back == null ? null : hm(t.back), from: t.from_label || 'home', point: typeof t.dest === 'object', stored: store[t.id] || null })) });
+    } catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/commute', async (req, res) => { if (!auth(req, res)) return; try { res.json(await save(req.body || {})); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 }
 

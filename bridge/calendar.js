@@ -209,6 +209,9 @@ async function sync() {
             description: e.description ? String(e.description).slice(0, 1200) : null,
             calendar: cal.name, calendar_id: cal.id, gid: e.id,
             account: acct.id,
+            // other people in it (guests, a video link, someone else's invitation): never moved by The Way
+            with_others: !!((e.attendees || []).some(a => !a.self) || e.hangoutLink || e.conferenceData || (e.organizer && e.organizer.self === false)) || undefined,
+            free: e.transparency === 'transparent' || undefined,
             source: calDefault === 'coaching' ? 'coaching' : 'calendar',
             category: classify(e.summary, d.manual, calDefault)
           });
@@ -325,7 +328,7 @@ function scheduleForDate(events, dateStr) {
     return {
       summary: e.summary, category: e.category, allDay: false,
       source: e.source || 'calendar', calendar: e.calendar || null, location: e.location || null, description: e.description || null, workout_id: e.workout_id || null, sport: e.sport || null, local_id: e.id && String(e.id).startsWith('ev_') ? e.id : null, google_id: e.google_id || null,
-      detail: e.detail || null, edit: e.source === 'commute' ? null : editKey(e),
+      detail: e.detail || null, edit: e.source === 'commute' ? null : editKey(e), with_others: e.with_others || undefined, free: e.free || undefined,
       attend: e.attend || null, attend_by: e.attend_by || null, attend_key: e.attend_key || null, series_key: e.series_key || null, orig_category: e.orig_category || null,
       from: fmtMin(sm), to: fmtMin(em), start_min: sm, end_min: em,
       minutes: Math.max(0, em - sm), blocking: BLOCKS.has(e.category)
