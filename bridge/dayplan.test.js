@@ -95,5 +95,16 @@ ok('a school day: lunch is the dining hall, between classes, never packed', () =
   assert.ok(/In the dining hall at school\.$/.test(lunch.what) && !/Pack it/.test(lunch.what), lunch.what);
   assert.ok(!/dining hall/.test(r.find(x => x.slot === 'dinner').what || ''), 'dinner is at home');
 });
+ok('practice, then a meeting until ten: dinner is packed between them, and the snack is never left inside the meeting', () => {
+  const busy = [{ start: m(17, 17), end: m(17, 45), name: 'Drive to Liberty Sports Park', category: 'commute' },
+    { start: m(17, 30), end: m(19, 15), name: 'Practice', category: 'coaching' }, { start: m(20, 30), end: m(22), name: 'Staff Meeting (in person)', category: 'work' },
+    { start: m(22, 15), end: m(22, 35), name: 'Drive home', category: 'commute' }];
+  const r = F.placeSnacks([{ time: '13:05', slot: 'lunch', kcal: 650 }, { time: '18:30', slot: 'dinner', kcal: 800, what: 'Protein and vegetables.' }, { time: '20:45', slot: 'snack', kcal: 240, what: 'A Huel shake.' }], { busy, wake: 390, bed: 1350 });
+  const dinner = r.find(x => x.slot === 'dinner'), snack = r.find(x => x.slot === 'snack');
+  assert.strictEqual(dinner.time, '19:15'); assert.ok(/Pack it: at Liberty Sports Park/.test(dinner.what), dinner.what);
+  const t = F.toMin(snack.time);
+  assert.ok(!busy.some(b => t < b.end && t + 30 > b.start), 'the snack at ' + snack.time + ' is clear of everything');
+  assert.ok(t >= m(19, 45) && t <= m(20), snack.time);
+});
 console.log(n + ' passed');
 

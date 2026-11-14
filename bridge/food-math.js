@@ -297,14 +297,18 @@ function placeSnacks(meals, opts) {
     const t = mmin(m);
     const earliest = Math.max(wake, prev ? mmin(prev) + (isMain(prev) && isMain(m) ? 75 : 60) : wake);
     if (D.freeAt(t, 30, busy) && t >= earliest) { prev = m; continue; }
-    const nt = D.nearestFree(Math.max(t, earliest), 30, busy, earliest, bed - 30);
+    let nt = D.nearestFree(Math.max(t, earliest), 30, busy, earliest, bed - 30);
+    // no free half hour that far from the meal before it (practice, then a meeting until ten): the spacing gives
+    // way before the meal sits inside something (Harry, 13 Nov: "Make sure stuff like that doesn't happen again")
+    if (nt == null && !D.freeAt(t, 30, busy)) nt = D.nearestFree(t, 30, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
     if (nt == null || nt === t) { prev = m; continue; }
     // what it is before or after: the next block after the new time, or the last one before it
     const byStart = busy.slice().sort((a, b) => a.start - b.start);
     const ref = nt < t ? byStart.find(b => b.start >= nt + 30) : byStart.filter(b => b.end <= nt).sort((a, b) => a.end - b.end).pop();
     m.moved_from = m.time; m.time = toHM(nt); delete m.at_min;
     // away from home (after a drive out, before the drive back): pack it
-    const out = byStart.filter(b => b.end <= nt + 1).pop();
+    // away from home: the last drive before it went out (not to school) and none has come home since
+    const out = byStart.filter(b => b.end <= nt + 1 && /^drive /i.test(String(b.name || ''))).pop();
     const away = out && /^drive to /i.test(String(out.name || '')) && !/mcdonogh/i.test(String(out.name || ''));
     m.place_note = away ? `Pack it: at ${String(out.name).replace(/^drive to /i, '').replace(/ · .*$/, '')}${ref && ref.start > nt ? `, before ${ref.name}` : ''}.`
       : ref ? `${nt < t ? 'Before' : 'After'} ${ref.name || 'the block'}.` : (nt < t ? 'Earlier: the day is full later.' : 'Later: the day is full before.');
