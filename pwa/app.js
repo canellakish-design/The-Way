@@ -2604,7 +2604,8 @@ V.today = async function(){
     const nx = rows.find(r => !done(r) && r.end > nm);
     if (!nx){ el.hidden = true; return; }
     const when = nx.start <= nm ? `now, until ${nx.to}` : `at ${nx.from}`;
-    const short = t => String(t || "").split(" · ")[0].replace(/\s*\(plan [^)]*\)/, "").slice(0, 60);
+    // a whole thought, never a sentence cut in the middle of a number ("…but was 23 g"): up to 110 characters, ended at a word
+    const short = t => { const x = String(t || "").split(" · ")[0].replace(/\s*\(plan [^)]*\)/, "").trim(); if (x.length <= 110) return x; const c = x.slice(0, 108); return c.slice(0, Math.max(60, c.lastIndexOf(" "))).replace(/[,;:(]$/, "") + "…"; };
     let tail = "";
     if (isSession(nx)){
       // what to eat before it: the fuelling row or the open meal between now and the start
