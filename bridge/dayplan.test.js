@@ -138,6 +138,10 @@ ok('nothing stays on top of anything: a workout over something fixed is moved to
   const ev = D.movesFor([day('2026-11-15', [own]), day('2026-11-16', [shared])], '2026-11-14', m(10), W);
   assert.deepStrictEqual(ev.map(x => [x.kind, x.key, x.from, x.to]), [['event', 'g:harry.c@mdunitedfc.org:abc123', '11:15', '09:17']]);
   assert.strictEqual(D.ownKey('l:ev_1'), true); assert.strictEqual(D.ownKey('o:uid'), false);
+  // a meeting, a call, or anything with guests or a video link has other people in it: never moved, whoever's calendar
+  const idp = Object.assign({}, own, { summary: 'IDP Meetings | U13 ECNL (Darrell)' }), guests = Object.assign({}, own, { with_others: true });
+  assert.strictEqual(D.movesFor([day('2026-11-15', [idp]), day('2026-11-16', [guests])], '2026-11-14', m(10), W).length, 0);
+  assert.strictEqual(D.solo({ summary: 'Cycle 3 Planning' }), true); assert.strictEqual(D.solo({ summary: 'Hudl Training | Wyscout' }), false);
 });
 console.log(n + ' passed');
 
