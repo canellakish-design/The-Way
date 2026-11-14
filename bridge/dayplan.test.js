@@ -119,6 +119,13 @@ ok('the meal before a session stays before it: moved earlier when the ride moves
   const lunch = tight.find(x => x.slot === 'lunch');
   assert.strictEqual(lunch.kcal, 920); assert.ok(/also the fuel for Pull/.test(lunch.what), lunch.what);
 });
+ok('a dawn ride that starts before his usual waking: the shake is half an hour ahead of it, never after it', () => {
+  const meals = [{ slot: 'before', time: '06:30', kcal: 105, protein_g: 20, what: 'Coffee and a Huel shake' }, { slot: 'on the bike', time: '06:00', kcal: 0 }, { slot: 'breakfast', time: '07:05', kcal: 665, what: 'Within 2 hours' }];
+  const ride = { start: m(6), end: m(7), name: 'Z1 trainer 60 min', kind: 'easy' };
+  const r = F.placeSnacks(meals, { busy: [ride, { start: m(7, 30), end: m(8, 15), name: 'Drive to McDonogh' }, { start: m(8, 30), end: m(9, 45), name: 'World History' }], sessions: [ride], wake: 390, bed: 1350 });
+  assert.strictEqual(r.find(x => x.slot === 'before').time, '05:30');
+  assert.strictEqual(r.find(x => x.slot === 'breakfast').time, '07:00', 'breakfast straight after the ride, before the drive');
+});
 ok('nothing stays on top of anything: a workout over something fixed is moved to its fix, one a day; started ones, rides with a place and past days are left', () => {
   const day = (date, events) => ({ date, events });
   const ride = (id, s, fix, o) => Object.assign({ category: 'training', workout_id: id, start_min: s, end_min: s + 60, summary: id, clash: fix === undefined ? null : { with: 'Drive home · 62 min', fix_min: fix } }, o || {});
