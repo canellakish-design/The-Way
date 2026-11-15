@@ -443,7 +443,7 @@ const isLiftEntry = w => /weight|lift|strength/i.test(String(w.sport || '')) || 
 // or swapped lift was never looked at again. This reads every lift the week holds, done or planned, and says what
 // is wrong in plain words. week: report()'s days (lifts, done_keys, ride, rest, times); sessions: the saved ones.
 function checkWeek(week, sessions) {
-  const out = [], day = k => tz.labelOf(k), nm = k => (TEMPLATES.find(t => t.key === k) || {}).short || k;
+  const out = [], day = k => tz.dayShort(k), nm = k => (TEMPLATES.find(t => t.key === k) || {}).short || k;
   const openOn = x => (x.lifts && x.lifts.length ? x.lifts : []).filter(k => k !== 'any' && !(x.done_keys || []).includes(k));
   const first = week.length ? week[0].date : null, last = week.length ? week[week.length - 1].date : null;
   // every time each of the five happens: saved sessions from six days before the week, and what the calendar holds
