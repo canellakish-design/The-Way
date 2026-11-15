@@ -1762,7 +1762,10 @@ function dayCard(d, plan, nowMin, rec, solo){
     // a ride's minutes by heart-rate zone, when the calendar already carried them: a thin bar, the unridden minutes grey
     const zb = g && g.zmin ? (z => { const rest = Math.max(0, (z.plan || 0) - z.z1 - z.z2 - z.z3); return `<span class="zonebar" title="${attr(`Z1 ${Math.round(z.z1)} · Z2 ${Math.round(z.z2)} · Z3 ${Math.round(z.z3)} min${z.plan ? ` of ${Math.round(z.plan)} planned` : ""}`)}">${[["z1", z.z1], ["z2", z.z2], ["z3", z.z3]].filter(x => x[1] > 0).map(([k, v]) => `<i class="${k}" style="flex:${v.toFixed(1)}"></i>`).join("")}${rest > 0 ? `<i class="zrest" style="flex:${rest.toFixed(1)}"></i>` : ""}</span>`; })(g.zmin) : "";
     // the gold medal: this day's ride beat the signature (a breakthrough); it sits on the ride's row
-    const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength|\brun\b|treadmill|zwift|trainer/i.test(r.title) && !/virtualride|^run$|walk|hike/i.test(r.sport||"");
+    // only a ride outside is a ride for the weather and the medal: never a lift, a kettlebell session or anything done
+    // indoors (Harry, 15 Nov 2026: "I don't need weather for kettlebell workouts"; its row carried the day's "F")
+    const isRide = (r.source === "plan" || r.source === "intervals" || r.bt) && !/lift|push$|pull|upper|legs|weight|strength|kettlebell|\bblast\b|\bpump\b|\bcore\b|yoga|mobility|\brun\b|treadmill|zwift|trainer/i.test(r.title) && !/virtualride|weighttraining|workout|yoga|^run$|walk|hike/i.test(r.sport||"")
+      && !(r.place && r.place !== "outside") && !r.indoor;
     const bt = isRide && BTS[d.date] ? (r.bt || BTS[d.date][0]) : null;
     const wxh = isRide && WX[d.date] ? WX[d.date].hours.find(h => h.hour === Math.floor(r.start / 60)) : null;
     // the tag stays short; the long reason lives in the detail that opens on tap
