@@ -201,13 +201,17 @@ async function rows(from, to, o) {
   }
   return want.filter(k => d.rows[k]).map(k => d.rows[k].row);
 }
-// The five-minute job: a few missing or stale days at a time, newest first, until the last 120 are on record.
+// The five-minute job: two missing days at a time, newest first, until the last 120 are on record; after that it only
+// rereads yesterday and the day before, every three hours (a late correction shows). Kept small on purpose: the job it
+// rides on already runs about twelve seconds every five minutes (usage audit, 14 Nov 2026).
 async function tick() {
   const today = tz.todayKey(), d = await store(), need = [];
-  for (let i = 1; i <= BACK && need.length < 3; i++) { const k = tz.shiftKey(today, -i); if (stale(k, d.rows[k], today)) need.push(k); }
+  const old = (k, e) => !e || !e.at || e.v !== VER || (k >= tz.shiftKey(today, -2) && Date.now() - e.at > 3 * 3600e3);
+  for (let i = 1; i <= BACK && need.length < 2; i++) { const k = tz.shiftKey(today, -i); if (old(k, d.rows[k])) need.push(k); }
   if (!need.length) return { built: 0 };
-  const got = await rows(need[need.length - 1], need[0], { budgetMs: 9000 });
-  return { built: need.length, on_record: Object.keys((await store()).rows).length, got: got.length };
+  const built = await build(need, 6000), keys = Object.keys(built);
+  if (keys.length) { const fresh = await store(); for (const k of keys) fresh.rows[k] = { at: Date.now(), v: VER, row: built[k] }; delete fresh.rows[today]; await setJSON(KEY, { rows: fresh.rows }).catch(() => {}); }
+  return { built: keys.length, on_record: Object.keys(d.rows).length + keys.filter(k => !d.rows[k]).length };
 }
 // For the coach's context: from the store only, so a question never waits on it.
 async function digest(days) {
