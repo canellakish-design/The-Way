@@ -393,3 +393,9 @@ ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
 #racePage .rc-src{display:flex; flex-direction:column; gap:1px; padding:7px 0; border-bottom:1px solid var(--line)} #racePage .rc-src a{color:var(--green)} #racePage .rc-src:last-child{border-bottom:0}
 .raceline{display:flex; align-items:center; gap:8px; padding:9px 12px; margin:12px 0 4px; border:1px solid var(--line); background:var(--card); color:var(--ink); text-decoration:none; min-width:0}
 .raceline b{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600} .raceline i{font-style:normal; font-family:var(--mono); font-size:12px; color:var(--green); flex:none} .raceline.none i{color:var(--muted)}
+#racePage .rc-near{margin-top:18px} #racePage .rc-kinds{display:flex; flex-wrap:wrap; gap:6px; margin:10px 0}
+#racePage .rc-kinds button{margin:0; min-height:36px; padding:6px 10px; font-size:11px} #racePage .rc-kinds button.on{background:var(--green-soft); border-color:var(--green); color:var(--ink)}
+#racePage .rc-found{border:1px solid var(--line); background:var(--card); margin:0 0 8px; padding:10px 12px} #racePage .rc-fhead{display:flex; gap:12px; align-items:flex-start}
+#racePage .rc-found .rc-what .hu-chip{white-space:normal} #racePage .rc-facts{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px}
+#racePage .rc-facts button,#racePage .rc-facts .btn{margin:0; min-height:40px; font-size:11px; padding:8px 10px; text-decoration:none; display:inline-flex; align-items:center}
+#racePage .rc-fromnote{margin-top:8px; color:var(--muted)}
