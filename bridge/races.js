@@ -106,7 +106,7 @@ const SOURCES = [
 ];
 
 // BikeReg's event search answers without a key. It is asked at most twice a day and what it said is kept.
-const FOUND_KEY = 'races-found', FOUND_TTL = 12 * 3600e3, STATES = 'MD,VA,DC,DE,PA,WV,NJ', REACH_MI = 210;
+const FOUND_KEY = 'races-found', FOUND_TTL = 12 * 3600e3, STATES = 'MD,VA,DC,DE,PA,WV,NJ', REACH_MI = 150;   // about three and a half hours by road
 const brDate = v => { const m = /Date\((\d+)/.exec(String(v || '')); return m ? tz.keyOf(new Date(+m[1])) : null; };
 const milesBetween = (a, b) => { const R = 3958.8, r = x => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon / 2) ** 2; return Math.round(2 * R * Math.asin(Math.sqrt(h))); };
