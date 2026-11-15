@@ -190,5 +190,17 @@ ok('two games back to back at one venue do not clash through the second one\'s a
   D.markClashes([first, away], { wake: 390, bed: 1350 });
   assert.ok(first.clash && away.clash);
 });
+ok('Legs or Pull and a hard ride on one day want three hours between them; an upper day or an easy ride does not', () => {
+  const lift = (name, s, e) => row(name, 'training', s, e, { kind: 'lifting', workout_id: 'L' }), ride = (name, s, e) => row(name, 'training', s, e, { kind: 'ride', workout_id: 'R' });
+  const vo2 = ride('VO2 40/20s', m(11, 10), m(12, 1)), z1 = ride('Zone 1, 75 min', m(13, 55), m(15, 10));
+  assert.strictEqual(D.changeover(vo2, lift('Pull and calves', m(12, 16), m(13, 11))), 180);
+  assert.strictEqual(D.changeover(lift('Legs', m(7, 30), m(8, 25)), vo2), 180);
+  assert.ok(D.changeover(vo2, lift('Push', m(12, 16), m(13, 11))) < 60);
+  assert.ok(D.changeover(z1, lift('Legs', m(15, 25), m(16, 20))) < 60);
+  // Friday 20 Nov as the auto-mover left it: Pull 15 minutes after the VO2 is marked, with a time three hours clear
+  const rows = D.markClashes([vo2, lift('Pull and calves', m(12, 16), m(13, 11))], { wake: m(6, 30), bed: m(21, 30) });
+  const pull = rows.find(r => /Pull/.test(r.summary));
+  assert.ok(pull.clash && pull.clash.fix_min >= m(15, 1), JSON.stringify(pull.clash));
+});
 console.log(n + ' passed');
 

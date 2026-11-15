@@ -906,6 +906,7 @@ V.lift = async function(){
       </a>`; }).join("")}</div>
       <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.blasts_this_week ? ` · +${L.blasts_this_week} kettlebell blast${L.blasts_this_week === 1 ? "" : "s"}` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${false ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
       <details class="why"><summary>why these days</summary><div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
+      ${(L.problems||[]).length ? `<div class="cue lprob"><b>To fix in this week</b><ul>${L.problems.map(p => `<li>${esc(p.text)}</li>`).join("")}</ul></div>` : ""}
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>
     </div>` : "";
@@ -932,7 +933,7 @@ V.lift = async function(){
     </div>` : "";
   document.getElementById("liftPage").innerHTML = `
     ${weekHTML}
-    <div class="card"><h4>${esc(T.name)}${T.short && /Upper/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(dayFmt(L.next_date)) : ""}` : ""}</h4>
+    <div class="card"><h4>${esc(T.name)}${T.short && /^Upper body/.test(T.name) ? ` <span class="small">(${esc(T.short)})</span>` : ""}${key === L.next ? ` · next up${L.next_date && L.next_date !== today ? ", " + esc(dayFmt(L.next_date)) : ""}` : ""}</h4>
       <div class="small">${T.hard_sets} hard sets · ${T.minutes} min${T.supplement ? " · extra, not one of the five" : ""} · switch to ${others.map(o => `<a href="#lift?t=${esc(o.key)}">${esc(o.short)}</a>`).join(" · ")}</div>
       <ul class="agenda lexlist">${T.exercises.map(exHTML).join("")}</ul>
       <label for="lNotes">Notes</label><input id="lNotes" placeholder="notes">

@@ -490,9 +490,14 @@ async function liftsSavedBy(from, to) {
   } catch (e) { /* no lift store */ }
   return out;
 }
-// A planned lift is done when a saved session carries its name; with one lift planned that day, any saved session is it.
+// A planned lift is done when the session saved that day is the same one of the five (a planned Upper 2 is not done
+// by a saved Legs, nor a Kettlebell Blast by any of the five). An entry that names none of them ("Lift") is done by
+// the day's one saved session when it is the day's one lift.
 function liftMatches(w, saved, plannedLifts) {
   if (!saved.length || isRideSport(w)) return false;
+  const key = require('./lifts').templateOf(w.name);
+  if (key) return saved.some(l => l.key === key);
+  if (require('./food-math').isBlast(w)) return false;
   const nm = String(w.name || '').toLowerCase();
   if (saved.some(l => l.names.some(n => n && (nm === n || nm.startsWith(n) || n.startsWith(nm))))) return true;
   return plannedLifts === 1 && saved.some(l => l.key !== 'pump');

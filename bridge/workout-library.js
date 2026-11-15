@@ -45,7 +45,7 @@ Before: carb breakfast 2 to 3 hours before (70 g oats and fruit). Carbs the even
 On the bike: one bottle of Tailwind, 2 scoops (50 g carbs). Fan on.
 After: a real meal within 2 hours, 45 g protein and carbs.
 The day: higher carb day.`,
-  lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes the day before a day off the bike or a long coaching day. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets, at school or Lifetime; the Pump at home is extra. Log it set by set on the Lift tab; it tells you the next weight.
+  lift: `LIFTING: Bigger Leaner Stronger, five days a week (push, pull, upper, legs, upper), each once every seven days. Legs goes two or three days before a hard ride, never the day before one. Heavy and short: 4 to 6 reps on the big lifts, three minutes between hard sets, at school or Lifetime; the Pump at home is extra. Log it set by set on the Lift tab; it tells you the next weight.
 
 EAT
 Before: a normal meal 1 to 2 hours before, or a Huel shake if it is first thing.
@@ -100,9 +100,9 @@ const LIBRARY = [
   // progression); here each is a block the calendar can hold.
   { key: 'lift-push', name: 'Push', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
   { key: 'lift-pull', name: 'Pull and calves', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
-  { key: 'lift-upper-1', name: 'Upper body and core (Upper 1)', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] },
+  { key: 'lift-upper-1', name: 'Upper 1: upper body and core', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] },
   { key: 'lift-legs', name: 'Legs', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
-  { key: 'lift-upper-2', name: 'Upper body and core (Upper 2)', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] }
+  { key: 'lift-upper-2', name: 'Upper 2: upper body and core', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] }
 ];
 
 // The notes follow where the ride is: a Zone 1 note's first line says trainer and ERG for a Zwift
