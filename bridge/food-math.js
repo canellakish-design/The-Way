@@ -311,21 +311,26 @@ function placeSnacks(meals, opts) {
       continue;
     }
     const earliest = Math.max(wake, prev ? mmin(prev) + (isMain(prev) && isMain(m) ? 75 : 60) : wake);
-    if (D.freeAt(t, 30, busy) && t >= earliest) { prev = m; continue; }
+    // packed and eaten at the field between two back-to-back games (dayplan.seams), with its note
+    const atSeam = sm => { if (sm.min !== t) { m.moved_from = m.time; m.time = toHM(sm.min); delete m.at_min; }
+      m.seam = true; m.place_note = `Pack it: eat at the field between ${sm.after} and ${sm.before}.`;
+      m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim(); prev = m; };
+    const seamsOk = () => D.seams(busy).filter(x => x.min >= earliest && x.min <= bed - 30);
+    // more than six hours after the main meal before it, with such a gap in between (Harry, 14 Nov 2026: U18 at 10:30a,
+    // U17 at 12:00p, then a ride; the plan had lunch as the meal after the ride: breakfast 8:45a, lunch 5:51p)
+    const starvedAt = at => { if (!isMain(m) || !prev || !isMain(prev) || at - mmin(prev) <= 360) return null;
+      const mid = (mmin(prev) + at) / 2; return seamsOk().filter(x => x.min < at - 60).sort((a, b) => Math.abs(a.min - mid) - Math.abs(b.min - mid))[0] || null; };
+    if (D.freeAt(t, 30, busy) && t >= earliest) { const sm0 = starvedAt(t); if (sm0) { atSeam(sm0); continue; } prev = m; continue; }
     let nt = D.nearestFree(Math.max(t, earliest), 30, busy, earliest, bed - 30);
     // no free half hour that far from the meal before it (practice, then a meeting until ten): the spacing gives
     // way before the meal sits inside something (Harry, 13 Nov: "Make sure stuff like that doesn't happen again")
     if (nt == null && !D.freeAt(t, 30, busy)) nt = D.nearestFree(t, 30, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
-    // A main meal that would land more than two and a half hours from its time (two games back to back, then a drive
-    // and a ride: lunch at 5:51p; Harry, 14 Nov 2026) is packed and eaten at the field between the games instead.
+    // A main meal that would land more than two and a half hours from its time, or more than six hours after the
+    // meal before it, is packed and eaten at the field between the games instead.
+    { const sm1 = starvedAt(nt == null ? t : nt); if (sm1) { atSeam(sm1); continue; } }
     if (isMain(m) && (nt == null || Math.abs(nt - t) > 150)) {
-      const sm = D.seams(busy).filter(x => x.min >= earliest && x.min <= bed - 30).sort((a, b) => Math.abs(a.min - t) - Math.abs(b.min - t))[0];
-      if (sm && (nt == null || Math.abs(sm.min - t) < Math.abs(nt - t))) {
-        if (sm.min !== t) { m.moved_from = m.time; m.time = toHM(sm.min); delete m.at_min; }
-        m.seam = true; m.place_note = `Pack it: eat at the field between ${sm.after} and ${sm.before}.`;
-        m.what = `${String(m.what || '').replace(/\s*$/, '')} ${m.place_note}`.trim();
-        prev = m; continue;
-      }
+      const sm = seamsOk().sort((a, b) => Math.abs(a.min - t) - Math.abs(b.min - t))[0];
+      if (sm && (nt == null || Math.abs(sm.min - t) < Math.abs(nt - t))) { atSeam(sm); continue; }
     }
     if (nt == null || nt === t) { prev = m; continue; }
     // what it is before or after: the next block after the new time, or the last one before it

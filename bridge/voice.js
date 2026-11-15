@@ -182,7 +182,7 @@ Action types:
 - nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep (30 minutes in full, half of the rest, 45 at most). A plan to nap later, or a question about napping, is a question, never a nap.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
-- A PHOTO may come with his words (it is the image at the top of this turn). Look at it first. In the reply say in a few words what you see, then what it means for him today and the one thing to do. What to do with it:
+- A PHOTO, or up to four, may come with his words (the images at the top of this turn). Look at them first, together: several photos are usually one thing from different sides (a plate and its label, the pages of a menu, two screens of his watch, his position from the side and the front), so read them as one and say so when they are separate things. In the reply say in a few words what you see, then what it means for him today and the one thing to do. What to do with it:
   a plate, a snack or a drink he says he had, is having or asks you to log: a meal (or drink) action, text = what is on the plate with amounts as you see them ("grilled salmon about 6 oz, a cup of white rice, broccoli").
   a plate, a menu, a shelf or a fridge he is asking about ("is this ok", "what should I get"): a question; pick for what is left of today's plan and say why in a number. Log nothing.
   a screenshot of his watch or strap (sleep, recovery, HRV, resting heart rate): a wellness action with the numbers read off it (a nap on it: a nap action). A scale: a weigh_in.
@@ -213,7 +213,9 @@ He said: "${text}"`;
 // A conversation: the earlier turns come back from the page (what he said,
 // what was answered), so "yes, do that" or "the second one" has something to
 // point at. The prompt with the day's context rides on the latest turn only.
+const MAX_PHOTOS = 4;
 async function understand(text, history, extra, image) {
+  const images = (Array.isArray(image) ? image : image ? [image] : []).slice(0, MAX_PHOTOS);
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
   const prior = (Array.isArray(history) ? history : []).slice(-10)
@@ -229,7 +231,7 @@ async function understand(text, history, extra, image) {
       output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
       system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
       // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
-      messages: turns.concat([{ role: 'user', content: (p => image ? [{ type: 'image', source: { type: 'base64', media_type: image.media_type, data: image.image_base64 } }, { type: 'text', text: p }] : p)(promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0)) }]) })
+      messages: turns.concat([{ role: 'user', content: (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0)) }]) })
   });
   const j = await r.json();
   if (j.usage) console.log('voice usage', JSON.stringify(j.usage));
@@ -277,7 +279,7 @@ async function run(a, x) {
         if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; }
       // a question or a remark is never a meal (food.js refuses words with nothing eaten in them)
       // with a photo in the turn, the reader sees the plate itself, not only the coach's words for it
-      let e; try { e = await food.addPhoto({ text: a.text, meal: a.meal || undefined, images: x && x.image ? [x.image] : undefined }); }
+      let e; try { e = await food.addPhoto({ text: a.text, meal: a.meal || undefined, images: x && x.images && x.images.length ? x.images : x && x.image ? [x.image] : undefined }); }
       catch (err) { if (err && err.not_food) return { ok: false, type: 'question', summary: 'Nothing logged: that was a question, not food.' }; throw err; }
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
       let celebrate = false, slot = null;
@@ -411,21 +413,24 @@ function attach(app) {
       // a Siri Shortcut named "The Way" can pass its own name along ("The way what's my next workout"): it is the
       // name of the door, not part of the sentence
       let text = String((req.body || {}).text || '').trim().replace(/^(hey\s+)?(siri[\s,]+)?the\s*way\b[\s,:.!?-]*/i, '').trim().slice(0, 1000);
-      // a photo: one image, as the Food page sends them; with no words it is "look at this"
-      const img = (req.body || {}).image, image = img && typeof img.image_base64 === 'string' && img.image_base64.length > 200 && img.image_base64.length < 7e6 && /^[A-Za-z0-9+/=]+$/.test(img.image_base64.slice(0, 200))
-        ? { image_base64: img.image_base64, media_type: /^image\/(jpeg|png|webp|gif)$/.test(String(img.media_type || '')) ? img.media_type : 'image/jpeg' } : null;
-      if (img && !image) return res.status(400).json({ error: 'That photo could not be read. Try another.' });
-      if (image && !text) text = 'Look at this photo and tell me what matters.';
+      // photos: up to four, as the Food page sends them (Harry, 14 Nov 2026: "I should be able to add multiple
+      // photos"); `image` is the one-photo form older pages send. With no words it is "look at this"
+      const sent = Array.isArray((req.body || {}).images) ? req.body.images : (req.body || {}).image ? [req.body.image] : [];
+      const okImg = img => img && typeof img.image_base64 === 'string' && img.image_base64.length > 200 && img.image_base64.length < 7e6 && /^[A-Za-z0-9+/=]+$/.test(img.image_base64.slice(0, 200));
+      const images = sent.filter(okImg).slice(0, MAX_PHOTOS).map(img => ({ image_base64: img.image_base64, media_type: /^image\/(jpeg|png|webp|gif)$/.test(String(img.media_type || '')) ? img.media_type : 'image/jpeg' }));
+      if (sent.length && !images.length) return res.status(400).json({ error: 'That photo could not be read. Try another.' });
+      const image = images[0] || null;
+      if (image && !text) text = images.length > 1 ? `Look at these ${images.length} photos and tell me what matters.` : 'Look at this photo and tell me what matters.';
       if (!text) return res.status(400).json({ error: 'nothing heard' });
       const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
-      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : ''), image);
+      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : ''), images);
       const actions = [];
       for (const a of (u.actions || []).slice(0, 6)) {
-        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image }))); }
+        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
       }
-      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image });
+      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 

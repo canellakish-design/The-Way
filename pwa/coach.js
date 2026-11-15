@@ -38,8 +38,8 @@
         ${SR ? `<button class="primary vhold" id="p_vHold">Hold to talk</button>` : ""}
         <div class="vheard" id="p_vHeard"></div>
         <div class="ch-type"><button id="chPhoto" class="ch-photo" aria-label="Send the coach a photo" title="Send the coach a photo"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><textarea id="chText" rows="1" aria-label="Ask your coach" placeholder="Or type it here"></textarea><button id="chGo">Ask</button></div>
-        <input type="file" id="chFile" accept="image/*" hidden>
-        <div class="ch-pick" id="chPick" hidden><img id="chPickImg" alt="the photo to send"><span class="small">Photo ready. Add a question, or just press Ask.</span><button class="linkish" id="chPickX">remove</button></div>
+        <input type="file" id="chFile" accept="image/*" multiple hidden>
+        <div class="ch-pick" id="chPick" hidden><div class="ch-thumbs" id="chThumbs"></div><span class="small" id="chPickNote"></span><button class="linkish" id="chPickX">remove all</button></div>
         <div class="ch-under"><span class="small" id="p_vStatus"></span><button class="linkish" id="chDeep" title="A longer answer: the coach reads the whole site and the research first (a minute or more)">Research it: the long answer</button></div>
       </div>
       <div class="vthread ch-conv" id="p_vThread"></div>
@@ -52,18 +52,29 @@
     // Ask: the quick conversation, spoken (voice.js); Enter sends it, Shift+Enter is a new line
     // a photo for the coach (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze"): picked from the
     // camera or the library, shrunk on the phone, sent with whatever is typed (or on its own)
-    let photo = null;
-    const pick = document.getElementById("chPick"), file = document.getElementById("chFile");
-    const clearPhoto = () => { photo = null; pick.hidden = true; file.value = ""; };
+    // up to four at a time (Harry, 14 Nov 2026: "I should be able to add multiple photos"): pick several at once, or
+    // press the camera again to add another; a tap on a small picture takes that one out
+    const MAX_PHOTOS = 4; let photos = [];
+    const pick = document.getElementById("chPick"), file = document.getElementById("chFile"), thumbs = document.getElementById("chThumbs"), pnote = document.getElementById("chPickNote");
+    const drawPhotos = () => { pick.hidden = !photos.length;
+      thumbs.innerHTML = photos.map((p, i) => `<button class="ch-thumb" data-i="${i}" aria-label="Remove photo ${i + 1}" title="Remove this photo"><img src="${p.thumb}" alt="photo ${i + 1} to send"><i aria-hidden="true">×</i></button>`).join("");
+      pnote.textContent = !photos.length ? "" : `${photos.length === 1 ? "1 photo" : photos.length + " photos"} ready${photos.length < MAX_PHOTOS ? ". Camera adds more" : " (the most at once)"}. Add a question, or just press Ask.`;
+      thumbs.querySelectorAll("[data-i]").forEach(b => b.onclick = () => { photos.splice(+b.dataset.i, 1); drawPhotos(); }); };
+    const clearPhoto = () => { photos = []; file.value = ""; drawPhotos(); };
     document.getElementById("chPhoto").onclick = () => { if (window.primeSound) primeSound(); file.click(); };
     document.getElementById("chPickX").onclick = clearPhoto;
-    file.onchange = async () => { const f = file.files && file.files[0]; if (!f) return;
-      const st = document.getElementById("p_vStatus"); if (st) st.textContent = "Reading the photo…";
-      try { const [big, small] = await Promise.all([fileToBase64(f, 1568, 0.82), fileToBase64(f, 220, 0.6)]);
-        photo = { image_base64: big, media_type: "image/jpeg", thumb: "data:image/jpeg;base64," + small };
-        document.getElementById("chPickImg").src = photo.thumb; pick.hidden = false; if (st) st.textContent = ""; box.focus(); }
-      catch (e) { if (st) st.textContent = "That photo could not be read. Try another."; clearPhoto(); } };
-    const askQuick = () => { const t = box.value.trim(); if (!t && !photo) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t, photo || undefined); box.value = ""; clearPhoto(); };
+    file.onchange = async () => { const fs = Array.from(file.files || []); if (!fs.length) return;
+      const st = document.getElementById("p_vStatus"), room = MAX_PHOTOS - photos.length, take = fs.slice(0, Math.max(0, room));
+      if (st) st.textContent = take.length > 1 ? "Reading the photos…" : "Reading the photo…";
+      let bad = 0;
+      // several together are sent a little smaller, so four still travel in one message
+      const side = photos.length + take.length > 1 ? 1280 : 1568;
+      for (const f of take) { try { const [big, small] = await Promise.all([fileToBase64(f, side, 0.8), fileToBase64(f, 220, 0.6)]);
+        photos.push({ image_base64: big, media_type: "image/jpeg", thumb: "data:image/jpeg;base64," + small }); } catch (e) { bad++; } }
+      file.value = ""; drawPhotos();
+      if (st) st.textContent = bad ? (bad === 1 ? "One photo could not be read. Try another." : bad + " photos could not be read.") : fs.length > take.length ? `Four photos at most: ${fs.length - take.length} left out.` : "";
+      if (photos.length) box.focus(); };
+    const askQuick = () => { const t = box.value.trim(); if (!t && !photos.length) { box.focus(); return; } if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t, photos.length ? photos.slice() : undefined); box.value = ""; clearPhoto(); };
     quick.onclick = askQuick;
     box.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); askQuick(); } });
     // the box grows with what is typed, up to a few lines
