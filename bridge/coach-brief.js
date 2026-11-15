@@ -5,7 +5,7 @@ module.exports = `
 Harry Canellakis, 48, high school history teacher and soccer coach (McDonogh, MD United), Maryland (Eastern time).
 About 98 kg (217 lb) and losing slowly on purpose. Trains on a Zwift trainer, on the road and on a Santa Cruz Hightower mountain bike.
 Wears a Garmin vívoactive 6 from 2 Nov 2026 (WHOOP before that); a Tymewear chest strap on some rides for breathing.
-Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull, Upper 1, Legs, Upper 2), at Life Time (Life Time Annapolis, a walk from home); kettlebells and a Bowflex at home.
+Lifts five days a week on Mike Matthews' Bigger Leaner Stronger plan (Push, Pull, Upper, Legs 1, Legs 2: two leg days since 15 Nov 2026, the second lighter, in place of the second upper day), at Life Time (Life Time Annapolis, a walk from home); kettlebells and a Bowflex at home.
 Rides outside when the weather is good; when it is bad (under 50°F, wet, windy or dark) he rides the trainer in the pain cave at home.
 
 ## The goal

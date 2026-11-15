@@ -82,6 +82,13 @@ function withFloor(scored, actual, floor) {
   if (!scored || floor == null || !(actual < scored.target) || actual < floor) return scored;
   return Object.assign({}, scored, { score: 100, direction: 'within the plan', remaining: 0 });
 }
+// Ahead of the plan is not over it (Harry, 15 Nov 2026, 9:18 a.m.: a breakfast of 67 g protein eaten before the plan's
+// clock said breakfast was due scored 0, "over" the 30 g due by then, and pulled the week's average down). During the
+// day the figure due so far is a floor to reach; the ceiling is the whole day's figure. target.whole carries that.
+function withWhole(scored, actual, whole) {
+  if (!scored || !(whole > 0) || !(actual > scored.target) || actual > whole * 1.05) return scored;
+  return Object.assign({}, scored, { score: 100, direction: 'ahead of the plan', remaining: 0 });
+}
 function scoreDay(actual, target) {
   if (!target) return null;
   const per = {};
@@ -90,6 +97,7 @@ function scoreDay(actual, target) {
   per.carbs_g = withFloor(per.carbs_g, actual ? (actual.carbs_g || 0) : 0, target.carbs_floor_g);
   per.kcal = withFloor(per.kcal, actual ? (actual.kcal || 0) : 0, target.kcal_floor);
   per.fat_g = withFloor(per.fat_g, actual ? (actual.fat_g || 0) : 0, target.fat_floor_g);
+  if (target.whole) for (const m of MACROS.concat(['kcal'])) per[m] = withWhole(per[m], actual ? (actual[m] || 0) : 0, target.whole[m]);
   const scored = MACROS.map(m => per[m] && per[m].score).filter(s => s != null);
   const overall = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null;
   return { per_macro: per, overall };

@@ -34,7 +34,7 @@ const PLACE_CHANGE = 15;
 // A heavy lower-body lift (Legs, or Pull with its deadlifts) and a hard ride on one day sit three hours apart, whichever
 // comes first (the 2026 review of strength work for cyclists; 15 Nov 2026: Pull had been put 15 minutes after the VO2).
 const HARD_GAP = 180;
-const lowerLift = r => r.kind === 'lifting' && /^(legs|pull)$/.test(require('./lifts').templateOf(r.summary) || '');
+const lowerLift = r => r.kind === 'lifting' && /^(legs|legs-2|pull)$/.test(require('./lifts').templateOf(r.summary) || '');
 const hardRide = r => r.kind !== 'lifting' && require('./lifts').HARD.test(String(r.summary || '').replace(/intervals\.?\s*icu/ig, ''));
 function changeover(a, b) {   // minutes needed between a ending and b starting
   if (!a || !b) return 0;
