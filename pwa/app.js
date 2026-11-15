@@ -886,8 +886,8 @@ V.lift = async function(){
     return `<svg viewBox="0 0 ${W} ${H}" class="lspark" preserveAspectRatio="none"><path d="${rows.map((r, i) => (i ? "L" : "M") + xs[i].toFixed(1) + "," + Y(r.e1rm).toFixed(1)).join(" ")}" fill="none" stroke="currentColor" stroke-width="2"></path></svg>`;
   };
   const hist = Object.entries(L.history || {});
-  const shortOf = k => (L.templates.find(t => t.key === k) || {}).short || "";
-  const legsDay = (L.week||[]).find(x => x.lift === "legs");
+  const shortOf = k => (L.templates.find(t => t.key === k) || {}).short || (k === "upper-2" ? "Upper 2" : k || "");
+  const legDays = (L.week||[]).filter(x => /^legs/.test(x.lift || "")), legsDay = legDays[0];
   // the count is the Day box's own (lifts.weekCount): "1 of 1 due" in the plan's first week, "3 of 5" after it
   // (a bridge without count: the same rule worked here from the sessions it lists, the first week judged on the sessions due)
   const C5 = L.count || (() => { const firsts = (L.sessions || []).filter(s => s.template !== "pump").map(s => s.date).sort(), f = firsts[0];
@@ -905,7 +905,7 @@ V.lift = async function(){
         <b>${ls.length ? ls.map(k => `${sh(k)}${dk.includes(k) ? "✓" : ""}`).join(" ") : "—"}</b>${sug ? `<span class="lsug">${sh(sug)}?</span>` : ""}
       </a>`; }).join("")}</div>
       <div class="small">Week ${L.week_no}${L.pumps_this_week ? ` · +${L.pumps_this_week} pump` : ""}${L.blasts_this_week ? ` · +${L.blasts_this_week} kettlebell blast${L.blasts_this_week === 1 ? "" : "s"}` : ""}${L.deload ? ` · <b style="color:var(--amber)">deload</b>` : ""}${L.last ? ` · last: ${esc(L.last.name||"")}, ${esc(dayFmt(L.last.date))}` : ""}${false ? ` · a dash with a name under it is a suggestion, not on the calendar` : ""}</div>
-      <details class="why"><summary>why these days</summary><div class="small">${legsDay ? `Legs ${esc(legsDay.label||legsDay.date)}: ${esc(legsDay.why)}.` : ""} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
+      <details class="why"><summary>why these days</summary><div class="small">${legDays.map(x => `${esc(shortOf(x.lift))} ${esc(x.label||x.date)}: ${esc(x.why)}.`).join(" ")} The two days with no lift are the two biggest riding days.${L.week.some(x => x.pumped || x.pump_ok) ? ` The Pump fits on ${L.week.filter(x => x.pump_ok || x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")}${L.week.some(x => x.pumped) ? ` (done ${L.week.filter(x => x.pumped).map(x => esc(String(x.label||x.date).slice(0,3))).join(", ")})` : ""}.` : ""} Hover or press a day for its ride.</div></details>
       ${(L.problems||[]).length ? `<div class="cue lprob"><b>To fix in this week</b><ul>${L.problems.map(p => `<li>${esc(p.text)}</li>`).join("")}</ul></div>` : ""}
       ${L.deload_note ? `<div class="cue">${esc(L.deload_note)}</div>` : ""}
       <div class="rowbtns"><button id="lWeek">Put the week on the calendar</button></div><div class="small" id="lWeekMsg"></div>

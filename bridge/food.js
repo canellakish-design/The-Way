@@ -501,7 +501,7 @@ async function dayReport(date) {
   // Macros are read against what the plan says should be in by now (today), or the whole day (a past day).
   const nowHM0 = hmNow();
   const due = date === tz.todayKey() ? F.dueSoFar(rows, g.target, nowHM0) : null;
-  const macroTarget = due ? (due.kcal > 0 ? Object.assign({}, g.target, due) : null) : g.target;
+  const macroTarget = due ? (due.kcal > 0 ? Object.assign({}, g.target, due, { whole: g.target }) : null) : g.target;
   const macro = macroTarget ? scoreDay(actual, macroTarget) : null;
   const rides = g.sessions.filter(s => s.done && s.end_at);
   const guide = F.guidelineScore(g.day, meals, rides, rows);
@@ -725,7 +725,7 @@ function nextUp(g, entries, actual, macroNow, nowHM) {
   // the compliance it would leave: the day to date plus this slot, against what is due once the slot's time has come
   const after = { kcal: (actual.kcal || 0) + (nx.kcal || 0), carbs_g: (actual.carbs_g || 0) + (nx.carbs_g || 0), protein_g: (actual.protein_g || 0) + (nx.protein_g || 0), fat_g: (actual.fat_g || 0) + fat };
   const dueThen = F.dueSoFar(meals, g.target, nx.time);   // includes this slot: its time has come
-  const scoredAfter = dueThen && dueThen.kcal > 0 ? scoreDay(after, Object.assign({}, g.target, dueThen)) : null;
+  const scoredAfter = dueThen && dueThen.kcal > 0 ? scoreDay(after, Object.assign({}, g.target, dueThen, { whole: g.target })) : null;
   const late = F.toMin(nx.time) < F.toMin(nowHM) - 5;
   return { slot: nx.slot, time: nx.time, name: `${nx.slot}${nx.time ? ' at ' + tz.hm12(nx.time) : ''}`, what: nx.what,
     kcal: nx.kcal || 0, carbs_g: nx.carbs_g || 0, protein_g: nx.protein_g || 0, fat_g: fat, low_carb: !!nx.low_carb, late,
