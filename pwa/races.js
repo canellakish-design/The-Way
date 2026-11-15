@@ -70,12 +70,12 @@
             <div class="rc-nexthead"><div><h3>${esc(n.name)}</h3><div class="small">${esc(dayWord(n.date))}${facts(n) ? " · " + facts(n) : ""}</div><div class="rc-chips">${chip(PRI[n.priority][0], PRI[n.priority][1])}${chip(n.kind)}${n.status === "registered" ? chip("entered", "hu-go") : ""}</div></div>
               <div class="rc-count"><b>${n.days_out}</b><i>${n.days_out === 1 ? "day" : "days"}</i></div></div>
             ${n.url ? `<a class="btn primary" href="${attr(n.url)}" target="_blank" rel="noopener">${n.status === "registered" ? "Your entry" : "Enter"}</a>` : ""}</div>` : ""}
-        <details class="ln-fold rc-add"${d.upcoming.length ? "" : " open"}><summary>Add a race</summary>${form(null, d.kinds, d.statuses)}</details>
         <span class="eyebrow rc-eye">The season</span>
         ${d.upcoming.length ? Object.keys(byMonth).sort().map(m => `<div class="rc-month">${MON[+m.slice(5) - 1]} ${m.slice(0, 4)}</div>${byMonth[m].map(r => row(r, d)).join("")}`).join("")
-          : `<div class="card"><div class="small">Nothing on the calendar yet. Add the first one above, or tell the coach: "add the Poolesville Road Race on May 15 as my A race".</div></div>`}
+          : `<div class="card"><div class="small">Nothing on the calendar yet. Pick from the races near you below, add one by hand, or tell the coach: "add the Poolesville Road Race on April 24 as my A race".</div></div>`}
+        <details class="ln-fold rc-near" id="rcNear"${d.upcoming.length ? "" : " open"}><summary>Find races near you</summary><div id="rcFound"><div class="small">Open to read what is open for entry within about three hours of home.</div></div></details>
+        <details class="ln-fold rc-add"><summary>Add a race by hand</summary>${form(null, d.kinds, d.statuses)}</details>
         ${d.past.length ? `<span class="eyebrow rc-eye">Behind you</span>${d.past.map(r => row(r, d)).join("")}` : ""}
-        <details class="ln-fold rc-near" id="rcNear"><summary>Find races near you</summary><div id="rcFound"><div class="small">Open to read what is open for entry within about three hours of home.</div></div></details>
         <details class="why rc-find"><summary>where to find races</summary><div class="small" id="rcSources">${sourcesHTML(d.sources)}</div></details>`;
       // what is open for entry near him (BikeReg, through the bridge): read when the fold is opened, by kind
       const near = document.getElementById("rcNear"); if (wasNear) near.open = true;
