@@ -9,7 +9,14 @@ const RACE = {
   location: 'Frederick, MD', miles: 57.2, climb_ft: 6231,
   character: 'climbing gran fondo: sustained threshold climbs, W/kg race'
 };
-const weeksOut = () => Math.max(0, (new Date(RACE.date) - new Date()) / (7 * 864e5));
+const weeksTo = date => Math.max(0, (new Date(date) - new Date()) / (7 * 864e5));
+// The race the season is built around is the next A race on his race calendar (races.js). With none there, and the
+// old fixed race behind him, there is no clock to count down: the season is base.
+async function current() {
+  try { const t = await require('./races').target(); if (t) return { race: { name: t.name, date: t.date, location: t.location || '', miles: t.distance_mi || null, climb_ft: t.climb_ft || null, character: t.kind + (t.notes ? ': ' + t.notes.slice(0, 120) : '') }, weeks: weeksTo(t.date + 'T12:00:00') }; } catch (e) { /* the old race stands */ }
+  if (new Date(RACE.date + 'T23:59:59') >= new Date()) return { race: RACE, weeks: weeksTo(RACE.date) };
+  return { race: { name: 'No A race set', date: null, location: '', miles: null, climb_ft: null, character: 'base season: add an A race on the Races page' }, weeks: 20 };
+}
 function phase(w) {
   if (w > 12) return 'base'; if (w > 4) return 'build';
   if (w > 1) return 'peak'; if (w > 0.3) return 'taper'; return 'race week';
@@ -46,12 +53,12 @@ async function weekState() {
   const wk = isoWeek(new Date());
   const db = await getJSON('race-week', {});
   const done = db[wk] || { aerobic_h: 0, hi_min: 0, strength: 0 };
-  const w = weeksOut();
+  const cur = await current(), w = cur.weeks;
   const hrs = await weeklyHours();
   const need = buckets(w, hrs.hours);
   const r1 = x => Math.round(x * 10) / 10;
   return {
-    race: RACE, weeks_out: r1(w), phase: need.phase, week: wk,
+    race: cur.race, weeks_out: cur.race.date ? r1(w) : null, phase: need.phase, week: wk,
     hours_source: hrs.source, weekly_hours: hrs.hours,
     need: { aerobic_h: r1(need.aerobic_h), hi_min: Math.round(need.hi_min), strength: need.strength },
     done: { aerobic_h: r1(done.aerobic_h), hi_min: Math.round(done.hi_min), strength: done.strength },

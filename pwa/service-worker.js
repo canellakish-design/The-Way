@@ -1,6 +1,6 @@
 // The Way — service worker v44. Network-first, and it only caches genuine
 // successes of the right content type.
-const SHELL = "the-way-shell-v285";   // bumped whenever the shell changes, so a held copy is dropped on activate
+const SHELL = "the-way-shell-v287";   // bumped whenever the shell changes, so a held copy is dropped on activate
 const COACH = "the-way-coach-v1";   // the 3D coach's files: kept across shell updates
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
@@ -18,7 +18,7 @@ self.addEventListener("fetch", e => {
       return r; }))));
     return;
   }
-  const shellPaths = ["/", "/index.html", "/splash.js", "/ptr.js", "/app.js", "/plan.js", "/food.js", "/links.js", "/coach.js", "/ride.js", "/flags.js", "/voice.js", "/face.js", "/fit.js", "/buckets.js", "/light.js", "/edge.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
+  const shellPaths = ["/", "/index.html", "/splash.js", "/ptr.js", "/app.js", "/plan.js", "/food.js", "/links.js", "/coach.js", "/ride.js", "/flags.js", "/races.js", "/voice.js", "/face.js", "/fit.js", "/buckets.js", "/light.js", "/edge.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
   if (shellPaths.includes(u.pathname)) {
     e.respondWith(fetch(e.request).then(r => {
       // Only cache a real success. A 404 page, or the API function answering
@@ -27,7 +27,7 @@ self.addEventListener("fetch", e => {
       const type = r.headers.get("content-type") || "";
       const cacheable = r.ok && r.status === 200
         && (/\.css$/.test(u.pathname) ? type.includes("css")
-          : (u.pathname === "/splash.js" || u.pathname === "/ptr.js" || u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js" || u.pathname === "/links.js" || u.pathname === "/coach.js" || u.pathname === "/ride.js" || u.pathname === "/flags.js" || u.pathname === "/voice.js" || u.pathname === "/face.js" || u.pathname === "/fit.js" || u.pathname === "/buckets.js" || u.pathname === "/light.js" || u.pathname === "/edge.js" || u.pathname === "/player.js") ? type.includes("javascript")
+          : (u.pathname === "/splash.js" || u.pathname === "/ptr.js" || u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js" || u.pathname === "/links.js" || u.pathname === "/coach.js" || u.pathname === "/ride.js" || u.pathname === "/flags.js" || u.pathname === "/races.js" || u.pathname === "/voice.js" || u.pathname === "/face.js" || u.pathname === "/fit.js" || u.pathname === "/buckets.js" || u.pathname === "/light.js" || u.pathname === "/edge.js" || u.pathname === "/player.js") ? type.includes("javascript")
           : type.includes("html"));
       if (cacheable) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
       return r;

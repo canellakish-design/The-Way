@@ -373,3 +373,23 @@ ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
 
 /* what each lift is, under its name (lifts.js DESC) */
 #liftPage .lexhead .ldesc{display:block; margin-top:6px; font-size:13px; line-height:1.4; font-weight:400; color:var(--muted); text-transform:none; letter-spacing:0; text-align:left; white-space:normal}
+
+/* ---- Races (races.js) ---- */
+#racePage .rc-clock{grid-template-columns:1fr} #racePage .rc-clock .n{font-size:26px; line-height:1.1; text-transform:none; overflow-wrap:anywhere}
+#racePage .rc-word{margin:8px 0 14px; color:var(--muted)}
+#racePage .rc-next{margin:0 0 14px} #racePage .rc-next h3{font-family:var(--num); font-weight:700; font-size:24px; line-height:1.1; margin:6px 0 4px; text-transform:uppercase; letter-spacing:.3px; overflow-wrap:anywhere}
+#racePage .rc-nexthead{display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:10px}
+#racePage .rc-count{flex:none; text-align:center; border:1px solid var(--green); padding:6px 12px; min-width:74px} #racePage .rc-count b{display:block; font-family:var(--num); font-size:40px; line-height:1; color:var(--green)} #racePage .rc-count i{font-style:normal; font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--muted)}
+#racePage .rc-chips,#racePage .rc-what i{display:flex; flex-wrap:wrap; gap:5px; margin-top:6px; font-style:normal}
+#racePage .rc-eye{display:block; margin:18px 0 6px} #racePage .rc-month{font-family:var(--mono); font-size:11px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin:14px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--line)}
+#racePage .rc-row{border:1px solid var(--line); background:var(--card); margin:0 0 8px; padding:0} #racePage .rc-row.skipped summary{opacity:.55}
+#racePage .rc-row summary{display:flex; gap:12px; align-items:flex-start; padding:10px 12px; cursor:pointer; list-style:none} #racePage .rc-row summary::-webkit-details-marker{display:none}
+#racePage .rc-when{flex:none; width:92px; display:flex; flex-direction:column; gap:2px} #racePage .rc-when b{font-family:var(--mono); font-size:12px; letter-spacing:.3px} #racePage .rc-when i{font-style:normal; font-family:var(--mono); font-size:11px; color:var(--green)}
+#racePage .rc-what{min-width:0; flex:1; display:flex; flex-direction:column; gap:2px} #racePage .rc-what > b{font-size:16px; overflow-wrap:anywhere}
+#racePage .rc-row[open] summary{border-bottom:1px solid var(--line)} #racePage .rc-notes{padding:8px 12px 0} #racePage .rc-enter{margin:10px 12px 0; display:inline-block}
+#racePage .rc-form{display:flex; flex-direction:column; gap:6px; padding:12px} #racePage .rc-add .rc-form{padding:10px 0 0}
+#racePage .rc-form input,#racePage .rc-form select,#racePage .rc-form textarea{width:100%; min-width:0; box-sizing:border-box} #racePage .rc-form .row2 > span{min-width:0}
+#racePage .rc-acts{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-top:6px} #racePage .rc-acts button{margin:0} #racePage .rc-del{color:var(--muted)}
+#racePage .rc-src{display:flex; flex-direction:column; gap:1px; padding:7px 0; border-bottom:1px solid var(--line)} #racePage .rc-src a{color:var(--green)} #racePage .rc-src:last-child{border-bottom:0}
+.raceline{display:flex; align-items:center; gap:8px; padding:9px 12px; margin:12px 0 4px; border:1px solid var(--line); background:var(--card); color:var(--ink); text-decoration:none; min-width:0}
+.raceline b{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600} .raceline i{font-style:normal; font-family:var(--mono); font-size:12px; color:var(--green); flex:none} .raceline.none i{color:var(--muted)}

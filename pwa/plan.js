@@ -97,10 +97,13 @@ V.calendar = async function(){
   view.innerHTML = `<span class="eyebrow">The plan</span>
     <div class="pweekhead"><h2 class="ptitle">Week of ${esc(dayLabel(mon,{weekday:undefined}))}</h2>
       <div class="pweeknav"><button id="pPrev" aria-label="Previous week">‹</button><button id="pToday">This week</button><button id="pNext" aria-label="Next week">›</button></div></div>
+    <div id="pRace"></div>
     <div id="pWeek"><div class="card"><div class="small">Loading the week…</div></div></div>`;
   document.getElementById("pPrev").onclick = ()=>go(keyAdd(mon,-7));
   document.getElementById("pNext").onclick = ()=>go(keyAdd(mon,7));
   document.getElementById("pToday").onclick = ()=>go(mondayOf(today));
+  // the next race and how far out it is; a tap opens the race calendar (races.js)
+  if (window.raceLine) raceLine().then(h => { const rl = document.getElementById("pRace"); if (rl) rl.innerHTML = h || `<a class="raceline none" href="#races"><i>No race on the calendar. Add one</i></a>`; });
 
   let cal;
   try{ cal = await bridge(`/calendar?from=${mon}&to=${sun}`); }

@@ -41,7 +41,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -185,6 +185,8 @@ async function contextNow() {
     const last = lifts.sessions[lifts.sessions.length - 1];
     lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
   }
+  // his race calendar (races.js): what is ahead and the season's clock
+  try { const R = require('./races'); lines.push(R.aheadText(await race(R.report(), 2000, null))); } catch (e) { /* no races line */ }
   // the look back (history.js): his last fortnight day by day, his best food days, his habits, the trends
   try { const hist = await race(require('./history').digest(14), 2500, ''); if (hist) lines.push(hist); } catch (e) { /* the day stands without it */ }
   return lines.join('\n');
@@ -215,6 +217,7 @@ Action types:
 - note: anything about how he feels or slept, text = his words.
 - nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep (30 minutes in full, half of the rest, 45 at most). A plan to nap later, or a question about napping, is a question, never a nap.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
+- race: he wants a race put on his race calendar ("add the Greenbelt crit on May 6 as a B race", "put Gran Fondo Maryland down for September 19, that's my A race"). name = the race's name; date = its day as YYYY-MM-DD (the next such date ahead); text = the rest as "priority=A|B|C; kind=road race|criterium|time trial|gran fondo|gravel|mountain bike|cyclocross|hill climb|other; location=…; distance_mi=…; notes=…", leaving out what he did not say (priority B when he did not say). Only when he asks to add one; a question about his races is answered from RACES AHEAD. He changes or removes a race on the Races page.
 - save_place: he wants the place he is at remembered ("save this place", "remember this café", "add Mags, I get the sunrise burrito here"). name = the place's name as he said it, text = what to order there or any note, or "". It is saved where he is standing.
 - A PHOTO, or up to four, may come with his words (the images at the top of this turn). Look at them first, together: several photos are usually one thing from different sides (a plate and its label, the pages of a menu, two screens of his watch, his position from the side and the front), so read them as one and say so when they are separate things. In the reply say in a few words what you see, then what it means for him today and the one thing to do. What to do with it:
   a plate, a snack or a drink he says he had, is having or asks you to log: a meal (or drink) action, text = what is on the plate with amounts as you see them ("grilled salmon about 6 oz, a cup of white rice, broccoli").
@@ -448,6 +451,13 @@ async function run(a, x) {
       d.notes = d.notes.slice(-200);
       await setJSON('voice-notes', d);
       return { ok: true, summary: 'Noted.' };
+    }
+    case 'race': {
+      // text carries the rest as "priority=A; kind=criterium; location=…; distance_mi=…; notes=…"
+      const kv = {}; for (const part of String(a.text || '').split(';')) { const m = /^\s*([a-z_]+)\s*=\s*(.+?)\s*$/i.exec(part); if (m) kv[m[1].toLowerCase()] = m[2]; }
+      let r; try { r = await require('./races').add({ name: a.name, date: a.date, priority: kv.priority, kind: kv.kind, location: kv.location, distance_mi: kv.distance_mi ? Number(kv.distance_mi) : undefined, notes: kv.notes }); }
+      catch (e) { return { ok: false, summary: e.message }; }
+      return { ok: true, summary: `On the race calendar: ${r.name}, ${tz.dayShort(r.date)} ${r.date.slice(0, 4)}, a ${r.priority} race (${r.kind}).` };
     }
     case 'nap': {
       let nap; try { nap = await require('./naps').add({ minutes: a.minutes, time: a.time || undefined, date: a.date || undefined }); } catch (e) { return { ok: false, summary: e.message }; }
