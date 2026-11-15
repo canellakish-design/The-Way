@@ -49,10 +49,11 @@ const READABLE = [
   ['/macros/today', 'today\'s macro targets'],
   ['/profile', 'the athlete profile'],
   ['/status', 'which connections are live'],
-  ['/race', 'race plans'],
+  ['/race', 'the season clock: the race the season is built around, weeks out, the phase and this week\'s buckets'],
+  ['/races', 'his race calendar: every race ahead with date, kind, priority (A/B/C), place, distance, climbing, status and link; past races with results; the season clock'],
   ['/flags/today', 'today\'s flags']
 ];
-const ALLOWED = /^\/(chain|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today)(\?[\w=&.,:%-]*)?$/;
+const ALLOWED = /^\/(chain|races|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today)(\?[\w=&.,:%-]*)?$/;
 
 const TOOLS = [
   { name: 'read_site', description: 'Read any page of The Way as JSON, exactly what the site shows. Paths you can read:\n' + READABLE.map(([p, d]) => `${p}: ${d}`).join('\n') + '\nRead several in parallel when the question spans them. Large answers are cut at about 60,000 characters.',

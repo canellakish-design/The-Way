@@ -291,7 +291,7 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients" };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients", races:"Races" };
   const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   // one way back: a page with a parent goes to its parent (the title still goes home), the rest to the Day
   if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a><a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
@@ -1858,7 +1858,9 @@ V.today = async function(){
     <div id="dayList"><div class="card"><div class="small">building the day…</div></div></div>
     <div class="small" id="daySources" style="margin-top:12px"></div>
     <div class="small auditnote" id="auditNote"></div>
+    <div id="raceLine"></div>
     <button id="toPlan" class="primary">The plan</button>
+    <button id="toRaces">Races</button>
     <button id="toSettings">Settings</button>`;
 
   // Last payload, so the now/next markers can be repainted without refetching.
@@ -1885,6 +1887,9 @@ V.today = async function(){
   // stranded on demo data with no way to fix it.
   document.getElementById("toSettings").onclick = ()=>{ location.hash = "#settings"; };
   document.getElementById("toPlan").onclick = ()=>{ location.hash = "#calendar"; };
+  document.getElementById("toRaces").onclick = ()=>{ location.hash = "#races"; };
+  // the next race and how far out it is (races.js), above the buttons
+  if (window.raceLine) raceLine().then(h => { const rl = document.getElementById("raceLine"); if (rl) rl.innerHTML = h; });
 
   const nowMin = ()=>{
     const p = new Intl.DateTimeFormat("en-US", { timeZone: cached.timezone || undefined,
