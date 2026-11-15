@@ -181,7 +181,7 @@ function abortListening(){
 // hold = talk; a quick tap toggles the sheet
 function wireHold(el, onTap){
   let downAt = 0, mine = false;
-  const down = (e)=>{ if (sending) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} if (window.primeSound) primeSound(); startListening(); };
+  const down = (e)=>{ if (sending || talk.on) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} if (window.primeSound) primeSound(); startListening(); };
   const up = (e)=>{
     if (!mine) return; mine = false; holding = false; e.preventDefault();
     const quick = Date.now() - downAt < HOLD_MS;
@@ -197,17 +197,23 @@ function wireHold(el, onTap){
 }
 
 // where he is, when the site already has permission: no prompt, three seconds at most, else nothing
+// kept for five minutes: a follow-up question does not wait on the phone's location again
+let whereKept = null;
 async function whereAmI(){
+  if (whereKept && Date.now() - whereKept.at < 300000) return whereKept.coords;
+  const c = await whereNow(); whereKept = { at: Date.now(), coords: c }; return c;
+}
+async function whereNow(){
   try{
     if (!navigator.geolocation) return null;
     if (navigator.permissions && navigator.permissions.query){ const st = await navigator.permissions.query({ name: "geolocation" }); if (st.state !== "granted") return null; }
-    return await new Promise(res => { const t = setTimeout(() => res(null), 3000); navigator.geolocation.getCurrentPosition(p => { clearTimeout(t); res({ lat: p.coords.latitude, lon: p.coords.longitude }); }, () => { clearTimeout(t); res(null); }, { maximumAge: 300000, timeout: 2800 }); });
+    return await new Promise(res => { const t = setTimeout(() => res(null), 1500); navigator.geolocation.getCurrentPosition(p => { clearTimeout(t); res({ lat: p.coords.latitude, lon: p.coords.longitude }); }, () => { clearTimeout(t); res(null); }, { maximumAge: 300000, timeout: 2800 }); });
   }catch{ return null; }
 }
 window.whereAmI = whereAmI;
 // photo: { image_base64, media_type, thumb }, or up to four of them, from the Coach page's Photo button (coach.js);
 // the coach looks at them together
-async function send(text, photo){
+async function send(text, photo, opts){
   const photos = (Array.isArray(photo) ? photo : photo ? [photo] : []).slice(0, 4); photo = photos[0] || null;
   if (!text && !photo) { status("Nothing to send."); return; }
   if (sending) return;
@@ -219,7 +225,7 @@ async function send(text, photo){
   status(photos.length > 1 ? "Looking at the photos…" : photo ? "Looking at the photo…" : "Thinking…");
   try{
     const coords = await whereAmI();
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", images: photos.length ? photos.map(p => ({ image_base64: p.image_base64, media_type: p.media_type })) : undefined, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", images: photos.length ? photos.map(p => ({ image_base64: p.image_base64, media_type: p.media_type })) : undefined, talk: opts && opts.talk ? true : undefined, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question"), offer: r.offer && r.offer.plan ? r.offer : null }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
@@ -284,13 +290,106 @@ function heyStart(){
 }
 function heyStop(){ const r = heyRec; heyRec = null; if (r){ r.onend = null; try{ r.abort(); }catch{} } }
 function heyPause(){ heyPaused = true; heyStop(); }
-function heyResume(){ heyPaused = false; if (heyOn && !ttsBusy()) heyStart(); else if (heyOn) setTimeout(heyResume, 700); }
+function heyResume(){ if (talk.on) return; heyPaused = false; if (heyOn && !ttsBusy()) heyStart(); else if (heyOn) setTimeout(heyResume, 700); }
 function setHey(on){
   heyOn = !!on; try{ localStorage.setItem("way-hey", heyOn ? "1" : "0"); }catch{}
   drawHey();
   if (heyOn){ heyPaused = false; heyStart(); toast("Hey Coach is listening. Start with \"Coach\"."); } else { heyStop(); toast("Hey Coach off."); }
 }
 document.addEventListener("visibilitychange", () => { if (document.hidden) heyStop(); else if (heyOn && !heyPaused) heyStart(); });
+
+/* ---- the open conversation ----
+   (Harry, 14 Nov 2026: "the kind of open back and forth conversation isn't working".) One tap starts it. He talks; when
+   he stops for a second and a half it is sent; the coach answers out loud; the moment the voice has finished it is
+   listening again. No button between turns and no "Coach" at the start of each sentence. It ends when he taps End,
+   says "that's all", leaves the page, or after ninety quiet seconds.
+   The microphone is closed while the coach thinks and speaks, so he never answers his own voice; a tap on the button
+   while he is speaking cuts him off and listens. Its own recogniser (the hold button and Hey Coach are paused). */
+const TALK_GAP = 1500, TALK_GAP_OPEN = 2600, TALK_QUIET = 90000;
+const TALK_END = /^\s*(?:ok(?:ay)?[, ]*)?(?:that'?s (?:all|it)|we'?re done|i'?m done|end (?:the )?conversation|stop listening|good ?bye|bye(?: coach)?|thanks?(?: you)?[, ]*(?:coach|that'?s all|bye)?)[\s.!]*$/i;
+const talk = { on: false, phase: "off", rec: null, buf: "", interim: "", gapT: 0, quietT: 0, waitT: 0, fails: 0 };
+const talkBtns = () => [document.getElementById("p_vTalk")].filter(Boolean);
+function drawTalk(){
+  const label = !talk.on ? "Start conversation" : talk.phase === "speaking" ? "Tap to interrupt" : talk.phase === "thinking" ? "Thinking…" : "Listening… just talk";
+  for (const b of talkBtns()) { b.textContent = label; b.classList.toggle("on", talk.on); b.classList.toggle("live", talk.on && talk.phase === "listening"); }
+  const end = document.getElementById("p_vTalkEnd"); if (end) end.hidden = !talk.on;
+  const hold = document.getElementById("p_vHold"); if (hold) hold.hidden = talk.on;
+  const m = document.getElementById("micBtn"); if (m) m.classList.toggle("talk", talk.on);
+}
+function talkHeard(){ const el = $("vHeard"); if (el) el.textContent = (talk.buf + " " + talk.interim).trim(); }
+function talkQuiet(){ clearTimeout(talk.quietT); if (talk.on) talk.quietT = setTimeout(() => { if (talk.on && talk.phase === "listening" && !(talk.buf + talk.interim).trim()) talkStop("Conversation ended after a quiet minute and a half. Tap to start again."); }, TALK_QUIET); }
+function talkCloseRec(){ const r = talk.rec; talk.rec = null; if (r){ r.onend = null; r.onresult = null; r.onerror = null; try{ r.abort(); }catch{} } }
+function talkListen(){
+  if (!talk.on || talk.rec) return;
+  if (sending || (window.coachSpeaking && coachSpeaking())) { clearTimeout(talk.waitT); talk.waitT = setTimeout(talkListen, 300); return; }
+  talk.phase = "listening"; drawTalk();
+  try{
+    const r = talk.rec = new SR(); r.lang = "en-US"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
+    r.onstart = () => { talk.fails = 0; status(""); };
+    r.onresult = e => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++){ const x = e.results[i]; if (x.isFinal) talk.buf += x[0].transcript + " "; else interim += x[0].transcript; }
+      talk.interim = interim; talkHeard(); talkQuiet();
+      // he has stopped: a second and a half after the last word, longer when the sentence plainly is not finished
+      const t = (talk.buf + " " + talk.interim).trim(); clearTimeout(talk.gapT);
+      if (t) { const open = /\b(and|but|or|so|because|the|a|an|to|for|with|my|i|i'm|is|are|was|of|in|on|at|if|that|what|how)$/i.test(t.replace(/[.,!?]+$/, "")); talk.gapT = setTimeout(talkFlush, open ? TALK_GAP_OPEN : TALK_GAP); }
+    };
+    r.onerror = e => { const k = e.error;
+      if (k === "not-allowed" || k === "service-not-allowed") talkStop("Microphone blocked. Settings → Safari → Microphone → Allow for this site.");
+      else if (k === "audio-capture") talkStop("No microphone found."); };
+    // the phone ends a session by itself at a pause or after a while: what was heard is kept, and it listens on
+    r.onend = () => { if (talk.rec !== r) return; talk.rec = null; if (!talk.on || talk.phase !== "listening") return;
+      if ((talk.buf + talk.interim).trim()) { clearTimeout(talk.gapT); talk.gapT = setTimeout(talkFlush, 500); }
+      setTimeout(talkListen, 250); };
+    r.start();
+  }catch(err){
+    talk.rec = null;
+    if (++talk.fails > 4) { talkStop("The microphone would not start. Tap Start conversation again."); return; }
+    setTimeout(talkListen, 600);
+  }
+}
+async function talkFlush(){
+  clearTimeout(talk.gapT);
+  if (!talk.on || talk.phase !== "listening") return;
+  const t = (talk.buf + " " + talk.interim).replace(/\s+/g, " ").trim(); talk.buf = ""; talk.interim = "";
+  if (!t) return;
+  if (TALK_END.test(t) && t.split(" ").length <= 6) { talkStop("Conversation ended."); if (typeof speak === "function") speak("Talk soon."); return; }
+  talk.phase = "thinking"; talkCloseRec(); drawTalk(); clearTimeout(talk.quietT);
+  await send(t, undefined, { talk: true });
+  if (!talk.on) return;
+  // his answer is being spoken (or fetched to be spoken): listen again the moment it is out
+  talk.phase = "speaking"; drawTalk();
+  const t0 = Date.now(); let clear = 0;
+  const wait = () => { if (!talk.on || talk.phase !== "speaking") return;
+    const busy = window.coachSpeaking ? coachSpeaking() : false; clear = busy ? 0 : clear + 1;
+    if ((clear >= 2 && Date.now() - t0 > 500) || Date.now() - t0 > 90000) { talk.phase = "listening"; const el = $("vHeard"); if (el) el.textContent = ""; talkQuiet(); talkListen(); return; }
+    talk.waitT = setTimeout(wait, 250); };
+  wait();
+}
+// a tap on the button while he is talking: cut him off and listen
+function talkInterrupt(){
+  try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
+  clearTimeout(talk.waitT); talk.phase = "listening"; talkQuiet(); talkListen(); drawTalk();
+}
+function talkStart(){
+  if (!SR) { status("This browser cannot listen. Type instead."); return; }
+  if (talk.on) return;
+  if (!onCoach()) { talk.pending = true; location.hash = "#coach"; return; }
+  talk.on = true; talk.buf = ""; talk.interim = ""; talk.fails = 0; talk.pending = false;
+  heyPause(); abortListening();
+  try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
+  status("Listening. Just talk; I answer when you pause."); talkQuiet(); talkListen(); drawTalk();
+}
+function talkStop(why){
+  const was = talk.on; talk.on = false; talk.phase = "off"; talk.pending = false;
+  clearTimeout(talk.gapT); clearTimeout(talk.quietT); clearTimeout(talk.waitT); talkCloseRec(); talk.buf = ""; talk.interim = "";
+  const el = $("vHeard"); if (el) el.textContent = "";
+  drawTalk(); if (was) { status(why || "Conversation ended."); heyResume(); }
+}
+// on: true starts it (from any page: it opens the Coach page first), false ends it, nothing toggles
+function talkToggle(on){ if (on === true) return talkStart(); if (on === false) return talkStop(); if (!talk.on) talkStart(); else if (talk.phase === "speaking") talkInterrupt(); else talkStop(); }
+document.addEventListener("visibilitychange", () => { if (document.hidden && talk.on) talkStop("Conversation ended: The Way went to the background."); });
+window.addEventListener("hashchange", () => { if (talk.on && !onCoach()) talkStop("Conversation ended."); });
 
 // the round button, on every page: hold to talk, tap to open the thread
 const b = document.createElement("button");
@@ -309,10 +408,13 @@ function mount(){
   const h = document.getElementById("p_vHold"); if (h && SR && !h.__wired){ h.__wired = true; wireHold(h); }
   const hb = document.getElementById("p_vHey"); if (hb){ if (!SR) hb.hidden = true; else hb.onclick = ()=> setHey(!heyOn); }
   const nw = document.getElementById("p_vNew"); if (nw) nw.onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
-  drawHey(); drawThread();
+  const tk = document.getElementById("p_vTalk"); if (tk){ if (!SR) tk.hidden = true; else tk.onclick = ()=>{ if (window.primeSound) try{ primeSound(); }catch{} talkToggle(); }; }
+  const te = document.getElementById("p_vTalkEnd"); if (te) te.onclick = ()=> talkStop();
+  drawHey(); drawThread(); drawTalk();
+  if (talk.pending) { talk.pending = false; setTimeout(talkStart, 150); }
 }
 // something said outside the conversation (the briefing): kept in it, so the words are there to read
 function note(asked, reply){ if (asked) history.push({ role: "user", text: asked }); history.push({ role: "assistant", text: reply || "" }); keep(); drawThread(); }
-window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note };
+window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note, talk: talkToggle, talking: () => talk.on };
 mount();   // the Coach page drew before this file loaded
 })();

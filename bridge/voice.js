@@ -55,8 +55,17 @@ const SCHEMA = () => ({
 const race = (p, ms, fallback) => Promise.race([p.catch(() => fallback), new Promise(r => setTimeout(() => r(fallback), ms))]);
 const L = ml => (Math.abs(ml) / 1000).toFixed(1) + ' L';
 
-// Where the day stands, in plain lines the model can reason from.
+// Where the day stands, in plain lines the model can reason from. Kept for 40 seconds (a back and forth asks every
+// few seconds; reading the whole day each time made every turn wait); anything logged or changed clears it.
+let ctxKept = null;
+const contextFresh = () => { ctxKept = null; };
 async function context() {
+  if (ctxKept && Date.now() - ctxKept.at < 40000 && ctxKept.day === tz.todayKey()) return ctxKept.text;
+  const text = await contextNow();
+  ctxKept = { at: Date.now(), day: tz.todayKey(), text };
+  return text;
+}
+async function contextNow() {
   const today = tz.todayKey(), tomorrow = tz.shiftKey(today, 1);
   const p = tz.parts(new Date());
   const nowMin = p.h * 60 + p.mi;
@@ -197,6 +206,7 @@ Action types:
 - "Repeat", "say that again", "what did you say": give the same information again, but as it stands at the time now (what has started, ended or is next has moved on since), in fresh words.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …". A question or a remark about food already in the journal ("why is my lunch score low", "was that enough carbs", "that was a good lunch") is a question, never a meal or a drink: nothing new was eaten, so nothing is logged.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
+A QUESTION ON ITS OWN NEEDS NO ACTION: when all he did was ask, return actions as an empty list and put the answer in the reply (writing the action out only delays the answer). Use the question type only alongside other actions.
 Fill every field: "" or 0 where it does not apply.
 
 The reply, spoken aloud, plain and friendly, to him as "you" (never "he" or "his"), no lists, no numbers he did not ask for:
@@ -234,7 +244,10 @@ He said: "${text}"`;
 const MAX_PHOTOS = 4;
 const TOOLS = [{ name: 'look_back', description: 'Read his record for a span of past days (today included), one row a day: every meal eaten with its numbers and portions, the food score and what it missed, each ride with its time of day, how close to plan and the meal before it, lifts, sleep, recovery, naps, weight. Use it when he asks about a day or a stretch that is not in the LOOK BACK block, or wants more detail than the block gives. 45 days at most in one call; the LOOK BACK block says how far back the record goes.',
   input_schema: { type: 'object', additionalProperties: false, required: ['from', 'to'], properties: { from: { type: 'string', description: 'first day, YYYY-MM-DD' }, to: { type: 'string', description: 'last day, YYYY-MM-DD' } } } }];
-async function understand(text, history, extra, image) {
+async function understand(text, history, extra, image, opt) {
+  const T = (opt && opt.ms) || {}, tStart = Date.now();
+  // on the copy only: another model to time against the usual one (never on the real site)
+  const model = (opt && opt.model && require('./sandbox').SANDBOX) ? opt.model : MODEL;
   const images = (Array.isArray(image) ? image : image ? [image] : []).slice(0, MAX_PHOTOS);
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
@@ -245,7 +258,8 @@ async function understand(text, history, extra, image) {
   const turns = []; for (const t of prior) { if (!turns.length && t.role !== 'user') continue; if (turns.length && turns[turns.length - 1].role === t.role) turns[turns.length - 1].content += '\n' + t.content; else turns.push(t); }
   if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
   // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
-  const first = (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0));
+  const tCtx = Date.now(); const ctxText = await context(); T.context_ms = Date.now() - tCtx;
+  const first = (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, ctxText + (extra ? '\n' + extra : ''), turns.length > 0));
   let messages = turns.concat([{ role: 'user', content: first }]);
   // He can look back (history.js): when the question is about days that are not in front of him, he asks for them
   // with look_back, reads them and then answers. Two looks at most, so a spoken answer never waits long.
@@ -255,14 +269,15 @@ async function understand(text, history, extra, image) {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-      body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
+      body: JSON.stringify({ model, max_tokens: 1500, fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
         system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
         tools: TOOLS, tool_choice: more ? { type: 'auto' } : { type: 'none' },
         messages })
     });
     const j = await r.json();
-    if (j.usage) console.log('voice usage', JSON.stringify(j.usage));
+    if (j.usage) { console.log('voice usage', JSON.stringify(j.usage)); T.out_tokens = (T.out_tokens || 0) + (j.usage.output_tokens || 0); T.in_tokens = (j.usage.input_tokens || 0) + (j.usage.cache_read_input_tokens || 0) + (j.usage.cache_creation_input_tokens || 0); T.cached_tokens = j.usage.cache_read_input_tokens || 0; }
+    T.rounds = round + 1; T.model_ms = Date.now() - tStart - (T.context_ms || 0); T.model = j.model || model;
     if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
     const uses = (j.content || []).filter(c => c.type === 'tool_use');
     if (j.stop_reason === 'tool_use' && uses.length && more) {
@@ -460,13 +475,16 @@ function attach(app) {
       if (!text) return res.status(400).json({ error: 'nothing heard' });
       const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
-      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : ''), images);
+      const ms = {}, tAll = Date.now();
+      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : '')
+        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : ''), images, { ms, model: (req.body || {}).model });
       const actions = [];
+      if ((u.actions || []).some(a => a.type !== 'question')) contextFresh();
       for (const a of (u.actions || []).slice(0, 6)) {
         try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
       }
-      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length,
+      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length, ms: Object.assign(ms, { total_ms: Date.now() - tAll }),
         offer: u.offer && String(u.offer.plan || '').trim() ? { label: String(u.offer.label || 'Yes, change it').slice(0, 60), plan: String(u.offer.plan).slice(0, 400) } : null });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }

@@ -35,7 +35,8 @@
     view.innerHTML = `<div class="fd-ttl ch-top"><h2 class="fd-h">Coach</h2><span class="vlinks">${SR ? `<button class="linkish" id="p_vHey">Hey Coach: off</button>` : ""}<button class="linkish" id="p_vNew">new conversation</button></span></div>
       <div class="chface" id="chFace"></div>
       <div class="ch-ask">
-        ${SR ? `<button class="primary vhold" id="p_vHold">Hold to talk</button>` : ""}
+        ${SR ? `<div class="ch-talkrow"><button class="primary vtalk" id="p_vTalk">Start conversation</button><button class="linkish" id="p_vTalkEnd" hidden>end</button></div>
+        <button class="vhold" id="p_vHold">Hold to talk</button>` : ""}
         <div class="vheard" id="p_vHeard"></div>
         <div class="ch-type"><button id="chPhoto" class="ch-photo" aria-label="Send the coach a photo" title="Send the coach a photo"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 8h3l1.5-2h7L17 8h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13.5" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><textarea id="chText" rows="1" aria-label="Ask your coach" placeholder="Or type it here"></textarea><button id="chGo">Ask</button></div>
         <input type="file" id="chFile" accept="image/*" multiple hidden>
