@@ -8,6 +8,9 @@ const app = express();
 app.use(express.json({ limit: '15mb' }));
 // a page read (GET) reads each blob once, however many places ask for it (storage.js)
 app.use((req, res, next) => (req.method === 'GET' ? withScope(next) : next()));
+// anything written anywhere (a meal logged on the Food page, a weigh-in, a set saved) makes the coach's kept read of the
+// day out of date: it is dropped, so his next answer reads the day fresh (voice.js)
+app.use((req, res, next) => { if (req.method !== 'GET' && !/^\/voice(\/|$)/.test(req.path.replace(/^\/\.netlify\/functions\/api/, ''))) { try { require('./voice').contextStale(); } catch (e) { /* it ages out */ } } next(); });
 app.get('/sandbox', (req, res) => res.json({ sandbox: !!SANDBOX }));
 require('./fuel-log').attach(app);
 require('./plan').attach(app);
