@@ -96,11 +96,23 @@ function setMic(on){ const b = document.getElementById("micBtn"); if (b) b.class
    session is still ending waits for it and starts the moment it is free. */
 let state = "idle";            // idle | starting | listening | stopping
 let wantListen = false, discard = false, holding = false;
+// The phone's recogniser does not always answer (Harry, 15 Nov 2026: "the listen button is kind of glitchy … it
+// sometimes freezes the page"). Three ways it went wrong, each now caught:
+//   it never starts, or never ends after a stop: the button waited on it for ever. A watch gives it a few seconds,
+//     then drops that recogniser, makes a fresh one next time, and sends what was heard;
+//   it ends the instant it starts, again and again: it was started again every 60 ms, forty times. A session that
+//     dies at once is waited on longer each time, and after five it stops and says so;
+//   it is started in the same breath the coach's voice is cut off: the phone is still changing from playing to
+//     listening. A quarter second is left between the two.
+let recAt = 0, recQuick = 0, recWatch = 0;
+const dropRec = () => { const r = rec; rec = null; clearTimeout(recWatch); if (r){ r.onstart = r.onresult = r.onerror = r.onend = null; try{ r.abort(); }catch{} } };
+const watchRec = (ms, fn) => { clearTimeout(recWatch); recWatch = setTimeout(fn, ms); };
+const VOICE_GAP = 250;   // between stopping his voice and opening the microphone
 function ensureRec(){
   if (rec) return rec;
   rec = new SR();
   rec.lang = "en-US"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
-  rec.onstart = ()=>{ state = "listening"; listening = true; setMic(true); status(""); };
+  rec.onstart = ()=>{ state = "listening"; listening = true; recAt = Date.now(); clearTimeout(recWatch); setMic(true); status(""); };
   rec.onresult = (e)=>{
     let interim = "";
     for (let i = e.resultIndex; i < e.results.length; i++){ const r = e.results[i]; if (r.isFinal) finalText += r[0].transcript + " "; else interim += r[0].transcript; }
@@ -120,12 +132,14 @@ function ensureRec(){
   // that is not the end of what he is saying (Harry, 14 Nov 2026: "my sentences keep getting cut off … on the Hold
   // to talk"): what was heard is kept and listening starts again at once. Only letting go sends it, all of it.
   rec.onend = ()=>{
-    state = "idle"; listening = false;
+    state = "idle"; listening = false; clearTimeout(recWatch);
     const got = (finalText + lastInterim).trim(); finalText = ""; lastInterim = "";
+    recQuick = !got && Date.now() - recAt < 700 ? recQuick + 1 : 0;   // a session that died at once, with nothing heard
     const toss = discard; discard = false;
     if (toss) { carry = ""; setMic(false); if (wantListen && holding) startListening(); else heyResume(); return; }
     carry = (carry + " " + got).trim();
-    if (holding && wantListen && !fatal && restarts < 40) { restarts++; setTimeout(resume, 60); return; }
+    if (holding && wantListen && !fatal && restarts < 40 && recQuick < 5) { restarts++; setTimeout(resume, recQuick ? Math.min(1200, 120 * 2 ** recQuick) : 60); return; }
+    if (recQuick >= 5 && holding) { recQuick = 0; dropRec(); if (!carry.trim()) { setMic(false); status("The microphone keeps closing by itself. Let go, wait a second and hold again, or type."); heyResume(); return; } }
     finish();
   };
   return rec;
@@ -135,9 +149,16 @@ let carry = "", lastInterim = "", restarts = 0, fatal = false;
 function resume(){
   if (!holding || !wantListen) { if (state === "idle" && carry) finish(); return; }
   if (state !== "idle") return;
-  state = "starting";
-  try{ rec.start(); }
-  catch(err){ state = "idle"; if (/InvalidState|already/i.test(String(err && err.message))) { try{ rec.stop(); }catch{} return; } finish(); }
+  state = "starting"; recAt = Date.now();
+  try{ ensureRec().start(); watchRec(4000, startTimedOut); }
+  catch(err){ state = "idle"; if (/InvalidState|already/i.test(String(err && err.message))) { try{ rec.stop(); }catch{} watchRec(1500, () => { if (state === "idle" && holding && wantListen) { dropRec(); resume(); } }); return; } finish(); }
+}
+// the microphone was asked for and nothing came back: that recogniser is dropped, what was heard so far is sent
+function startTimedOut(){
+  if (state !== "starting") return;
+  dropRec(); state = "idle"; listening = false;
+  if (carry.trim()) { finish(); return; }
+  setMic(false); status("The microphone did not start. Hold the button again, or type."); heyResume();
 }
 // he let go: send everything heard during the hold
 function finish(){
@@ -156,35 +177,45 @@ function startListening(){
   heyPause();
   wantListen = true;
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
+  const speaking = !!(window.coachSpeaking && coachSpeaking()) || (window.speechSynthesis && speechSynthesis.speaking);
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
-  finalText = ""; lastInterim = ""; carry = ""; restarts = 0; fatal = false; discard = false;
+  finalText = ""; lastInterim = ""; carry = ""; restarts = 0; fatal = false; discard = false; recQuick = 0;
   const heard = $("vHeard"); if (heard) heard.textContent = "";
-  state = "starting";
-  try{ ensureRec().start(); }
-  catch(err){
-    state = "idle";
-    if (/InvalidState|already/i.test(String(err && err.message))){ try{ rec.stop(); }catch{} return; }   // its onend will start us
-    status("Could not start the microphone: " + err.message);
-  }
+  state = "starting"; recAt = Date.now();
+  const go = ()=>{
+    if (state !== "starting") return;                  // let go, or dropped, in the gap
+    try{ ensureRec().start(); watchRec(4000, startTimedOut); }
+    catch(err){
+      state = "idle";
+      if (/InvalidState|already/i.test(String(err && err.message))){ try{ rec.stop(); }catch{}   // its onend will start us; if it never comes, a fresh one does
+        watchRec(1500, () => { if (state === "idle" && holding && wantListen) { dropRec(); startListening(); } }); return; }
+      dropRec(); status("Could not start the microphone: " + err.message);
+    }
+  };
+  if (speaking) setTimeout(go, VOICE_GAP); else go();
 }
 // Letting go: the microphone stays open a moment longer, so the last word, still being worked out, is not lost.
 function stopListening(){
   wantListen = false;
   if (state === "listening" || state === "starting"){
     state = "stopping";
-    setTimeout(()=>{ if (state !== "stopping") return; try{ rec.stop(); }catch{ state = "idle"; finish(); } }, 400);
+    setTimeout(()=>{ if (state !== "stopping") return; try{ rec.stop(); }catch{ state = "idle"; finish(); return; }
+      // the end that should follow a stop did not come: take what was heard and let the button go
+      watchRec(2500, () => { if (state !== "stopping") return; const got = (finalText + lastInterim).trim(); finalText = ""; lastInterim = ""; carry = (carry + " " + got).trim(); dropRec(); state = "idle"; listening = false; finish(); });
+    }, 400);
   }
   else if (state === "idle") finish();                 // between two sessions: nothing is running, send what is kept
 }
 function abortListening(){
   wantListen = false; discard = true; carry = "";
-  if (state !== "idle"){ state = "stopping"; try{ rec.abort(); }catch{ state = "idle"; } }
+  if (state !== "idle"){ state = "stopping"; try{ rec.abort(); }catch{ state = "idle"; }
+    if (state === "stopping") watchRec(1500, () => { if (state !== "stopping") return; dropRec(); state = "idle"; listening = false; discard = false; carry = ""; setMic(false); heyResume(); }); }
 }
 
 // hold = talk; a quick tap toggles the sheet
 function wireHold(el, onTap){
   let downAt = 0, mine = false;
-  const down = (e)=>{ if (sending || talk.on) return; e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} if (window.primeSound) primeSound(); startListening(); };
+  const down = (e)=>{ if (talk.on) return; if (sending) { status("Still working on the last one…"); return; } e.preventDefault(); downAt = Date.now(); mine = true; holding = true; try{ el.setPointerCapture(e.pointerId); }catch{} if (window.primeSound) primeSound(); startListening(); };
   const up = (e)=>{
     if (!mine) return; mine = false; holding = false; e.preventDefault();
     const quick = Date.now() - downAt < HOLD_MS;
@@ -288,15 +319,19 @@ function heyHeard(t){
   if (m) { heyArmedUntil = Date.now() + 8000; toast("Yes?"); if (typeof speak === "function") speak("Yes?"); return; }
   if (Date.now() < heyArmedUntil && t.trim()) { heyArmedUntil = 0; heyAsk(t.trim()); }
 }
+let heyQuick = 0;
 function heyStart(){
   if (!SR || !heyOn || heyPaused || heyRec || document.hidden) return;
   try{
     heyRec = new SR(); heyRec.lang = "en-US"; heyRec.continuous = true; heyRec.interimResults = false; heyRec.maxAlternatives = 1;
     heyRec.onresult = e => { for (let i = e.resultIndex; i < e.results.length; i++) if (e.results[i].isFinal) heyHeard(e.results[i][0].transcript); };
     heyRec.onerror = e => { if (e.error === "not-allowed" || e.error === "service-not-allowed"){ setHey(false); toast("Microphone blocked: allow it for The Way, then turn Hey Coach on again."); } };
-    heyRec.onend = () => { heyRec = null; if (heyOn && !heyPaused) setTimeout(heyStart, 300); };
+    // a session that ends the moment it starts (the microphone is taken, the phone says no) is tried again more and
+    // more slowly, up to half a minute apart: it used to be tried again every 300 ms for as long as the page was open
+    const at = Date.now();
+    heyRec.onend = () => { heyRec = null; heyQuick = Date.now() - at < 1000 ? Math.min(heyQuick + 1, 7) : 0; if (heyOn && !heyPaused) setTimeout(heyStart, heyQuick ? Math.min(30000, 300 * 2 ** heyQuick) : 300); };
     heyRec.start();
-  }catch{ heyRec = null; setTimeout(heyStart, 1500); }
+  }catch{ heyRec = null; heyQuick = Math.min(heyQuick + 1, 7); setTimeout(heyStart, Math.min(30000, 1500 * heyQuick)); }
 }
 function heyStop(){ const r = heyRec; heyRec = null; if (r){ r.onend = null; try{ r.abort(); }catch{} } }
 function heyPause(){ heyPaused = true; heyStop(); }
@@ -317,7 +352,7 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) heySt
    while he is speaking cuts him off and listens. Its own recogniser (the hold button and Hey Coach are paused). */
 const TALK_GAP = 1200, TALK_GAP_OPEN = 2400, TALK_QUIET = 90000;
 const TALK_END = /^\s*(?:ok(?:ay)?[, ]*)?(?:that'?s (?:all|it)|we'?re done|i'?m done|end (?:the )?conversation|stop listening|good ?bye|bye(?: coach)?|thanks?(?: you)?[, ]*(?:coach|that'?s all|bye)?)[\s.!]*$/i;
-const talk = { on: false, phase: "off", rec: null, buf: "", interim: "", gapT: 0, quietT: 0, waitT: 0, fails: 0 };
+const talk = { on: false, phase: "off", rec: null, buf: "", interim: "", gapT: 0, quietT: 0, waitT: 0, fails: 0, at: 0, quick: 0, watchT: 0, againT: 0 };
 const talkBtns = () => [document.getElementById("p_vTalk")].filter(Boolean);
 function drawTalk(){
   const label = !talk.on ? "Start conversation" : talk.phase === "speaking" ? "Tap to interrupt" : talk.phase === "thinking" ? "Thinking…" : "Listening… just talk";
@@ -328,14 +363,14 @@ function drawTalk(){
 }
 function talkHeard(){ const el = $("vHeard"); if (el) el.textContent = (talk.buf + " " + talk.interim).trim(); }
 function talkQuiet(){ clearTimeout(talk.quietT); if (talk.on) talk.quietT = setTimeout(() => { if (talk.on && talk.phase === "listening" && !(talk.buf + talk.interim).trim()) talkStop("Conversation ended after a quiet minute and a half. Tap to start again."); }, TALK_QUIET); }
-function talkCloseRec(){ const r = talk.rec; talk.rec = null; if (r){ r.onend = null; r.onresult = null; r.onerror = null; try{ r.abort(); }catch{} } }
+function talkCloseRec(){ const r = talk.rec; talk.rec = null; clearTimeout(talk.watchT); clearTimeout(talk.againT); if (r){ r.onend = null; r.onresult = null; r.onerror = null; try{ r.abort(); }catch{} } }
 function talkListen(){
   if (!talk.on || talk.rec) return;
   if (sending || (window.coachSpeaking && coachSpeaking())) { clearTimeout(talk.waitT); talk.waitT = setTimeout(talkListen, 300); return; }
   talk.phase = "listening"; drawTalk();
   try{
     const r = talk.rec = new SR(); r.lang = "en-US"; r.continuous = true; r.interimResults = true; r.maxAlternatives = 1;
-    r.onstart = () => { talk.fails = 0; status(""); };
+    r.onstart = () => { talk.fails = 0; talk.at = Date.now(); clearTimeout(talk.watchT); status(""); };
     r.onresult = e => {
       let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++){ const x = e.results[i]; if (x.isFinal) talk.buf += x[0].transcript + " "; else interim += x[0].transcript; }
@@ -348,14 +383,22 @@ function talkListen(){
       if (k === "not-allowed" || k === "service-not-allowed") talkStop("Microphone blocked. Settings → Safari → Microphone → Allow for this site.");
       else if (k === "audio-capture") talkStop("No microphone found."); };
     // the phone ends a session by itself at a pause or after a while: what was heard is kept, and it listens on
-    r.onend = () => { if (talk.rec !== r) return; talk.rec = null; if (!talk.on || talk.phase !== "listening") return;
-      if ((talk.buf + talk.interim).trim()) { clearTimeout(talk.gapT); talk.gapT = setTimeout(talkFlush, 500); }
-      setTimeout(talkListen, 250); };
+    r.onend = () => { if (talk.rec !== r) return; talk.rec = null; clearTimeout(talk.watchT); if (!talk.on || talk.phase !== "listening") return;
+      const heard = (talk.buf + talk.interim).trim();
+      if (heard) { clearTimeout(talk.gapT); talk.gapT = setTimeout(talkFlush, 500); }
+      // a session that died at once with nothing heard: wait longer each time, and after six stop and say so (it used
+      // to be opened again every quarter second, for ever)
+      talk.quick = !heard && Date.now() - talk.at < 900 ? talk.quick + 1 : 0;
+      if (talk.quick >= 6) { talkStop("The microphone keeps closing by itself. Tap Start conversation to try again."); return; }
+      clearTimeout(talk.againT); talk.againT = setTimeout(talkListen, talk.quick ? Math.min(3000, 250 * 2 ** talk.quick) : 250); };
+    talk.at = Date.now();
     r.start();
+    // asked for and never started: that one is dropped and a fresh one tried
+    clearTimeout(talk.watchT); talk.watchT = setTimeout(() => { if (talk.rec !== r || !talk.on) return; talkCloseRec(); if (++talk.fails > 3) { talkStop("The microphone would not start. Tap Start conversation again."); return; } talk.againT = setTimeout(talkListen, 600); }, 4500);
   }catch(err){
     talk.rec = null;
     if (++talk.fails > 4) { talkStop("The microphone would not start. Tap Start conversation again."); return; }
-    setTimeout(talkListen, 600);
+    clearTimeout(talk.againT); talk.againT = setTimeout(talkListen, 600);
   }
 }
 async function talkFlush(){
@@ -379,21 +422,24 @@ async function talkFlush(){
 // a tap on the button while he is talking: cut him off and listen
 function talkInterrupt(){
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
-  clearTimeout(talk.waitT); talk.phase = "listening"; talkQuiet(); talkListen(); drawTalk();
+  // his voice is cut off first, and the microphone opened a moment later (not in the same breath)
+  clearTimeout(talk.waitT); talk.phase = "listening"; talkQuiet(); drawTalk(); talk.waitT = setTimeout(talkListen, VOICE_GAP + 50);
 }
 function talkStart(){
   if (!SR) { status("This browser cannot listen. Type instead."); return; }
   if (talk.on) return;
   if (!onCoach()) { talk.pending = true; location.hash = "#coach"; return; }
-  talk.on = true; talk.buf = ""; talk.interim = ""; talk.fails = 0; talk.pending = false;
+  talk.on = true; talk.buf = ""; talk.interim = ""; talk.fails = 0; talk.quick = 0; talk.pending = false;
   heyPause(); abortListening();
+  const speaking = !!(window.coachSpeaking && coachSpeaking()) || (window.speechSynthesis && speechSynthesis.speaking) || state !== "idle";
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
   warm(); whereAmI();
-  status("Listening. Just talk; I answer when you pause."); talkQuiet(); talkListen(); drawTalk();
+  status("Listening. Just talk; I answer when you pause."); talkQuiet(); drawTalk();
+  if (speaking) { talk.phase = "listening"; drawTalk(); talk.waitT = setTimeout(talkListen, VOICE_GAP + 50); } else talkListen();
 }
 function talkStop(why){
   const was = talk.on; talk.on = false; talk.phase = "off"; talk.pending = false;
-  clearTimeout(talk.gapT); clearTimeout(talk.quietT); clearTimeout(talk.waitT); talkCloseRec(); talk.buf = ""; talk.interim = "";
+  clearTimeout(talk.gapT); clearTimeout(talk.quietT); clearTimeout(talk.waitT); clearTimeout(talk.againT); talkCloseRec(); talk.buf = ""; talk.interim = "";
   const el = $("vHeard"); if (el) el.textContent = "";
   drawTalk(); if (was) { status(why || "Conversation ended."); heyResume(); }
 }
@@ -427,6 +473,8 @@ function mount(){
 }
 // something said outside the conversation (the briefing): kept in it, so the words are there to read
 function note(asked, reply){ if (asked) history.push({ role: "user", text: asked }); history.push({ role: "assistant", text: reply || "" }); keep(); drawThread(); }
-window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note, talk: talkToggle, talking: () => talk.on };
+// micOpen: the microphone is open or being opened (a hold, or the conversation listening): heavy work elsewhere on
+// the page waits for it to close (face.js builds the 3D figure only then)
+window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note, talk: talkToggle, talking: () => talk.on, micOpen: () => listening || state !== "idle" || holding || (talk.on && talk.phase === "listening") };
 mount();   // the Coach page drew before this file loaded
 })();

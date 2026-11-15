@@ -102,6 +102,8 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 15 Nov | Legs on the calendar twice in a week and no Upper 2 | A swap by hand was never checked against the week | the week is checked as it stands (checkWeek) and listed on the Lift page | disagreement |
 | 15 Nov | Macros 57: a breakfast eaten before the plan's clock scored 0 as "over" | During the day the figure due so far was both floor and ceiling | the ceiling is the whole day's figure | disagreement |
 | 15 Nov | Protein over its target lowered the score (258 g scored 34) | Over and under were scored alike on every macro | protein over costs nothing | disagreement |
+| 15 Nov | "The listen button is kind of glitchy. It sometimes freezes the page on the coach's page" | The 3D figure was built half a second after the page opened, holding the page still for a second or more: a tap in that window sat there until it was over. And the phone's recogniser was trusted to answer: one that never started or never ended left the button dead, one that closed at once was reopened every 60 to 250 ms | the figure waits for 2.5 s with no touch and a closed microphone; watches on start and stop, a longer wait after each instant close, then a plain message; a quarter second between his voice stopping and the microphone opening | my mistake |
+| 15 Nov | "I think I only have one 45-pound kettlebell at home" | The Blasts, the Pump and the home notes were written for bells of several sizes, two at a time | every Blast exercise uses the one 45 lb bell and progresses in reps; one-bell carries; the Pump's bell lifts moved to the Bowflex | new case |
 
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
@@ -118,7 +120,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **12 Nov: 1.** 1 my mistake.
 **13 Nov: 4.** 1 new case, 2 disagreement, 1 my mistake.
 **14 Nov: 13.** 6 new case, 3 disagreement, 3 my mistake, 1 advisor.
-**15 Nov: 11.** 2 new case, 7 disagreement, 2 my mistake.
+**15 Nov: 13.** 3 new case, 7 disagreement, 3 my mistake.
 
 *10 to 15 Nov were not logged at the time. The rows above were written on 15 Nov from the commits and the conversation, so their count is a floor, and the kind is Claude's reading after the fact.*
 
@@ -128,10 +130,10 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 |---|---|---|---|---|---|
 | Week 1 (1 to 7 Nov) | 38 | 17 | 11 | 6 | 4 |
 | Week 2 (8 to 14 Nov) | 33 | | | | |
-| 15 Nov alone | 11 | | | | |
+| 15 Nov alone | 13 | | | | |
 
-- **The count has not fallen from daily to weekly.** It fell in the middle of week 2 (one to five a day) and rose again on 14 and 15 Nov (13 and 11), when the scheduler (auto-move, drives, clashes) and the lifting week were being changed.
-- **The kind shifted** from new real-world cases to two parts disagreeing and to Claude's own mistakes in new code. Since 10 Nov: 12 new case, 14 disagreement, 9 my mistake, 1 advisor.
+- **The count has not fallen from daily to weekly.** It fell in the middle of week 2 (one to five a day) and rose again on 14 and 15 Nov (13 and 13), when the scheduler (auto-move, drives, clashes) and the lifting week were being changed.
+- **The kind shifted** from new real-world cases to two parts disagreeing and to Claude's own mistakes in new code. Since 10 Nov: 13 new case, 14 disagreement, 10 my mistake, 1 advisor.
 - **The plan was not kept.** The log stopped on 9 Nov; the feature freeze ended in practice that day (about 110 commits by 15 Nov, most of them features Harry asked for); the weekly Chrome run has not run since 1 Nov.
 - **Changed plan, put to Harry on 15 Nov:** the log is written as part of every fix; lifting reads from one Monday-to-Sunday week; the push check covers lifting; next review 29 Nov. A one-week freeze on the scheduler and lifting (fixes only) is proposed and is his call.
 
