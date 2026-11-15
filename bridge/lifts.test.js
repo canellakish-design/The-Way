@@ -265,7 +265,12 @@ ok('days already gone take nothing: what is left of the five goes on the days st
   assert.strictEqual(wl.filter(x => x.date >= '2026-11-21' && x.lift).length, 2);
   for (const x of wl.filter(x => x.date >= '2026-11-21')) assert.ok(!Array.isArray(x.lift), 'one session a day');
   const PL = L.checkWeek(wl.map(x => Object.assign(x, { done_keys: x.date === '2026-11-17' ? ['push'] : [] })), [{ date: '2026-11-17', template: 'push' }], { fixed: true });
-  assert.ok(PL.filter(p => p.kind === 'no_room').length >= 1 && PL.some(p => /lost with the week/.test(p.text)), JSON.stringify(PL));
+  assert.ok(PL.filter(p => p.kind === 'no_room').length >= 1 && PL.some(p => /No day still open this week will take/.test(p.text)), JSON.stringify(PL));
+  // Sunday night, the week over: what was not done is lost with it
+  const over = days.map(x => Object.assign({}, x, { past: x.date < '2026-11-22' }));
+  const PO = L.checkWeek(L.placeWeek(over.map(x => x.date === '2026-11-22' ? Object.assign({}, x, { locked: 'legs', locks: ['legs'] }) : x), { done: { '2026-11-17': 'push', '2026-11-22': 'legs' } }).map(x => Object.assign(x, { done_keys: x.date === '2026-11-17' ? ['push'] : x.date === '2026-11-22' ? ['legs'] : [] })),
+    [{ date: '2026-11-17', template: 'push' }, { date: '2026-11-22', template: 'legs' }], { fixed: true, today: '2026-11-22' });
+  assert.ok(PO.some(p => p.kind === 'no_room' && /lost with the week, and next week starts fresh/.test(p.text)), JSON.stringify(PO));
 });
 ok('a day away is no day for the gym: nothing is placed on it, and a lift already on it is flagged', () => {
   const ride = (name, minutes, tss) => ({ name, minutes, tss, hard: L.HARD.test(name) });
