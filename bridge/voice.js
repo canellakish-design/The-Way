@@ -25,6 +25,10 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 const { LIBRARY } = require('./workout-library');
 const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
+// Quick spoken answers and the conversation run on the faster model (Harry, 14 Nov 2026, after the two were timed on
+// his own day: a steady 2.2 seconds against 3 to 6, at half the cost; "Sonnet for quick answers"). A photo, the meal
+// analysis (food.js) and the researched answers (coach.js) stay on the stronger one. VOICE_MODEL in Netlify overrides.
+const QUICK_MODEL = process.env.VOICE_MODEL || 'claude-sonnet-5-5';
 
 const SUPPS = () => require('./micro-math').TABLE.supplements.map(s => s.key);
 const FIELDS = ['type', 'text', 'meal', 'supplement', 'medicine', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport', 'sleep_h', 'sleep_score', 'recovery', 'hrv', 'rhr'];
@@ -264,8 +268,9 @@ const TOOLS = [{ name: 'look_back', description: 'Read his record for a span of 
 async function understand(text, history, extra, image, opt) {
   const T = (opt && opt.ms) || {}, tStart = Date.now();
   // on the copy only: another model to time against the usual one (never on the real site)
-  const model = (opt && opt.model && require('./sandbox').SANDBOX) ? opt.model : MODEL;
   const images = (Array.isArray(image) ? image : image ? [image] : []).slice(0, MAX_PHOTOS);
+  // on the copy only: another model to time against the usual one (never on the real site)
+  const model = (opt && opt.model && require('./sandbox').SANDBOX) ? opt.model : images.length ? MODEL : QUICK_MODEL;
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
   if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
   const prior = (Array.isArray(history) ? history : []).slice(-10)
