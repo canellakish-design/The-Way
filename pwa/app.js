@@ -154,23 +154,30 @@ window.celebrate = celebrate; window.primeSound = primeSound;
 // silent mutes Web Audio, and plays media). The element is unlocked by the tap that asked (primeSound); the sound
 // is decoded once for its loudness curve, read at the element's clock, so the mouth still follows the real words.
 const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YQAAAAA=";
-const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, last: null,
+const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, last: null, gen: 0, multi: false,
   // called inside a tap: the phone lets this element play later without another tap
   unlock(){ try{ if (navigator.audioSession) navigator.audioSession.type = "playback"; }catch{}
     try{ if (!this.el) { this.el = new Audio(); this.el.preload = "auto"; this.el.setAttribute("playsinline", ""); }
       if (!this.playing) { this.el.src = SILENT_WAV; const p = this.el.play(); if (p && p.catch) p.catch(()=>{}); } }catch{} },
-  stop(){ try{ if (this.el) { this.el.onended = null; this.el.onerror = null; this.el.pause(); } }catch{}
+  // mine: its own tidy-up at the end of an answer; without it (anyone else calling), whatever is on its way is dropped too
+  stop(mine){ if (!mine) { this.gen = (this.gen || 0) + 1; __ttsPending = 0; }
+    try{ if (this.el) { this.el.onended = null; this.el.onerror = null; this.el.pause(); } }catch{}
     if (this.url) { try{ URL.revokeObjectURL(this.url); }catch{} this.url = null; }
     this.playing = false; this.env = null; __ttsSpeaking = false; },
   // 0 to 1, how loud the voice is right now; null when it is not this voice speaking
   level(){ if (!this.playing || !this.el) return null;
     if (!this.env) return 0.3 + 0.35 * Math.abs(Math.sin(performance.now() / 95));   // no curve: a steady chatter
     return Math.min(1, (this.env[Math.floor(this.el.currentTime * 50)] || 0) * 4.5); },
-  async say(t){
-    if (this.on === false) { this.last = "phone"; throw new Error("phone voice"); }
-    let r; try{ r = await bridge("/voice/speak", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text: t }) }); }
-    catch(e){ if (/503|no voice key/i.test(e.message)) this.on = false; this.last = "phone: " + e.message.slice(0, 60); throw e; }
-    this.on = true;
+  // A long answer is spoken in two parts (Harry, 14 Nov 2026: "any way we can increase the speed of responses"): the
+  // first sentence and the rest are asked for at the same moment; the first is short, so it is ready about two
+  // seconds sooner and starts while the rest is still being made, and the rest follows without a gap.
+  parts(t){
+    t = String(t || "").trim(); if (t.length < 140) return [t];
+    const m = /^(.{25,170}?[.!?])\s+(\S[\s\S]{30,})$/.exec(t);
+    return m ? [m[1], m[2]] : [t];
+  },
+  async clip(text){
+    const r = await bridge("/voice/speak", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text }) });
     const bin = atob(r.audio_b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     // the loudness curve, fifty readings a second (decoding works whatever the silent switch says)
     let env = null;
@@ -178,14 +185,36 @@ const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, l
       if (ctx) { const audio = await new Promise((ok, no) => ctx.decodeAudioData(bytes.buffer.slice(0), ok, no));
         const ch = audio.getChannelData(0), win = Math.max(1, Math.floor(audio.sampleRate / 50)); env = [];
         for (let i = 0; i < ch.length; i += win) { let q = 0; const n = Math.min(win, ch.length - i); for (let j = 0; j < n; j++) q += ch[i + j] * ch[i + j]; env.push(Math.sqrt(q / n)); } } }catch{ env = null; }
-    this.stop();
-    const el = this.el || (this.el = new Audio());
-    this.url = URL.createObjectURL(new Blob([bytes], { type: r.mime || "audio/mpeg" }));
-    el.src = this.url; this.env = env; this.playing = true; __ttsSpeaking = true;
-    el.onended = () => this.stop();
-    el.onerror = () => this.stop();
-    try{ await el.play(); this.last = "natural"; }
-    catch(e){ this.stop(); this.last = "phone: " + String(e.name || e.message).slice(0, 60); throw e; }
+    return { text, env, blob: new Blob([bytes], { type: r.mime || "audio/mpeg" }) };
+  },
+  // one part through the page's audio; resolves when its last word is out
+  play(c, gen){
+    return new Promise((done, fail) => {
+      if (gen !== this.gen) return done(false);
+      const el = this.el || (this.el = new Audio());
+      if (this.url) { try{ URL.revokeObjectURL(this.url); }catch{} }
+      this.url = URL.createObjectURL(c.blob);
+      el.src = this.url; this.env = c.env; this.playing = true; __ttsSpeaking = true; __ttsPending = 0;
+      el.onended = () => done(true);
+      el.onerror = () => done(false);
+      // the words of this part under the face, and its mouth, in step with this part's own clock
+      if (this.multi) { try{ if (window.Face && Face.caption) Face.caption(c.text); }catch{} }
+      const p = el.play(); if (p && p.catch) p.catch(fail);
+    });
+  },
+  async say(t){
+    if (this.on === false) { this.last = "phone"; throw new Error("phone voice"); }
+    const gen = this.gen = (this.gen || 0) + 1, parts = this.parts(t);
+    const jobs = parts.map(x => this.clip(x)); jobs.slice(1).forEach(j => j.catch(()=>{}));
+    let first; try{ first = await jobs[0]; }
+    catch(e){ if (/503|no voice key/i.test(e.message)) this.on = false; this.last = "phone: " + e.message.slice(0, 60); throw e; }
+    this.on = true;
+    if (gen !== this.gen) return;                      // a newer answer has taken over
+    this.stop(true); this.multi = parts.length > 1;
+    try{ const ok = await this.play(first, gen); this.last = "natural";
+      if (ok && parts.length > 1 && gen === this.gen) { const rest = await jobs[1].catch(() => null); if (rest && gen === this.gen) await this.play(rest, gen); }
+      if (gen === this.gen) this.stop(true); }
+    catch(e){ if (gen === this.gen) this.stop(true); this.last = "phone: " + String(e.name || e.message).slice(0, 60); throw e; }
   } };
 window.CoachVoice = CoachVoice;
 // asked once at load, so a phone with no key set goes straight to its own voice with no wait
@@ -193,7 +222,8 @@ try{ setTimeout(()=>{ if (typeof bridge === "function") bridge("/voice/speak").t
 function speak(t){
   __lastSpoken = t; __ttsPending = Date.now();
   try{ speechSynthesis.cancel(); }catch{}
-  CoachVoice.say(t).then(()=>{ __ttsPending = 0; }).catch(()=> speakPhone(t));
+  const gen = (CoachVoice.gen || 0) + 1;
+  CoachVoice.say(t).then(()=>{ if (CoachVoice.gen === gen) __ttsPending = 0; }).catch(()=>{ if (CoachVoice.gen === gen) speakPhone(t); else __ttsPending = 0; });
 }
 function speakPhone(t){
   try{

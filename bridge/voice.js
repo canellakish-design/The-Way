@@ -55,15 +55,32 @@ const SCHEMA = () => ({
 const race = (p, ms, fallback) => Promise.race([p.catch(() => fallback), new Promise(r => setTimeout(() => r(fallback), ms))]);
 const L = ml => (Math.abs(ml) / 1000).toFixed(1) + ' L';
 
-// Where the day stands, in plain lines the model can reason from. Kept for 40 seconds (a back and forth asks every
-// few seconds; reading the whole day each time made every turn wait); anything logged or changed clears it.
+// Where the day stands, in plain lines the model can reason from.
+// Reading the whole day takes about five seconds, half of the wait for an answer (measured 14 Nov 2026, when Harry asked
+// for faster answers). So it is read ahead and kept: the page asks for it the moment he opens the Coach page, presses
+// the talk button or starts a conversation (GET /voice/warm), and by the time he has finished speaking it is there.
+// Kept 90 seconds, in this process and in the store (the next request may land on another process); anything he logs
+// or changes through the coach clears it. The clock is never kept: the time of the question is added when it is asked.
+const CTX_KEY = 'voice-context', CTX_TTL = 90000;
 let ctxKept = null;
-const contextFresh = () => { ctxKept = null; };
-async function context() {
-  if (ctxKept && Date.now() - ctxKept.at < 40000 && ctxKept.day === tz.todayKey()) return ctxKept.text;
+const ctxGood = c => c && c.text && c.day === tz.todayKey() && Date.now() - c.at < CTX_TTL;
+async function contextFresh() { ctxKept = null; try { await setJSON(CTX_KEY, { at: 0 }); } catch (e) { /* it ages out */ } }
+async function contextBuild() {
   const text = await contextNow();
   ctxKept = { at: Date.now(), day: tz.todayKey(), text };
-  return text;
+  try { await setJSON(CTX_KEY, ctxKept); } catch (e) { /* kept in this process at least */ }
+  return ctxKept;
+}
+async function contextKept() {
+  if (ctxGood(ctxKept)) return ctxKept;
+  try { const c = await getJSON(CTX_KEY, null); if (ctxGood(c)) { ctxKept = c; return c; } } catch (e) { /* read it fresh */ }
+  return null;
+}
+async function context() {
+  const c = (await contextKept()) || (await contextBuild());
+  const age = Math.round((Date.now() - c.at) / 1000), p = tz.parts(new Date());
+  // read a moment ago: say so, and give the time now, so "starts in 12 minutes" is never read as the present
+  return age < 20 ? c.text : `${c.text}\n(The lines above were read ${age} seconds ago. The time now is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}; count any "in N min" from there.)`;
 }
 async function contextNow() {
   const today = tz.todayKey(), tomorrow = tz.shiftKey(today, 1);
@@ -459,6 +476,10 @@ function attach(app) {
       const u = await understand('Give me my briefing.', [], 'This is a briefing, spoken to him by his coach\'s face, not a question to act on: take no actions. Three short parts in plain speech, no lists, under 110 words in all: where he is now, with two or three of the real numbers (fitness, the week\'s riding, sleep, weight) and his rung on the watts-per-kilo ladder; the one limiter to fix now and why, as an expert coach would name it; and what to do this week to move toward being a high-level masters cyclist. Speak to him as "you". Warm, direct, a coach who knows him.');
       res.json({ reply: String(u.reply || '').slice(0, 900) });
     } catch (e) { res.status(500).json({ error: e.message }); } });
+  // read the day ahead of the question (the page calls this as he opens the Coach page or starts to talk)
+  app.get('/voice/warm', async (req, res) => { if (!auth(req, res)) return;
+    try { const t = Date.now(), had = await contextKept(); if (!had || Date.now() - had.at > 30000) await contextBuild(); res.json({ ok: true, fresh: !had, ms: Date.now() - t }); }
+    catch (e) { res.status(500).json({ error: e.message }); } });
   app.post('/voice', async (req, res) => { if (!auth(req, res)) return;
     try {
       // a Siri Shortcut named "The Way" can pass its own name along ("The way what's my next workout"): it is the
@@ -479,7 +500,7 @@ function attach(app) {
       const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : '')
         + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : ''), images, { ms, model: (req.body || {}).model });
       const actions = [];
-      if ((u.actions || []).some(a => a.type !== 'question')) contextFresh();
+      if ((u.actions || []).some(a => a.type !== 'question')) await contextFresh();
       for (const a of (u.actions || []).slice(0, 6)) {
         try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
@@ -489,4 +510,6 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, understand, run, context, promptFor, resized };
+// a write somewhere else in the app: the kept read is out of date (not waited on)
+function contextStale() { ctxKept = null; setJSON(CTX_KEY, { at: 0 }).catch(() => {}); }
+module.exports = { attach, understand, run, context, contextStale, promptFor, resized };

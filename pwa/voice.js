@@ -150,6 +150,7 @@ function finish(){
 }
 function startListening(){
   if (!SR) return;
+  warm();
   heyPause();
   wantListen = true;
   if (state !== "idle") return;                        // starting or still ending: onend picks it up
@@ -197,6 +198,11 @@ function wireHold(el, onTap){
 }
 
 // where he is, when the site already has permission: no prompt, three seconds at most, else nothing
+// The coach reads the whole day before he answers, about five seconds of every wait. Asked for ahead of the question
+// (as the Coach page opens, as the talk button goes down, as a conversation starts, while he is speaking his answer),
+// it is ready by the time the words arrive. At most once every 25 seconds.
+let warmAt = 0;
+function warm(){ if (Date.now() - warmAt < 25000) return; warmAt = Date.now(); try{ bridge("/voice/warm").catch(()=>{}); }catch{} }
 // kept for five minutes: a follow-up question does not wait on the phone's location again
 let whereKept = null;
 async function whereAmI(){
@@ -300,12 +306,12 @@ document.addEventListener("visibilitychange", () => { if (document.hidden) heySt
 
 /* ---- the open conversation ----
    (Harry, 14 Nov 2026: "the kind of open back and forth conversation isn't working".) One tap starts it. He talks; when
-   he stops for a second and a half it is sent; the coach answers out loud; the moment the voice has finished it is
+   he stops for a little over a second it is sent; the coach answers out loud; the moment the voice has finished it is
    listening again. No button between turns and no "Coach" at the start of each sentence. It ends when he taps End,
    says "that's all", leaves the page, or after ninety quiet seconds.
    The microphone is closed while the coach thinks and speaks, so he never answers his own voice; a tap on the button
    while he is speaking cuts him off and listens. Its own recogniser (the hold button and Hey Coach are paused). */
-const TALK_GAP = 1500, TALK_GAP_OPEN = 2600, TALK_QUIET = 90000;
+const TALK_GAP = 1200, TALK_GAP_OPEN = 2400, TALK_QUIET = 90000;
 const TALK_END = /^\s*(?:ok(?:ay)?[, ]*)?(?:that'?s (?:all|it)|we'?re done|i'?m done|end (?:the )?conversation|stop listening|good ?bye|bye(?: coach)?|thanks?(?: you)?[, ]*(?:coach|that'?s all|bye)?)[\s.!]*$/i;
 const talk = { on: false, phase: "off", rec: null, buf: "", interim: "", gapT: 0, quietT: 0, waitT: 0, fails: 0 };
 const talkBtns = () => [document.getElementById("p_vTalk")].filter(Boolean);
@@ -358,7 +364,7 @@ async function talkFlush(){
   await send(t, undefined, { talk: true });
   if (!talk.on) return;
   // his answer is being spoken (or fetched to be spoken): listen again the moment it is out
-  talk.phase = "speaking"; drawTalk();
+  talk.phase = "speaking"; drawTalk(); warm();
   const t0 = Date.now(); let clear = 0;
   const wait = () => { if (!talk.on || talk.phase !== "speaking") return;
     const busy = window.coachSpeaking ? coachSpeaking() : false; clear = busy ? 0 : clear + 1;
@@ -378,6 +384,7 @@ function talkStart(){
   talk.on = true; talk.buf = ""; talk.interim = ""; talk.fails = 0; talk.pending = false;
   heyPause(); abortListening();
   try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{}
+  warm(); whereAmI();
   status("Listening. Just talk; I answer when you pause."); talkQuiet(); talkListen(); drawTalk();
 }
 function talkStop(why){
@@ -410,7 +417,8 @@ function mount(){
   const nw = document.getElementById("p_vNew"); if (nw) nw.onclick = ()=>{ history = []; keep(); drawThread(); status("New conversation."); };
   const tk = document.getElementById("p_vTalk"); if (tk){ if (!SR) tk.hidden = true; else tk.onclick = ()=>{ if (window.primeSound) try{ primeSound(); }catch{} talkToggle(); }; }
   const te = document.getElementById("p_vTalkEnd"); if (te) te.onclick = ()=> talkStop();
-  drawHey(); drawThread(); drawTalk();
+  drawHey(); drawThread(); drawTalk(); warm();
+  const tb = document.getElementById("chText"); if (tb && !tb.__warm){ tb.__warm = true; tb.addEventListener("focus", warm); }
   if (talk.pending) { talk.pending = false; setTimeout(talkStart, 150); }
 }
 // something said outside the conversation (the briefing): kept in it, so the words are there to read
