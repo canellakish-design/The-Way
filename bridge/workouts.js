@@ -87,6 +87,11 @@ function clean(body, prev, earliest, fact) {   // fact: a start he has already m
       : ((isDate(b.date) && b.date !== p.date) || (isTime(b.time) && b.time !== p.time) || (b.sport != null && b.sport !== p.sport) ? null : (p.indoor || null)),
     // when he pressed Start (POST /workouts/:id/start): the session's real start; a new day clears it
     started_at: b.started_at === null ? null : typeof b.started_at === 'string' ? b.started_at.slice(0, 30) : (isDate(b.date) && b.date !== p.date ? null : (p.started_at || null)),
+    // what Start changed, so a slip can be taken back (POST /workouts/:id/unstart; Harry, 15 Nov 2026, 5:09a in bed:
+    // "I accidentally hit start"): the time it had, and the later sessions it pushed
+    started_undo: b.started_at === null || b.started_undo === null ? null : b.started_undo && typeof b.started_undo === 'object'
+      ? { time: isTime(b.started_undo.time) ? b.started_undo.time : null, moved: (Array.isArray(b.started_undo.moved) ? b.started_undo.moved : []).filter(x => x && x.id && isTime(x.time)).slice(0, 8).map(x => ({ id: String(x.id), time: x.time })) }
+      : (isDate(b.date) && b.date !== p.date ? null : (p.started_undo || null)),
     // moved by The Way off something it was on top of (dayplan.js autoMove): from when, and off what; his own change of time clears it
     auto_moved: b.auto_moved && typeof b.auto_moved === 'object' ? b.auto_moved : (isTime(b.time) && b.time !== p.time ? null : (p.auto_moved || null)),
     // the course picked for the ride (courses.js): name, length, climbing and its two headings
@@ -713,6 +718,9 @@ function attach(app) {
   app.post('/workouts/:id/start', async (req, res) => { if (!auth(req, res)) return;
     try { const r = await start(req.params.id); if (!r) return res.status(404).json({ error: 'no such workout' }); res.json(Object.assign({ ok: true }, r)); }
     catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
+  app.post('/workouts/:id/unstart', async (req, res) => { if (!auth(req, res)) return;
+    try { const r = await unstart(req.params.id); if (!r) return res.status(404).json({ error: 'no such workout' }); res.json(Object.assign({ ok: true }, r)); }
+    catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.put('/workouts/:id', async (req, res) => { if (!auth(req, res)) return;
     const st = await settings(); const d = await db(); const prev = d.workouts[req.params.id];
     if (!prev) return res.status(404).json({ error: 'no such workout' });
@@ -784,10 +792,23 @@ async function start(id, now) {
   const today = tz.todayKey(), p = tz.parts(now || new Date()), nowMin = p.h * 60 + p.mi;
   if (me.date !== today) { const e = new Error('Start is for a session planned today.'); e.status = 400; throw e; }
   const plan = startPlan(Object.values(d.workouts).filter(w => w && w.date === today), id, nowMin), moved = [];
-  for (const ch of plan) { const body = ch.id === id ? { time: ch.time, started_at: (now || new Date()).toISOString() } : { time: ch.time };
+  const undo = { time: me.time || null, moved: plan.slice(1).map(ch => ({ id: ch.id, time: (d.workouts[ch.id] || {}).time })).filter(x => x.time) };
+  for (const ch of plan) { const body = ch.id === id ? { time: ch.time, started_at: (now || new Date()).toISOString(), started_undo: undo } : { time: ch.time };
     // the time is the fact here: the sleep-first earliest-start check is for planning, not for what he is already doing
     const w = await update(ch.id, body, { started: true }).catch(e => ({ error: e.message })); moved.push({ id: ch.id, time: ch.time, name: (d.workouts[ch.id] || {}).name, error: w && w.error || undefined }); }
   return { started: id, at: plan[0].time, moved };
+}
+// Start pressed by mistake: the session goes back to the time it had and is no longer started; the sessions Start
+// pushed later go back too (unless one of those has since been started itself).
+async function unstart(id) {
+  const d = await db(); const me = d.workouts[id];
+  if (!me) return null;
+  if (!me.started_at) { const e = new Error('That session has not been started.'); e.status = 400; throw e; }
+  const u = me.started_undo || {}, restored = [];
+  await update(id, Object.assign({ started_at: null }, u.time ? { time: u.time } : {}), { started: true });
+  for (const m of u.moved || []) { const o = d.workouts[m.id]; if (!o || o.started_at || o.date !== me.date) continue;
+    const r = await update(m.id, { time: m.time }, { started: true }).catch(e => ({ error: e.message })); if (!(r && r.error)) restored.push({ id: m.id, time: m.time, name: o.name }); }
+  return { unstarted: id, time: u.time || me.time, restored };
 }
 // a session already on the Garmin or Zwift is re-sent so nothing is left different.
 async function update(id, body, opts) {

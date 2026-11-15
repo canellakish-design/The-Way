@@ -242,7 +242,19 @@ async function workOut(date) {
 async function get(date, fresh) {
   const k = `suggest-${date}`;
   const have = await getJSON(k, null).catch(() => null);
-  if (have && (have.status === 'yes' || have.status === 'no')) return have;
+  // A yes stands only while the ride it made is still that ride. Changed to something else or taken off (15 Nov
+  // 2026: the trail ride became a trainer ride and the Day still said "Mountain Bike Park at 2:20p. Bike on tonight's
+  // packing list"), the answer is spent: nothing is shown, and no new idea is pushed for that day.
+  if (have && have.status === 'yes') {
+    const d = await getJSON('plan-workouts', { workouts: {} }).catch(() => ({ workouts: {} }));
+    const w = (d.workouts || {})[have.ride_id];
+    if (w && w.date === date && w.suggested) return have;
+    const spent = { date, made: have.made, answered: have.answered || null, none: 'the ride it became was changed or taken off', was: (have.route && have.route.name) || null };
+    await setJSON(k, spent).catch(() => {});
+    return spent;
+  }
+  if (have && have.none && have.was) return have;
+  if (have && have.status === 'no') return have;
   if (have && !fresh && Date.now() - Date.parse(have.made || have.at || 0) < 3 * 3600e3) return have;
   const s = await workOut(date).catch(e => ({ none: e.message }));
   const out = Object.assign({ date, made: new Date().toISOString() }, s);
