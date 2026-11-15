@@ -12,17 +12,20 @@
 // (each with how many days stand behind it), and the trends of the last week against the three before.
 //
 //   GET /history?from=YYYY-MM-DD&to=YYYY-MM-DD   the rows (45 days at most), built where missing
-//   GET /history/patterns                         best days, habits, trends over the last 60 days
+//   GET /history/patterns                         best days, habits, trends and the week-by-week roll-up of the whole record
 //
-// A past day's row is kept; the two days before today are rebuilt when older than half an hour (a correction to
-// yesterday shows), today is always read fresh. The five-minute job fills in missing days a few at a time.
+// A past day's row is kept for good; the two days before today are rebuilt when older than half an hour (a correction to
+// yesterday shows), today is always read fresh. The five-minute job fills in missing days a few at a time, back
+// 120 days at first; after that the record only grows, and the weeks roll up so a season reads at a glance.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const KEY = 'history-days';
-const KEEP = 60, GOOD_FOOD = 75, GOOD_RIDE = 85;
+// BACK: how far the first fill reaches (the rides are on record 120 days, the food 60). From then on nothing is
+// dropped: the record only grows (Harry, 14 Nov 2026: "access to all my data through my entire history").
+const BACK = 120, GOOD_FOOD = 75, GOOD_RIDE = 85;
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 const dowOf = date => DOW[new Date(date + 'T12:00:00Z').getUTCDay()];
@@ -113,7 +116,22 @@ function patterns(rows, today) {
   const mins = rs => rs.reduce((a, r) => a + r.done.reduce((x, d) => x + (d.minutes || 0), 0), 0);
   const trends = [tr('food score', r => r.food ? r.food.score : null, '', 0), tr('protein', r => r.food ? r.food.protein : null, 'g a day', 0), tr('sleep', r => r.sleep_h, 'h a night', 1), tr('recovery', r => r.recovery, '', 0), tr('weight', r => r.lb, 'lb', 1)].filter(Boolean);
   trends.push({ label: 'riding', last7: mins(wk), before: prior.length ? Math.round(mins(prior) / Math.max(1, prior.length / 7)) : null, unit: 'min a week' });
-  return { days: all.length, days_with_food: fed.length, from: all.length ? all[0].date : null, best_food_days: best, worst_food_days: worst, food_habits: foodHabits, ride_habits: rideHabits, good_rides: goodRides, trends };
+  return { days: all.length, days_with_food: fed.length, from: all.length ? all[0].date : null, weeks: weeks(all, today), best_food_days: best, worst_food_days: worst, food_habits: foodHabits, ride_habits: rideHabits, good_rides: goodRides, trends };
+}
+
+// week by week (Monday to Sunday): the long view, so a season's drift shows without reading every day
+function weeks(rows, today) {
+  const by = {};
+  for (const r of (rows || []).filter(x => x && x.date < (today || '9999'))) {
+    const dow = (new Date(r.date + 'T12:00:00Z').getUTCDay() + 6) % 7, mon = tz.shiftKey(r.date, -dow);
+    (by[mon] = by[mon] || []).push(r);
+  }
+  return Object.keys(by).sort().map(mon => { const rs = by[mon], fed = rs.filter(r => r.food && r.food.score != null);
+    const sum = f => rs.reduce((a, r) => a + r.done.reduce((x, d) => x + (f(d) || 0), 0), 0), rd = v => v == null ? null : Math.round(v);
+    return { week_of: mon, days: rs.length, food_days: fed.length, food_score: rd(avg(fed.map(r => r.food.score))), good_food_days: fed.filter(r => r.food.score >= GOOD_FOOD).length,
+      kcal: rd(avg(fed.map(r => r.food.kcal))), protein: rd(avg(fed.map(r => r.food.protein))),
+      rides: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'ride').length, 0), ride_min: sum(d => d.kind === 'ride' ? d.minutes : 0), tss: sum(d => d.tss), lifts: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'lift').length, 0),
+      sleep_h: r1(avg(rs.map(r => r.sleep_h))), recovery: rd(avg(rs.map(r => r.recovery))), lb: r1(avg(rs.map(r => r.lb))) }; });
 }
 
 // what the quick coach always has in view: the last fortnight day by day, his best days, the habits, the trends
@@ -121,12 +139,14 @@ function digestText(rows, today, days) {
   const n = days || 14, all = (rows || []).filter(r => r && r.date < today).sort((a, b) => b.date.localeCompare(a.date));
   if (!all.length) return '';
   const P = patterns(all, today), out = [];
-  out.push(`LOOK BACK: his last ${Math.min(n, all.length)} days before today, newest first (the record goes back to ${tz.dayShort(P.from)}; look_back reads any of it in full). Food score is the day out of 100; ${GOOD_FOOD} or more is a good day.`);
+  out.push(`LOOK BACK: his last ${Math.min(n, all.length)} days before today, newest first (the record goes back to ${tz.dayShort(P.from)} and is kept for good; look_back reads any stretch of it day by day). Food score is the day out of 100; ${GOOD_FOOD} or more is a good day.`);
   for (const r of all.slice(0, n)) out.push(line(r));
   if (P.best_food_days.length) out.push('HIS BEST FOOD DAYS, his own choices, the model to copy: ' + P.best_food_days.map(b => `${b.dow} ${tz.dayShort(b.date).replace(/^\w+,?\s*/, '')} scored ${b.score}${b.day ? ` (a ${b.day})` : ''}: ${b.meals.map(m => `${m.slot} ${m.name}`).join('; ')}`).join(' || '));
   const pair = p => p.map(g => `${g.label}: ${g.mean} (${g.n} ${g.n === 1 ? 'day' : 'days'})`).join(' vs ');
   if (P.food_habits.length) out.push('FOOD HABITS, mean food score: ' + P.food_habits.map(pair).join(' · '));
   if (P.ride_habits.length) out.push('RIDE HABITS, mean % of plan ridden that day: ' + P.ride_habits.map(p => p.map(g => `${g.label}: ${g.mean == null ? 'no plan to compare' : g.mean + '%'} (${g.n})`).join(' vs ')).join(' · '));
+  // the long view: every week on record, oldest first (the last 16 when there are more)
+  if (P.weeks.length > 1) out.push('WEEK BY WEEK (Monday to Sunday, oldest first; the last may be part of a week): ' + P.weeks.slice(-16).map(w => `week of ${tz.dayShort(w.week_of).replace(/^\w+,?\s*/, '')}: ${w.food_days ? `food ${w.food_score} over ${w.food_days} days (${w.good_food_days} good), protein ${w.protein} g` : 'no food logged'}, ${w.rides} rides ${w.ride_min} min${w.tss ? ' ' + w.tss + ' TSS' : ''}, ${w.lifts} lifts${w.sleep_h != null ? `, sleep ${w.sleep_h} h` : ''}${w.recovery != null ? `, recovery ${w.recovery}` : ''}${w.lb != null ? `, ${w.lb} lb` : ''}`).join(' || '));
   if (P.trends.length) out.push('TRENDS, last 7 days against the 3 weeks before: ' + P.trends.map(t => `${t.label} ${t.last7 == null ? 'none' : t.last7}${t.before != null ? ` (was ${t.before})` : ''}${t.unit ? ' ' + t.unit : ''}`).join('; '));
   return out.join('\n');
 }
@@ -166,15 +186,15 @@ async function rows(from, to, o) {
   if (need.length && !(o && o.cached)) {
     const built = await build(need, (o && o.budgetMs) || 12000); let dirty = false;
     for (const k of Object.keys(built)) { if (k === today) { d.rows[k] = { at: 0, row: built[k] }; continue; } d.rows[k] = { at: Date.now(), row: built[k] }; dirty = true; }
-    if (dirty) { const floor = tz.shiftKey(today, -KEEP); const keep = {}; for (const k of Object.keys(d.rows)) if (k >= floor && k !== today) keep[k] = d.rows[k];
+    if (dirty) { const keep = {}; for (const k of Object.keys(d.rows)) if (k !== today) keep[k] = d.rows[k];   // nothing is dropped: the record only grows
       await setJSON(KEY, { rows: keep }).catch(() => {}); }
   }
   return want.filter(k => d.rows[k]).map(k => d.rows[k].row);
 }
-// The five-minute job: a few missing or stale days at a time, newest first, until the last 60 are on record.
+// The five-minute job: a few missing or stale days at a time, newest first, until the last 120 are on record.
 async function tick() {
   const today = tz.todayKey(), d = await store(), need = [];
-  for (let i = 1; i <= KEEP && need.length < 3; i++) { const k = tz.shiftKey(today, -i); if (!d.rows[k] || stale(k, d.rows[k].at, today)) need.push(k); }
+  for (let i = 1; i <= BACK && need.length < 3; i++) { const k = tz.shiftKey(today, -i); if (!d.rows[k] || stale(k, d.rows[k].at, today)) need.push(k); }
   if (!need.length) return { built: 0 };
   const got = await rows(need[need.length - 1], need[0], { budgetMs: 9000 });
   return { built: need.length, on_record: Object.keys((await store()).rows).length, got: got.length };
@@ -192,7 +212,7 @@ async function lookBack(input) {
   if (from < tz.shiftKey(to, -44)) from = tz.shiftKey(to, -44);
   const rs = await rows(from, to, { budgetMs: 9000 }), brief = rs.length > 7;
   return { from, to, days: rs.map(r => brief ? Object.assign({}, r, { meals: r.meals.map(m => ({ slot: m.slot, time: m.time, name: m.name, kcal: m.kcal, c: m.c, p: m.p })) }) : r),
-    note: rs.length ? undefined : 'nothing on record for those days', kept_days: KEEP };
+    note: rs.length ? undefined : 'nothing on record for those days' };
 }
 
 function attach(app) {
@@ -203,4 +223,4 @@ function attach(app) {
     try { const today = tz.todayKey(), d = await store(); res.json(patterns(Object.values(d.rows).map(x => x.row), today)); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, rowOf, line, patterns, digestText, digest, rows, build, tick, lookBack, GOOD_FOOD, KEEP };
+module.exports = { attach, rowOf, line, patterns, weeks, digestText, digest, rows, build, tick, lookBack, GOOD_FOOD, BACK };
