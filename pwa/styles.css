@@ -1016,6 +1016,10 @@ body:has(#chFace) #micBtn{display:none}
 .stagestop{position:absolute; right:10px; top:44px; z-index:3; margin:0; padding:6px 12px; font-size:11px; min-height:0; display:none}
 .chface.stage.talking .stagestop{display:block}
 .ch-ask{gap:8px} .ch-ask .vhold{width:100%; min-height:52px; margin:0}
+.ch-talkrow{display:flex; align-items:center; gap:12px} .ch-talkrow .vtalk{flex:1; min-height:56px; margin:0; font-size:15px}
+.vtalk.on{background:var(--green-soft); color:var(--ink); border-color:var(--green)} .vtalk.live{animation:micpulse 1.6s ease-in-out infinite}
+.ch-talkrow .linkish{font-size:13px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:8px 4px; font-weight:400; text-decoration:underline; margin:0} .ch-talkrow .linkish[hidden]{display:none}
+.ch-ask .vhold[hidden]{display:none}
 .ch-ask .vheard{min-height:0; margin:0; font-size:18px} .ch-ask .vheard:empty{display:none}
 .ch-type{display:flex; gap:8px; align-items:stretch} .ch-type textarea{flex:1; min-width:0; resize:none; min-height:44px} .ch-type button{margin:0; flex:0 0 auto; min-width:72px}
 .ch-under{display:flex; justify-content:space-between; align-items:baseline; gap:10px; min-height:18px; margin-top:-2px}

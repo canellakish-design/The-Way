@@ -82,7 +82,10 @@ async function bridge(pathname, opts){
 }
 function esc(t){ const d=document.createElement("div"); d.textContent=t==null?"":String(t); return d.innerHTML; }
 function attr(t){ return esc(t).replace(/"/g,"&quot;"); }
-let __ttsSpeaking = false, __lastSpoken = "";
+let __ttsSpeaking = false, __lastSpoken = "", __ttsPending = 0;
+// true from the moment an answer is handed to the voice until the last word is out (the natural voice is fetched first,
+// so there is a second or two before any sound): the open conversation listens again only after this goes false
+window.coachSpeaking = () => __ttsSpeaking || (__ttsPending && Date.now() - __ttsPending < 12000) || (function(){ try{ return speechSynthesis.speaking; }catch{ return false; } })();
 /* A meal that lands on the plan: a chime, a green check that pops open in
    the middle of the screen with bits flung out of it, then flies down to
    the meal's own card and sits there. The sound is made here (sine notes,
@@ -188,20 +191,20 @@ window.CoachVoice = CoachVoice;
 // asked once at load, so a phone with no key set goes straight to its own voice with no wait
 try{ setTimeout(()=>{ if (typeof bridge === "function") bridge("/voice/speak").then(r => { CoachVoice.on = !!(r && r.on); }).catch(()=>{}); }, 1500); }catch{}
 function speak(t){
-  __lastSpoken = t;
+  __lastSpoken = t; __ttsPending = Date.now();
   try{ speechSynthesis.cancel(); }catch{}
-  CoachVoice.say(t).catch(()=> speakPhone(t));
+  CoachVoice.say(t).then(()=>{ __ttsPending = 0; }).catch(()=> speakPhone(t));
 }
 function speakPhone(t){
   try{
     const u = new SpeechSynthesisUtterance(t); u.rate = 1.03;
     __lastSpoken = t;
-    u.onstart = ()=>{ __ttsSpeaking = true; };
-    u.onend = ()=>{ __ttsSpeaking = false; };
-    u.onerror = ()=>{ __ttsSpeaking = false; };
+    u.onstart = ()=>{ __ttsSpeaking = true; __ttsPending = 0; };
+    u.onend = ()=>{ __ttsSpeaking = false; __ttsPending = 0; };
+    u.onerror = ()=>{ __ttsSpeaking = false; __ttsPending = 0; };
     if (window.Face) Face.speaking(u);   // the coach's face moves with the words when it is open (face.js)
     speechSynthesis.speak(u);
-  }catch(e){}
+  }catch(e){ __ttsPending = 0; }
 }
 
 /* photo helpers — used by Food Log and Batches, both send {image_base64, media_type} */
@@ -270,84 +273,22 @@ function defaultView(){
   return "today";
 }
 
-/* ---------------- COACH (shared conversation component) ----------------
-   Every group has its coach: same hands-free loop, different persona.
-   The persona rides in the POST body; the bridge keeps a separate thread
-   and voice for each. */
-const PERSONA_HINTS = {
-  plan:     "Planning coach — the week, the windows, tomorrow's ride.",
-  activate: "Activation coach — mobility, warm-ups, getting the body ready.",
-  train:    "Training coach — sessions, buckets, what the week owes.",
-  sleep:    "Sleep coach — sleep, HRV, the morning readiness picture.",
-  analyze:  "Analyst — weight, W/kg, trends. Ride analysis coming soon."
-};
+/* ---------------- COACH (the card at the foot of the older pages) ----------------
+   It used to be its own small coach with its own listening loop, which did not hold a conversation (Harry, 14 Nov
+   2026: "the kind of open back and forth conversation isn't working"). There is one coach now: this card starts the
+   open conversation with him (voice.js), on the Coach page, and what is typed here is asked there. */
 function coachCard(persona){
   return `<span class="eyebrow" style="margin-top:16px;display:block">Coach</span>
-    <div class="card"><div class="small">${PERSONA_HINTS[persona]||""}</div>
-      <div class="coachLog" id="coachLog"></div>
+    <div class="card"><div class="small">Talk it through with your coach: he knows your plan, your food, your sleep and your record.</div>
       <button class="ptt" id="convBtn">Start conversation</button>
       <input id="coachTyped" placeholder="…or type here and press Enter"></div>`;
 }
 function wireCoach(persona){
-  const log = document.getElementById("coachLog");
-  const add = (who, t)=>{ const d=document.createElement("div"); d.className="turn "+who;
-    d.textContent = (who==="you"?"You: ":"Coach: ")+t; log.appendChild(d); log.scrollTop=1e6; };
-  const ask = async (text)=>{
-    add("you", text);
-    try{
-      const r = await bridge("/agent",{method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({text, persona})});
-      add("coach", r.reply); speak(r.reply);
-    }catch(e){ add("coach","(bridge unreachable — " + e.message + ")"); }
-  };
-  document.getElementById("coachTyped").addEventListener("keydown",e=>{
-    if(e.key==="Enter"&&e.target.value.trim()){ ask(e.target.value.trim()); e.target.value=""; }});
-
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const btn = document.getElementById("convBtn");
-  if (!SR){ btn.textContent = "Voice unavailable here — type below"; btn.disabled = true; return; }
-  let rec = null, convOn = false;
-  // No browser API gives real acoustic echo cancellation between
-  // SpeechSynthesis output and SpeechRecognition input, so the mic can
-  // hear the coach's own voice through a tablet/phone speaker and
-  // mistake it for a barge-in. A Bluetooth earpiece (e.g. Shokz) mostly
-  // sidesteps this. This word-overlap check is a rough fallback filter.
-  const wordOverlap = (a,b)=>{
-    const wa = a.toLowerCase().split(/\s+/).filter(Boolean);
-    const wb = new Set(b.toLowerCase().split(/\s+/).filter(Boolean));
-    if (!wa.length) return 0;
-    return wa.filter(w=>wb.has(w)).length / wa.length;
-  };
-  const handleUtterance = (text)=>{
-    text = text.trim(); if (!text) return;
-    if (__ttsSpeaking){
-      if (wordOverlap(text, __lastSpoken) > 0.5) return; // mic hearing the coach — ignore
-      speechSynthesis.cancel(); CoachVoice.stop(); __ttsSpeaking = false;   // real barge-in
-    }
-    ask(text);
-  };
-  const startRec = ()=>{
-    rec = new SR(); rec.lang = "en-US"; rec.continuous = true; rec.interimResults = false;
-    rec.onresult = e=>{
-      for (let i = e.resultIndex; i < e.results.length; i++){
-        if (e.results[i].isFinal) handleUtterance(e.results[i][0].transcript);
-      }
-    };
-    rec.onerror = ()=>{};
-    rec.onend = ()=>{ if (convOn){ try{ rec.start(); }catch(e){} } };
-    try{ rec.start(); }catch(e){}
-  };
-  btn.onclick = ()=>{
-    convOn = !convOn;
-    if (convOn){
-      btn.textContent = "End conversation"; btn.classList.add("listening");
-      startRec();
-    } else {
-      btn.textContent = "Start conversation"; btn.classList.remove("listening");
-      if (rec){ rec.onend = null; try{ rec.stop(); }catch(e){} rec = null; }
-      speechSynthesis.cancel(); CoachVoice.stop(); __ttsSpeaking = false;
-    }
-  };
+  const btn = document.getElementById("convBtn"), typed = document.getElementById("coachTyped");
+  if (typed) typed.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.value.trim()){ const t = e.target.value.trim(); e.target.value = ""; if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t); } });
+  if (!btn) return;
+  if (!window.voiceBits || !voiceBits.supported){ btn.textContent = "Voice unavailable here: type below"; btn.disabled = true; return; }
+  btn.onclick = () => { if (window.primeSound) primeSound(); voiceBits.talk(true); };
 }
 
 function gearList(dayType, storm){

@@ -54,7 +54,7 @@ function rowOf(o) {
     return m ? { name: m.name, min_before: at - toMin(m.time), c: m.c, p: m.p } : null; };
   const done = (cal.done || []).map(a => ({ kind: /run/i.test(a.type || '') ? 'run' : 'ride', name: String(a.name || '').slice(0, 60), time: a.time || '', minutes: a.minutes || null, tss: a.tss != null ? Math.round(a.tss) : null,
     avg_hr: a.avg_hr || null, np_w: a.np_w || null, indoor: /virtual/i.test(a.type || ''), before: before(toMin(a.time)) }));
-  for (const l of o.lifts || []) done.push({ kind: 'lift', name: String(l.name || 'Lift').slice(0, 60), volume_lb: l.volume_lb || null });
+  for (const l of o.lifts || []) done.push({ kind: 'lift', name: String(l.name || 'Lift').slice(0, 60), volume_lb: l.volume_lb || null, tops: l.tops && l.tops.length ? l.tops : undefined });
   const planned = (cal.planned || []).map(w => String(w.name || '').slice(0, 60));
   return { date: o.date, dow: dowOf(o.date), food, meals, done, planned, plan_pct: pct,
     sleep_h: o.night && o.night.hours != null ? r1(o.night.hours) : null, sleep_score: o.night && o.night.score != null ? Math.round(o.night.score) : null,
@@ -70,7 +70,7 @@ function line(row) {
     const by = {}; for (const m of row.meals) (by[m.slot || 'other'] = by[m.slot || 'other'] || []).push(m);
     bits.push('ate: ' + Object.keys(by).map(s => `${s} ${by[s].map(m => `${m.name} (${m.kcal} kcal, ${m.c}C ${m.p}P${m.time ? ', ' + tz.hm12(m.time) : ''})`).join(' + ')}`).join('; '));
   } else bits.push('no food logged');
-  if (row.done.length) bits.push('trained: ' + row.done.map(d => d.kind === 'lift' ? `${d.name} lift${d.volume_lb ? ` (${d.volume_lb} lb moved)` : ''}`
+  if (row.done.length) bits.push('trained: ' + row.done.map(d => d.kind === 'lift' ? `${d.name} lift${d.volume_lb ? ` (${d.volume_lb} lb moved${d.tops ? ': ' + d.tops.join(', ') : ''})` : ''}`
     : `${d.name}${d.time ? ' at ' + tz.hm12(d.time) : ''}${d.minutes ? `, ${d.minutes} min` : ''}${d.tss != null ? `, ${d.tss} TSS` : ''}${d.avg_hr ? `, avg HR ${d.avg_hr}` : ''}${d.before ? `, ${d.before.min_before} min after ${d.before.name} (${d.before.c} g carbs)` : ', nothing eaten before it'}`).join('; ')
     + (row.plan_pct != null ? ` [riding ${row.plan_pct}% of plan]` : ''));
   else if (row.planned.length) bits.push(`planned but not done: ${row.planned.join(', ')}`);
@@ -153,7 +153,9 @@ function digestText(rows, today, days) {
 
 // ---- the store ---------------------------------------------------------------------------------------
 async function store() { const d = await getJSON(KEY, { rows: {} }); d.rows = d.rows || {}; return d; }
-const stale = (date, at, today) => !at || (date >= tz.shiftKey(today, -2) && Date.now() - at > 30 * 60000);
+// VER: the shape of a row; a row built to an older shape is built again (2: lifts carry their name, pounds and top sets)
+const VER = 2;
+const stale = (date, e, today) => !e || !e.at || e.v !== VER || (date >= tz.shiftKey(today, -2) && Date.now() - e.at > 30 * 60000);
 
 // Build the rows of these dates (oldest first is cheapest: one calendar read and one sleep read for the span).
 async function build(dates, budgetMs) {
@@ -173,19 +175,27 @@ async function build(dates, budgetMs) {
     if (budgetMs && Date.now() - t0 > budgetMs) break;
     let report = null; try { report = await food.dayReport(date); } catch (e) { report = null; }
     out[date] = rowOf({ date, report, cal: (cal.days || []).find(d => d.date === date) || null,
-      lifts: (liftsDoc.sessions || []).filter(s => s.date === date), night: (rec.nights || []).find(x => x.date === date) || null,
+      lifts: (liftsDoc.sessions || []).filter(s => s.date === date).map(liftOf), night: (rec.nights || []).find(x => x.date === date) || null,
       rec: (rec.recs || []).find(x => x.date === date) || null, nap_min: naps[date] || null, lb: lbOn[date] ? lbOn[date].lb : null });
   }
   return out;
+}
+// a saved lift as the Lift page names it: the template's name, the pounds moved, its best set of each exercise
+function liftOf(s) {
+  let name = s.name || ''; try { const t = require('./lifts').TEMPLATES; const tpl = Array.isArray(t) ? t.find(x => x.key === s.template) : (t || {})[s.template]; if (!name && tpl && tpl.name) name = tpl.name; } catch (e) { /* the key stands */ }
+  if (!name) name = s.template ? String(s.template).replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase()) : 'Lift';
+  const volume = (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0);
+  const tops = (s.exercises || []).map(e => { const best = (e.sets || []).filter(x => x.lb > 0 && x.reps > 0).sort((a, b) => b.lb - a.lb || b.reps - a.reps)[0]; return best ? `${e.name || e.key} ${best.lb} lb x ${best.reps}` : null; }).filter(Boolean);
+  return { name, volume_lb: volume || s.volume_lb || null, tops: tops.slice(0, 8) };
 }
 // The rows of a span, from the store, building what is missing or stale (within a time budget).
 async function rows(from, to, o) {
   const today = tz.todayKey(), d = await store(), want = [];
   for (let k = from; k <= to && want.length < 62; k = tz.shiftKey(k, 1)) want.push(k);
-  const need = want.filter(k => k <= today && (k === today || !d.rows[k] || stale(k, d.rows[k].at, today)));
+  const need = want.filter(k => k <= today && (k === today || stale(k, d.rows[k], today)));
   if (need.length && !(o && o.cached)) {
     const built = await build(need, (o && o.budgetMs) || 12000); let dirty = false;
-    for (const k of Object.keys(built)) { if (k === today) { d.rows[k] = { at: 0, row: built[k] }; continue; } d.rows[k] = { at: Date.now(), row: built[k] }; dirty = true; }
+    for (const k of Object.keys(built)) { if (k === today) { d.rows[k] = { at: 0, row: built[k] }; continue; } d.rows[k] = { at: Date.now(), v: VER, row: built[k] }; dirty = true; }
     if (dirty) { const keep = {}; for (const k of Object.keys(d.rows)) if (k !== today) keep[k] = d.rows[k];   // nothing is dropped: the record only grows
       await setJSON(KEY, { rows: keep }).catch(() => {}); }
   }
@@ -194,7 +204,7 @@ async function rows(from, to, o) {
 // The five-minute job: a few missing or stale days at a time, newest first, until the last 120 are on record.
 async function tick() {
   const today = tz.todayKey(), d = await store(), need = [];
-  for (let i = 1; i <= BACK && need.length < 3; i++) { const k = tz.shiftKey(today, -i); if (!d.rows[k] || stale(k, d.rows[k].at, today)) need.push(k); }
+  for (let i = 1; i <= BACK && need.length < 3; i++) { const k = tz.shiftKey(today, -i); if (stale(k, d.rows[k], today)) need.push(k); }
   if (!need.length) return { built: 0 };
   const got = await rows(need[need.length - 1], need[0], { budgetMs: 9000 });
   return { built: need.length, on_record: Object.keys((await store()).rows).length, got: got.length };
