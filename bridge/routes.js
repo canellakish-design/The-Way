@@ -15,6 +15,8 @@
 //
 //   GET  /routes                     { connected, routes:[{ id, name, km, miles, gain_m, gain_ft, url, updated }] }
 //   POST /routes/loop                { minutes|km, direction?, type?, name?, save?, date? } → the loop, saved if asked
+//   GET  /routes/near?lat=&lon=      his routes that pass near that point, best first, each with where to join it
+//   POST /routes/here                { lat, lon, name?, save? } → that route begun at the point nearest him
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
@@ -36,9 +38,14 @@ async function creds() {
   if (!token) { const e = new Error('Ride with GPS is not connected: connect it in Settings first.'); e.status = 400; throw e; }
   return { 'x-rwgps-api-key': key, 'x-rwgps-auth-token': token, Accept: 'application/json' };
 }
+const num = v => (v == null || v === '' || !Number.isFinite(Number(v))) ? null : Number(v);
 const shapeRoute = r => ({ id: String(r.id), name: String(r.name || 'Route').trim(), km: r.distance ? r1(r.distance / 1000) : null, miles: r.distance ? r1(r.distance / 1609.34) : null,
   gain_m: r.elevation_gain != null ? Math.round(r.elevation_gain) : null, gain_ft: r.elevation_gain != null ? Math.round(r.elevation_gain * 3.281) : null,
-  where: [r.locality, r.administrative_area].filter(Boolean).join(', ') || null, url: r.html_url || `https://ridewithgps.com/routes/${r.id}`, updated: r.updated_at || null });
+  where: [r.locality, r.administrative_area].filter(Boolean).join(', ') || null, url: r.html_url || `https://ridewithgps.com/routes/${r.id}`, updated: r.updated_at || null,
+  // where it lies on the map (for "which of my routes pass near me"): its corners, where it starts, and its kind
+  box: num(r.sw_lat) != null && num(r.ne_lat) != null && num(r.sw_lng) != null && num(r.ne_lng) != null ? [num(r.sw_lat), num(r.sw_lng), num(r.ne_lat), num(r.ne_lng)] : null,
+  first: num(r.first_lat) != null && num(r.first_lng) != null ? [num(r.first_lat), num(r.first_lng)] : null,
+  kind: r.track_type || null, surface: r.surface || null, unpaved_pct: num(r.unpaved_pct) });
 
 // His library, from the kept copy when it is under six hours old (fresh: read it now).
 async function list(fresh) {
@@ -146,6 +153,162 @@ async function removeTest(id) {
   return { removed: true, id: r.id, name: r.name };
 }
 
+// ============================================================
+// From where he stands (Harry, 15 Nov 2026: "I want the coach to know where I am and to tell me where to go to
+// start a route … the best route in the area … the starting point of the route needs to be able to change, so it's
+// the closest to my current location"; "it just needs to be on the route, the closest part on the route").
+//   near(coords)       which of his routes pass close to him, each with the point on it nearest him: how far, which
+//                      way, and the street it is on. Best first: a short way to the route, a length that fits the time.
+//   startHere(coords)  one of them begun at that nearest point: a loop is turned so it starts and ends there, ridden
+//                      the same way round; a one-way route is ridden from there to its end. Saved to his library
+//                      when asked, as "<name> (from <street>)".
+// ============================================================
+const KY = 110.57, kxAt = lat => 111.32 * Math.cos(lat * Math.PI / 180);
+const distKm = (a, b) => Math.hypot((a[0] - b[0]) * KY, (a[1] - b[1]) * kxAt((a[0] + b[0]) / 2));
+const lengthKm = pts => { let s = 0; for (let i = 1; i < pts.length; i++) s += distKm(pts[i - 1], pts[i]); return s; };
+// how far a point is from a route's corners box: 0 inside it (pure)
+function boxKm(box, here) {
+  if (!box) return Infinity;
+  const lat = Math.min(Math.max(here[0], box[0]), box[2]), lon = Math.min(Math.max(here[1], box[1]), box[3]);
+  return distKm(here, [lat, lon]);
+}
+// the point of a track nearest to him, on the line between its points and not only at them (pure)
+function nearest(points, here) {
+  if (!points || !points.length) return null;
+  const kx = kxAt(here[0]), X = p => (p[1] - here[1]) * kx, Y = p => (p[0] - here[0]) * KY;
+  let best = { i: 0, km: Math.hypot(X(points[0]), Y(points[0])), at: points[0], t: 0 };
+  for (let i = 0; i < points.length - 1; i++) {
+    const ax = X(points[i]), ay = Y(points[i]), bx = X(points[i + 1]), by = Y(points[i + 1]), dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2)) : 0, km = Math.hypot(ax + t * dx, ay + t * dy);
+    if (km < best.km) best = { i, km, t, at: [points[i][0] + t * (points[i + 1][0] - points[i][0]), points[i][1] + t * (points[i + 1][1] - points[i][1])] };
+  }
+  return best;
+}
+const isLoop = pts => pts.length > 3 && distKm(pts[0], pts[pts.length - 1]) <= 0.4;
+// The same route begun at that point (pure). A loop: from there round to there again, the same way round.
+// A one-way route: from there to its end.
+function restart(points, n) {
+  const at = [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], after = points.slice(n.i + 1), same = (a, b) => a[0] === b[0] && a[1] === b[1];
+  let out = isLoop(points) ? [at].concat(after, points.slice(same(points[0], points[points.length - 1]) ? 1 : 0, n.i + 1), [at]) : [at].concat(after);
+  out = out.filter((p, i) => !i || !same(p, out[i - 1]));
+  return out;
+}
+const COMPASS = ['north', 'northeast', 'east', 'southeast', 'south', 'southwest', 'west', 'northwest'];
+const compass = (from, to) => COMPASS[Math.round(((Math.atan2((to[1] - from[1]) * kxAt(from[0]), (to[0] - from[0]) * KY) * 180 / Math.PI + 360) % 360) / 45) % 8];
+
+// A route's track, kept (a route's line does not change until it is edited: kept against its "updated").
+const TRACK_KEY = id => 'rwgps-track-' + id, SHAPES_KEY = 'rwgps-shapes', COARSE = 80;
+async function trackOf(r) {
+  const kept = await getJSON(TRACK_KEY(r.id), null).catch(() => null);
+  if (kept && kept.points && kept.updated === (r.updated || null)) return kept.points;
+  const res = await fetch(`${RWGPS}/routes/${encodeURIComponent(r.id)}.json`, { headers: await creds(), signal: AbortSignal.timeout(9000) });
+  if (!res.ok) throw new Error('Ride with GPS answered ' + res.status + ' for ' + r.name);
+  const j = await res.json(), raw = ((j.route || j).track_points || []).filter(p => p && p.y != null && p.x != null), step = Math.max(1, Math.ceil(raw.length / 2500));
+  const points = raw.filter((_, i) => i % step === 0 || i === raw.length - 1).map(p => [Math.round(p.y * 1e5) / 1e5, Math.round(p.x * 1e5) / 1e5]);
+  if (points.length < 2) throw new Error(r.name + ' has no line to follow.');
+  await setJSON(TRACK_KEY(r.id), { updated: r.updated || null, points, at: Date.now() }).catch(() => {});
+  return points;
+}
+const coarse = pts => { const step = Math.max(1, Math.ceil(pts.length / COARSE)); return pts.filter((_, i) => i % step === 0 || i === pts.length - 1); };
+// The outline of every route (80 points each, in one place), so "which pass near me" is answered without reading
+// 120 tracks. Built a few at a time: here for the routes around him, and by the five-minute job for the rest.
+async function shapesFor(routes, budgetMs, most) {
+  const S = await getJSON(SHAPES_KEY, { shapes: {} }).catch(() => ({ shapes: {} })), shapes = (S && S.shapes) || {};
+  const need = routes.filter(r => !(shapes[r.id] && shapes[r.id].u === (r.updated || null))).slice(0, most == null ? 12 : most);
+  if (need.length) {
+    const got = await Promise.race([Promise.all(need.map(r => trackOf(r).then(p => ({ r, p })).catch(() => null))), new Promise(res => setTimeout(() => res(null), budgetMs || 8000))]);
+    let changed = false;
+    for (const g of got || []) if (g) { shapes[g.r.id] = { u: g.r.updated || null, p: coarse(g.p), loop: isLoop(g.p) }; changed = true; }
+    if (changed) await setJSON(SHAPES_KEY, { shapes, at: Date.now() }).catch(() => {});
+  }
+  return shapes;
+}
+// the five-minute job: outlines for routes that have none yet, three at a time; nothing to do once all are kept
+async function tick() {
+  const L = await getJSON(LIST_KEY, null).catch(() => null);
+  if (!L || !L.connected || !(L.routes || []).length || require('./sandbox').SANDBOX) return { skipped: true };
+  const S = await getJSON(SHAPES_KEY, { shapes: {} }).catch(() => ({ shapes: {} })), have = (S && S.shapes) || {};
+  const need = L.routes.filter(r => !(have[r.id] && have[r.id].u === (r.updated || null)));
+  if (!need.length) return { done: true, shapes: Object.keys(have).length };
+  await shapesFor(need, 6000, 3);
+  return { built: Math.min(3, need.length), left: Math.max(0, need.length - 3) };
+}
+
+// the street a point is on, in a few words ("Clopper Rd, Germantown"); null when the map service does not say
+async function placeOf(p) {
+  const k = envStr('TOMTOM_API_KEY'); if (!k) return null;
+  try {
+    const r = await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${p[0].toFixed(5)},${p[1].toFixed(5)}.json?key=${encodeURIComponent(k)}&radius=200`, { signal: AbortSignal.timeout(3500) });
+    if (!r.ok) return null;
+    const a = ((await r.json()).addresses || [])[0], ad = a && a.address; if (!ad) return null;
+    const street = ad.streetName || ad.street || '', town = ad.municipality || ad.municipalitySubdivision || '';
+    return { street: street || null, town: town || null, text: [street, town].filter(Boolean).join(', ') || ad.freeformAddress || null };
+  } catch (e) { return null; }
+}
+const mapsTo = p => `https://www.google.com/maps/dir/?api=1&destination=${p[0].toFixed(5)},${p[1].toFixed(5)}`;
+const REACH_KM = 16;   // a route passing more than ten miles away is not "in the area"
+
+// Best first (pure): the way to the route counts most, then how far its length is from the time he has.
+function rank(rows, wantKm) {
+  const score = x => x.join_km + (wantKm > 0 && x.km ? Math.abs(x.km - wantKm) / wantKm * 8 : 0);
+  return rows.slice().sort((a, b) => score(a) - score(b));
+}
+
+async function near(coords, o) {
+  o = o || {};
+  if (!coords || !(Math.abs(Number(coords.lat)) <= 90) || !(Math.abs(Number(coords.lon)) <= 180)) { const e = new Error('No location came with that, so the routes near you cannot be worked out. Allow location for the site.'); e.status = 400; throw e; }
+  const here = [Number(coords.lat), Number(coords.lon)], reach = o.reach_km > 0 ? o.reach_km : REACH_KM;
+  let L = await list();
+  if (L.connected && L.routes.length && L.routes[0].box === undefined) L = await list(true);   // a copy kept before the corners were read
+  if (!L.connected) { const e = new Error(L.reason || 'Ride with GPS is not connected.'); e.status = 400; throw e; }
+  const type = SPEED[o.type] ? o.type : 'road', wantKm = o.km > 0 ? o.km : o.minutes > 0 ? SPEED[type] * o.minutes / 60 : 0;
+  // the routes whose corners reach him, the ones starting nearest first (their outlines are read first)
+  const around = L.routes.filter(r => r.box && boxKm(r.box, here) <= reach).sort((a, b) => (a.first ? distKm(here, a.first) : 1e3) - (b.first ? distKm(here, b.first) : 1e3));
+  const shapes = await shapesFor(around, o.budget_ms || 8000);
+  const rough = around.map(r => { const s = shapes[r.id]; if (!s) return null; const n = nearest(s.p, here); return n && n.km <= reach + 1 ? Object.assign({ r, join_km: n.km }, { km: r.km }) : null; }).filter(Boolean);
+  // the exact point for the best few (the outline is good to a few hundred metres)
+  const top = rank(rough, wantKm).slice(0, 5), rows = [];
+  await Promise.all(top.map(async x => { try {
+    const pts = await trackOf(x.r), n = nearest(pts, here); if (!n || n.km > reach) return;
+    const loop = isLoop(pts), left = loop ? x.r.km : r1(lengthKm(restart(pts, n)));
+    rows.push({ id: x.r.id, name: x.r.name, km: left, miles: left != null ? r1(left / 1.60934) : null, gain_ft: x.r.gain_ft, minutes: left ? Math.round(left / SPEED[type] * 60) : null,
+      loop, kind: x.r.kind || (loop ? 'loop' : 'one way'), surface: x.r.surface, unpaved_pct: x.r.unpaved_pct, url: x.r.url,
+      join_km: r1(n.km), join_miles: r1(n.km / 1.60934), direction: n.km < 0.15 ? null : compass(here, n.at), start: [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], maps: mapsTo(n.at) });
+  } catch (e) { /* that one could not be read */ } }));
+  const out = rank(rows, wantKm);
+  await Promise.all(out.slice(0, 3).map(async x => { const p = await placeOf(x.start); x.place = p ? p.text : null; x.street = p ? p.street : null; }));
+  return { here: { lat: here[0], lon: here[1] }, reach_miles: r1(reach / 1.60934), looked_at: around.length, unread: around.filter(r => !shapes[r.id]).length, routes: out };
+}
+
+// One route begun at the point on it nearest him; saved to his library when asked.
+async function startHere(coords, o) {
+  o = o || {};
+  const N = await near(coords, o), L = await list();
+  let row = null;
+  if (o.id) row = N.routes.find(x => x.id === String(o.id));
+  if (!row && o.name) { const m = match(L.routes, o.name); row = m ? N.routes.find(x => x.id === m.id) : null;
+    if (!row && m) {   // a route of his that is not among the nearest five: still his to start from the closest point on it
+      const pts = await trackOf(m), n = nearest(pts, [N.here.lat, N.here.lon]), loop = isLoop(pts), left = loop ? m.km : r1(lengthKm(restart(pts, n))), p = await placeOf(n.at);
+      row = { id: m.id, name: m.name, km: left, miles: left != null ? r1(left / 1.60934) : null, gain_ft: m.gain_ft, minutes: left ? Math.round(left / SPEED.road * 60) : null, loop, url: m.url,
+        join_km: r1(n.km), join_miles: r1(n.km / 1.60934), direction: n.km < 0.15 ? null : compass([N.here.lat, N.here.lon], n.at), start: [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], maps: mapsTo(n.at), place: p ? p.text : null, street: p ? p.street : null }; } }
+  if (!row && !o.name && !o.id) row = N.routes[0];
+  if (!row) { const e = new Error(o.name ? `No route like "${String(o.name).slice(0, 40)}" in your Ride with GPS library.` : `None of your routes passes within ${N.reach_miles} miles of where you are.`); e.status = 404; throw e; }
+  if (!row.place && row.place !== null) { const p = await placeOf(row.start); row.place = p ? p.text : null; row.street = p ? p.street : null; }
+  const out = Object.assign({}, row, { new_name: `${row.name} (from ${row.street || row.place || 'here'})`.slice(0, 120), saved: null });
+  if (o.save) {
+    const have = L.routes.find(r => r.name === out.new_name);   // asked twice from the same spot: the copy already made
+    if (have) out.saved = { saved: true, route_id: have.id, url: have.url, already: true };
+    else { const track = await trackOf(L.routes.find(x => x.id === row.id)), pts = restart(track, nearest(track, [N.here.lat, N.here.lon]));
+      out.saved = await save(gpx(pts, out.new_name), out.new_name, `"${row.name}" begun at ${row.place || 'the point nearest you'}: ${row.loop ? 'the same loop, the same way round, starting and ending there' : 'from there to its end'}. Made by The Way on ${tz.dayShort(tz.todayKey())}. Look it over before riding it.`, o.wait_ms); }
+  }
+  return out;
+}
+// in words, for the coach and for the page
+function hereText(x) {
+  const way = x.join_miles < 0.1 ? 'you are on it now' : `${x.join_miles} mi ${x.direction || ''} of you`.replace(/\s+/g, ' ');
+  return `${x.name}: ${x.miles} mi${x.gain_ft != null ? ', ' + x.gain_ft + ' ft' : ''}${x.minutes ? ', about ' + x.minutes + ' min' : ''}${x.loop ? '' : ' (one way from there)'}; start on ${x.place || 'the route'}, ${way}`;
+}
+
 // The track of a ride he did on a day (the longest outdoor one), as points.
 async function rideTrack(date) {
   const W = require('./workout-math'), st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
@@ -175,6 +338,10 @@ function attach(app) {
   const wrap = fn => async (req, res) => { if (!auth(req, res)) return; try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } };
   app.get('/routes', wrap(req => list((req.query || {}).fresh === '1')));
   app.delete('/routes/:id', wrap(req => removeTest(req.params.id)));
+  // which of his routes pass near a point, each with the point on it nearest him (reads only)
+  app.get('/routes/near', wrap(req => { const q = req.query || {}; return near({ lat: Number(q.lat), lon: Number(q.lon) }, { minutes: Number(q.minutes) || 0, type: q.type }); }));
+  // one of them begun at that point; save: true puts the re-started route in his library
+  app.post('/routes/here', wrap(req => { const b = req.body || {}; return startHere({ lat: Number(b.lat), lon: Number(b.lon) }, { name: b.name, id: b.id, minutes: Number(b.minutes) || 0, type: b.type, save: b.save === true }); }));
   app.post('/routes/loop', wrap(async req => { const b = req.body || {};
     const L = await loop({ start: await home(), minutes: Number(b.minutes) || 0, km: Number(b.km) || 0, direction: b.direction, type: b.type });
     const name = String(b.name || `Loop from home, ${L.miles} mi`).slice(0, 120);
@@ -182,4 +349,5 @@ function attach(app) {
     return { name, km: L.km, miles: L.miles, minutes: L.minutes, direction: L.direction, maps: L.maps, points: L.points.length, saved }; }));
 }
 
-module.exports = { attach, list, match, gpx, corners, loop, save, rideTrack, home, libraryText, wordsOf, BEARING, SPEED };
+module.exports = { attach, list, match, gpx, corners, loop, save, rideTrack, home, libraryText, wordsOf, BEARING, SPEED,
+  near, startHere, hereText, tick, nearest, restart, isLoop, boxKm, rank, distKm, lengthKm, compass };
