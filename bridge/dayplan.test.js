@@ -163,6 +163,9 @@ ok('nothing stays on top of anything: a workout over something fixed is moved to
   const C = require('./calendar');
   assert.strictEqual(C.classify('Bethesda Premier Cup: U18 ECNL vs Pittsburgh Riverhounds', null, null), 'coaching');
   assert.strictEqual(C.classify('U17 vs Baltimore Celtic', null, null), 'coaching'); assert.strictEqual(C.classify('Cycle 3 Planning', null, null), 'busy');
+  // a league or an age group in a meeting's title does not make it a game
+  assert.strictEqual(C.classify('U13 to U18 Girls Staff Meeting (in person)', null, null), 'work'); assert.strictEqual(C.classify('IDP Meetings | U13 ECNL (Darrell)', null, null), 'busy');
+  assert.strictEqual(C.classify('U16 ECNL game at Bethesda', null, null), 'coaching');
 });
 ok('the seam between two back-to-back games: a dose wanted mid-game sits there, not hours earlier', () => {
   const b = D.blocksOf([
