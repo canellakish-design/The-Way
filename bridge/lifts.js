@@ -250,6 +250,14 @@ function placeWeek(days, o) {
     else if (x.long_coaching) s = 80 - hardPen;
     else if (!x.ride) s = 50;
     else if (next) s = 20 - load(next) / 5 - hardPen;
+    // Legs against the hard rides (Harry, 15 Nov 2026: "do legs 2 to 3 days out before I do the VO2 max intervals").
+    // Heavy leg work leaves the legs short of their best for two days, sometimes three (the drop in what the muscle
+    // can be made to do is measurable 48 hours after heavy lifting), so: never the day before a hard ride, and best
+    // two or three days ahead of the next one. This outweighs where the soreness would otherwise be put.
+    if (s > -1e3) {
+      if (next && next.ride && next.ride.hard) s -= 200;
+      else if ([d[i + 2], d[i + 3]].some(y => y && y.ride && y.ride.hard)) s += 70;
+    }
     if (opts.done && opts.done[x.date]) s += 1e3;                      // already lifted legs that day: it stands
     if (locksOf(x).length && !locksOf(x).includes('legs')) s = -2e3;
     if (x.rest && !(opts.done && opts.done[x.date])) s = -3e3;       // a rest day (all three classes): nothing is placed on it
@@ -263,9 +271,11 @@ function placeWeek(days, o) {
   if (legsIdx >= 0) {
     const x = d[legsIdx], next = d[legsIdx + 1];
     x.lift = 'legs';
+    const hardAhead = [d[legsIdx + 2], d[legsIdx + 3]].find(y => y && y.ride && y.ride.hard), gapDays = hardAhead ? d.indexOf(hardAhead) - legsIdx : 0;
     x.why = next && (!next.ride || next.long_coaching) ? `the day before ${!next.ride ? 'a day off the bike' : 'a long coaching day'} (${tz.labelOf(next.date)}), so the soreness lands where it costs no ride`
       : x.long_coaching ? `a long coaching day (${Math.round(x.coaching_min / 60)} h), no ride anyway`
       : !x.ride ? 'a day off the bike' : 'the lightest riding ahead of it';
+    if (hardAhead) x.why += `; ${gapDays === 2 ? 'two' : 'three'} days before ${hardAhead.ride.name} (${tz.labelOf(hardAhead.date)}), so the legs are fresh for it`;
   }
   // 2. the two lift-free days: the two biggest riding days left
   //    (a rest day, all three classes, is lift-free before any of them; a week with more rest days than free days holds fewer lifts)
@@ -285,6 +295,12 @@ function placeWeek(days, o) {
       const i = slots[j]; if (i == null) return;
       if (k === 'pull' && legsIdx >= 0 && Math.abs(i - legsIdx) <= 1) s += 3;      // deadlift next to the Romanian deadlift
       if (k === 'push' && d[i].ride && d[i].ride.hard) s += 0.5;                      // a push day on the 40/20s is fine, a pull day a little better
+      if (k === 'pull' && d[i + 1] && d[i + 1].ride && d[i + 1].ride.hard) s += 2;    // deadlifts the day before a hard ride
+      // the two "Upper body and core" days are never back to back, on the plan or against one already on the calendar
+      // (15 Nov 2026: Upper 1 Friday, Pull Saturday, Upper 2 Sunday read as the same workout three days running)
+      if (/^upper/.test(k)) { const other = k === 'upper-1' ? 'upper-2' : 'upper-1';
+        for (const nb of [d[i - 1], d[i + 1]]) if (nb && locksOf(nb).includes(other)) s += 2;
+        const oj = p.indexOf(other); if (oj >= 0 && slots[oj] != null && Math.abs(slots[oj] - i) === 1) s += 1; }
     });
     for (let a = 0; a < p.length; a++) for (let b = a + 1; b < p.length; b++) if (four.indexOf(p[a]) > four.indexOf(p[b])) s += 1;   // the book's order, when nothing else decides
     if (s < bestS) { bestS = s; bestP = p; }
