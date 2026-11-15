@@ -39,4 +39,55 @@ ok('what the coach is told about his library', () => {
   assert.ok(/library is empty/.test(R.libraryText({ connected: true, routes: [] })));
   assert.ok(/HIS ROUTES in Ride with GPS \(4; newest first\): Loch Raven Loop \(28\.4 mi, 2100 ft\); /.test(R.libraryText({ connected: true, routes: lib })));
 });
+// a square loop about 4 km a side, drawn clockwise from its south-west corner and closed
+const sq = []; { const a = [39.00, -77.00], dLat = 4 / 110.57, dLon = 4 / (111.32 * Math.cos(39 * Math.PI / 180));
+  for (let k = 0; k <= 20; k++) sq.push([a[0] + dLat * k / 20, a[1]]);                 // north up the west side
+  for (let k = 1; k <= 20; k++) sq.push([a[0] + dLat, a[1] + dLon * k / 20]);          // east along the top
+  for (let k = 1; k <= 20; k++) sq.push([a[0] + dLat - dLat * k / 20, a[1] + dLon]);   // south down the east side
+  for (let k = 1; k <= 20; k++) sq.push([a[0], a[1] + dLon - dLon * k / 20]); }        // west along the bottom, home
+ok('the point on a route nearest him lies on the line, between its points', () => {
+  const here = [39.0181, -76.95];                       // just east of the east side, about half way up
+  const nr = R.nearest(sq, here);
+  assert.ok(Math.abs(nr.at[1] - sq[45][1]) < 1e-9, 'on the east side');
+  assert.ok(Math.abs(nr.at[0] - 39.0181) < 1e-6, 'level with him, not at a corner of the line: ' + nr.at[0]);
+  assert.ok(nr.km > 0.2 && nr.km < 0.6, String(nr.km));
+  assert.strictEqual(R.compass(here, nr.at), 'west');
+  assert.strictEqual(R.nearest([], here), null);
+});
+ok('a loop begun at that point: it starts and ends there, goes the same way round, and is as long as before', () => {
+  const here = [39.0181, -76.95], nr = R.nearest(sq, here), out = R.restart(sq, nr);
+  assert.ok(R.isLoop(sq) && R.isLoop(out));
+  assert.deepStrictEqual(out[0], out[out.length - 1]);
+  assert.ok(Math.abs(out[0][0] - 39.0181) < 1e-4 && Math.abs(out[0][1] - sq[45][1]) < 1e-4, JSON.stringify(out[0]));
+  assert.ok(out[1][0] < out[0][0], 'still heading south down the east side, as the route was drawn');
+  assert.ok(Math.abs(R.lengthKm(out) - R.lengthKm(sq)) < 0.02, R.lengthKm(out) + ' vs ' + R.lengthKm(sq));
+  // every point of the route is still on it
+  for (const p of sq) assert.ok(out.some(q => q[0] === p[0] && q[1] === p[1]), JSON.stringify(p));
+  // standing at the route's own start: the route as it was
+  const same = R.restart(sq, R.nearest(sq, sq[0]));
+  assert.ok(Math.abs(R.lengthKm(same) - R.lengthKm(sq)) < 0.001);
+});
+ok('a one-way route begun at that point runs from there to its end', () => {
+  const line = sq.slice(0, 41), nr = R.nearest(line, [39.02, -77.01]), out = R.restart(line, nr);   // up the west side, along the top
+  assert.ok(!R.isLoop(line));
+  assert.deepStrictEqual(out[out.length - 1], line[line.length - 1]);
+  assert.ok(R.lengthKm(out) < R.lengthKm(line) && R.lengthKm(out) > 4, String(R.lengthKm(out)));
+});
+ok('the corners box of a route: nothing to cover inside it, the gap outside it', () => {
+  const box = [39.0, -77.0, 39.04, -76.95];
+  assert.strictEqual(R.boxKm(box, [39.02, -76.97]), 0);
+  assert.ok(Math.abs(R.boxKm(box, [39.0, -77.1]) - 8.65) < 0.2, String(R.boxKm(box, [39.0, -77.1])));
+  assert.strictEqual(R.boxKm(null, [39, -77]), Infinity);
+});
+ok('best first: the way to the route counts most, then how far its length is from the time he has', () => {
+  const rows = [{ name: 'far, right length', join_km: 9, km: 36 }, { name: 'close, right length', join_km: 1, km: 34 }, { name: 'closest, far too long', join_km: 0.2, km: 110 }];
+  assert.deepStrictEqual(R.rank(rows, 36).map(x => x.name), ['close, right length', 'far, right length', 'closest, far too long']);
+  assert.deepStrictEqual(R.rank(rows, 0).map(x => x.name), ['closest, far too long', 'close, right length', 'far, right length']);
+});
+ok('where to go, in a line', () => {
+  assert.strictEqual(R.hereText({ name: 'Sugarloaf Loop', miles: 31.2, gain_ft: 1900, minutes: 125, loop: true, place: 'Clopper Rd, Germantown', join_miles: 1.3, direction: 'north' }),
+    'Sugarloaf Loop: 31.2 mi, 1900 ft, about 125 min; start on Clopper Rd, Germantown, 1.3 mi north of you');
+  assert.ok(/you are on it now/.test(R.hereText({ name: 'A', miles: 10, loop: true, place: 'Main St', join_miles: 0 })));
+  assert.ok(/one way from there/.test(R.hereText({ name: 'A', miles: 10, loop: false, place: null, join_miles: 2, direction: 'east' })));
+});
 console.log(n + ' passed');

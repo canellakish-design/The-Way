@@ -23,7 +23,9 @@ export default async () => {
     const moved = /^(1|true|yes)$/i.test(String(process.env.THE_WAY_SANDBOX || '')) ? { skipped: 'sandbox' } : await require('../../bridge/dayplan.js').autoMove().catch(e => ({ error: e.message }));
     // the coach's look back: a few past days at a time until the last 60 are on record (bridge/history.js)
     const history = await require('../../bridge/history.js').tick().catch(e => ({ error: e.message }));
-    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend, pack, suggest, where, moved, history })), { headers: { 'Content-Type': 'application/json' } });
+    // the outline of each of his routes, three at a time until all are kept, so the coach can say which pass near him (bridge/routes.js)
+    const routes = await require('../../bridge/routes.js').tick().catch(e => ({ error: e.message }));
+    return new Response(JSON.stringify(Object.assign({}, r, { calendar, commute, attend, pack, suggest, where, moved, history, routes })), { headers: { 'Content-Type': 'application/json' } });
   } catch (e) {
     return new Response(JSON.stringify({ ok: false, error: e.message }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }

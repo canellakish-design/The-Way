@@ -57,8 +57,10 @@ function sheet(){
   return s;
 }
 
+// a way out of the page that came with an action: directions to where a route starts, the route's own page
+const actLinks = a => [a.link, a.link2].filter(l => l && /^https:\/\//.test(l.href || "")).map(l => ` <a class="vlink" href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label || "Open")}</a>`).join("");
 function status(t){ const el = $("vStatus"); if (el) el.textContent = t || ""; }
-const msgHTML = h => `<div class="vmsg ${h.role}">${(h.imgs || (h.img ? [h.img] : [])).length ? `<div class="vphotos">${(h.imgs || [h.img]).map(s => `<img class="vphoto" src="${s}" alt="a photo you sent">`).join("")}</div>` : ""}${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div>${h.offer && h === history[history.length - 1] ? `<div class="voffer"><button class="primary" data-offer-yes>${esc(h.offer.label || "Yes, change it")}</button><button data-offer-no>No</button></div>` : ""}</div>`;
+const msgHTML = h => `<div class="vmsg ${h.role}">${(h.imgs || (h.img ? [h.img] : [])).length ? `<div class="vphotos">${(h.imgs || [h.img]).map(s => `<img class="vphoto" src="${s}" alt="a photo you sent">`).join("")}</div>` : ""}${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}${actLinks(a)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div>${h.offer && h === history[history.length - 1] ? `<div class="voffer"><button class="primary" data-offer-yes>${esc(h.offer.label || "Yes, change it")}</button><button data-offer-no>No</button></div>` : ""}</div>`;
 // the coach offered a change: Yes sends back exactly what he proposed, and he makes it; No leaves it
 function wireOffer(el){
   const last = history[history.length - 1]; if (!el || !last || !last.offer) return;
@@ -78,7 +80,7 @@ function drawThread(){
     wireOffer(el);
     return;
   }
-  el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
+  el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}${actLinks(a)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
     || `<div class="small">${onCoach() ? "Ask below, type or hold to talk. The coach answers out loud and can log or change things for you." : `Hold to talk. Or turn on Hey Coach and start with "Coach".`}</div>`;
   el.scrollTop = el.scrollHeight;
 }
