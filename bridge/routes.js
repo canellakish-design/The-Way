@@ -134,6 +134,18 @@ async function save(gpxText, name, description, waitMs) {
   return { saved: true, pending: true, note: 'Ride with GPS is still building it; it will be in your library in a minute.' };
 }
 
+// Taking a route out of his library. Only a route The Way made as a test ("THE WAY TEST …") can be removed here:
+// his own routes are his to delete, in Ride with GPS.
+async function removeTest(id) {
+  const L = await list(true), r = (L.routes || []).find(x => x.id === String(id));
+  if (!r) { const e = new Error('No such route in the library.'); e.status = 404; throw e; }
+  if (!/^THE WAY TEST\b/i.test(r.name)) { const e = new Error('Only a test route made by The Way can be removed here.'); e.status = 403; throw e; }
+  const res = await fetch(`${RWGPS}/routes/${encodeURIComponent(r.id)}.json`, { method: 'DELETE', headers: await creds(), signal: AbortSignal.timeout(12000) });
+  if (!res.ok && res.status !== 404) { const e = new Error('Ride with GPS did not remove it (' + res.status + ').'); e.status = 502; throw e; }
+  await setJSON(LIST_KEY, null).catch(() => {});
+  return { removed: true, id: r.id, name: r.name };
+}
+
 // The track of a ride he did on a day (the longest outdoor one), as points.
 async function rideTrack(date) {
   const W = require('./workout-math'), st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
@@ -162,6 +174,7 @@ function libraryText(L) {
 function attach(app) {
   const wrap = fn => async (req, res) => { if (!auth(req, res)) return; try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } };
   app.get('/routes', wrap(req => list((req.query || {}).fresh === '1')));
+  app.delete('/routes/:id', wrap(req => removeTest(req.params.id)));
   app.post('/routes/loop', wrap(async req => { const b = req.body || {};
     const L = await loop({ start: await home(), minutes: Number(b.minutes) || 0, km: Number(b.km) || 0, direction: b.direction, type: b.type });
     const name = String(b.name || `Loop from home, ${L.miles} mi`).slice(0, 120);
