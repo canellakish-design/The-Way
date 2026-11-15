@@ -810,6 +810,9 @@ async function unstart(id) {
     const r = await update(m.id, { time: m.time }, { started: true }).catch(e => ({ error: e.message })); if (!(r && r.error)) restored.push({ id: m.id, time: m.time, name: o.name }); }
   return { unstarted: id, time: u.time || me.time, restored };
 }
+// One planned session to the Garmin (through intervals.icu), or off it: what POST /workouts/:id/sync does, for the coach.
+async function send(id) { const st = await settings(), d = await db(), w = d.workouts[id]; if (!w) return null; const out = await syncOne(w, st); d.workouts[id] = out; await save(d); return out; }
+async function unsend(id) { const d = await db(), w = d.workouts[id]; if (!w) return null; await unsyncOne(w); d.workouts[id] = Object.assign({}, w, { sync: { state: 'off' } }); await save(d); return d.workouts[id]; }
 // a session already on the Garmin or Zwift is re-sent so nothing is left different.
 async function update(id, body, opts) {
   const st = await settings(); const d = await db(); const prev = d.workouts[id];
@@ -831,4 +834,4 @@ async function remove(id) {
   return w;
 }
 
-module.exports = { startPlan, start, playerRideAsDone, fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove };
+module.exports = { startPlan, start, playerRideAsDone, fmtMin, dropUntimedCopies, markLogged, liftsSavedBy, liftMatches, dedupeRides, gradeDay, isRideSport, clean, nameForLength, durationOf, EARLIEST, attach, calendar, preflight, descriptionFor, stravaDone, plannedDays, loggedPlanned, pastNow, gradeOne, dayCompliance, hrLoad, create, update, remove, send, unsend };
