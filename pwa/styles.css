@@ -1016,9 +1016,11 @@ body:has(#chFace) #micBtn{display:none}
 .stagestop{position:absolute; right:10px; top:44px; z-index:3; margin:0; padding:6px 12px; font-size:11px; min-height:0; display:none}
 .chface.stage.talking .stagestop{display:block}
 .ch-ask{gap:8px} .ch-ask .vhold{width:100%; min-height:52px; margin:0}
-.ch-talkrow{display:flex; align-items:center; gap:12px} .ch-talkrow .vtalk{flex:1; min-height:56px; margin:0; font-size:15px}
+/* the button that turns the conversation on is the biggest thing under the coach (Harry, 15 Nov 2026: "Make the
+   conversation on button larger"); "end" beside it is a real button of the same height, easy to hit */
+.ch-talkrow{display:flex; align-items:stretch; gap:10px} .ch-talkrow .vtalk{flex:1; min-height:96px; margin:0; font-size:21px; letter-spacing:2px; line-height:1.2; padding:14px 12px}
 .vtalk.on{background:var(--green-soft); color:var(--ink); border-color:var(--green)} .vtalk.live{animation:micpulse 1.6s ease-in-out infinite}
-.ch-talkrow .linkish{font-size:13px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:8px 4px; font-weight:400; text-decoration:underline; margin:0} .ch-talkrow .linkish[hidden]{display:none}
+.ch-talkrow .linkish{flex:none; min-width:84px; min-height:96px; font-family:var(--mono); font-size:15px; font-weight:700; letter-spacing:2px; text-transform:uppercase; color:var(--ink); border:1px solid var(--line); background:var(--card); box-shadow:none; padding:0 14px; text-decoration:none; margin:0} .ch-talkrow .linkish[hidden]{display:none}
 .ch-ask .vhold[hidden]{display:none}
 .ch-ask .vheard{min-height:0; margin:0; font-size:18px} .ch-ask .vheard:empty{display:none}
 .ch-type{display:flex; gap:8px; align-items:stretch} .ch-type textarea{flex:1; min-width:0; resize:none; min-height:44px} .ch-type button{margin:0; flex:0 0 auto; min-width:72px}
