@@ -16,6 +16,7 @@
   const PRI = { A: ["A race", "hu-go"], B: ["B race", "hu-hold"], C: ["C race", "hu-dim"] };
   const chip = (t, cls) => `<span class="hu-chip ${cls || "hu-dim"}">${esc(t)}</span>`;
   const facts = r => [r.location, r.distance_mi ? `${r.distance_mi} mi` : "", r.climb_ft ? `${Number(r.climb_ft).toLocaleString()} ft up` : "", r.minutes ? `about ${r.minutes} min` : "", r.category].filter(Boolean).map(esc).join(" · ");
+  const clock12 = t => { const m = /^(\d\d):(\d\d)/.exec(t || ""); if (!m) return t || ""; let h = +m[1]; const ap = h < 12 ? "a" : "p"; h = h % 12 || 12; return `${h}:${m[2]}${ap}`; };
   const msgOf = e => String(e && e.message || e).replace(/^bridge \d+ — /, "");
 
   // the form, for a new race or one being changed
@@ -55,6 +56,7 @@
   V.races = async function(){
     view.innerHTML = `<div id="racePage" class="ln-page"><div class="ln-ttl"><h2 class="ln-h">Races</h2></div><div class="card"><div class="small">loading…</div></div></div>`;
     const el = document.getElementById("racePage");
+    let wasNear = false, nearKind = "";
     const draw = async (keepOpen) => {
       let d; try { d = await bridge("/races"); } catch (e) { el.innerHTML = `<div class="ln-ttl"><h2 class="ln-h">Races</h2></div><div class="card"><div class="small">The race calendar could not be read: ${esc(msgOf(e))}</div></div>`; return; }
       const c = d.clock, n = d.next, byMonth = {};
@@ -73,7 +75,34 @@
         ${d.upcoming.length ? Object.keys(byMonth).sort().map(m => `<div class="rc-month">${MON[+m.slice(5) - 1]} ${m.slice(0, 4)}</div>${byMonth[m].map(r => row(r, d)).join("")}`).join("")
           : `<div class="card"><div class="small">Nothing on the calendar yet. Add the first one above, or tell the coach: "add the Poolesville Road Race on May 15 as my A race".</div></div>`}
         ${d.past.length ? `<span class="eyebrow rc-eye">Behind you</span>${d.past.map(r => row(r, d)).join("")}` : ""}
+        <details class="ln-fold rc-near" id="rcNear"><summary>Find races near you</summary><div id="rcFound"><div class="small">Open to read what is open for entry within about three hours of home.</div></div></details>
         <details class="why rc-find"><summary>where to find races</summary><div class="small" id="rcSources">${sourcesHTML(d.sources)}</div></details>`;
+      // what is open for entry near him (BikeReg, through the bridge): read when the fold is opened, by kind
+      const near = document.getElementById("rcNear"); if (wasNear) near.open = true;
+      const loadNear = async kind => { const box = document.getElementById("rcFound"); if (!box) return; nearKind = kind || "";
+        box.innerHTML = `<div class="small">reading the race listings…</div>`;
+        let f; try { f = await bridge("/races/find" + (kind ? "?kind=" + encodeURIComponent(kind) : "")); } catch (e) { box.innerHTML = `<div class="small">The listings could not be read: ${esc(msgOf(e))}</div>`; return; }
+        const kinds = Object.keys(f.counts || {}), hrs = h => h == null ? "" : h < 1 ? `${Math.round(h * 60)} min` : `${h} h`;
+        box.innerHTML = `<div class="rc-kinds"><button data-kind="" class="${kind ? "" : "on"}">all</button>${kinds.map(k => `<button data-kind="${attr(k)}" class="${kind === k ? "on" : ""}">${esc(k)} · ${f.counts[k]}</button>`).join("")}</div>
+          ${f.note ? `<div class="small">${esc(f.note)}</div>` : ""}
+          ${f.events.length ? f.events.slice(0, 60).map(e => `<div class="rc-found">
+              <div class="rc-fhead"><span class="rc-when"><b>${esc(dayWord(e.date))}</b><i>${esc(String(dOf(e.date).getFullYear()))}</i></span>
+                <span class="rc-what"><b>${esc(e.name)}</b><span class="small">${esc(e.where)}${e.miles != null ? ` · ${e.miles} mi, about ${hrs(e.drive_h)} drive` : ""}</span>
+                  <i>${chip(e.kind)}${e.masters.length ? e.masters.slice(0, 2).map(m => chip(m.name + (m.start ? " · " + clock12(m.start) : ""), "hu-go")).join("") : chip("no masters field listed")}${e.reg_close && e.reg_close >= d.today ? chip("entry closes " + dayWord(e.reg_close), "hu-hold") : ""}</i></span></div>
+              <div class="rc-facts"><a class="btn" href="${attr(e.url)}" target="_blank" rel="noopener">Open on BikeReg</a>${e.on_calendar ? `<span class="small">on your calendar</span>` : `<button class="primary" data-take="${attr(e.id)}">Add to my calendar</button>`}<span class="small" data-tmsg="${attr(e.id)}"></span></div></div>`).join("")
+            : `<div class="small">Nothing listed${kind ? " for " + esc(kind) : ""} within reach right now.</div>`}
+          <div class="small rc-fromnote">From BikeReg, read ${esc(new Date(f.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}. Drive times are a rough guide from the distance. Road races for next season appear as promoters open entry, mostly from January.</div>`;
+        box.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => loadNear(b.dataset.kind));
+        box.querySelectorAll("[data-take]").forEach(b => b.onclick = async () => { const e = f.events.find(x => x.id === b.dataset.take), m = box.querySelector(`[data-tmsg="${b.dataset.take}"]`); if (!e) return;
+          b.disabled = true; m.textContent = "adding…";
+          const first = e.masters[0];
+          try { await bridge("/races", { method: "POST", headers: J, body: JSON.stringify({ name: e.name.replace(/\s+--\s+Event #\d+.*$/i, ""), date: e.date, kind: e.kind, priority: "C", status: "idea", location: e.where, url: e.url,
+              category: first ? first.name : "", notes: [first && first.start ? `Your field starts ${clock12(first.start)}` : "", first && first.fee ? `entry $${first.fee}` : "", e.reg_close ? `entry closes ${dayWord(e.reg_close)}` : "", e.miles != null ? `about ${hrs(e.drive_h)} drive` : ""].filter(Boolean).join("; ") }) });
+            wasNear = true; await draw(); }
+          catch (err) { m.textContent = msgOf(err); b.disabled = false; } });
+      };
+      near.addEventListener("toggle", () => { wasNear = near.open; if (near.open && !near.dataset.loaded) { near.dataset.loaded = "1"; loadNear(nearKind); } });
+      if (near.open) { near.dataset.loaded = "1"; loadNear(nearKind); }
       if (keepOpen) { const o = el.querySelector(`[data-race="${keepOpen}"]`); if (o) o.open = true; }
       // save (new or changed), take off
       el.querySelectorAll("[data-save]").forEach(b => b.onclick = async () => {

@@ -10,6 +10,7 @@
 //   POST   /races              { name, date, kind?, priority?, location?, distance_mi?, climb_ft?, minutes?, url?, notes?, status? }
 //   PUT    /races/:id          any of the same, plus result: { place?, field?, time?, notes? }
 //   DELETE /races/:id
+//   GET    /races/find?kind=    races open for entry within reach of home, from BikeReg's event search (kept 12 hours)
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
@@ -89,8 +90,94 @@ function aheadText(v) {
   return out.join('\n');
 }
 
+// ---- where to find races -----------------------------------------------------------------------------
+// The calendars worth checking for Maryland and around it (researched 14 Nov 2026; each was opened and read).
+const SOURCES = [
+  { name: 'BikeReg', url: 'https://www.bikereg.com/events/', what: 'Where nearly every race in the region opens entry, all kinds, with each race\'s category list. The list below is read from it.' },
+  { name: 'MABRA', url: 'https://www.mabra.org', what: 'The local association (MD, DC, northern VA, DE): the road series, the cyclocross calendar, time trials. The 2027 road calendar will land here first.' },
+  { name: 'MABRA mailing list', url: 'https://groups.google.com/g/MABRA-USCF', what: 'Where promoters announce dates and changes before the entry pages exist.' },
+  { name: 'USA Cycling event finder', url: 'https://usacycling.sport80.com/pub/e_locator/events/find?from_date=today&country_region=81', what: 'Sanctioned road and cyclocross dates as soon as the permit is filed (Poolesville 2027 showed here first).' },
+  { name: 'Mid-Atlantic Super Series', url: 'https://www.masuperseries.com', what: 'Mountain bike cross-country and endurance; three rounds at Fair Hill, Maryland. Age classes 40 to 49.' },
+  { name: 'RVA Racing', url: 'https://rvaracing.com', what: 'Virginia cyclocross, the Virginia cross-country series and gravel; masters 45 to 59 classes.' },
+  { name: 'PA Cycling Association', url: 'https://pacycling.org/calendar/', what: 'Pennsylvania cyclocross (PACX) and road.' },
+  { name: 'Mid-Atlantic time trial series', url: 'https://midatlantictimetrialseries.blogspot.com', what: 'Time trials (Church Creek, That Dam TT); masters 45+ classes.' },
+  { name: 'Gran Fondo Maryland', url: 'https://www.granfondonationalseries.com/gran-fondo-maryland', what: 'Frederick, age-group ranked on timed climbs.' },
+  { name: 'GFNY Maryland', url: 'https://maryland.gfny.com', what: 'Cambridge, on the Eastern Shore: flat, fast, age-group ranked.' }
+];
+
+// BikeReg's event search answers without a key. It is asked at most twice a day and what it said is kept.
+const FOUND_KEY = 'races-found', FOUND_TTL = 12 * 3600e3, STATES = 'MD,VA,DC,DE,PA,WV,NJ', REACH_MI = 210;
+const brDate = v => { const m = /Date\((\d+)/.exec(String(v || '')); return m ? tz.keyOf(new Date(+m[1])) : null; };
+const milesBetween = (a, b) => { const R = 3958.8, r = x => x * Math.PI / 180, dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon / 2) ** 2; return Math.round(2 * R * Math.asin(Math.sqrt(h))); };
+const NOT_EVENTS = /^(club membership|cycling camp|gift card|virtual|track|special event|merchandise|donation)$/i, RIDES = /^(recreational|bike tour)$/i;
+function kindFromTypes(types, name) {
+  const t = (types || []).join(' | ').toLowerCase();
+  return /cyclocross/.test(t) ? 'cyclocross' : /mountain bike|mtb/.test(t) ? 'mountain bike' : /gravel/.test(t) ? 'gravel' : /gran fondo/.test(t) ? 'gran fondo'
+    : /criterium/.test(t) ? 'criterium' : /time trial/.test(t) ? 'time trial' : /road race/.test(t) ? 'road race' : /hill climb/.test(t) ? 'hill climb' : kindOf(name);
+}
+// the fields a man of his age can enter as a master: "Masters 40+", "Men 45-59", "Cat 1/2/3 Men 40-49"; not 50+, not the women's
+function mastersFor(categories, age) {
+  const out = [];
+  for (const c of categories || []) { const n = String(c.CategoryName || c.name || '');
+    if (/wom[ae]n|female|girls?|junior|youth|kids?|\bw\s?\d\d/i.test(n)) continue;
+    const plus = /\b(\d\d)\s*\+/.exec(n), span = /\b(\d\d)\s*(?:-|to)\s*(\d\d)\b/.exec(n);
+    const fits = plus ? (+plus[1] >= 30 && +plus[1] <= age) : span ? (+span[1] >= 30 && +span[1] <= age && +span[2] >= age) : false;
+    if (fits) out.push({ name: n.slice(0, 70), start: /^\d\d:\d\d/.test(String(c.StartTime || '')) ? String(c.StartTime).slice(0, 5) : null, fee: Number(c.EntryFee) > 0 ? Number(c.EntryFee) : null });
+  }
+  return out.slice(0, 4);
+}
+// one BikeReg event as the page shows it (pure); null for what is not an event to ride (a club membership, a camp)
+function shape(e, home, age) {
+  const types = (e.EventTypes || []).map(String), real = types.filter(t => !NOT_EVENTS.test(t));
+  // not something to enter and ride: a membership, a series pass, a camp, a school league
+  if (/membership|series registration|season pass|\bcamp\b|\bNICA\b|skills sessions?|high school|\bVAHS\b|teen trail|girls riding|volunteer/i.test(String(e.EventName || ''))) return null;
+  const date = brDate(e.EventDate); if (!date || !e.EventName || (types.length && !real.some(t => !/^(club membership|cycling camp|gift card|virtual|merchandise|donation)$/i.test(t)))) return null;
+  if (types.some(t => /^(club membership|cycling camp|gift card|virtual)$/i.test(t)) && !types.some(t => /cyclocross|mountain|gravel|fondo|road|criterium|time trial|recreational|tour|enduro|hill/i.test(t))) return null;
+  const lat = Number(e.Latitude), lon = Number(e.Longitude), here = Number.isFinite(lat) && Number.isFinite(lon) && (lat || lon) ? { lat, lon } : null;
+  const miles = here && home ? milesBetween(home, here) : null, kind = kindFromTypes(types, e.EventName);
+  const ride = !/cyclocross|mountain|gravel|fondo|road race|criterium|time trial|enduro|hill/i.test(types.join(' ')) && types.some(t => RIDES.test(t));
+  return { id: 'br' + e.EventId, name: String(e.EventName).trim().slice(0, 120), date, end_date: brDate(e.EventEndDate) !== date ? brDate(e.EventEndDate) : null,
+    where: [e.EventCity, e.EventState].filter(Boolean).join(', '), state: e.EventState || '', kind, ride, miles,
+    // a straight line is shorter than the road: about 1.3 times it, at 50 mph, to the nearest quarter hour
+    drive_h: miles != null ? Math.max(0.25, Math.round(miles * 1.3 / 50 * 4) / 4) : null,
+    url: String(e.EventUrl || e.EventPermalink || '').replace(/^http:/i, 'https:'), series: types.filter(t => /super series|mabra|rva racing|championship series|pennsylvania cycling/i.test(t)).slice(0, 2),
+    masters: mastersFor(e.Categories, age || 48), fields: (e.Categories || []).length,
+    reg_open: brDate(e.RegOpenDate), reg_close: brDate(e.RegCloseDate) };
+}
+async function fetchFound(today) {
+  const all = [], until = tz.shiftKey(today, 420);
+  for (let page = 0; page < 4; page++) {
+    const r = await fetch(`https://www.bikereg.com/api/search?states=${STATES}&startdate=${today}&enddate=${until}&startpage=${page}`, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(20000) });
+    if (!r.ok) throw new Error('BikeReg answered ' + r.status);
+    const j = await r.json(), list = j.MatchingEvents || []; all.push(...list);
+    if (list.length < 100) break;
+  }
+  return all;
+}
+// The races within reach, soonest first. From the kept copy when it is under 12 hours old; a failed read keeps the old one.
+async function find(q) {
+  const today = tz.todayKey(), kept = await getJSON(FOUND_KEY, null).catch(() => null);
+  let data = kept, note = null;
+  if (!kept || !kept.events || Date.now() - (kept.at || 0) > FOUND_TTL || (q && q.fresh)) {
+    try {
+      let home = null, age = 48;
+      try { const cs = await require('./commute').settings(); home = cs && cs.home && Number.isFinite(+cs.home.lat) && Number.isFinite(+cs.home.lon) ? { lat: +cs.home.lat, lon: +cs.home.lon } : null; } catch (e) { home = null; }
+      try { age = (await require('./body').stored()).age || 48; } catch (e) { age = 48; }
+      const events = (await fetchFound(today)).map(e => shape(e, home, age)).filter(Boolean);
+      data = { at: Date.now(), home: !!home, events }; await setJSON(FOUND_KEY, data).catch(() => {});
+    } catch (e) { if (!kept) throw e; note = 'BikeReg could not be reached just now; this is the list as last read.'; }
+  }
+  const mine = (await db()).races, on = new Set(mine.map(r => r.name.toLowerCase() + '|' + r.date));
+  const kind = q && KINDS.includes(q.kind) ? q.kind : null;
+  const events = (data.events || []).filter(e => e.date >= today && (e.miles == null || e.miles <= REACH_MI) && (!kind || e.kind === kind) && (q && q.rides ? true : !e.ride))
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.miles || 0) - (b.miles || 0))
+    .map(e => Object.assign({}, e, { on_calendar: on.has(e.name.toLowerCase() + '|' + e.date) }));
+  return { at: data.at, from: 'BikeReg', note, reach_miles: REACH_MI, counts: KINDS.reduce((a, k) => { const n = (data.events || []).filter(e => e.date >= today && !e.ride && (e.miles == null || e.miles <= REACH_MI) && e.kind === k).length; if (n) a[k] = n; return a; }, {}), events };
+}
+
 async function db() { const d = await getJSON(KEY, { races: [] }); d.races = Array.isArray(d.races) ? d.races : []; return d; }
-async function report() { return view((await db()).races, tz.todayKey()); }
+async function report() { return Object.assign(view((await db()).races, tz.todayKey()), { sources: SOURCES }); }
 async function add(body) { const d = await db(); const r = clean(body, null); d.races.push(r); await setJSON(KEY, d); return r; }
 async function update(id, body) {
   const d = await db(), i = d.races.findIndex(r => r.id === id);
@@ -104,9 +191,10 @@ async function target() { const v = await report(); return v.target; }
 function attach(app) {
   const wrap = fn => async (req, res) => { if (!auth(req, res)) return; try { res.json(await fn(req)); } catch (e) { res.status(e.status || 500).json({ error: e.message }); } };
   app.get('/races', wrap(() => report()));
+  app.get('/races/find', wrap(req => find({ kind: String((req.query || {}).kind || ''), fresh: (req.query || {}).fresh === '1', rides: (req.query || {}).rides === '1' })));
   app.post('/races', wrap(async req => ({ ok: true, race: await add(req.body) })));
   app.put('/races/:id', wrap(async req => ({ ok: true, race: await update(req.params.id, req.body) })));
   app.delete('/races/:id', wrap(async req => ({ ok: await remove(req.params.id) })));
 }
 
-module.exports = { attach, clean, view, aheadText, kindOf, phaseOf, report, add, update, remove, target, KINDS, STATUSES };
+module.exports = { attach, clean, view, aheadText, kindOf, phaseOf, report, add, update, remove, target, find, shape, mastersFor, kindFromTypes, SOURCES, KINDS, STATUSES };
