@@ -403,14 +403,15 @@ function permutations(a) { if (a.length <= 1) return [a]; const out = []; a.forE
 // different stretches and a missed session rolled forward for ever)
 // The week from a day: each day's planned ride (the plan here and in
 // intervals.icu, or the ride done), coaching minutes from the calendar.
-async function weekDays(n, from0) {
+async function weekDays(n, from0, kept) {
   const today = /^\d{4}-\d{2}-\d{2}$/.test(from0 || '') ? from0 : tz.todayKey();   // the week from today, or from a day asked for
   const from = today, to = tz.shiftKey(today, (n || 7) - 1);
   const days = [];
   for (let i = 0; i < (n || 7); i++) days.push({ date: tz.shiftKey(today, i), ride: null, coaching_min: 0, long_coaching: false, rest: null });
   try {
     const { calendar } = require('./workouts');
-    const cal = await calendar(from, to);
+    const cal = (kept && kept.cal) || await calendar(from, to);
+    if (kept) kept.cal = cal;   // the report reads the calendar once and every part of it uses that read
     for (const day of cal.days || []) {
       const x = days.find(y => y.date === day.date); if (!x) continue;
       x.rest = day.rest || null;   // a day with all three classes: no lift goes on it
@@ -461,19 +462,19 @@ async function placedLiftsBetween(from, to, nowMin) {
 // Kettlebell Blasts (his at-home extras, on the calendar as WeightTraining, ~30 min) done in the window: a
 // planned one logged, or a done one by its name. Counted beside the five as "+1", like the Pump, never inside.
 const isBlast = w => require('./food-math').isBlast(w);
-async function blastsBetween(from, to, sessions) {
+async function blastsBetween(from, to, sessions, kept) {
   const seen = new Set((sessions || []).filter(x => /^blast-/.test(x.template) && x.date >= from && x.date <= to).map(x => x.date));
   try {
     const { calendar } = require('./workouts');
-    const cal = await calendar(from, to);
-    for (const day of cal.days || []) {
+    const cal = kept && (kept.days || []).some(x => x.date === from) ? kept : await calendar(from, to);
+    for (const day of (cal.days || []).filter(x => x.date >= from && x.date <= to)) {
       if ((day.planned || []).filter(isBlast).some(w => w.logged) || (day.done || []).some(isBlast)) seen.add(day.date);
     }
   } catch (e) { /* the saved ones stand */ }
   return seen.size;
 }
 // the week's count with the first week's due sessions read from the calendar
-async function weekCountPlaced(sessions, today) {
+async function weekCountPlaced(sessions, today, cal) {
   const fs = await require('./fresh-start').freshStart();
   const w0 = weekCount(sessions, today, undefined, fs);
   const nowMin = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
@@ -481,7 +482,7 @@ async function weekCountPlaced(sessions, today) {
   const [placed, dueNow, blasts, placedWeek, dueWeek] = await Promise.all([
     inFirst ? placedLiftsBetween(w0.first_count, today).catch(() => 0) : 0,
     inFirst ? placedLiftsBetween(w0.first_count, today, nowMin).catch(() => 0) : 0,
-    blastsBetween(w0.from, today, sessions).catch(() => 0),
+    blastsBetween(w0.from, today, sessions, cal).catch(() => 0),
     placedLiftsBetween(w0.from, w0.to).catch(() => 0),
     placedLiftsBetween(w0.from, today, nowMin).catch(() => 0)]);
   // with lifts on the calendar, the due count is the ones whose time has come (none yet reads "due later", not red)
@@ -552,7 +553,8 @@ function checkWeek(week, sessions, o) {
   if (missing.length && out.some(p => p.kind === 'again')) out.push({ kind: 'missing', date: null, key: missing[0], text: `${missing.map(nm).join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not in the week: the repeated session's day would take ${missing.length === 1 ? 'it' : 'one'}.` });
   else for (const k of missing) { const was = week.find(x => (x.missed || []).includes(k)), fits = week.find(x => x.suggested && x.lift === k);
     if (was && fits) out.push({ kind: 'missed', date: was.date, key: k, text: `${nm(k)} was on ${day(was.date)} and was not logged. It fits on ${day(fits.date)}.` });
-    else if (!fits) out.push({ kind: 'no_room', date: was ? was.date : null, key: k, text: `${was ? `${nm(k)} was on ${day(was.date)} and was not logged. ` : ''}No day is left for ${nm(k)} this week${fixed ? ': it is lost with the week, and next week starts fresh' : ''}.` }); }
+    else if (!fits) { const ahead = week.some(x => !x.past && (!o || !o.today || x.date > o.today));
+      out.push({ kind: 'no_room', date: was ? was.date : null, key: k, text: `${was ? `${nm(k)} was on ${day(was.date)} and was not logged. ` : ''}${ahead ? `No day still open this week will take ${nm(k)} (rest days, days away and the rules leave none).` : `No day is left for ${nm(k)} this week${fixed ? ': it is lost with the week, and next week starts fresh' : ''}.`}` }); } }
   week.forEach((x, i) => { const next = week[i + 1], open = openOn(x);
     const hardNext = next && next.ride && next.ride.hard && !next.ride.done ? next : null;
     for (const lk of open.filter(isLegs)) if (hardNext) out.push({ kind: 'legs_before_hard', date: x.date, key: lk, text: `${nm(lk)} on ${day(x.date)} is the day before ${hardNext.ride.name} (${day(hardNext.date)}). Heavy leg work takes two days to clear: two or three days before is the place for it.` });
@@ -583,7 +585,7 @@ async function report(from) {
   // this week, Monday to Sunday, or the week from a day asked for (the placer, for a week ahead); three days past it
   // are read too, only to be looked at (a leg day on the week's last day is placed by the rides that follow it)
   const start = /^\d{4}-\d{2}-\d{2}$/.test(from || '') ? from : mondayOf(today), rolling = start !== mondayOf(start);
-  const ten = await weekDays(10, start), days = ten.slice(0, 7), ahead = ten.slice(7);
+  const kept = {}, ten = await weekDays(10, start, kept), days = ten.slice(0, 7), ahead = ten.slice(7);
   for (const x of days) if (x.date < today) x.past = true;
   // the strip mirrors the calendar: every lift saved on a day, then every lift the calendar holds that day
   const doneByDate = {}, locks = {};
@@ -592,7 +594,7 @@ async function report(from) {
   const doneKeys = new Set(sessions.filter(s => s.date >= days[0].date && s.date <= days[6].date).map(s => s.template)), missed = {};
   try {
     const { calendar } = require('./workouts');
-    const cal = await calendar(days[0].date, days[days.length - 1].date);
+    const cal = kept.cal || await calendar(days[0].date, days[days.length - 1].date);
     for (const day of cal.days || []) for (const w of (day.planned || []).filter(isLiftEntry)) { const k = templateOf(w.name); if (!k) continue;
       // a day gone: what was done that day is the day; a lift that was on it and was not saved is missed, not held
       if (day.date < today) { if (!(locks[day.date] || []).includes(k) && !doneKeys.has(k)) (missed[day.date] = missed[day.date] || []).push(k); }
@@ -624,7 +626,7 @@ async function report(from) {
     if (best) (history[e.name] = history[e.name] || []).push({ date: s.date, e1rm: best, top_lb: Math.max(...e.sets.map(x => x.lb || 0)) });
   }
   const problems = checkWeek(week, sessions, { today, fixed: !rolling });
-  const wc = await weekCountPlaced(sessions, today);
+  const wc = await weekCountPlaced(sessions, today, kept.cal);
   const last = sessions[sessions.length - 1] || null;
   // eight weeks on, one off: counted from the first session of this plan
   const weekNo = wc.week_no || 1;
