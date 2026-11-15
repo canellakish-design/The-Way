@@ -28,10 +28,13 @@ const BEARING = { north: 0, northeast: 45, east: 90, southeast: 135, south: 180,
 const r1 = n => Math.round(n * 10) / 10;
 
 async function creds() {
-  const key = envStr('RWGPS_API_KEY'), r = await getJSON('rwgps', { token: null }).catch(() => ({ token: null }));
+  // the sign-in the Plan page already uses (plan.js: RWGPS_AUTH_TOKEN in Netlify); a token kept by POST /rwgps/connect
+  // (flags.js) serves when that one is not set
+  const key = envStr('RWGPS_API_KEY'); let token = envStr('RWGPS_AUTH_TOKEN');
+  if (!token) { const r = await getJSON('rwgps', { token: null }).catch(() => ({ token: null })); token = (r && r.token) || ''; }
   if (!key) { const e = new Error('Ride with GPS is not set up in Netlify (RWGPS_API_KEY).'); e.status = 400; throw e; }
-  if (!r || !r.token) { const e = new Error('Ride with GPS is not connected: connect it in Settings first.'); e.status = 400; throw e; }
-  return { 'x-rwgps-api-key': key, 'x-rwgps-auth-token': r.token, Accept: 'application/json' };
+  if (!token) { const e = new Error('Ride with GPS is not connected: connect it in Settings first.'); e.status = 400; throw e; }
+  return { 'x-rwgps-api-key': key, 'x-rwgps-auth-token': token, Accept: 'application/json' };
 }
 const shapeRoute = r => ({ id: String(r.id), name: String(r.name || 'Route').trim(), km: r.distance ? r1(r.distance / 1000) : null, miles: r.distance ? r1(r.distance / 1609.34) : null,
   gain_m: r.elevation_gain != null ? Math.round(r.elevation_gain) : null, gain_ft: r.elevation_gain != null ? Math.round(r.elevation_gain * 3.281) : null,
