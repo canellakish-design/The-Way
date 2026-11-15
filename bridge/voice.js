@@ -41,7 +41,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'player', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -164,7 +164,7 @@ async function contextNow() {
   // the week ahead, as the plan has it
   if (week && week.days) {
     const ahead = week.days.filter(d => d.date > today).map(d => {
-      const items = (d.planned || []).map(w => `${w.name}${w.time ? ' ' + tz.hm12(w.time) : ''}${w.course && w.course.name ? ' on ' + w.course.name : ''}`)
+      const items = (d.planned || []).map(w => `${w.name}${w.time ? ' ' + tz.hm12(w.time) : ''}${w.course && w.course.name ? ' on ' + w.course.name : ''}${/ride|run/i.test(String(w.sport || '')) ? (w.sync && w.sync.state === 'synced' ? ' [on the Garmin]' : ' [not on the Garmin]') : ''}`)
         .concat((d.intervals || []).map(e => `${e.name}${e.time ? ' ' + tz.hm12(e.time) : ''}`));
       return items.length ? `${d.date.slice(5)}: ${items.join(', ')}` : null;
     }).filter(Boolean);
@@ -185,6 +185,8 @@ async function contextNow() {
     const last = lifts.sessions[lifts.sessions.length - 1];
     lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
   }
+  // his Ride with GPS routes (routes.js): the library he can ride from, kept six hours
+  try { const RT = require('./routes'); lines.push(RT.libraryText(await race(RT.list(), 2500, null))); } catch (e) { /* no routes line */ }
   // his race calendar (races.js): what is ahead and the season's clock
   try { const R = require('./races'); lines.push(R.aheadText(await race(R.report(), 2000, null))); } catch (e) { /* no races line */ }
   // the look back (history.js): his last fortnight day by day, his best food days, his habits, the trends
@@ -215,6 +217,10 @@ Action types:
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
 - note: anything about how he feels or slept, text = his words.
+- garmin: he wants a planned ride or run put on his Garmin, or taken off it ("send tomorrow's ride to my Garmin", "put this week's rides on the Garmin", "take Thursday's ride off the Garmin"). It goes through intervals.icu, which passes it to the Garmin. date = the day (the first day of a stretch); new_date = the last day when he means several days ("this week": today to six days on), else ""; text = words that name the session, or "" for every ride and run in the day or stretch; name = "off" to take it off, else "". A session already on the Garmin that you change with workout_change is re-sent by itself; do not add a garmin action for that. Lifts are not sent: he logs them on the Lift tab.
+- route: he wants one of HIS ROUTES (the list under where the day stands) to be the route for a planned ride ("ride the Loch Raven loop on Saturday", "use my Annapolis 30 for tomorrow's ride"). name = the route's name as in the list; date = the ride's day; text = words that name the ride, or "". Only a route in the list.
+- new_route: he wants a new route made and saved to his Ride with GPS library. Two kinds. A loop from home for a ride of a given length ("make me a 90 minute road loop", "build a two hour loop heading north"): minutes = the riding time; text = "direction=north|northeast|east|southeast|south|southwest|west|northwest; type=road|gravel|mtb", leaving out what he did not say; name = a name if he gave one, else "". Or a ride he has already done, kept as a route ("save last Saturday's ride as a route called Davidsonville loop"): text = "from=YYYY-MM-DD" (the day of that ride), minutes 0, name = the name he gave. date = the day of a planned ride it should become the route for, else "". The loop is drawn by a map service on roads a bicycle can use: tell him to look it over in Ride with GPS before he rides it. It reaches the Garmin the way his other Ride with GPS routes do.
+- player: he wants to do a planned ride now in The Way's own workout player ("open the player", "start today's ride in the player", "let's ride"). date = the ride's day (today unless he says); text = words that name it, or "". The page opens the player on it; he presses Start there.
 - nap: he says he napped ("I napped 25 minutes", "just had a half hour nap", "napped from 1:40 to 2:05"). minutes = how long; time = when it began as HH:MM 24-hour if he said, else ""; date = today unless he names another day. It counts toward that day's sleep (30 minutes in full, half of the rest, 45 at most). A plan to nap later, or a question about napping, is a question, never a nap.
 - wellness: the morning's numbers from the strap or the watch, said aloud ("recovery 85, sleep 7 hours 28, HRV 42, resting 56"). sleep_h = hours as a decimal (7:28 is 7.47), sleep_score = the sleep percent if given, recovery = the recovery percent, hrv, rhr = resting heart rate; 0 for any not given. date = the morning it belongs to (today unless he says last night's for a past day), text = where it came from ("WHOOP", "Garmin") or "".
 - race: he wants a race put on his race calendar ("add the Greenbelt crit on May 6 as a B race", "put Gran Fondo Maryland down for September 19, that's my A race"). name = the race's name; date = its day as YYYY-MM-DD (the next such date ahead); text = the rest as "priority=A|B|C; kind=road race|criterium|time trial|gran fondo|gravel|mountain bike|cyclocross|hill climb|other; location=…; distance_mi=…; notes=…", leaving out what he did not say (priority B when he did not say). Only when he asks to add one; a question about his races is answered from RACES AHEAD. He changes or removes a race on the Races page.
@@ -327,6 +333,13 @@ async function findWorkout(date, text) {
   const onDay = Object.values(d.workouts || {}).filter(w => w.date === date).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
   const ws = words(text);
   return (ws.length ? onDay.find(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))) : null) || onDay[0] || null;
+}
+// The planned ride on a day that his words point at, else the day's first ride (never a lift).
+async function findRide(date, text) {
+  const d = await getJSON('plan-workouts', { workouts: {} });
+  const rides = Object.values(d.workouts || {}).filter(w => w && w.date === date && /ride/i.test(String(w.sport || ''))).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
+  const ws = words(text);
+  return (ws.length ? rides.find(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))) : null) || rides[0] || null;
 }
 // A Zone 1 of a new length is the library's template at that length; anything
 // else keeps its shape and its longest step grows or shrinks to fit.
@@ -458,6 +471,48 @@ async function run(a, x) {
       let r; try { r = await require('./races').add({ name: a.name, date: a.date, priority: kv.priority, kind: kv.kind, location: kv.location, distance_mi: kv.distance_mi ? Number(kv.distance_mi) : undefined, notes: kv.notes }); }
       catch (e) { return { ok: false, summary: e.message }; }
       return { ok: true, summary: `On the race calendar: ${r.name}, ${tz.dayShort(r.date)} ${r.date.slice(0, 4)}, a ${r.priority} race (${r.kind}).` };
+    }
+    case 'garmin': {
+      const W = require('./workouts'), from = isDate(a.date) ? a.date : tz.todayKey(), to = isDate(a.new_date) && a.new_date >= from && a.new_date <= tz.shiftKey(from, 13) ? a.new_date : from;
+      const d = await getJSON('plan-workouts', { workouts: {} }), ws = words(a.text), off = /^(off|remove|take)/i.test(String(a.name || ''));
+      let list = Object.values(d.workouts || {}).filter(w => w && w.date >= from && w.date <= to && /ride|run/i.test(String(w.sport || ''))).sort((x, y) => (x.date + (x.time || '')).localeCompare(y.date + (y.time || '')));
+      if (ws.length) { const named = list.filter(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))); if (named.length) list = named; }
+      if (off) list = list.filter(w => w.sync && w.sync.state === 'synced');
+      if (!list.length) return { ok: false, summary: off ? `Nothing ${from === to ? 'on ' + tz.dayShort(from) : 'in those days'} is on the Garmin.` : `No planned ride or run ${from === to ? 'on ' + tz.dayShort(from) : 'in those days'} to send.` };
+      const done = [], failed = [];
+      for (const w of list.slice(0, 12)) { const r = off ? await W.unsend(w.id).catch(e => ({ sync: { state: 'error', error: e.message } })) : await W.send(w.id).catch(e => ({ sync: { state: 'error', error: e.message } }));
+        const good = off ? r && r.sync && r.sync.state === 'off' : r && r.sync && r.sync.state === 'synced';
+        (good ? done : failed).push(`${w.name} (${tz.dayShort(w.date)})${good ? '' : ': ' + String(r && r.sync && r.sync.error || 'not sent').slice(0, 80)}`); }
+      return { ok: done.length > 0, summary: (done.length ? `${off ? 'Off the Garmin' : 'Sent to the Garmin through intervals.icu'}: ${done.join(', ')}.` : '') + (failed.length ? ` Not ${off ? 'removed' : 'sent'}: ${failed.join('; ')}.` : '') };
+    }
+    case 'route': {
+      const R = require('./routes'), L = await R.list();
+      if (!L.connected) return { ok: false, summary: L.reason || 'Ride with GPS is not connected.' };
+      const r = R.match(L.routes, a.name || a.text);
+      if (!r) return { ok: false, summary: `No route like "${String(a.name || a.text).slice(0, 40)}" in your Ride with GPS library.` };
+      const date = isDate(a.date) ? a.date : tz.todayKey(), hit = await findRide(date, a.text);
+      if (!hit) return { ok: false, summary: `No planned ride on ${tz.dayShort(date)} to put ${r.name} on.` };
+      try { await require('./workouts').update(hit.id, { route_id: r.id }); } catch (e) { return { ok: false, summary: e.message }; }
+      return { ok: true, summary: `${r.name}${r.miles != null ? ` (${r.miles} mi${r.gain_ft != null ? ', ' + r.gain_ft + ' ft' : ''})` : ''} is the route for ${hit.name}, ${tz.dayShort(date)}.`, workout_id: hit.id };
+    }
+    case 'new_route': {
+      const R = require('./routes'), kv = {}; for (const part of String(a.text || '').split(';')) { const m = /^\s*([a-z_]+)\s*=\s*(.+?)\s*$/i.exec(part); if (m) kv[m[1].toLowerCase()] = m[2]; }
+      let points, name, desc, what;
+      try {
+        if (isDate(kv.from)) { const t = await R.rideTrack(kv.from); points = t.points; name = String(a.name || t.ride.name || 'Ride').slice(0, 100); desc = `From your ride on ${tz.dayShort(kv.from)}.`; what = `your ${tz.dayShort(kv.from)} ride`; }
+        else { const L = await R.loop({ start: await R.home(), minutes: a.minutes > 0 ? a.minutes : 60, direction: kv.direction, type: kv.type });
+          points = L.points; name = String(a.name || `Loop from home, ${L.miles} mi${L.direction ? ' ' + L.direction : ''}`).slice(0, 100); desc = `Drawn by The Way for a ${L.minutes} minute ${L.type} ride. Look it over before riding it.`; what = `a ${L.miles} mile loop from home${L.direction ? ', heading ' + L.direction : ''} (about ${L.minutes} min)`; }
+        const s = await R.save(R.gpx(points, name), name, desc, 8000);
+        if (s.sandbox) return { ok: true, summary: `Drew ${what} as "${name}". On the copy nothing is sent to Ride with GPS.` };
+        let tied = '';
+        if (s.route_id && isDate(a.date)) { const hit = await findRide(a.date, ''); if (hit) { await require('./workouts').update(hit.id, { route_id: s.route_id }).catch(() => {}); tied = ` It is the route for ${hit.name}, ${tz.dayShort(a.date)}.`; } }
+        return { ok: true, summary: `Saved to Ride with GPS: "${name}", ${what}.${s.url ? ' ' + s.url : ' ' + (s.note || '')}${tied}`, url: s.url || null };
+      } catch (e) { return { ok: false, summary: e.message }; }
+    }
+    case 'player': {
+      const date = isDate(a.date) ? a.date : tz.todayKey(), hit = await findRide(date, a.text);
+      if (!hit) return { ok: false, summary: `No planned ride on ${tz.dayShort(date)} to open in the player.` };
+      return { ok: true, summary: `Opening the player: ${hit.name}.`, open: '#player?id=' + encodeURIComponent(hit.id), workout_id: hit.id };
     }
     case 'nap': {
       let nap; try { nap = await require('./naps').add({ minutes: a.minutes, time: a.time || undefined, date: a.date || undefined }); } catch (e) { return { ok: false, summary: e.message }; }

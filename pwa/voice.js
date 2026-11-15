@@ -239,6 +239,8 @@ async function send(text, photo, opts){
     const cheer = (r.actions||[]).find(a => a.celebrate);
     if (cheer && typeof celebrate === "function") celebrate({ slot: cheer.slot || null });
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
+    // "open the player": the coach names the ride and the page goes to it (voice.js bridge: the player action)
+    { const go = (r.actions||[]).find(a => a.ok && typeof a.open === "string" && /^#[a-z]+/.test(a.open)); if (go) setTimeout(() => { location.hash = go.open; }, 1400); }
   }catch(e){ status(e.message); history.pop(); keep(); drawThread(); }
   sending = false;
 }
