@@ -21,7 +21,7 @@ const auth = (req, res) => { if (req.get('x-the-way-app') === '1') return true; 
 const READABLE = [
   ['/chain', 'the chain: ten links, this week and today, the verdict'],
   ['/history?from=YYYY-MM-DD&to=YYYY-MM-DD', 'the look back, one compact row a day (45 days at most): every meal eaten with its numbers, the food score and what it missed, each ride with its time, % of plan and the meal before it, lifts, sleep, recovery, naps, weight. The first thing to read for "what did I eat/do on…", for trends and for habits'],
-  ['/history/patterns', 'what the last 60 days say: his best food days (the model to copy), food habits and ride habits with how many days stand behind each, the last 7 days against the 3 weeks before'],
+  ['/history/patterns', 'what his whole record says: every week rolled up (food score, protein, rides, TSS, lifts, sleep, recovery, weight), his best food days (the model to copy), food habits and ride habits with how many days stand behind each, the last 7 days against the 3 weeks before. Read this for trends and for where he is heading'],
   ['/food/day?date=YYYY-MM-DD', 'one day of food: targets, meal plan, journal entries with grades, hydration, live fuel, sessions'],
   ['/food/today', 'today\'s food (same as food/day for today)'],
   ['/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD', 'planned sessions and Strava rides with compliance, zones, breathing; up to 62 days'],

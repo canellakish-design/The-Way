@@ -73,4 +73,11 @@ ok('the digest the coach always has: days newest first, the best days as the mod
   assert.ok(/RIDE HABITS/.test(t) && /TRENDS/.test(t));
   assert.strictEqual(H.digestText([], '2026-11-12'), '');
 });
+ok('week by week: each Monday-to-Sunday week rolled up, oldest first, and in the digest', () => {
+  const W = H.weeks(rows, '2026-11-12');
+  assert.deepStrictEqual(W.map(w => w.week_of), ['2026-10-26', '2026-11-02', '2026-11-09']);
+  const w2 = W[1];   // Mon 2 Nov to Thu 5 Nov: 85, 78, 55, 48
+  assert.deepStrictEqual([w2.food_days, w2.food_score, w2.good_food_days, w2.rides, w2.ride_min], [4, 67, 2, 4, 240]);
+  assert.ok(/WEEK BY WEEK.*week of Nov 2: food 67 over 4 days \(2 good\).*4 rides 240 min/.test(H.digestText(rows, '2026-11-12', 14)));
+});
 console.log(n + ' passed');
