@@ -164,10 +164,23 @@
       window.Coach3D.mount(holder, { url: "avatar/coach.glb?v=" + C3D_V, state: voiceState })
         .then(() => { is3d = true; loading3d = false; place3d(); if (said && talking) window.Coach3D.say(said); if (!live()) window.Coach3D.pause(true); })
         .catch(e => { console.warn("3D coach:", e && e.message || e); fail3d(); }); };
-    if (window.Coach3D) go();
-    else { window.addEventListener("coach3d-ready", go, { once: true });
-      const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = fail3d; document.head.appendChild(sc); }
+    // Building the figure holds the page still for a second or more on a phone (three and a half in the test
+    // browser): the model is unpacked and its shaders compiled in one go, and nothing can be tapped meanwhile. That
+    // is not done while his finger is on the page or the microphone is open (Harry, 15 Nov 2026: the listen button
+    // "sometimes freezes the page": a tap on it as the page opened landed in the middle of this, and sat there until
+    // it was over). Arriving on the page counts as a touch: the figure is built once two and a half seconds have gone
+    // by with no touch and no open microphone, so a tap made on arriving is answered at once.
+    const start = () => {
+      if (window.Coach3D) go();
+      else { window.addEventListener("coach3d-ready", () => whenQuiet(go), { once: true });
+        const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = fail3d; document.head.appendChild(sc); } };
+    lastTouch = Date.now(); whenQuiet(start);
   }
+  let lastTouch = 0;
+  for (const ev of ["pointerdown", "pointerup", "keydown"]) document.addEventListener(ev, () => { lastTouch = Date.now(); }, { capture: true, passive: true });
+  const micOpen = () => { try { return !!(window.voiceBits && voiceBits.micOpen && voiceBits.micOpen()); } catch (e) { return false; } };
+  const QUIET_MS = 2500;
+  function whenQuiet(fn){ if (!holder) return; if (micOpen() || Date.now() - lastTouch < QUIET_MS) { setTimeout(() => whenQuiet(fn), 400); return; } fn(); }
 
   // ---- how it moves ---------------------------------------------------------------------------------
   // Each joint is a small spring toward where it wants to be, so nothing snaps and a gesture settles with a
