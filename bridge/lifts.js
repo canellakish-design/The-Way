@@ -179,6 +179,8 @@ const BLASTS = [
       ex('Hollow hold', 3, 20, 30, 'time', 0, 'Seconds.')
     ] }
 ];
+// a Blast runs on the clock, not on long rests: what is left of the minute (A), a breath between exercises (B)
+for (const t of BLASTS) for (const e of t.exercises) e.rest_min = t.key === 'blast-a' ? 0.5 : 0.75;
 const ALL = TEMPLATES.concat([PUMP], BLASTS);
 // an extra (the Pump, a Kettlebell Blast): logged and shown, never one of the five and never holding a day against them
 const isExtra = k => k === 'pump' || /^blast-/.test(String(k || ''));
