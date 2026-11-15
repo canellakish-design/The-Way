@@ -1066,3 +1066,5 @@ body:has(#chFace) #micBtn{display:none}
 
 /* Start on a session's row, and the line once it is started */
 .rxlog.startw{border-color:var(--green); color:var(--green)} .placeline.started{color:var(--green)}
+
+.placeline.started .unstartw{font-size:12px; color:var(--muted); text-transform:none; letter-spacing:0; box-shadow:none; border:0; padding:2px 6px; margin:0 0 0 6px; font-weight:400; text-decoration:underline; min-height:0; background:none}

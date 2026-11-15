@@ -187,4 +187,13 @@ ok('a library note follows the sport: a road Zone 1 says road and heart rate, a 
   assert.ok(/^ZONE 1 on the road/.test(z90.notes));
   assert.ok(/^ZONE 1 on the trainer/.test(notesFor(z90.notes, 'VirtualRide')));
 });
+ok('Start keeps what it changed so it can be taken back; clearing the start clears it', () => {
+  const base = clean({ name: 'Zone 1, 90 min', sport: 'VirtualRide', date: '2026-11-15', time: '15:27', steps: [{ kind: 'step', label: 'Zone one', dur_s: 5400, target: { type: 'power', lo: 60, hi: 68 } }] });
+  const started = clean({ time: '05:09', started_at: '2026-11-15T10:09:29.012Z', started_undo: { time: '15:27', moved: [{ id: 'w_x', time: '17:21' }, { id: 'w_bad', time: 'soon' }] } }, base, '00:00', true);
+  assert.deepStrictEqual([started.time, started.started_undo.time, started.started_undo.moved.length], ['05:09', '15:27', 1]);
+  // an edit that does not touch the start keeps it; taking the start back clears both
+  assert.deepStrictEqual(clean({ notes: 'x' }, started, '00:00', true).started_undo, started.started_undo);
+  const back = clean({ time: '15:27', started_at: null }, started, '00:00');
+  assert.deepStrictEqual([back.time, back.started_at, back.started_undo], ['15:27', null, null]);
+});
 console.log(n + ' passed');
