@@ -97,6 +97,9 @@ function scoreDay(actual, target) {
   per.carbs_g = withFloor(per.carbs_g, actual ? (actual.carbs_g || 0) : 0, target.carbs_floor_g);
   per.kcal = withFloor(per.kcal, actual ? (actual.kcal || 0) : 0, target.kcal_floor);
   per.fat_g = withFloor(per.fat_g, actual ? (actual.fat_g || 0) : 0, target.fat_floor_g);
+  // Protein over its figure never costs (Harry, 15 Nov 2026: "I don't think I should get a lower score if I go over
+  // protein"). Under still does; calories, carbs and fat are still read both ways, so a day eaten over still shows.
+  if (per.protein_g && per.protein_g.direction === 'over') per.protein_g = Object.assign({}, per.protein_g, { score: 100, free: true, remaining: 0 });   // still reads 'over', at no cost
   if (target.whole) for (const m of MACROS.concat(['kcal'])) per[m] = withWhole(per[m], actual ? (actual[m] || 0) : 0, target.whole[m]);
   const scored = MACROS.map(m => per[m] && per[m].score).filter(s => s != null);
   const overall = scored.length ? Math.round(scored.reduce((a, b) => a + b, 0) / scored.length) : null;

@@ -54,7 +54,7 @@ function rowOf(o) {
     return m ? { name: m.name, min_before: at - toMin(m.time), c: m.c, p: m.p } : null; };
   const done = (cal.done || []).map(a => ({ kind: /run/i.test(a.type || '') ? 'run' : 'ride', name: String(a.name || '').slice(0, 60), time: a.time || '', minutes: a.minutes || null, tss: a.tss != null ? Math.round(a.tss) : null,
     avg_hr: a.avg_hr || null, np_w: a.np_w || null, indoor: /virtual/i.test(a.type || ''), before: before(toMin(a.time)) }));
-  for (const l of o.lifts || []) done.push({ kind: 'lift', name: String(l.name || 'Lift').slice(0, 60), volume_lb: l.volume_lb || null, tops: l.tops && l.tops.length ? l.tops : undefined });
+  for (const l of o.lifts || []) done.push({ kind: 'lift', extra: l.extra || undefined, name: String(l.name || 'Lift').slice(0, 60), volume_lb: l.volume_lb || null, tops: l.tops && l.tops.length ? l.tops : undefined });
   const planned = (cal.planned || []).map(w => String(w.name || '').slice(0, 60));
   return { date: o.date, dow: dowOf(o.date), food, meals, done, planned, plan_pct: pct,
     sleep_h: o.night && o.night.hours != null ? r1(o.night.hours) : null, sleep_score: o.night && o.night.score != null ? Math.round(o.night.score) : null,
@@ -130,7 +130,7 @@ function weeks(rows, today) {
     const sum = f => rs.reduce((a, r) => a + r.done.reduce((x, d) => x + (f(d) || 0), 0), 0), rd = v => v == null ? null : Math.round(v);
     return { week_of: mon, days: rs.length, food_days: fed.length, food_score: rd(avg(fed.map(r => r.food.score))), good_food_days: fed.filter(r => r.food.score >= GOOD_FOOD).length,
       kcal: rd(avg(fed.map(r => r.food.kcal))), protein: rd(avg(fed.map(r => r.food.protein))),
-      rides: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'ride').length, 0), ride_min: sum(d => d.kind === 'ride' ? d.minutes : 0), tss: sum(d => d.tss), lifts: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'lift').length, 0),
+      rides: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'ride').length, 0), ride_min: sum(d => d.kind === 'ride' ? d.minutes : 0), tss: sum(d => d.tss), lifts: rs.reduce((a, r) => a + r.done.filter(d => d.kind === 'lift' && !d.extra).length, 0),
       sleep_h: r1(avg(rs.map(r => r.sleep_h))), recovery: rd(avg(rs.map(r => r.recovery))), lb: r1(avg(rs.map(r => r.lb))) }; });
 }
 
@@ -182,11 +182,11 @@ async function build(dates, budgetMs) {
 }
 // a saved lift as the Lift page names it: the template's name, the pounds moved, its best set of each exercise
 function liftOf(s) {
-  let name = s.name || ''; try { const t = require('./lifts').TEMPLATES; const tpl = Array.isArray(t) ? t.find(x => x.key === s.template) : (t || {})[s.template]; if (!name && tpl && tpl.name) name = tpl.name; } catch (e) { /* the key stands */ }
+  let name = s.name || '', extra = false; try { const LF = require('./lifts'), tpl = (LF.ALL || LF.TEMPLATES).concat(LF.RETIRED || []).find(x => x.key === s.template); if (!name && tpl && tpl.name) name = tpl.name; extra = LF.isExtra(s.template); } catch (e) { /* the key stands */ }
   if (!name) name = s.template ? String(s.template).replace(/[-_]/g, ' ').replace(/^./, c => c.toUpperCase()) : 'Lift';
   const volume = (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0);
   const tops = (s.exercises || []).map(e => { const best = (e.sets || []).filter(x => x.lb > 0 && x.reps > 0).sort((a, b) => b.lb - a.lb || b.reps - a.reps)[0]; return best ? `${e.name || e.key} ${best.lb} lb x ${best.reps}` : null; }).filter(Boolean);
-  return { name, volume_lb: volume || s.volume_lb || null, tops: tops.slice(0, 8) };
+  return { name, extra: extra || undefined, volume_lb: volume || s.volume_lb || null, tops: tops.slice(0, 8) };
 }
 // The rows of a span, from the store, building what is missing or stale (within a time budget).
 async function rows(from, to, o) {

@@ -102,7 +102,10 @@ const LIBRARY = [
   { key: 'lift-pull', name: 'Pull and calves', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
   { key: 'lift-upper-1', name: 'Upper body and core', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] },
   { key: 'lift-legs', name: 'Legs 1', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(55), { type: 'free' })] },
-  { key: 'lift-legs-2', name: 'Legs 2', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] }
+  { key: 'lift-legs-2', name: 'Legs 2', sport: 'WeightTraining', notes: EAT.lift, steps: [step('Lift', m(50), { type: 'free' })] },
+  // The Kettlebell Blasts: thirty minutes at home, extra to the five. Their exercises, descriptions and logging are on
+  // the Lift page (lifts.js BLASTS); the calendar entry carries the same session in words.
+  ...require('./lifts').BLASTS.map(t => ({ key: 'lift-' + t.key, name: `${t.name} · home`, sport: 'WeightTraining', notes: require('./lifts').blastNotes(t) + '\n\nEAT\nNothing extra for it: thirty easy minutes is about 180 kcal, already counted in the day. After a ride, the meal after the ride covers both.', steps: [step('Kettlebell', m(t.minutes), { type: 'free' })] }))
 ];
 
 // The notes follow where the ride is: a Zone 1 note's first line says trainer and ERG for a Zwift

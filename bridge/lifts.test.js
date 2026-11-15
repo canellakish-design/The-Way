@@ -118,11 +118,11 @@ ok('the strip mirrors the calendar: a day with Push done and Pull planned keeps 
   for (const x of w.filter(x => x.lift && !x.on_calendar)) assert.strictEqual(x.suggested, true);
   assert.ok(w.some(x => x.suggested), 'the rest are suggestions');
 });
-ok('a session lifted in the six days before the window is not placed again inside it (Push on Monday, Tuesday\'s window)', () => {
+ok('a week asked for from a day that is not a Monday: a session lifted in the six days before it is not placed again inside it (Push on Monday, Tuesday\'s window)', () => {
   const days = ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16'].map(date => ({ date, ride: null, coaching_min: 0, long_coaching: false }));
   days[0].ride = { name: 'VO2 4 × 4 min', minutes: 40, tss: 52, hard: true };
   days[1].locks = ['legs']; days[1].locked = 'legs';
-  const w = L.placeWeek(days, { recent: { push: '2026-11-09' } });
+  const w = L.placeWeek(days, { recent: { push: '2026-11-09' }, rolling: true });
   assert.strictEqual(w.filter(x => x.lift === 'push').length, 0, JSON.stringify(w.map(x => x.lift)));
   assert.deepStrictEqual(w.filter(x => x.lift).map(x => x.lift).sort(), ['legs', 'legs-2', 'pull', 'upper-1']);
   assert.ok(w.some(x => /Push was done/.test(x.why)), w.map(x => x.why).join(' | '));
@@ -223,8 +223,8 @@ ok('the week checked as it stands: a session twice, the one left out, legs and d
 });
 ok('the count is of the five, each once: Legs twice and no Upper 2 is four, and it never reads 6 of 5', () => {
   const s = (date, template) => ({ date, template, exercises: [] });
-  const all = [s('2026-11-02', 'push'), s('2026-11-10', 'push'), s('2026-11-11', 'pull'), s('2026-11-12', 'upper-1'), s('2026-11-13', 'legs'), s('2026-11-15', 'legs'), s('2026-11-16', 'pump')];
-  const c = L.weekCount(all, '2026-11-16');
+  const all = [s('2026-11-02', 'push'), s('2026-11-10', 'push'), s('2026-11-11', 'pull'), s('2026-11-12', 'upper-1'), s('2026-11-13', 'legs'), s('2026-11-15', 'legs'), s('2026-11-14', 'pump'), s('2026-11-15', 'blast-b')];
+  const c = L.weekCount(all, '2026-11-15');
   assert.strictEqual(c.sessions, 4); assert.strictEqual(c.repeats, 1); assert.strictEqual(c.pumps, 1); assert.strictEqual(c.word, '4 of 5');
 });
 ok('each session by its name: the two leg days by their number, and every older name still reads', () => {
@@ -234,6 +234,60 @@ ok('each session by its name: the two leg days by their number, and every older 
   assert.strictEqual(L.templateOf('Upper 2: upper body and core'), 'upper-2'); assert.strictEqual(L.templateOf('Upper 1: upper body and core'), 'upper-1');
   assert.strictEqual(L.templateOf('Upper body and core (Upper 2)'), 'upper-2'); assert.strictEqual(L.templateOf('Upper body and core'), 'upper-1');
   assert.strictEqual(L.templateOf('Kettlebell Blast B'), null);
+});
+ok('the week is Monday to Sunday: the count starts again on Monday, and the extras are never one of the five', () => {
+  const s = (date, template) => ({ date, template, exercises: [] });
+  const all = [s('2026-11-10', 'push'), s('2026-11-13', 'upper-1'), s('2026-11-14', 'pull'), s('2026-11-15', 'legs'), s('2026-11-15', 'blast-b')];
+  const sun = L.weekCount(all, '2026-11-15');
+  assert.strictEqual(sun.from, '2026-11-09'); assert.strictEqual(sun.to, '2026-11-15'); assert.strictEqual(sun.word, '4 of 5');
+  const mon = L.weekCount(all, '2026-11-16');
+  assert.strictEqual(mon.from, '2026-11-16'); assert.strictEqual(mon.sessions, 0); assert.strictEqual(mon.word, '0 of 5');
+  assert.strictEqual(L.mondayOf('2026-11-15'), '2026-11-09'); assert.strictEqual(L.mondayOf('2026-11-16'), '2026-11-16');
+  assert.ok(L.isExtra('pump') && L.isExtra('blast-a') && !L.isExtra('legs-2'));
+});
+ok('days already gone take nothing: what is left of the five goes on the days still open, and a missed one is named or lost', () => {
+  const ride = (name, minutes, tss) => ({ name, minutes, tss, hard: L.HARD.test(name) });
+  // Thursday of a week: Push was done Tuesday, Wednesday's Legs 2 was not; four days are left
+  const mk = (date, o) => Object.assign({ date, ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false }, o || {});
+  const days = [mk('2026-11-16', { past: true, rest: 'three classes', ride: null }), mk('2026-11-17', { past: true, locked: 'push', locks: ['push'], ride: ride('VO2 40/20s', 51, 55) }),
+    mk('2026-11-18', { past: true, missed: ['legs-2'] }), mk('2026-11-19'), mk('2026-11-20', { ride: ride('VO2 40/20s', 51, 55) }), mk('2026-11-21', { ride: ride('Z1 road 150 min', 150, 100) }), mk('2026-11-22')];
+  const w = L.placeWeek(days, { done: { '2026-11-17': 'push' } }), by = Object.fromEntries(w.map(x => [x.date, x.lift]));
+  assert.strictEqual(by['2026-11-16'], null); assert.strictEqual(by['2026-11-18'], null, 'nothing is put on a day gone: ' + JSON.stringify(by));
+  assert.strictEqual(by['2026-11-17'], 'push');
+  assert.deepStrictEqual(w.filter(x => x.date >= '2026-11-19' && x.lift).map(x => x.lift).sort(), ['legs', 'legs-2', 'pull', 'upper-1'], JSON.stringify(by));
+  // the check names the missed one and where it fits
+  const week = w.map(x => Object.assign(x, { done_keys: x.date === '2026-11-17' ? ['push'] : [] }));
+  const P = L.checkWeek(week, [{ date: '2026-11-17', template: 'push' }], { fixed: true });
+  assert.ok(P.some(p => p.kind === 'missed' && /Legs 2 was on Wed, Nov 18 and was not logged\. It fits on/.test(p.text)), JSON.stringify(P));
+  // Saturday, two days left, three sessions still owed: two are placed, the third is lost with the week, not stacked
+  const late = days.map(x => x.date <= '2026-11-20' ? Object.assign({}, x, { past: true }) : x);
+  const wl = L.placeWeek(late, { done: { '2026-11-17': 'push' } });
+  assert.strictEqual(wl.filter(x => x.date >= '2026-11-21' && x.lift).length, 2);
+  for (const x of wl.filter(x => x.date >= '2026-11-21')) assert.ok(!Array.isArray(x.lift), 'one session a day');
+  const PL = L.checkWeek(wl.map(x => Object.assign(x, { done_keys: x.date === '2026-11-17' ? ['push'] : [] })), [{ date: '2026-11-17', template: 'push' }], { fixed: true });
+  assert.ok(PL.filter(p => p.kind === 'no_room').length >= 1 && PL.some(p => /lost with the week/.test(p.text)), JSON.stringify(PL));
+});
+ok('a day away is no day for the gym: nothing is placed on it, and a lift already on it is flagged', () => {
+  const ride = (name, minutes, tss) => ({ name, minutes, tss, hard: L.HARD.test(name) });
+  const days = ['16', '17', '18', '19', '20', '21', '22'].map(dd => ({ date: '2026-11-' + dd, ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false }));
+  days[5].away = 'a 180 min drive'; days[6].away = 'a 180 min drive';
+  const w = L.placeWeek(days);
+  assert.strictEqual(w[5].lift, null); assert.strictEqual(w[6].lift, null); assert.ok(/a day away/.test(w[6].why), w[6].why);
+  assert.strictEqual(w.filter(x => x.lift).length, 5, 'five days are open for the five');
+  const P = L.checkWeek([{ date: '2026-11-22', lifts: ['legs'], done_keys: [], away: 'a 180 min drive' }], [], {});
+  assert.ok(P.some(p => p.kind === 'away' && /Legs 1 on Sun, Nov 22, a day away/.test(p.text)), JSON.stringify(P));
+});
+ok('the Kettlebell Blasts are sessions on the Lift page: each exercise described, extra to the five, read from a calendar name', () => {
+  assert.deepStrictEqual(L.BLASTS.map(t => t.key), ['blast-a', 'blast-b']);
+  for (const t of L.BLASTS) { assert.ok(t.supplement && t.blast && t.warmup && t.cue && t.minutes === 30, t.key);
+    for (const e of t.exercises) assert.ok(e.desc && e.desc.length > 40, e.name + ' is described'); }
+  assert.ok(!L.TEMPLATES.some(t => t.blast), 'never one of the five');
+  assert.strictEqual(L.blastOf('Kettlebell Blast B · home'), 'blast-b'); assert.strictEqual(L.blastOf('Kettlebell Blast A'), 'blast-a'); assert.strictEqual(L.blastOf('Legs 2'), null);
+  assert.strictEqual(L.templateOf('Kettlebell Blast B · home'), null, 'a Blast holds no day against the five');
+  const notes = L.blastNotes(L.BLASTS[1]);
+  assert.ok(/KETTLEBELL BLAST B · Press and Carry · 30 min/.test(notes) && /Half-kneeling kettlebell press, 3 × 6 to 8/.test(notes) && /never to failure/.test(notes) && /Lift page/.test(notes));
+  assert.strictEqual(L.target(L.BLASTS[1].exercises[0], null).lb, 35);
+  assert.strictEqual(L.target(L.BLASTS[1].exercises[0], { sets: [{ reps: 10, lb: 35 }, { reps: 10, lb: 35 }, { reps: 9, lb: 35 }] }).lb, 44, 'the next bell up');
 });
 console.log(n + ' passed');
 

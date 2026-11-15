@@ -44,6 +44,20 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
     }
     notes.push(`${d.date}: ${meals.length} meals, ${blocks.length} blocks`);
   }
+  // lifting (15 Nov 2026, after "the lifting schedule has been wrong a lot of times"): the week is Monday to Sunday,
+  // the count never passes five, every session he can open has its exercises described, and what is wrong with the
+  // week as the calendar holds it is said out loud (a note here: his calendar's state, not a fault to stop a push)
+  try {
+    const L = await get('/lifts');
+    if ((L.week || []).length !== 7 || new Date(L.week[0].date + 'T12:00:00Z').getUTCDay() !== 1) fail(`lifting: the week does not run Monday to Sunday (${(L.week || []).map(x => x.date.slice(5)).join(' ')})`);
+    if (!L.count || L.count.sessions > 5 || /^[6-9] of 5/.test(L.count.word || '')) fail(`lifting: the count reads "${L.count && L.count.word}"`);
+    for (const key of ['push', 'pull', 'upper-1', 'legs', 'legs-2', 'pump', 'blast-a', 'blast-b']) { const t = (L.templates || []).find(x => x.key === key);
+      if (!t) { fail(`lifting: no ${key} session on the Lift page`); continue; }
+      for (const e of t.exercises || []) if (!e.desc) fail(`lifting: ${t.short}, ${e.name} has no description`); }
+    for (const x of L.week || []) if ((x.lifts || []).length > 1 && !x.past && (x.lifts || []).filter(k => !(x.done_keys || []).includes(k)).length > 1) notes.push(`lifting: two sessions still open on ${x.date}`);
+    for (const pr of L.problems || []) notes.push('lifting, to fix in the week: ' + pr.text);
+    notes.push(`lifting: ${L.count.word}, week ${L.week[0].date} to ${L.week[6].date}`);
+  } catch (e) { fail('lifting: ' + e.message); }
   // the page itself, when a browser is at hand
   let pw = null; try { pw = require('playwright'); } catch (e) { notes.push('no Playwright here: the page check was skipped'); }
   if (pw) {

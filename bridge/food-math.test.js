@@ -721,8 +721,8 @@ ok('ahead of the plan is not over it: during the day the figure due so far is a 
   const whole = { kcal: 2800, carbs_g: 211, protein_g: 187, fat_g: 96 };
   const dueAt9 = Object.assign({}, whole, { kcal: 250, carbs_g: 20, protein_g: 30, fat_g: 15 });
   const ate = { kcal: 593, carbs_g: 31, protein_g: 67, fat_g: 23 };
-  // as it was scored: 0, 0 and 3
-  assert.ok(scoreDay(ate, dueAt9).overall < 5);
+  // against the figure due so far alone, carbs and fat read as over (0 and 3)
+  assert.ok(scoreDay(ate, dueAt9).overall < 40);
   const s = scoreDay(ate, Object.assign({}, dueAt9, { whole }));
   assert.strictEqual(s.overall, 100); assert.strictEqual(s.per_macro.protein_g.direction, 'ahead of the plan');
   // behind what is due still costs
@@ -731,6 +731,17 @@ ok('ahead of the plan is not over it: during the day the figure due so far is a 
   assert.strictEqual(scoreDay({ kcal: 3300, carbs_g: 300, protein_g: 190, fat_g: 100 }, Object.assign({}, dueAt9, { whole })).per_macro.carbs_g.direction, 'over');
   // a past day is scored against the whole day, both ways, as before
   assert.strictEqual(scoreDay({ kcal: 2400, carbs_g: 211, protein_g: 111, fat_g: 96 }, whole).per_macro.protein_g.direction, 'under');
+});
+ok('protein over its figure costs nothing; under still does, and calories, carbs and fat are read both ways', () => {
+  const { scoreDay } = require('./intake');
+  const t = { kcal: 2460, carbs_g: 211, protein_g: 187, fat_g: 96 };
+  // Saturday 14 Nov: 258 g protein scored 34
+  const sat = scoreDay({ kcal: 3199, carbs_g: 241, protein_g: 258, fat_g: 134 }, t);
+  assert.strictEqual(sat.per_macro.protein_g.score, 100); assert.strictEqual(sat.per_macro.protein_g.free, true);
+  assert.strictEqual(sat.per_macro.fat_g.direction, 'over'); assert.ok(sat.per_macro.fat_g.score < 40);
+  assert.strictEqual(sat.overall, Math.round((sat.per_macro.carbs_g.score + 100 + sat.per_macro.fat_g.score) / 3));
+  assert.strictEqual(scoreDay({ kcal: 2000, carbs_g: 211, protein_g: 91, fat_g: 96 }, t).per_macro.protein_g.direction, 'under');
+  assert.ok(scoreDay({ kcal: 2000, carbs_g: 211, protein_g: 91, fat_g: 96 }, t).per_macro.protein_g.score < 15);
 });
 console.log(n + ' passed');
 

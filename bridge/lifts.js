@@ -69,6 +69,14 @@ const DESC = {
   'Barbell hip thrust': 'The glutes, the muscle that drives the pedal down. With the shoulders on a bench and the bar across the hips, push the hips up until the body is level from knee to shoulder, pause, and lower.',
   'Single-leg leg press': 'The quads and glutes of each leg on its own, so the stronger leg cannot carry the weaker. One foot on the plate, lower until the knee nears the chest and press, without locking out.',
   'Seated leg curl': 'The hamstrings, the back of the thigh. Sitting with the pad over the lower shins, bend the knees to pull it under the seat and let it back slowly.',
+  'Two-hand kettlebell swing': 'The hips: glutes and hamstrings, with the grip and the trunk holding on. Hinge back with a flat back, hike the bell between the legs and snap the hips forward so it floats to chest height; the arms only guide it.',
+  'Goblet squat': 'The quads and glutes, with the trunk held upright by the bell. Holding the bell by the horns at the chest, sit down between the heels until the elbows touch the knees, then stand.',
+  'Kettlebell one-arm row': 'The lats and the middle back, one side at a time. One hand and knee on a bench or the bell-side foot back in a split stance, pull the bell to the hip and lower it slowly.',
+  'Half-kneeling kettlebell press': 'The shoulder, with the trunk and hips kept square. On one knee, the bell racked at the shoulder on the kneeling side, press it straight overhead and lower it to the rack.',
+  'Dead bug': 'The deep abdominals. On your back with arms and knees up, lower the opposite arm and leg toward the floor while the lower back stays pressed down, then change sides.',
+  'Farmer carry': 'The grip, the shoulders and the whole trunk. A bell in each hand (or one racked at the shoulder), walk tall with short quick steps and the ribs down.',
+  'Suitcase carry': 'The side of the trunk, which stops you tipping. One bell in one hand, walk tall without leaning toward it or away from it; change hands.',
+  'Hollow hold': 'The abdominals, held long. On your back with the lower back pressed down, lift the shoulders and the straight legs a little off the floor and hold.',
   'Plank': 'The whole trunk. Forearms and toes on the floor, the body held in one straight line.'
 };
 const ex = (name, sets, lo, hi, kind, start, note, inc) => ({ name, desc: DESC[name] || '', sets, reps_lo: lo, reps_hi: hi, kind, start_lb: start, note: note || '', inc: inc || (kind === 'bowflex' || kind === 'bar' || kind === 'cable' ? 10 : kind === 'db' ? 5 : 0), rest_min: hi <= 6 ? 3 : hi <= 8 ? 2.5 : 2 });
@@ -142,7 +150,42 @@ const PUMP = { key: 'pump', name: 'Pump at home', short: 'Pump', minutes: 20, su
     ex('Kettlebell curl', 2, 10, 15, 'bell', 18, 'Both hands on the horns.'),
     ex('Plank', 2, 45, 60, 'time', 0, 'Seconds. Hips level, breathe.')
   ] };
-const ALL = TEMPLATES.concat([PUMP]);
+// The Kettlebell Blasts: thirty minutes at home with one bell, extra to the five like the Pump, never one of them.
+// They were calendar notes only until 15 Nov 2026 (Harry: "move the kettlebell blasts to lifting. So when I click on
+// lifting, they're there. And do the same thing with the instructions"): now they are sessions here, each exercise
+// with its description, its target and its sets to log. Effort 6 to 7 out of 10, never to failure.
+const BLAST_CUE = 'Bell: one you can swing for 15 crisp reps with about 3 left in the tank. Effort 6 to 7 out of 10, never to failure: this is extra to the five gym lifts.';
+const BLASTS = [
+  { key: 'blast-a', name: 'Kettlebell Blast A', short: 'Blast A', minutes: 30, supplement: true, blast: true, title: 'Swing and Squat',
+    why: 'Swing and Squat: twenty minutes on the minute, swings on the odd minutes and goblet squats on the even ones, then a carry and a plank. It works the legs, so not on a leg day, the day before one, or the day before a hard ride. Extra to the five.',
+    warmup: 'Warm up, 5 min: halos, 5 each way; prying goblet squat hold, 3 × 20 s; hip hinge with the bell, 10.',
+    cue: 'The blast is 20 minutes on the minute: a new set at the top of every minute, swings on the odd minutes, goblet squats on the even ones, and rest for what is left of the minute. ' + BLAST_CUE,
+    exercises: [
+      ex('Two-hand kettlebell swing', 10, 10, 15, 'bell', 35, 'Odd minutes. Crisp: stop the set when the snap goes.'),
+      ex('Goblet squat', 10, 5, 8, 'bell', 35, 'Even minutes. Elbows inside the knees at the bottom.'),
+      ex('Suitcase carry', 2, 30, 40, 'time', 0, 'Seconds each side, about 40 m. The finish, with the plank.'),
+      ex('Plank', 2, 45, 60, 'time', 0, 'Seconds. Hips level, breathe.')
+    ] },
+  { key: 'blast-b', name: 'Kettlebell Blast B', short: 'Blast B', minutes: 30, supplement: true, blast: true, title: 'Press and Carry',
+    why: 'Press and Carry: three rounds of row, press, swing and dead bug, then a carry and a hollow hold. Upper body and trunk, so it fits beside a leg day. Extra to the five.',
+    warmup: 'Warm up, 5 min: halos, 5 each way; arm bars, 3 each side; bird dogs, 8 each side.',
+    cue: 'The blast is 3 rounds of about 6 minutes, 1 minute of rest between rounds: row, press, swings, dead bug, one after the other. ' + BLAST_CUE,
+    exercises: [
+      ex('Kettlebell one-arm row', 3, 8, 10, 'bell', 35, 'Each side.'),
+      ex('Half-kneeling kettlebell press', 3, 6, 8, 'bell', 26, 'Each side. Ribs down, no lean.'),
+      ex('Two-hand kettlebell swing', 3, 10, 15, 'bell', 35, 'Crisp: stop the set when the snap goes.'),
+      ex('Dead bug', 3, 30, 40, 'time', 0, 'Seconds. Lower back on the floor the whole time.'),
+      ex('Farmer carry', 2, 30, 40, 'time', 0, 'Seconds each side, about 40 m; or one bell racked. The finish, with the hollow hold.'),
+      ex('Hollow hold', 3, 20, 30, 'time', 0, 'Seconds.')
+    ] }
+];
+const ALL = TEMPLATES.concat([PUMP], BLASTS);
+// an extra (the Pump, a Kettlebell Blast): logged and shown, never one of the five and never holding a day against them
+const isExtra = k => k === 'pump' || /^blast-/.test(String(k || ''));
+// a calendar entry's name to its Blast ("Kettlebell Blast B · home"), else null
+const blastOf = name => { const m = /kettlebell\s*blast\s*([ab])?\b/i.exec(String(name || '')); return m ? 'blast-' + (m[1] || 'b').toLowerCase() : null; };
+// the words a Blast carries on the calendar, written from the session itself
+const blastNotes = t => `${t.name.toUpperCase()} · ${t.title} · ${t.minutes} min\n\n${t.warmup}\n\n${t.exercises.map(e => `  ${e.name}, ${e.sets} × ${e.reps_lo}${e.reps_hi !== e.reps_lo ? ' to ' + e.reps_hi : ''}${e.kind === 'time' ? ' s' : ''}${e.note ? ' (' + e.note + ')' : ''}`).join('\n')}\n\n${t.cue}\nOpen it on the Lift page for each exercise's description and to log the sets.`;
 const LEGACY = { 'lift-a': 'Lift A: hinge and push', 'lift-b': 'Lift B: squat and pull' };   // the two sessions this plan replaced
 const nameOf = key => (ALL.concat(RETIRED).find(t => t.key === key) || {}).name || LEGACY[key] || key;
 const isLegs = k => k === 'legs' || k === 'legs-2';
@@ -248,6 +291,7 @@ function periodization(templates, sessions, today) {
 // Returns the same days with .lift set to a template key or null, plus why.
 const HARD = /vo2|40\s*\/\s*20|threshold|race|interval|sweet\s*spot|\b(ftp|ramp)\s*test/i;
 const LONG_COACHING_MIN = 4 * 60;
+const AWAY_DRIVE_MIN = 90;   // a single drive this long: he is not near Life Time that day
 // A day can hold more than one lift (Push saved, Pull put on the calendar the same evening): x.locks is
 // every session on that day, x.locked the first of them. A key held anywhere is not placed again.
 const locksOf = x => x.locks && x.locks.length ? x.locks : x.locked ? [x.locked] : [];
@@ -292,15 +336,15 @@ function placeWeek(days, o) {
     }
     if (opts.done && opts.done[x.date]) s += 1e3;                      // already lifted that day: it stands
     if (locksOf(x).length && !locksOf(x).includes(key)) s = -2e3;
-    if (x.rest && !(opts.done && opts.done[x.date])) s = -3e3;       // a rest day (all three classes): nothing is placed on it
+    if ((x.rest || x.away || x.past) && !(opts.done && opts.done[x.date])) s = -3e3;   // a rest day (all three classes), a day away, a day gone: nothing is placed on it
     return s;
   };
   for (const key of LEGS) {
     let idx = d.findIndex(x => locksOf(x).includes(key)), best = -1e9;   // already on the calendar this week: it stands
     const held = idx >= 0;
-    // done in the six days before the week: due again only from the sixth day after it (Legs 1 on a Sunday is due the
-    // next Sunday, and the days before that are the other leg day's)
-    const dueFrom = recent[key] ? tz.shiftKey(recent[key], 6) : null;
+    // done in the days before the week: due again only from the fifth day after it (Legs 1 on a Sunday is not due
+    // before Friday, and the days before that are the other leg day's)
+    const dueFrom = recent[key] ? tz.shiftKey(recent[key], 5) : null;
     if (!held) d.forEach((x, i) => { if (Object.values(legsAt).includes(i) || (dueFrom && x.date < dueFrom)) return; const s = legsScore(x, i, key); if (s > best) { best = s; idx = i; } });
     if (idx < 0 || (!held && best <= -1500)) continue;                   // no day will take it this week
     legsAt[key] = idx;
@@ -313,16 +357,20 @@ function placeWeek(days, o) {
     if (hardAhead) x.why += `; ${gapDays === 2 ? 'two' : 'three'} days before ${hardAhead.ride.name} (${tz.labelOf(hardAhead.date)}), so the legs are fresh for it`;
   }
   const legIdxs = Object.values(legsAt);
-  // 2. the two lift-free days: the two biggest riding days left
-  //    (a rest day, all three classes, is lift-free before any of them; a week with more rest days than free days holds fewer lifts)
-  const restDays = d.map((x, i) => ({ x, i })).filter(p => !legIdxs.includes(p.i) && p.x.rest && !(opts.done && opts.done[p.x.date]) && !locksOf(p.x).length);
-  const rest = d.map((x, i) => ({ x, i })).filter(p => !legIdxs.includes(p.i) && !p.x.locked && !restDays.includes(p)).sort((a, b) => load(b.x) - load(a.x));
-  const free = new Set(restDays.map(p => p.i).concat(rest.slice(0, Math.max(0, n - 5 - restDays.length)).map(p => p.i)));
-  for (const i of free) d[i].why = d[i].rest ? `no lift: a rest day (${d[i].rest})` : d[i].ride ? `no lift: one of the two biggest riding days (${d[i].ride.name})` : 'no lift: a rest day';
+  // 2. the days with no lift. A rest day, a day away and a day already gone take nothing. Of the days still open,
+  //    as many as the sessions left to place need are used, and the biggest riding days are the ones left free.
+  const shut = x => (x.rest || x.away || x.past) && !(opts.done && opts.done[x.date]) && !locksOf(x).length;
+  const restDays = d.map((x, i) => ({ x, i })).filter(p => !legIdxs.includes(p.i) && shut(p.x));
+  // a session already on the calendar this week is placed where it is, not again somewhere else
+  const four = ['push', 'pull', 'upper-1'].filter(k => !d.some(x => locksOf(x).includes(k)) && !(opts.rolling && recent[k]));
+  const rest = d.map((x, i) => ({ x, i })).filter(p => !legIdxs.includes(p.i) && !p.x.locked && !restDays.some(r => r.i === p.i)).sort((a, b) => load(b.x) - load(a.x));
+  const free = new Set(restDays.map(p => p.i).concat(rest.slice(0, Math.max(0, rest.length - four.length)).map(p => p.i)));
+  for (const i of free) d[i].why = d[i].past ? '' : d[i].rest ? `no lift: a rest day (${d[i].rest})` : d[i].away ? `no lift: a day away (${d[i].away})` : d[i].ride ? `no lift: one of the biggest riding days (${d[i].ride.name})` : 'no lift: a rest day';
+  // (a week asked for from a day that is not a Monday: a day left free because its session was done just before says so)
+  if (opts.rolling) { const heldKeys = Object.keys(recent).filter(k => recent[k] && !isLegs(k));
+    if (heldKeys.length) for (const p of rest.slice(Math.max(0, n - 5 - restDays.length), Math.max(0, rest.length - four.length))) d[p.i].why = `no lift: ${heldKeys.map(k => `${nameOf(k)} was done ${tz.labelOf(recent[k])}`).join(', ')}`; }
   // 3. the other three, in the book's order, with pull kept a day clear of the leg days when it can be
   const slots = d.map((x, i) => i).filter(i => !legIdxs.includes(i) && !free.has(i) && !(d[i].locked && d[i].locked !== 'any'));
-  // a session already on the calendar this week is placed where it is, not again somewhere else
-  const four = ['push', 'pull', 'upper-1'].filter(k => !d.some(x => locksOf(x).includes(k)) && !recent[k]);
   const perms = permutations(four);
   let bestP = null, bestS = 1e9;
   for (const p of perms) {
@@ -331,14 +379,18 @@ function placeWeek(days, o) {
       const i = slots[j]; if (i == null) return;
       if (k === 'pull' && legIdxs.some(j => Math.abs(i - j) <= 1)) s += 3;           // deadlift next to a leg day
       if (k === 'push' && d[i].ride && d[i].ride.hard) s += 0.5;                      // a push day on the 40/20s is fine, a pull day a little better
-      if (k === 'pull' && d[i + 1] && d[i + 1].ride && d[i + 1].ride.hard) s += 2;    // deadlifts the day before a hard ride
+      if (k === 'pull' && all[i + 1] && all[i + 1].ride && all[i + 1].ride.hard) s += 2;   // deadlifts the day before a hard ride
+      if (recent[k] && Math.round((Date.parse(d[i].date) - Date.parse(recent[k])) / 864e5) < 5) s += 2;   // the same session less than five days on
+      if (k === 'push' || k === 'upper-1') { const other = k === 'push' ? 'upper-1' : 'push';   // bench, then close-grip bench the next day
+        for (const nb of [d[i - 1], d[i + 1]]) if (nb && locksOf(nb).includes(other)) s += 1;
+        const oj = p.indexOf(other); if (oj >= 0 && slots[oj] != null && Math.abs(slots[oj] - i) === 1) s += 0.5; }
     });
     for (let a = 0; a < p.length; a++) for (let b = a + 1; b < p.length; b++) if (four.indexOf(p[a]) > four.indexOf(p[b])) s += 1;   // the book's order, when nothing else decides
     if (s < bestS) { bestS = s; bestP = p; }
   }
   (bestP || four).forEach((k, j) => { const i = slots[j]; if (i != null) { d[i].lift = k; d[i].why = d[i].ride ? `with the ride (${d[i].ride.name})` : d[i].long_coaching ? 'a coaching day, no ride' : 'a day off the bike'; } });
   const held = Object.keys(recent).filter(k => recent[k]);
-  for (const i of slots.slice(four.length)) if (!d[i].lift && held.length) d[i].why = `no lift: ${held.map(k => `${nameOf(k)} was done ${tz.labelOf(recent[k])}`).join(', ')}`;
+  if (opts.rolling) for (const i of slots.slice(four.length)) if (!d[i].lift && held.length) d[i].why = `no lift: ${held.map(k => `${nameOf(k)} was done ${tz.labelOf(recent[k])}`).join(', ')}`;
   for (const x of d) if (x.locked && x.locked !== 'any') { x.lift = x.locked; x.why = opts.done && opts.done[x.date] ? 'logged' : 'on the calendar'; }
   // what the calendar holds, and what is only a suggestion for a day the calendar leaves empty
   for (const x of d) { const L = locksOf(x).filter(k => k !== 'any'); x.lifts = L; x.on_calendar = L.length > 0; x.suggested = !!x.lift && !x.on_calendar; }
@@ -346,7 +398,10 @@ function placeWeek(days, o) {
 }
 function permutations(a) { if (a.length <= 1) return [a]; const out = []; a.forEach((x, i) => { for (const p of permutations(a.slice(0, i).concat(a.slice(i + 1)))) out.push([x].concat(p)); }); return out; }
 
-// The week from today: each day's planned ride (the plan here and in
+// Monday of the week a day is in (the lifting week is Monday to Sunday, like the calendar's and the coach's:
+// until 15 Nov 2026 the count looked seven days back and the plan seven days ahead, so "this week" meant two
+// different stretches and a missed session rolled forward for ever)
+// The week from a day: each day's planned ride (the plan here and in
 // intervals.icu, or the ride done), coaching minutes from the calendar.
 async function weekDays(n, from0) {
   const today = /^\d{4}-\d{2}-\d{2}$/.test(from0 || '') ? from0 : tz.todayKey();   // the week from today, or from a day asked for
@@ -373,9 +428,14 @@ async function weekDays(n, from0) {
   } catch (e) { /* no plan: the week is placed on the calendar alone */ }
   try {
     const { scheduleReport } = require('./calendar');
-    const s = await scheduleReport({ days: n || 7 });
+    // read for the days still ahead only (a day gone needs no placing; the read is the slow part of this page)
+    const t0 = tz.todayKey(), last = days[Math.min(days.length, 7) - 1].date, span = Math.round((Date.parse(last) - Date.parse(t0)) / 864e5) + 1;
+    const s = span > 0 ? await scheduleReport({ days: span }) : { days: [] };
     for (const day of s.days || []) {
       const x = days.find(y => y.date === day.date); if (!x) continue;
+      // a day with a long drive in it is a day away (the game in Somerset, NJ on 22 Nov had Upper 2 at Life Time at 7:30a)
+      const drive = Math.max(0, ...(day.events || []).filter(e => e.category === 'commute').map(e => e.minutes || ((e.end_min || 0) - (e.start_min || 0)) || 0));
+      if (drive >= AWAY_DRIVE_MIN) x.away = `a ${drive} min drive`;
       x.coaching_min = (day.events || []).filter(e => e.category === 'coaching' && !e.allDay).reduce((a, e) => a + (e.minutes || 0), 0);
       x.long_coaching = x.coaching_min >= LONG_COACHING_MIN;
     }
@@ -401,14 +461,15 @@ async function placedLiftsBetween(from, to, nowMin) {
 // Kettlebell Blasts (his at-home extras, on the calendar as WeightTraining, ~30 min) done in the window: a
 // planned one logged, or a done one by its name. Counted beside the five as "+1", like the Pump, never inside.
 const isBlast = w => require('./food-math').isBlast(w);
-async function blastsBetween(from, to) {
-  const { calendar } = require('./workouts');
-  const cal = await calendar(from, to);
-  const seen = new Set();
-  for (const day of cal.days || []) {
-    for (const w of (day.planned || []).filter(isBlast)) if (w.logged) seen.add(day.date + '|' + String(w.name).toLowerCase());
-    for (const r of (day.done || []).filter(isBlast)) seen.add(day.date + '|' + String(r.name).toLowerCase());
-  }
+async function blastsBetween(from, to, sessions) {
+  const seen = new Set((sessions || []).filter(x => /^blast-/.test(x.template) && x.date >= from && x.date <= to).map(x => x.date));
+  try {
+    const { calendar } = require('./workouts');
+    const cal = await calendar(from, to);
+    for (const day of cal.days || []) {
+      if ((day.planned || []).filter(isBlast).some(w => w.logged) || (day.done || []).some(isBlast)) seen.add(day.date);
+    }
+  } catch (e) { /* the saved ones stand */ }
   return seen.size;
 }
 // the week's count with the first week's due sessions read from the calendar
@@ -417,18 +478,24 @@ async function weekCountPlaced(sessions, today) {
   const w0 = weekCount(sessions, today, undefined, fs);
   const nowMin = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
   const inFirst = w0.first_count && w0.first_week;
-  const [placed, dueNow, blasts] = await Promise.all([
+  const [placed, dueNow, blasts, placedWeek, dueWeek] = await Promise.all([
     inFirst ? placedLiftsBetween(w0.first_count, today).catch(() => 0) : 0,
     inFirst ? placedLiftsBetween(w0.first_count, today, nowMin).catch(() => 0) : 0,
-    blastsBetween(w0.from, today).catch(() => 0)]);
+    blastsBetween(w0.from, today, sessions).catch(() => 0),
+    placedLiftsBetween(w0.from, w0.to).catch(() => 0),
+    placedLiftsBetween(w0.from, today, nowMin).catch(() => 0)]);
   // with lifts on the calendar, the due count is the ones whose time has come (none yet reads "due later", not red)
   const c = placed ? weekCount(sessions, today, dueNow, fs) : w0;
-  return Object.assign(c, { blasts, extras: c.pumps + blasts });
+  // how many of the five are due by now, for the box's colour: Monday reads "0 of 5" in grey, not red. With the week on
+  // the calendar, the lifts whose time has passed; with nothing on it, five spread over the seven days
+  const dow = Math.round((Date.parse(today) - Date.parse(mondayOf(today))) / 864e5) + 1;
+  const due = Math.min(5, Math.max(c.sessions, placedWeek ? dueWeek : Math.floor(5 * (dow - 1) / 7)));
+  return Object.assign(c, { blasts, extras: c.pumps + blasts, due });
 }
 function weekCount(sessions, today, placedDue, fresh) {
   // the fresh start (fresh-start.js): sessions before it are not counted, and the first week runs from it
   const fs = /^\d{4}-\d{2}-\d{2}$/.test(fresh || '') ? fresh : null;
-  const from = fs && fs > tz.shiftKey(today, -6) ? fs : tz.shiftKey(today, -6);
+  const mon = mondayOf(today), from = fs && fs > mon ? fs : mon;   // this week, Monday to Sunday
   const wk = (sessions || []).filter(x => x.date >= from && x.date <= today);
   const fiveAll = wk.filter(x => TEMPLATES.some(t => t.key === x.template));
   // each of the five counts once: Legs twice and no Upper 2 is four of the five, and the count never passes five
@@ -445,7 +512,7 @@ function weekCount(sessions, today, placedDue, fresh) {
   const expected = !first ? 0 : dayN < 7 ? (placedDue != null ? Math.min(5, Math.max(placedDue, five.length)) : Math.min(5, Math.ceil(5 * dayN / 7))) : 5;
   const firstWeek = !!first && dayN < 7 && expected < 5;
   const of = firstWeek ? expected : 5;
-  return { from, sessions: five.length, repeats: fiveAll.length - five.length, pumps: wk.filter(x => x.template === 'pump').length, blasts: 0, target: 5, expected, of, first_week: firstWeek, started: !!first, first, first_count: firstCount, fresh_start: fs,
+  return { from, to: tz.shiftKey(mon, 6), sessions: five.length, done: five, repeats: fiveAll.length - five.length, pumps: wk.filter(x => x.template === 'pump').length, blasts: 0, target: 5, expected, of, first_week: firstWeek, started: !!first, first, first_count: firstCount, fresh_start: fs,
     week_no: weekNo, deload: weekNo > 0 && weekNo % 9 === 0, word: firstWeek && !of ? 'due later' : `${five.length} of ${of}${firstWeek ? ' due' : ''}` };
 }
 // A calendar entry's name to its session: "Upper body and core (Upper 2)" by its bracket, "Pull" by its
@@ -469,8 +536,8 @@ const isLiftEntry = w => /weight|lift|strength/i.test(String(w.sport || '')) || 
 // of times"). The placer only fills empty days; what is already on the calendar stood whatever it broke, and a moved
 // or swapped lift was never looked at again. This reads every lift the week holds, done or planned, and says what
 // is wrong in plain words. week: report()'s days (lifts, done_keys, ride, rest, times); sessions: the saved ones.
-function checkWeek(week, sessions) {
-  const out = [], day = k => tz.dayShort(k), nm = k => (TEMPLATES.concat(RETIRED).find(t => t.key === k) || {}).short || k;
+function checkWeek(week, sessions, o) {
+  const out = [], fixed = !!(o && o.fixed), day = k => tz.dayShort(k), nm = k => (TEMPLATES.concat(RETIRED).find(t => t.key === k) || {}).short || k;
   const openOn = x => (x.lifts && x.lifts.length ? x.lifts : []).filter(k => k !== 'any' && !(x.done_keys || []).includes(k));
   const first = week.length ? week[0].date : null, last = week.length ? week[week.length - 1].date : null;
   // every time each of the five happens: saved sessions from six days before the week, and what the calendar holds
@@ -483,7 +550,9 @@ function checkWeek(week, sessions) {
       if (!a[i].done && gap > 0 && gap < 5) out.push({ kind: 'again', date: a[i].date, key: k, text: `${nm(k)} is on ${day(a[i].date)}, ${gap} day${gap === 1 ? '' : 's'} after ${a[i - 1].done ? 'it was done' : 'another ' + nm(k)} (${day(a[i - 1].date)}). Each of the five is done once every seven days.` }); } }
   const missing = TEMPLATES.map(t => t.key).filter(k => !seen[k]);
   if (missing.length && out.some(p => p.kind === 'again')) out.push({ kind: 'missing', date: null, key: missing[0], text: `${missing.map(nm).join(' and ')} ${missing.length === 1 ? 'is' : 'are'} not in the week: the repeated session's day would take ${missing.length === 1 ? 'it' : 'one'}.` });
-  else if (missing.length && week.every(x => !x.suggested || !missing.includes(x.lift))) for (const k of missing) out.push({ kind: 'no_room', date: null, key: k, text: `No day is open for ${nm(k)} this week.` });
+  else for (const k of missing) { const was = week.find(x => (x.missed || []).includes(k)), fits = week.find(x => x.suggested && x.lift === k);
+    if (was && fits) out.push({ kind: 'missed', date: was.date, key: k, text: `${nm(k)} was on ${day(was.date)} and was not logged. It fits on ${day(fits.date)}.` });
+    else if (!fits) out.push({ kind: 'no_room', date: was ? was.date : null, key: k, text: `${was ? `${nm(k)} was on ${day(was.date)} and was not logged. ` : ''}No day is left for ${nm(k)} this week${fixed ? ': it is lost with the week, and next week starts fresh' : ''}.` }); }
   week.forEach((x, i) => { const next = week[i + 1], open = openOn(x);
     const hardNext = next && next.ride && next.ride.hard && !next.ride.done ? next : null;
     for (const lk of open.filter(isLegs)) if (hardNext) out.push({ kind: 'legs_before_hard', date: x.date, key: lk, text: `${nm(lk)} on ${day(x.date)} is the day before ${hardNext.ride.name} (${day(hardNext.date)}). Heavy leg work takes two days to clear: two or three days before is the place for it.` });
@@ -493,6 +562,7 @@ function checkWeek(week, sessions) {
     if (legsHere.length > 1 && open.some(isLegs)) out.push({ kind: 'legs_together', date: x.date, key: 'legs', text: `Legs 1 and Legs 2 are both on ${day(x.date)}.` });
     else if (legsHere.length && legsNext.length && legsHere[0] !== legsNext[0] && (open.some(isLegs) || openOn(next).some(isLegs)))
       out.push({ kind: 'legs_together', date: next.date, key: 'legs', text: `Legs 1 and Legs 2 are back to back (${day(x.date)} and ${day(next.date)}). Two clear days between them is the aim.` });
+    if (x.away && open.length) out.push({ kind: 'away', date: x.date, key: open[0], text: `${open.map(nm).join(' and ')} on ${day(x.date)}, a day away (${x.away}): you are not near the gym that day.` });
     if (x.rest && open.length) out.push({ kind: 'rest_day', date: x.date, key: open[0], text: `${open.map(nm).join(' and ')} on ${day(x.date)}, a rest day (${x.rest}).` });
     // a heavy lower-body lift and a hard ride on one day: three hours between them
     for (const c of x.close || []) out.push({ kind: 'close_to_hard', date: x.date, key: c.key, text: `${nm(c.key)} on ${day(x.date)} is ${c.gap_min} min ${c.after ? 'after' : 'before'} ${c.ride}. A heavy lower-body lift and a hard ride want three hours between them.` });
@@ -505,22 +575,28 @@ async function report(from) {
   const sessions = d.sessions.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.at).localeCompare(String(b.at)));
   const lastOf = {};
   for (const s of sessions) for (const e of s.exercises || []) lastOf[e.name] = { date: s.date, sets: e.sets };
-  const templates = ALL.map(t => ({ key: t.key, name: t.name, short: t.short, minutes: t.minutes, why: t.why, order: t.order || 9, supplement: !!t.supplement,
+  const templates = ALL.map(t => ({ key: t.key, name: t.name, short: t.short, minutes: t.minutes, why: t.why, order: t.order || 9, supplement: !!t.supplement, blast: !!t.blast, title: t.title || null, warmup: t.warmup || null, cue: t.cue || null,
     hard_sets: t.exercises.reduce((a, e) => a + e.sets, 0),
     exercises: t.exercises.map(e => Object.assign({}, e, { last: lastOf[e.name] || null, target: target(e, lastOf[e.name]) })) }));
   // the week: what was lifted already this week holds its day; the rest is placed
   const today = tz.todayKey();
-  // the week from today, or the week from a day asked for (the placer, for a week ahead); three days past it are read
-  // too, only to be looked at (a leg day on the week's last day is placed by the rides that follow it)
-  const ten = await weekDays(10, from), days = ten.slice(0, 7), ahead = ten.slice(7);
+  // this week, Monday to Sunday, or the week from a day asked for (the placer, for a week ahead); three days past it
+  // are read too, only to be looked at (a leg day on the week's last day is placed by the rides that follow it)
+  const start = /^\d{4}-\d{2}-\d{2}$/.test(from || '') ? from : mondayOf(today), rolling = start !== mondayOf(start);
+  const ten = await weekDays(10, start), days = ten.slice(0, 7), ahead = ten.slice(7);
+  for (const x of days) if (x.date < today) x.past = true;
   // the strip mirrors the calendar: every lift saved on a day, then every lift the calendar holds that day
   const doneByDate = {}, locks = {};
   const add = (date, k) => { if (!k) return; const a = locks[date] = locks[date] || []; if (!a.includes(k)) a.push(k); };
-  for (const s of sessions) if (s.date >= today && s.template !== 'pump') { doneByDate[s.date] = doneByDate[s.date] || s.template; add(s.date, s.template); }
+  for (const s of sessions) if (s.date >= days[0].date && s.date <= days[6].date && !isExtra(s.template)) { doneByDate[s.date] = doneByDate[s.date] || s.template; add(s.date, s.template); }
+  const doneKeys = new Set(sessions.filter(s => s.date >= days[0].date && s.date <= days[6].date).map(s => s.template)), missed = {};
   try {
     const { calendar } = require('./workouts');
     const cal = await calendar(days[0].date, days[days.length - 1].date);
-    for (const day of cal.days || []) for (const w of (day.planned || []).filter(isLiftEntry)) add(day.date, templateOf(w.name));
+    for (const day of cal.days || []) for (const w of (day.planned || []).filter(isLiftEntry)) { const k = templateOf(w.name); if (!k) continue;
+      // a day gone: what was done that day is the day; a lift that was on it and was not saved is missed, not held
+      if (day.date < today) { if (!(locks[day.date] || []).includes(k) && !doneKeys.has(k)) (missed[day.date] = missed[day.date] || []).push(k); }
+      else add(day.date, k); }
     // a Legs or Pull within three hours of a hard ride on the same day (the times the calendar holds)
     const toMin = t => { const m = /^(\d{1,2}):(\d{2})/.exec(String(t || '')); return m ? +m[1] * 60 + +m[2] : null; }, lenOf = w => Math.round((w.steps || []).reduce((a, s) => a + (s.dur_s || 0), 0) / 60) || 60;
     for (const day of cal.days || []) { const x = days.find(y => y.date === day.date); if (!x) continue;
@@ -529,15 +605,15 @@ async function report(from) {
         for (const r of hard) { const rs = toMin(r.time), re = rs + lenOf(r), after = a >= rs, gap = after ? a - re : rs - (a + lenOf(w));
           if (gap < 180) (x.close = x.close || []).push({ key: k, ride: r.name, gap_min: Math.max(0, gap), after }); } } }
   } catch (e) { /* the placement stands on its own */ }
-  for (const x of days) if (locks[x.date]) { x.locks = locks[x.date]; x.locked = x.locks[0]; }
+  for (const x of days) { if (locks[x.date]) { x.locks = locks[x.date]; x.locked = x.locks[0]; } if (missed[x.date]) x.missed = missed[x.date]; }
   // what was lifted in the six days before the window: not due again yet
   const recent = {};
-  for (const s of sessions) if (s.template !== 'pump' && s.date < days[0].date && s.date >= tz.shiftKey(days[0].date, -6)) recent[s.template] = s.date;
-  const week = placeWeek(days, { done: doneByDate, recent, ahead }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
+  for (const s of sessions) if (!isExtra(s.template) && s.date < days[0].date && s.date >= tz.shiftKey(days[0].date, -6)) recent[s.template] = s.date;
+  const week = placeWeek(days, { done: doneByDate, recent, ahead, rolling }).map(x => Object.assign(x, { done: !!doneByDate[x.date], label: tz.labelOf(x.date), name: x.lift ? nameOf(x.lift) : null }));
   // the pump fits any day but legs and the day before it
-  week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = !isLegs(x.lift) && !(next && isLegs(next.lift)); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); });
+  week.forEach((x, i) => { const next = week[i + 1]; x.pump_ok = !isLegs(x.lift) && !(next && isLegs(next.lift)); x.pumped = sessions.some(s => s.date === x.date && s.template === 'pump'); x.blasted = sessions.filter(s => s.date === x.date && /^blast-/.test(s.template)).map(s => s.template); });
   // each day's sessions still to do (a day can hold a done Push and a planned Pull)
-  for (const x of week) { x.done_keys = sessions.filter(s => s.date === x.date && s.template !== 'pump').map(s => s.template);
+  for (const x of week) { x.done_keys = sessions.filter(s => s.date === x.date && !isExtra(s.template)).map(s => s.template);
     x.open = (x.lifts && x.lifts.length ? x.lifts : x.lift ? [x.lift] : []).filter(k => !x.done_keys.includes(k)); }
   // next: today's, if not done; else the next day that holds one
   const nextX = week.find(x => x.date >= today && x.open.length) || null;
@@ -547,21 +623,21 @@ async function report(from) {
     const best = Math.max(0, ...(e.sets || []).map(x => e1rm(x.lb, x.reps) || 0));
     if (best) (history[e.name] = history[e.name] || []).push({ date: s.date, e1rm: best, top_lb: Math.max(...e.sets.map(x => x.lb || 0)) });
   }
-  const problems = checkWeek(week, sessions);
+  const problems = checkWeek(week, sessions, { today, fixed: !rolling });
   const wc = await weekCountPlaced(sessions, today);
   const last = sessions[sessions.length - 1] || null;
   // eight weeks on, one off: counted from the first session of this plan
   const weekNo = wc.week_no || 1;
   const deload = wc.deload;
   const plan = periodization(TEMPLATES, sessions, today);
-  return { templates, next: nextX ? nextX.open[0] : 'push', next_date: nextX ? nextX.date : null, week, plan: 'Bigger Leaner Stronger, five days', periodization: plan,
+  return { templates, next: nextX ? nextX.open[0] : 'push', next_date: nextX ? nextX.date : null, week, week_from: days[0].date, week_to: days[6].date, plan: 'Bigger Leaner Stronger, five days', periodization: plan,
     week_no: weekNo, deload, deload_note: deload ? 'Deload week: the same lifts, half the hard sets, two reps shy of the top of the range. The weights stay.' : null,
     last: last ? { date: last.date, template: last.template, name: nameOf(last.template) } : null,
     sessions: sessions.slice(-15).reverse().map(s => ({ id: s.id, date: s.date, template: s.template, name: nameOf(s.template),
       notes: s.notes || '', volume_lb: (s.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, x) => b + (x.lb || 0) * (x.reps || 0), 0), 0),
       exercises: (s.exercises || []).map(e => ({ name: e.name, sets: e.sets })) })),
     problems, history, this_week: wc.sessions, target_per_week: 5, pumps_this_week: wc.pumps, blasts_this_week: wc.blasts || 0, count: wc,
-    rules: ['Legs two or three days before a hard ride (VO2, threshold, a race), never the day before one; then the day before a day off the bike or a long coaching day.', 'No lift on the two biggest riding days.', 'Two leg days a week: Legs 1 heavy, Legs 2 lighter and short of failure, two clear days between them when the week allows.', 'Bench (Push) and close-grip bench (Upper) a day apart when the week allows.', 'Deadlifts (Pull) not the day before a hard ride. Legs or Pull three hours from a hard ride on the same day.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'Each of the five once every seven days; eight weeks, then a deload week.', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.', 'A Kettlebell Blast at home is extra too: shown as +1 beside the five, about 180 kcal toward the day\'s burn.'] };
+    rules: ['Legs two or three days before a hard ride (VO2, threshold, a race), never the day before one; then the day before a day off the bike or a long coaching day.', 'No lift on the two biggest riding days.', 'Two leg days a week: Legs 1 heavy, Legs 2 lighter and short of failure, two clear days between them when the week allows.', 'Bench (Push) and close-grip bench (Upper) a day apart when the week allows.', 'Deadlifts (Pull) not the day before a hard ride. Legs or Pull three hours from a hard ride on the same day.', 'Pull (deadlift) a day clear of legs (Romanian deadlift) when the week allows.', 'The week runs Monday to Sunday: each of the five once in it. A session missed is named, moved to a day still open if one is left, and otherwise lost with the week; nothing is stacked.', 'Eight weeks, then a deload week.', 'No lift on a rest day (all three classes) or a day away (a drive of 90 minutes or more).', 'The pump at home is extra: any day but legs and the day before it; it does not count toward the five.', 'A Kettlebell Blast at home is extra too: shown as +1 beside the five, about 180 kcal toward the day\'s burn.'] };
 }
 
 async function save(body) {
@@ -573,9 +649,14 @@ async function save(body) {
     name: String(e.name || '').slice(0, 60),
     sets: (Array.isArray(e.sets) ? e.sets : []).map(s => ({ reps: Math.max(0, Math.min(300, Math.round(Number(s.reps) || 0))), lb: Math.max(0, Math.min(1000, Math.round(Number(s.lb) || 0))) })).filter(s => s.reps > 0)
   })).filter(e => e.name && e.sets.length);
-  if (!exercises.length) throw new Error('no sets to save');
+  // quick: the session was done and its sets were not written down (told to the coach, or ticked off): it counts for
+  // the week, and the targets stay where the last real session left them
+  if (!exercises.length && !b.quick) throw new Error('no sets to save');
+  if (date > tz.todayKey()) throw new Error('a session cannot be saved for a day that has not come');
   const d = await db();
+  if (b.quick && d.sessions.some(x => x.date === date && x.template === t.key)) { const e = new Error(`${t.name} is already logged for ${tz.dayShort(date)}.`); e.status = 409; throw e; }
   const s = { id: 'l_' + Date.now().toString(36), date, template: t.key, exercises, notes: String(b.notes || '').slice(0, 400), at: new Date().toISOString() };
+  if (!exercises.length) s.quick = true;
   d.sessions.push(s); d.sessions = d.sessions.slice(-400);
   await setJSON('lifts', d);
   return s;
@@ -614,4 +695,4 @@ function attach(app) {
     try { const d = await db(); const n = d.sessions.length; d.sessions = d.sessions.filter(s => s.id !== req.params.id); await setJSON('lifts', d); res.json({ ok: true, removed: n - d.sessions.length }); } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { DESC, attach, weekCount, weekCountPlaced, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN, checkWeek, HARD, nameOf, RETIRED, isLegs };
+module.exports = { DESC, attach, weekCount, weekCountPlaced, templateOf, TEMPLATES, PUMP, target, e1rm, nextBell, prevBell, placeWeek, periodization, report, save, scheduleWeek, LONG_COACHING_MIN, checkWeek, HARD, nameOf, RETIRED, isLegs, BLASTS, isExtra, blastOf, blastNotes, mondayOf, ALL };

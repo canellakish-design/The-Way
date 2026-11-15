@@ -66,6 +66,43 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 9 Nov | "Protein at every main meal: missed 1 of 1 day" | The soy sauce logged beside the sushi counted as a meal of its own | add-ons fold into their meal for every rule; a meal is judged as a whole | disagreement |
 | 9 Nov | "Z1 +-40%" on a ride under the Zone 1 floor, and two debriefs for one ride | A below-floor share printed after "+"; a 0-minute false start got its own debrief | "Z1 low 40%" / "Below Z1"; no debrief under 5 minutes or for a second save | my mistake |
 
+| 10 Nov | Push placed again on Tuesday, the day after Monday's Push | The placer looked seven days forward and never back | a session done in the last six days is not placed again | disagreement |
+| 10 Nov | The Day painted yesterday's plan as today's | The kept copy of the day was drawn before the fresh one landed, whatever its date | a kept day is only drawn when it is today's | my mistake |
+| 10 Nov | FX Physical Therapy on his day | A shared calendar's event that is not his to attend | left off the day, its free windows and the plan | new case |
+| 10 Nov | A recovery dinner read "Low carb" | The label's cut-offs | cut-offs at 20% and 45% | disagreement |
+| 10 Nov | A moved snack lost its "Before Practice" note | The protein words were rewritten over the whole note | the note is kept | my mistake |
+| 11 Nov | The same weigh-in counted twice | The iPhone Shortcut sends Health's reading again each morning | the same reading replaces the one kept | new case |
+| 11 Nov | A weigh-in sent as "217.9 lb" was not read | The Shortcut sends the sample as text with its unit | read with its unit, kg too | new case |
+| 12 Nov | A drive chained to a venue that had not been looked up | The new drives joined consecutive events before the place was known | no chaining to a place not looked up yet | my mistake |
+| 13 Nov | Tomorrow's page showed no meals | The Day drew meals for today only | every day shows its meals; scripts/smoke.js checks it before every push | my mistake |
+| 13 Nov | Wednesday's staff meeting and practice at Liberty read as two places | One place written two ways on the calendar | one place however the calendar writes it | disagreement |
+| 13 Nov | The deficit rule used the watch's 3.6 h, not the WHOOP's 6.4 h he entered | Hand-entered sleep did not win for its date | the hand-entered night wins | disagreement |
+| 13 Nov | Lunch "packed" on a school day | The plan did not know the dining hall | school days: lunch between classes is the dining hall | new case |
+| 14 Nov | "Whenever any event is on top of another event you have to move stuff around" | Overlaps were marked and left for him to fix | a workout over something fixed is moved by The Way (dayplan.js autoMove) | disagreement |
+| 14 Nov | His IDP meetings (with a Meet link) were moved by The Way | The new auto-move treated any block of his as movable | a meeting, a call or anything with guests is never moved | my mistake |
+| 14 Nov | The U18 game he added was moved to 8:45p, twice | It was read as his own free block; the first fix did not cover an event with a place | games and events with a place are fixed | my mistake |
+| 14 Nov | "U13 to U18 Girls Staff Meeting" read as a game | The rule written to catch the game was too wide | rule narrowed | my mistake |
+| 14 Nov | A moved ride left its pre-ride snack after the ride | The meal before a session did not move with it | the meal before a session stays before it | disagreement |
+| 14 Nov | A shake placed inside a drive | The added shake skipped the free-time rule every meal follows | it goes in free time like every meal | disagreement |
+| 14 Nov | An event marked Free in Google sat on his day | Free and busy were read alike | an event marked Free is information | new case |
+| 14 Nov | Hold to talk cut the sentence off at a pause | The phone ends its listening on a pause | what was heard is kept and it listens on | new case |
+| 14 Nov | The coach's voice was silent on the iPhone | Web Audio is muted by the silent switch | the voice plays as media | new case |
+| 14 Nov | The coach could not say what he ate on Monday | The coach saw today only | history.js: 120 days on record and a look_back tool | new case |
+| 14 Nov | The coach said the app only reads heart rate from mountain bike rides | The model misread the grading rule for rides with no power meter | explained; the coach's rules say what is read from which ride | advisor |
+| 14 Nov | "The open back and forth conversation isn't working" | Each turn had to be started by hand, and the page listened to its own voice | one conversation: its own listening, the mic shut while the coach speaks, a pause sends | new case |
+| 14 Nov | Two games back to back: lunch was planned for 5:51p | A main meal displaced past six hours with a gap between the games | packed, eaten at the field between them | new case |
+| 15 Nov | Heart rate sat too low in the player on a Zone 1 ride | ERG held watts; nothing steered by heart rate | the player holds heart rate near 110 | new case |
+| 15 Nov | Pressed Start by accident, in bed, with no way back | Start had no undo | two taps when far from the planned time, and an undo | new case |
+| 15 Nov | A weather grade on a kettlebell workout | Anything on the plan that was not a lift by name was treated as a ride outside | kettlebell, lifts and indoor sessions carry no weather | my mistake |
+| 15 Nov | "Clashes with … pick one" on two games at the same field | The second game's arrive-by time overlapped the first | two events at one venue use their real start | disagreement |
+| 15 Nov | A stale "Recommended ride · yes" banner | A yes stayed open after its ride was gone | a yes is spent when its ride no longer exists | disagreement |
+| 15 Nov | The Next line said "by 6:30a" at 7:23a | It named a time already past | it says "eat … now" | disagreement |
+| 15 Nov | A race he did not want on his race calendar | Claude added Capital Cross Classic from a list it had offered | removed; nothing is added unless he adds it | my mistake |
+| 15 Nov | Upper 1 Friday, Pull Saturday, Upper 2 Sunday: the same workout three days running | Missed sessions were packed into the first open days with no rule between the two upper days | spacing rules; then the week made Monday to Sunday so nothing stacks | disagreement |
+| 15 Nov | Legs on the calendar twice in a week and no Upper 2 | A swap by hand was never checked against the week | the week is checked as it stands (checkWeek) and listed on the Lift page | disagreement |
+| 15 Nov | Macros 57: a breakfast eaten before the plan's clock scored 0 as "over" | During the day the figure due so far was both floor and ceiling | the ceiling is the whole day's figure | disagreement |
+| 15 Nov | Protein over its target lowered the score (258 g scored 34) | Over and under were scored alike on every macro | protein over costs nothing | disagreement |
+
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
 **3 Nov: 2.** 1 disagreement, 1 advisor.
@@ -76,12 +113,37 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **8 Nov: 2.** 2 disagreement.
 **9 Nov: 6.** 2 new case, 2 disagreement, 2 my mistake.
 
-## Found by the Chrome tests (before Harry saw them)
+**10 Nov: 5.** 1 new case, 2 disagreement, 2 my mistake.
+**11 Nov: 2.** 2 new case.
+**12 Nov: 1.** 1 my mistake.
+**13 Nov: 4.** 1 new case, 2 disagreement, 1 my mistake.
+**14 Nov: 13.** 6 new case, 3 disagreement, 3 my mistake, 1 advisor.
+**15 Nov: 11.** 2 new case, 7 disagreement, 2 my mistake.
+
+*10 to 15 Nov were not logged at the time. The rows above were written on 15 Nov from the commits and the conversation, so their count is a floor, and the kind is Claude's reading after the fact.*
+
+## Review, 15 Nov
+
+| | Total | New case | Disagreement | My mistake | Advisor |
+|---|---|---|---|---|---|
+| Week 1 (1 to 7 Nov) | 38 | 17 | 11 | 6 | 4 |
+| Week 2 (8 to 14 Nov) | 33 | | | | |
+| 15 Nov alone | 11 | | | | |
+
+- **The count has not fallen from daily to weekly.** It fell in the middle of week 2 (one to five a day) and rose again on 14 and 15 Nov (13 and 11), when the scheduler (auto-move, drives, clashes) and the lifting week were being changed.
+- **The kind shifted** from new real-world cases to two parts disagreeing and to Claude's own mistakes in new code. Since 10 Nov: 12 new case, 14 disagreement, 9 my mistake, 1 advisor.
+- **The plan was not kept.** The log stopped on 9 Nov; the feature freeze ended in practice that day (about 110 commits by 15 Nov, most of them features Harry asked for); the weekly Chrome run has not run since 1 Nov.
+- **Changed plan, put to Harry on 15 Nov:** the log is written as part of every fix; lifting reads from one Monday-to-Sunday week; the push check covers lifting; next review 29 Nov. A one-week freeze on the scheduler and lifting (fixes only) is proposed and is his call.
+
+## Found before Harry saw them (the Chrome tests, audits, the push check)
 
 | Date | Run | Found | Fixed in |
 |---|---|---|---|
 | 1 Nov | first run | 13 mismatches | `03729b5`, `7d62306` |
 | 1 Nov | re-run | 14 mismatches, 10 earlier fixes confirmed | `cf035e8` |
+| 15 Nov | the lifting audit (a read of the code and the live week) | Pull put 15 minutes after the VO2 by the auto-mover; Legs could land on a hard-ride day (its penalty lost to the new bonus); the count could read "6 of 5"; a planned Upper 2 marked done by a saved Legs; "move my lift" took the ride; Upper 2 at Life Time on a day in New Jersey | `795c1eb`, `b9a4fcf`, and the Monday-to-Sunday commit |
+| 15 Nov | the live check after a push | Ride with GPS read as not connected on the live site (the new code looked for the sign-in in the wrong place) | `c4595ad` |
+| 15 Nov | the push check | The Day page took ten seconds to draw today's meals on a first visit (22 days of schedule asked for before anything was drawn) | today and its neighbours are drawn first |
 
 ## 3 Nov · the VO2 line
 - The VO2 session goal was "8 to 12 min above 152". No ride on record held 152 for more than 18 s (best: Nov 1, max 155), so every VO2 session graded red. Harry set the line at VT2, 139. Tymewear's own VO2max training target is HR 147 and 216 W; the 40/20 "on" blocks at 191 W sit under that.
