@@ -399,3 +399,22 @@ ul.agenda.hsched .ridefuel .rfd{display:block; margin-top:2px}
 #racePage .rc-found .rc-what .hu-chip{white-space:normal} #racePage .rc-facts{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:10px}
 #racePage .rc-facts button,#racePage .rc-facts .btn{margin:0; min-height:40px; font-size:11px; padding:8px 10px; text-decoration:none; display:inline-flex; align-items:center}
 #racePage .rc-fromnote{margin-top:8px; color:var(--muted)}
+
+/* the races to choose from, as a calendar */
+#racePage .rc-calnote{margin:8px 0 2px; color:var(--muted)}
+#racePage .rc-kinds button u,#racePage .rc-day i u{display:inline-block; width:8px; height:8px; border-radius:50%; text-decoration:none; background:var(--muted)}
+#racePage .rc-kinds button u{margin-right:6px; vertical-align:1px}
+#racePage .rc-day i u.k-cx,#racePage .rc-kinds button u.k-cx,#racePage .rc-kchip.k-cx{background:var(--amber)} #racePage .rc-day i u.k-mtb,#racePage .rc-kinds button u.k-mtb,#racePage .rc-kchip.k-mtb{background:var(--green)}
+#racePage .rc-day i u.k-gr,#racePage .rc-kinds button u.k-gr,#racePage .rc-kchip.k-gr{background:var(--carb)} #racePage .rc-day i u.k-road,#racePage .rc-kinds button u.k-road,#racePage .rc-kchip.k-road{background:var(--water)}
+#racePage .rc-day i u.k-gf,#racePage .rc-kinds button u.k-gf,#racePage .rc-kchip.k-gf{background:var(--red)} #racePage .rc-day i u.k-o,#racePage .rc-kinds button u.k-o,#racePage .rc-kchip.k-o{background:var(--muted)}
+#racePage .rc-kchip{color:#000; border-color:transparent}
+#racePage .rc-cal{margin:16px 0 0} #racePage .rc-calttl{display:flex; justify-content:space-between; align-items:baseline; font-family:var(--num); font-weight:700; font-size:22px; text-transform:uppercase; letter-spacing:.3px; margin:0 0 6px}
+#racePage .rc-calttl span{font-family:var(--mono); font-weight:400; font-size:10px; letter-spacing:1.2px; color:var(--muted)}
+#racePage .rc-dow,#racePage .rc-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:3px} #racePage .rc-dow span{font-family:var(--mono); font-size:10px; color:var(--muted); text-align:center; padding:2px 0}
+#racePage .rc-day{min-height:46px; margin:0; padding:4px 0 3px; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; gap:3px; border:1px solid var(--line-soft); background:transparent; color:var(--muted); box-shadow:none; min-width:0; letter-spacing:0}
+#racePage .rc-day b{font-family:var(--mono); font-size:12px; font-weight:400} #racePage .rc-day.blank{border-color:transparent} #racePage .rc-day.gone{opacity:.35} #racePage .rc-day.today b{color:var(--green)}
+#racePage button.rc-day.has{background:var(--card); border-color:var(--line); color:var(--ink); cursor:pointer} #racePage button.rc-day.has b{font-weight:700}
+#racePage .rc-day i{display:flex; flex-wrap:wrap; gap:2px; justify-content:center; align-items:center; font-style:normal; max-width:100%} #racePage .rc-day i s{font-family:var(--mono); font-size:9px; text-decoration:none; color:var(--muted)}
+#racePage button.rc-day.sel{border-color:var(--green); background:var(--green-soft)} #racePage button.rc-day.mine{outline:2px solid var(--ink); outline-offset:-3px}
+#racePage .rc-daypanel{margin:10px 0 0; padding:10px 0 0; border-top:2px solid var(--green)} #racePage .rc-dayttl{display:flex; justify-content:space-between; align-items:baseline; font-weight:600; margin:0 0 8px}
+#racePage .rc-dayttl span{font-family:var(--mono); font-size:11px; color:var(--green)} #racePage .rc-minehere{margin:0 0 8px}

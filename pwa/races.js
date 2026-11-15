@@ -56,7 +56,7 @@
   V.races = async function(){
     view.innerHTML = `<div id="racePage" class="ln-page"><div class="ln-ttl"><h2 class="ln-h">Races</h2></div><div class="card"><div class="small">loading…</div></div></div>`;
     const el = document.getElementById("racePage");
-    let wasNear = false, nearKind = "";
+    let wasNear = false, nearKind = "", nearDay = "";
     const draw = async (keepOpen) => {
       let d; try { d = await bridge("/races"); } catch (e) { el.innerHTML = `<div class="ln-ttl"><h2 class="ln-h">Races</h2></div><div class="card"><div class="small">The race calendar could not be read: ${esc(msgOf(e))}</div></div>`; return; }
       const c = d.clock, n = d.next, byMonth = {};
@@ -73,26 +73,48 @@
         <span class="eyebrow rc-eye">The season</span>
         ${d.upcoming.length ? Object.keys(byMonth).sort().map(m => `<div class="rc-month">${MON[+m.slice(5) - 1]} ${m.slice(0, 4)}</div>${byMonth[m].map(r => row(r, d)).join("")}`).join("")
           : `<div class="card"><div class="small">Nothing on the calendar yet. Pick from the races near you below, add one by hand, or tell the coach: "add the Poolesville Road Race on April 24 as my A race".</div></div>`}
-        <details class="ln-fold rc-near" id="rcNear"${d.upcoming.length ? "" : " open"}><summary>Find races near you</summary><div id="rcFound"><div class="small">Open to read what is open for entry within about three hours of home.</div></div></details>
+        <details class="ln-fold rc-near" id="rcNear"${d.upcoming.length ? "" : " open"}><summary>Races to choose from</summary><div id="rcFound"><div class="small">Open for the calendar of races within reach of home.</div></div></details>
         <details class="ln-fold rc-add"><summary>Add a race by hand</summary>${form(null, d.kinds, d.statuses)}</details>
         ${d.past.length ? `<span class="eyebrow rc-eye">Behind you</span>${d.past.map(r => row(r, d)).join("")}` : ""}
         <details class="why rc-find"><summary>where to find races</summary><div class="small" id="rcSources">${sourcesHTML(d.sources)}</div></details>`;
       // what is open for entry near him (BikeReg, through the bridge): read when the fold is opened, by kind
       const near = document.getElementById("rcNear"); if (wasNear) near.open = true;
+      // Shown as a calendar (Harry, 15 Nov 2026: "Just give me a list of races and I will select from list … Put them
+      // in a calendar style"): each month a grid, a dot on a day for each race (coloured by its kind), his own races
+      // ringed; a tap on a day lists that day's races under the month, each with its Add button.
+      const KCLS = { "cyclocross": "k-cx", "mountain bike": "k-mtb", "gravel": "k-gr", "road race": "k-road", "criterium": "k-road", "time trial": "k-road", "hill climb": "k-road", "gran fondo": "k-gf", "other": "k-o" };
+      const hrs = h => h == null ? "" : h < 1 ? `${Math.round(h * 60)} min` : `${h} h`;
+      const card = e => `<div class="rc-found">
+          <div class="rc-fhead"><span class="rc-what"><b>${esc(e.name)}</b><span class="small">${esc(e.where)}${e.miles != null ? ` · ${e.miles} mi, about ${hrs(e.drive_h)} drive` : ""}</span>
+              <i><span class="hu-chip rc-kchip ${KCLS[e.kind] || "k-o"}">${esc(e.kind)}</span>${e.masters.length ? e.masters.slice(0, 2).map(m => chip(m.name + (m.start ? " · " + clock12(m.start) : ""), "hu-go")).join("") : chip("no masters field listed")}${e.reg_close && e.reg_close >= d.today ? chip("entry closes " + dayWord(e.reg_close), "hu-hold") : e.reg_close ? chip("entry closed", "hu-stop") : ""}</i></span></div>
+          <div class="rc-facts"><a class="btn" href="${attr(e.url)}" target="_blank" rel="noopener">Open on BikeReg</a>${e.on_calendar ? `<span class="small">on your calendar</span>` : `<button class="primary" data-take="${attr(e.id)}">Add to my calendar</button>`}<span class="small" data-tmsg="${attr(e.id)}"></span></div></div>`;
       const loadNear = async kind => { const box = document.getElementById("rcFound"); if (!box) return; nearKind = kind || "";
         box.innerHTML = `<div class="small">reading the race listings…</div>`;
         let f; try { f = await bridge("/races/find" + (kind ? "?kind=" + encodeURIComponent(kind) : "")); } catch (e) { box.innerHTML = `<div class="small">The listings could not be read: ${esc(msgOf(e))}</div>`; return; }
-        const kinds = Object.keys(f.counts || {}), hrs = h => h == null ? "" : h < 1 ? `${Math.round(h * 60)} min` : `${h} h`;
-        box.innerHTML = `<div class="rc-kinds"><button data-kind="" class="${kind ? "" : "on"}">all</button>${kinds.map(k => `<button data-kind="${attr(k)}" class="${kind === k ? "on" : ""}">${esc(k)} · ${f.counts[k]}</button>`).join("")}</div>
+        const kinds = Object.keys(f.counts || {}), byDay = {}, mineDay = {};
+        for (const e of f.events) (byDay[e.date] = byDay[e.date] || []).push(e);
+        for (const r of d.upcoming) if (r.status !== "skipped") (mineDay[r.date] = mineDay[r.date] || []).push(r);
+        const days = Object.keys(byDay).sort();
+        if (!nearDay || !byDay[nearDay]) nearDay = days.find(k => k >= d.today) || days[0] || "";
+        const months = Array.from(new Set(days.concat(Object.keys(mineDay)).filter(k => k >= d.today.slice(0, 8) + "01").map(k => k.slice(0, 7)))).sort().slice(0, 16);
+        const monthHTML = m => { const y = +m.slice(0, 4), mo = +m.slice(5) - 1, lead = (new Date(y, mo, 1).getDay() + 6) % 7, n = new Date(y, mo + 1, 0).getDate(); let cells = "";
+          for (let i = 0; i < lead; i++) cells += `<span class="rc-day blank"></span>`;
+          for (let dd = 1; dd <= n; dd++) { const k = `${m}-${String(dd).padStart(2, "0")}`, ev = byDay[k] || [], mine = mineDay[k] || [];
+            cells += ev.length || mine.length
+              ? `<button class="rc-day has${k === nearDay ? " sel" : ""}${mine.length ? " mine" : ""}${k < d.today ? " gone" : ""}" data-day="${k}" aria-label="${attr(dayWord(k))}: ${ev.length} ${ev.length === 1 ? "race" : "races"}${mine.length ? ", one of yours" : ""}"><b>${dd}</b><i>${ev.slice(0, 4).map(e => `<u class="${KCLS[e.kind] || "k-o"}"></u>`).join("")}${ev.length > 4 ? `<s>+${ev.length - 4}</s>` : ""}</i></button>`
+              : `<span class="rc-day${k < d.today ? " gone" : ""}${k === d.today ? " today" : ""}"><b>${dd}</b></span>`; }
+          const here = nearDay.slice(0, 7) === m ? (byDay[nearDay] || []) : null, mineHere = nearDay.slice(0, 7) === m ? (mineDay[nearDay] || []) : [];
+          return `<div class="rc-cal"><div class="rc-calttl">${MON[mo]} ${y}<span>${days.filter(k => k.slice(0, 7) === m).reduce((a, k) => a + byDay[k].length, 0)} to choose from</span></div>
+            <div class="rc-dow"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div><div class="rc-grid">${cells}</div>
+            ${here ? `<div class="rc-daypanel" id="rcDayPanel"><div class="rc-dayttl">${esc(dOf(nearDay).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" }))}<span>${here.length} ${here.length === 1 ? "race" : "races"}</span></div>
+              ${mineHere.length ? `<div class="small rc-minehere">On your calendar that day: ${mineHere.map(r => esc(r.name)).join(", ")}</div>` : ""}${here.map(card).join("")}</div>` : ""}</div>`; };
+        box.innerHTML = `<div class="small rc-calnote">${f.events.length} ${kind ? esc(kind) + " " : ""}${f.events.length === 1 ? "race" : "races"} within about three and a half hours of home. Tap a day to see its races; add the ones you want.</div>
+          <div class="rc-kinds"><button data-kind="" class="${kind ? "" : "on"}">all</button>${kinds.map(k => `<button data-kind="${attr(k)}" class="${kind === k ? "on" : ""}"><u class="${KCLS[k] || "k-o"}"></u>${esc(k)} · ${f.counts[k]}</button>`).join("")}</div>
           ${f.note ? `<div class="small">${esc(f.note)}</div>` : ""}
-          ${f.events.length ? f.events.slice(0, 60).map(e => `<div class="rc-found">
-              <div class="rc-fhead"><span class="rc-when"><b>${esc(dayWord(e.date))}</b><i>${esc(String(dOf(e.date).getFullYear()))}</i></span>
-                <span class="rc-what"><b>${esc(e.name)}</b><span class="small">${esc(e.where)}${e.miles != null ? ` · ${e.miles} mi, about ${hrs(e.drive_h)} drive` : ""}</span>
-                  <i>${chip(e.kind)}${e.masters.length ? e.masters.slice(0, 2).map(m => chip(m.name + (m.start ? " · " + clock12(m.start) : ""), "hu-go")).join("") : chip("no masters field listed")}${e.reg_close && e.reg_close >= d.today ? chip("entry closes " + dayWord(e.reg_close), "hu-hold") : ""}</i></span></div>
-              <div class="rc-facts"><a class="btn" href="${attr(e.url)}" target="_blank" rel="noopener">Open on BikeReg</a>${e.on_calendar ? `<span class="small">on your calendar</span>` : `<button class="primary" data-take="${attr(e.id)}">Add to my calendar</button>`}<span class="small" data-tmsg="${attr(e.id)}"></span></div></div>`).join("")
-            : `<div class="small">Nothing listed${kind ? " for " + esc(kind) : ""} within reach right now.</div>`}
-          <div class="small rc-fromnote">From BikeReg, read ${esc(new Date(f.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}. Drive times are a rough guide from the distance. Road races for next season appear as promoters open entry, mostly from January.</div>`;
+          ${months.length ? months.map(monthHTML).join("") : `<div class="small">Nothing listed${kind ? " for " + esc(kind) : ""} within reach right now.</div>`}
+          <div class="small rc-fromnote">From BikeReg, read ${esc(new Date(f.at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))}. A ring marks a day you already have a race. Drive times are a rough guide from the distance. Road races for next season appear as promoters open entry, mostly from January.</div>`;
         box.querySelectorAll("[data-kind]").forEach(b => b.onclick = () => loadNear(b.dataset.kind));
+        box.querySelectorAll("[data-day]").forEach(b => b.onclick = async () => { nearDay = b.dataset.day; await loadNear(nearKind); const pn = document.getElementById("rcDayPanel"); if (pn) pn.scrollIntoView({ block: "nearest", behavior: "smooth" }); });
         box.querySelectorAll("[data-take]").forEach(b => b.onclick = async () => { const e = f.events.find(x => x.id === b.dataset.take), m = box.querySelector(`[data-tmsg="${b.dataset.take}"]`); if (!e) return;
           b.disabled = true; m.textContent = "adding…";
           const first = e.masters[0];
