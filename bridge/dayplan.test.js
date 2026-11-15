@@ -179,5 +179,16 @@ ok('the seam between two back-to-back games: a dose wanted mid-game sits there, 
   assert.ok(D.placeDose(m(9, 30), 10, b, 390).min < m(9, 15));
   assert.deepStrictEqual(D.seams(b.slice(0, 2)), []);
 });
+ok('two games back to back at one venue do not clash through the second one\'s arrive-by hour', () => {
+  const plex = 'Maryland SoccerPlex, 18031 Central Park Cir, Boyds, MD 20841';
+  const u18 = { category: 'coaching', summary: 'U18 ECNL vs Pittsburgh Riverhounds', start_min: m(10, 30), end_min: m(12), location: plex, description: 'Arrive by 10:15 AM.' };
+  const u17 = { category: 'coaching', summary: 'Coaching · U17 ECNL vs Baltimore Celtic', start_min: m(12), end_min: m(13, 45), location: plex, description: 'Arrive by 11:00 AM. Kickoff 12:00 PM.' };
+  D.markClashes([u18, u17], { wake: 390, bed: 1350 });
+  assert.ok(!u18.clash && !u17.clash, JSON.stringify([u18.clash, u17.clash]));
+  // at another venue an hour's warm-up inside the first game is still a clash
+  const away = Object.assign({}, u17, { location: 'Anne Chambers Field, Annapolis, MD', clash: undefined }), first = Object.assign({}, u18, { clash: undefined });
+  D.markClashes([first, away], { wake: 390, bed: 1350 });
+  assert.ok(first.clash && away.clash);
+});
 console.log(n + ' passed');
 

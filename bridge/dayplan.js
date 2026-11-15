@@ -125,13 +125,17 @@ function placeDose(t, len, blocks, earliest) {
 // never clash). Each row that should move gets { clash: { with, fix_min } }: the lower in rank moves (a workout
 // before his own block, his own block before anything fixed); two fixed rows both get the mark, no fix.
 // win: { wake, bed } (sleep-window.js) bounds the fix.
+const venueOf = r => String((r && r.location) || '').toLowerCase().split(',')[0].replace(/\s+/g, ' ').trim();
 function markClashes(rows, win) {
   const R = (rows || []).filter(r => r && !r.allDay && r.start_min != null && r.end_min > r.start_min && (FIXED.has(r.category) || MOVABLE.has(r.category)));
   const wake = win && win.wake != null ? win.wake : 390, bed = win && win.bed != null ? win.bed : 1350;
   const effStart = r => { if (r.category === 'coaching') { const a = arriveBy(r.description); if (a != null && a < r.start_min && r.start_min - a <= 180) return a; } return r.start_min; };
   for (let i = 0; i < R.length; i++) for (let j = i + 1; j < R.length; j++) {
     const a = R[i], b = R[j];
-    const as = effStart(a), bs = effStart(b);
+    // two games at one venue, back to back: he is already there for the second, so its "Arrive by" hour is not
+    // time he is missing from the first (15 Nov 2026: U17 at 12:00p "clashes with" U18 at 10:30a, "pick one")
+    const there = a.category === 'coaching' && b.category === 'coaching' && venueOf(a) && venueOf(a) === venueOf(b);
+    const as = there ? a.start_min : effStart(a), bs = there ? b.start_min : effStart(b);
     // over each other, or too close to change between (a 4:15 ride when the drive home ends at 4:14)
     // a drive's edges move a few minutes with the traffic: an overlap of five minutes or less with one is not a clash
     const lap = Math.min(a.end_min, b.end_min) - Math.max(as, bs);
