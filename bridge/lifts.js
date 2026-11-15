@@ -64,6 +64,8 @@ const DESC = {
   'Bowflex seated row': 'The middle back and lats. Sitting facing the rods with the chest up, pull the handles to your ribs and return under control.',
   'Bowflex chest press': 'The chest, shoulders and triceps. Sitting with your back on the pad, press the handles forward until the arms are straight.',
   'Kettlebell seated press': 'The shoulders. Sitting tall, press one bell from the shoulder to overhead and lower it; then the other side.',
+  'Bowflex shoulder press': 'The shoulders. Sitting with your back on the pad and the handles at shoulder height, press them straight up and lower under control.',
+  'Bowflex curl': 'The biceps. Standing or sitting facing the rods with the handles low, curl them to the shoulders with the elbows still at your sides.',
   'Kettlebell curl': 'The biceps. Holding one bell by the horns in both hands, curl it to the chest with the elbows at your sides.',
   'Bulgarian split squat': 'The quads and glutes, one leg at a time, as on the bike. With the back foot on a bench behind you and a dumbbell in each hand, lower straight down until the front thigh is level, then stand.',
   'Barbell hip thrust': 'The glutes, the muscle that drives the pedal down. With the shoulders on a bench and the bar across the hips, push the hips up until the body is level from knee to shoulder, pause, and lower.',
@@ -74,7 +76,7 @@ const DESC = {
   'Kettlebell one-arm row': 'The lats and the middle back, one side at a time. One hand and knee on a bench or the bell-side foot back in a split stance, pull the bell to the hip and lower it slowly.',
   'Half-kneeling kettlebell press': 'The shoulder, with the trunk and hips kept square. On one knee, the bell racked at the shoulder on the kneeling side, press it straight overhead and lower it to the rack.',
   'Dead bug': 'The deep abdominals. On your back with arms and knees up, lower the opposite arm and leg toward the floor while the lower back stays pressed down, then change sides.',
-  'Farmer carry': 'The grip, the shoulders and the whole trunk. A bell in each hand (or one racked at the shoulder), walk tall with short quick steps and the ribs down.',
+  'Rack carry': 'The trunk and the upper back, holding you upright against the bell. The bell rests on the forearm at the shoulder, elbow tucked; walk tall with short quick steps and the ribs down, then change sides.',
   'Suitcase carry': 'The side of the trunk, which stops you tipping. One bell in one hand, walk tall without leaning toward it or away from it; change hands.',
   'Hollow hold': 'The abdominals, held long. On your back with the lower back pressed down, lift the shoulders and the straight legs a little off the floor and hold.',
   'Plank': 'The whole trunk. Forearms and toes on the floor, the body held in one straight line.'
@@ -93,7 +95,7 @@ const TEMPLATES = [
   { key: 'pull', name: 'Pull and calves', short: 'Pull', minutes: 55, order: 2,
     why: 'Back and biceps, calves at the end: deadlift, barbell row, lat pulldown, calf raise.',
     exercises: [
-      ex('Barbell deadlift', 3, 4, 6, 'bar', 185, 'Hips back, bar close, stand tall; reset every rep. At home: two-bell kettlebell deadlift.', 10),
+      ex('Barbell deadlift', 3, 4, 6, 'bar', 185, 'Hips back, bar close, stand tall; reset every rep. At home: kettlebell deadlift, the bell between the feet, slow on the way down.', 10),
       ex('Barbell row', 3, 4, 6, 'bar', 115, 'Pull to the belly, squeeze the blades, no shrug. At home: Bowflex seated row.', 10),
       ex('Lat pulldown', 3, 4, 6, 'cable', 120, 'Chest up, elbows down and back. At home: Bowflex lat pulldown.', 10),
       ex('Standing calf raise', 3, 8, 10, 'cable', 150, 'Machine, or a bell in hand with toes on a step. Pause at the top and the bottom.', 10)
@@ -109,15 +111,15 @@ const TEMPLATES = [
   { key: 'legs', name: 'Legs 1', short: 'Legs 1', minutes: 55, order: 4,
     why: 'The heavy leg day, the book\'s: back squat, leg press, Romanian deadlift, calf raise. Placed two or three days before a hard ride, never the day before one.',
     exercises: [
-      ex('Barbell back squat', 3, 4, 6, 'bar', 155, 'Below parallel, knees out, brace. At home: two-bell kettlebell front squat.', 10),
+      ex('Barbell back squat', 3, 4, 6, 'bar', 155, 'Below parallel, knees out, brace. At home: goblet squat with the kettlebell.', 10),
       ex('Leg press', 3, 6, 8, 'cable', 270, 'Feet shoulder width, knees to the chest, do not lock out. At home: Bulgarian split squat with bells.', 20),
-      ex('Romanian deadlift', 3, 4, 6, 'bar', 135, 'Hinge until the hamstrings pull, no lower; the bar stays on the thighs. At home: two-bell kettlebell RDL.', 10),
+      ex('Romanian deadlift', 3, 4, 6, 'bar', 135, 'Hinge until the hamstrings pull, no lower; the bar stays on the thighs. At home: one-leg kettlebell RDL.', 10),
       ex('Standing calf raise', 3, 8, 10, 'cable', 150, 'Machine, or a bell in hand with toes on a step.', 10)
     ] },
   { key: 'legs-2', name: 'Legs 2', short: 'Legs 2', minutes: 50, order: 5,
     why: 'The second leg day, lighter and one leg at a time: split squat, hip thrust, single-leg press, leg curl. Every set stops a rep or two short of failure, so the legs are ready for the next hard ride. Two or three days before one, never the day before, and two clear days from Legs 1 when the week allows.',
     exercises: [
-      ex('Bulgarian split squat', 3, 6, 8, 'db', 30, 'Each leg; the weight of one dumbbell. Back foot on the bench, front shin near upright. At home: the same with two bells.', 5),
+      ex('Bulgarian split squat', 3, 6, 8, 'db', 30, 'Each leg; the weight of one dumbbell. Back foot on the bench, front shin near upright. At home: the same, the kettlebell held at the chest.', 5),
       ex('Barbell hip thrust', 3, 6, 8, 'bar', 135, 'Shoulders on the bench, bar over the hips, a pause at the top. At home: kettlebell glute bridge.', 10),
       ex('Single-leg leg press', 3, 8, 10, 'cable', 110, 'Each leg, about half of what both legs press. Do not lock out. At home: kettlebell step-up.', 10),
       ex('Seated leg curl', 3, 8, 10, 'cable', 90, 'Slow on the way back. At home: sliding leg curl on the floor.', 10)
@@ -146,41 +148,45 @@ const PUMP = { key: 'pump', name: 'Pump at home', short: 'Pump', minutes: 20, su
   exercises: [
     ex('Bowflex seated row', 3, 10, 15, 'bowflex', 70, 'Close to failure on every set; a minute between.', 5),
     ex('Bowflex chest press', 2, 10, 15, 'bowflex', 70, '', 5),
-    ex('Kettlebell seated press', 2, 10, 15, 'bell', 26, 'One bell, each side.'),
-    ex('Kettlebell curl', 2, 10, 15, 'bell', 18, 'Both hands on the horns.'),
+    // (two kettlebell exercises until 15 Nov 2026, at 26 and 18 lb: he has one bell, 45 lb, too heavy for sets of 15)
+    ex('Bowflex shoulder press', 2, 10, 15, 'bowflex', 50, 'Sitting tall, ribs down.', 5),
+    ex('Bowflex curl', 2, 10, 15, 'bowflex', 40, 'Elbows at your sides, no swing.', 5),
     ex('Plank', 2, 45, 60, 'time', 0, 'Seconds. Hips level, breathe.')
   ] };
 // The Kettlebell Blasts: thirty minutes at home with one bell, extra to the five like the Pump, never one of them.
 // They were calendar notes only until 15 Nov 2026 (Harry: "move the kettlebell blasts to lifting. So when I click on
 // lifting, they're there. And do the same thing with the instructions"): now they are sessions here, each exercise
 // with its description, its target and its sets to log. Effort 6 to 7 out of 10, never to failure.
-const BLAST_CUE = 'Bell: one you can swing for 15 crisp reps with about 3 left in the tank. Effort 6 to 7 out of 10, never to failure: this is extra to the five gym lifts.';
+// He has one kettlebell at home, 45 lb (Harry, 15 Nov 2026: "I think I only have one 45-pound kettlebell at home"): every
+// Blast exercise uses it, a carry is a one-bell carry, and progress is in reps, never in a heavier bell.
+const HOME_BELL = 45;
+const BLAST_CUE = `Bell: the ${HOME_BELL} lb one, for everything. Effort 6 to 7 out of 10, never to failure: this is extra to the five gym lifts.`;
 const BLASTS = [
   { key: 'blast-a', name: 'Kettlebell Blast A', short: 'Blast A', minutes: 30, supplement: true, blast: true, title: 'Swing and Squat',
     why: 'Swing and Squat: twenty minutes on the minute, swings on the odd minutes and goblet squats on the even ones, then a carry and a plank. It works the legs, so not on a leg day, the day before one, or the day before a hard ride. Extra to the five.',
     warmup: 'Warm up, 5 min: halos, 5 each way; prying goblet squat hold, 3 × 20 s; hip hinge with the bell, 10.',
     cue: 'The blast is 20 minutes on the minute: a new set at the top of every minute, swings on the odd minutes, goblet squats on the even ones, and rest for what is left of the minute. ' + BLAST_CUE,
     exercises: [
-      ex('Two-hand kettlebell swing', 10, 10, 15, 'bell', 35, 'Odd minutes. Crisp: stop the set when the snap goes.'),
-      ex('Goblet squat', 10, 5, 8, 'bell', 35, 'Even minutes. Elbows inside the knees at the bottom.'),
+      ex('Two-hand kettlebell swing', 10, 10, 15, 'bell', HOME_BELL, 'Odd minutes. Crisp: stop the set when the snap goes.'),
+      ex('Goblet squat', 10, 6, 10, 'bell', HOME_BELL, 'Even minutes. Elbows inside the knees at the bottom.'),
       ex('Suitcase carry', 2, 30, 40, 'time', 0, 'Seconds each side, about 40 m. The finish, with the plank.'),
       ex('Plank', 2, 45, 60, 'time', 0, 'Seconds. Hips level, breathe.')
     ] },
   { key: 'blast-b', name: 'Kettlebell Blast B', short: 'Blast B', minutes: 30, supplement: true, blast: true, title: 'Press and Carry',
-    why: 'Press and Carry: three rounds of row, press, swing and dead bug, then a carry and a hollow hold. Upper body and trunk, so it fits beside a leg day. Extra to the five.',
+    why: 'Press and Carry: three rounds of row, press, swing and dead bug, then a one-bell carry and a hollow hold. Upper body and trunk, so it fits beside a leg day. Extra to the five.',
     warmup: 'Warm up, 5 min: halos, 5 each way; arm bars, 3 each side; bird dogs, 8 each side.',
     cue: 'The blast is 3 rounds of about 6 minutes, 1 minute of rest between rounds: row, press, swings, dead bug, one after the other. ' + BLAST_CUE,
     exercises: [
-      ex('Kettlebell one-arm row', 3, 8, 10, 'bell', 35, 'Each side.'),
-      ex('Half-kneeling kettlebell press', 3, 6, 8, 'bell', 26, 'Each side. Ribs down, no lean.'),
-      ex('Two-hand kettlebell swing', 3, 10, 15, 'bell', 35, 'Crisp: stop the set when the snap goes.'),
+      ex('Kettlebell one-arm row', 3, 8, 12, 'bell', HOME_BELL, 'Each side.'),
+      ex('Half-kneeling kettlebell press', 3, 3, 6, 'bell', HOME_BELL, 'Each side. Ribs down, no lean. If it will not go up strict, stand and use a little leg drive.'),
+      ex('Two-hand kettlebell swing', 3, 10, 15, 'bell', HOME_BELL, 'Crisp: stop the set when the snap goes.'),
       ex('Dead bug', 3, 30, 40, 'time', 0, 'Seconds. Lower back on the floor the whole time.'),
-      ex('Farmer carry', 2, 30, 40, 'time', 0, 'Seconds each side, about 40 m; or one bell racked. The finish, with the hollow hold.'),
+      ex('Rack carry', 2, 30, 40, 'time', 0, 'Seconds each side, about 40 m, the bell held at the shoulder. The finish, with the hollow hold.'),
       ex('Hollow hold', 3, 20, 30, 'time', 0, 'Seconds.')
     ] }
 ];
 // a Blast runs on the clock, not on long rests: what is left of the minute (A), a breath between exercises (B)
-for (const t of BLASTS) for (const e of t.exercises) e.rest_min = t.key === 'blast-a' ? 0.5 : 0.75;
+for (const t of BLASTS) for (const e of t.exercises) { e.rest_min = t.key === 'blast-a' ? 0.5 : 0.75; if (e.kind === 'bell') e.fixed = true; }
 const ALL = TEMPLATES.concat([PUMP], BLASTS);
 // an extra (the Pump, a Kettlebell Blast): logged and shown, never one of the five and never holding a day against them
 const isExtra = k => k === 'pump' || /^blast-/.test(String(k || ''));
@@ -211,6 +217,13 @@ function target(def, last) {
     const allTop = sets.length >= def.sets && sets.every(s => s.reps >= def.reps_hi);
     if (allTop) return { lb: 0, reps: Math.min(def.reps_hi + (def.kind === 'time' ? 15 : 2), def.reps_hi * 2), why: `every set reached ${def.reps_hi}: add ${def.kind === 'time' ? '15 seconds' : 'two reps'}`, progress: true };
     return { lb: 0, reps: Math.max(def.reps_lo, Math.min(def.reps_hi, minReps + 1)), why: `hold until every set reaches ${def.reps_hi}`, progress: false };
+  }
+  // the one bell he owns (def.fixed): the weight cannot move, so the reps do: one more on the weakest set, and at the
+  // top of the range the work is made harder some other way (a slower lowering, a pause), never a heavier bell
+  if (def.fixed) {
+    const allTop = sets.length >= def.sets && sets.every(s => s.reps >= def.reps_hi);
+    if (allTop) return { lb: def.start_lb, reps: def.reps_hi, why: `every set reached ${def.reps_hi} with the ${def.start_lb} lb bell: the same again with a three-second lowering`, progress: true };
+    return { lb: def.start_lb, reps: Math.max(def.reps_lo, Math.min(def.reps_hi, minReps + 1)), why: `the ${def.start_lb} lb bell; the weakest set did ${minReps}, aim for ${Math.max(def.reps_lo, Math.min(def.reps_hi, minReps + 1))}`, progress: false };
   }
   if (topReps >= def.reps_hi) return { lb: increment(def, lb), reps: def.reps_lo, why: `a set reached ${def.reps_hi} at ${lb} lb: up to ${increment(def, lb)}, back to ${def.reps_lo} reps`, progress: true };
   if (minReps < def.reps_lo && sets.length >= 2) return { lb: decrement(def, lb), reps: def.reps_lo, why: `a set fell to ${minReps} at ${lb} lb: back to ${decrement(def, lb)} and ${def.reps_lo} to ${def.reps_hi} reps`, progress: false, back: true };

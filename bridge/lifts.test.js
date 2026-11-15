@@ -28,7 +28,7 @@ ok('Matthews: a set at the top of the range adds weight (ten on the bar, five on
   assert.strictEqual(db.lb, 55);
   const small = L.target(pushdown, { sets: [{ reps: 8, lb: 50 }, { reps: 7, lb: 50 }, { reps: 6, lb: 50 }] });
   assert.strictEqual(small.lb, 55);
-  const bell = L.target(L.PUMP.exercises[2], { sets: [{ reps: 15, lb: 26 }, { reps: 12, lb: 26 }] });
+  const bell = L.target({ name: 'A kettlebell lift', kind: 'bell', sets: 2, reps_lo: 10, reps_hi: 15, start_lb: 26 }, { sets: [{ reps: 15, lb: 26 }, { reps: 12, lb: 26 }] });   // where there is a next bell to go to
   assert.strictEqual(bell.lb, 35);
   const hold = L.target(chest, { sets: [{ reps: 5, lb: 135 }, { reps: 5, lb: 135 }, { reps: 4, lb: 135 }] });
   assert.strictEqual(hold.lb, 135); assert.strictEqual(hold.reps, 5); assert.strictEqual(hold.progress, false);
@@ -290,9 +290,16 @@ ok('the Kettlebell Blasts are sessions on the Lift page: each exercise described
   assert.strictEqual(L.blastOf('Kettlebell Blast B · home'), 'blast-b'); assert.strictEqual(L.blastOf('Kettlebell Blast A'), 'blast-a'); assert.strictEqual(L.blastOf('Legs 2'), null);
   assert.strictEqual(L.templateOf('Kettlebell Blast B · home'), null, 'a Blast holds no day against the five');
   const notes = L.blastNotes(L.BLASTS[1]);
-  assert.ok(/KETTLEBELL BLAST B · Press and Carry · 30 min/.test(notes) && /Half-kneeling kettlebell press, 3 × 6 to 8/.test(notes) && /never to failure/.test(notes) && /Lift page/.test(notes));
-  assert.strictEqual(L.target(L.BLASTS[1].exercises[0], null).lb, 35);
-  assert.strictEqual(L.target(L.BLASTS[1].exercises[0], { sets: [{ reps: 10, lb: 35 }, { reps: 10, lb: 35 }, { reps: 9, lb: 35 }] }).lb, 44, 'the next bell up');
+  assert.ok(/KETTLEBELL BLAST B · Press and Carry · 30 min/.test(notes) && /Half-kneeling kettlebell press, 3 × 3 to 6/.test(notes) && /the 45 lb one, for everything/.test(notes) && /never to failure/.test(notes) && /Lift page/.test(notes));
+  // one bell at home, 45 lb: every Blast exercise with a bell uses it, and it never moves; the reps do
+  for (const tpl of L.BLASTS) for (const e of tpl.exercises.filter(e => e.kind === 'bell')) { assert.strictEqual(e.start_lb, 45, e.name); assert.strictEqual(e.fixed, true); }
+  assert.ok(!L.BLASTS.some(tpl => tpl.exercises.some(e => /farmer/i.test(e.name))), 'no carry that needs two bells');
+  const row = L.BLASTS[1].exercises[0];
+  assert.strictEqual(L.target(row, null).lb, 45);
+  const next = L.target(row, { sets: [{ reps: 10, lb: 45 }, { reps: 10, lb: 45 }, { reps: 9, lb: 45 }] });
+  assert.strictEqual(next.lb, 45); assert.strictEqual(next.reps, 10);
+  const top = L.target(row, { sets: [{ reps: 12, lb: 45 }, { reps: 12, lb: 45 }, { reps: 12, lb: 45 }] });
+  assert.strictEqual(top.lb, 45, 'never a heavier bell'); assert.ok(/three-second lowering/.test(top.why));
 });
 console.log(n + ' passed');
 
