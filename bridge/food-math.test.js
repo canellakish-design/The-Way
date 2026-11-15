@@ -706,6 +706,12 @@ ok('two games back to back, then a drive and a ride: lunch is packed and eaten b
   const lunch = r.find(m => m.slot === 'lunch');
   assert.strictEqual(lunch.time, '12:00', JSON.stringify(lunch)); assert.ok(lunch.seam);
   assert.ok(/Pack it: eat at the field between .*U18.* and .*U17/.test(lunch.what), lunch.what);
+  // the plan had lunch as the meal after the ride (3:35p): it still comes to the seam, not 5:51p, nine hours after breakfast
+  const late = F.placeSnacks(meals.map(x => x.slot === 'lunch' ? Object.assign({}, x, { time: '15:35' }) : x), { busy, sessions: [{ start: mm(14, 20), end: mm(15, 35), name: 'MTB', kind: 'easy' }], wake: 390, bed: 1350 }).find(x => x.slot === 'lunch');
+  assert.strictEqual(late.time, '12:00', JSON.stringify(late)); assert.ok(late.seam);
+  // ...and when the plan already had it after the evening session (5:51p, a free half hour): the same
+  const planned = F.placeSnacks(meals.map(x => x.slot === 'lunch' ? Object.assign({}, x, { time: '17:51' }) : x), { busy, sessions: [], wake: 390, bed: 1350 }).find(x => x.slot === 'lunch');
+  assert.strictEqual(planned.time, '12:00', JSON.stringify(planned));
   // one game alone has no seam: the meal goes to the nearest free half hour, as before
   const one = F.placeSnacks(meals, { busy: busy.filter(b => !/U18/.test(b.name)), sessions: [], wake: 390, bed: 1350 }).find(m => m.slot === 'lunch');
   assert.ok(!one.seam && one.time !== '12:00', JSON.stringify(one));
