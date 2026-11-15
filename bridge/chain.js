@@ -84,7 +84,7 @@ function verdict(links) {
 const { recoveryState, mean, sd } = require('./recovery');
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 8;   // 8: the weighted fuel mean   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
+const ROW_V = 9;   // 9: protein over its figure costs nothing   // 8: the weighted fuel mean   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
 // Fuel for a day, as how much of what the plan asked for went in: for each ride, the carbs eaten in the four
 // hours before it against the plan's carbs for that window, the carbs taken on the bike against the plan's
 // bottle, and (once a day, on the first ride) the pre-ride supplements due against those taken: beetroot on a
@@ -296,11 +296,11 @@ async function report() {
   tasks.push((async () => { try {
     const d = await getJSON('lifts', { sessions: [] });
     const L = require('./lifts');
-    const wk = (d.sessions || []).filter(x => x.date >= weekFrom && counts(x.date) && x.date <= today && x.template !== 'pump');
+    const wk = (d.sessions || []).filter(x => x.date >= weekFrom && counts(x.date) && x.date <= today && !L.isExtra(x.template));
     const nameOf = k => (L.TEMPLATES.find(t => t.key === k) || {}).short || (L.TEMPLATES.find(t => t.key === k) || {}).name || k;
     // the count is the Lift page's own (lifts.weekCount): the first week judged on the sessions due, a ninth week a deload
     const c = await L.weekCountPlaced(d.sessions || [], today);
-    lift = { sessions: c.sessions, pumps: c.pumps, blasts: c.blasts || 0, target: 5, expected: c.expected, of: c.of, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
+    lift = { sessions: c.sessions, pumps: c.pumps, blasts: c.blasts || 0, target: 5, expected: c.expected, of: c.of, due: c.due, week_from: c.from, word: c.word, first_week: c.first_week, started: c.started, deload: c.deload, week_no: c.week_no,
       today: wk.filter(x => x.date === today).map(x => nameOf(x.template)), week: wk.map(x => ({ date: x.date, name: nameOf(x.template), volume_lb: (x.exercises || []).reduce((a, e) => a + (e.sets || []).reduce((b, q) => b + (q.lb || 0) * (q.reps || 0), 0), 0) })) };
   } catch (e) { /* no lifts yet */ } })());
   await Promise.all(tasks);
@@ -378,12 +378,13 @@ async function report() {
     // the plan's first week is judged against the sessions due since it started, not a full five
     // the box reads "1 of 1 due" in the plan's first week and "3 of 5" after it, the Lift page's own count
     lift: { week: Math.round(Math.min(1, lift.sessions / (lift.of || 5)) * 100),
-      state: lift.deload || (lift.first_week && !lift.of) ? 'none' : stateOf('lift', lift.sessions / (lift.of || 5)),   // nothing due yet: grey, not red
+      // judged on the sessions due by now in this Monday-to-Sunday week (a Monday rest day reads "0 of 5" in grey, not red)
+      state: lift.deload || (lift.first_week && !lift.of) || lift.due === 0 ? 'none' : stateOf('lift', lift.sessions / (lift.due || lift.of || 5)),
       first_week: !!lift.first_week, of: lift.of != null ? lift.of : 5, count_word: lift.word,
       sessions: lift.sessions, pumps: lift.pumps || 0, blasts: lift.blasts || 0, extras: (lift.pumps || 0) + (lift.blasts || 0), target: lift.target, expected: lift.expected, started: lift.started, deload: lift.deload, week_no: lift.week_no,
       today: lift.today.length, planned_ahead: liftsPlanned, planned_today: (() => { const td = planAhead.days.find(d => d.date === today); const l = td && td.lifts[0]; return l ? `${l.name.slice(0, 18)}${l.time ? ' ' + tz.hm12(l.time) : ''}` : null; })(), today_word: `${lift.today.length ? lift.today.join(', ') : (!lift.started ? (liftsPlanned ? `${liftsPlanned} on the calendar` : 'not started') : lift.deload ? 'deload week' : '')}${rxLine('lift') ? (lift.today.length || !lift.started || lift.deload ? ' · ' : '') + rxLine('lift') : ''}` || null, week_list: lift.week, unit: lift.first_week ? `of ${lift.of} due` : `of ${lift.of || 5}`,
       rx: { creatine: rxWeek.creatine, started: creatineStart, days: creatineDays },
-      basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions the plan placed from its first day through today; 80% green, 50% amber` : 'sessions logged on the Lift tab in the last seven days against the plan\'s five: four or five green, three amber, fewer red' },
+      basis: lift.first_week ? `the plan's first week: ${lift.sessions} of the ${lift.expected} sessions the plan placed from its first day through today; 80% green, 50% amber` : `sessions logged on the Lift tab this week (Monday to Sunday) against the plan's five; the colour reads them against the ${lift.due != null ? lift.due : 5} due by now: 80% green, 50% amber` },
     recovery: (() => {
       const todayScore = recToday ? recToday.score : null;
       const dayBand = todayScore == null ? null : todayScore >= 67 ? 'good' : todayScore >= 34 ? 'warn' : 'bad';

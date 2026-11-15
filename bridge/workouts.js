@@ -497,10 +497,11 @@ function liftMatches(w, saved, plannedLifts) {
   if (!saved.length || isRideSport(w)) return false;
   const key = require('./lifts').templateOf(w.name);
   if (key) return saved.some(l => l.key === key);
-  if (require('./food-math').isBlast(w)) return false;
+  // a Kettlebell Blast is done by a Blast saved on the Lift page that day (its own letter, or the only one saved), never by one of the five
+  if (require('./food-math').isBlast(w)) { const b = require('./lifts').blastOf(w.name), blasts = saved.filter(l => /^blast-/.test(l.key)); return blasts.some(l => l.key === b) || blasts.length === 1; }
   const nm = String(w.name || '').toLowerCase();
   if (saved.some(l => l.names.some(n => n && (nm === n || nm.startsWith(n) || n.startsWith(nm))))) return true;
-  return plannedLifts === 1 && saved.some(l => l.key !== 'pump');
+  return plannedLifts === 1 && saved.some(l => !require('./lifts').isExtra(l.key));
 }
 async function calendar(from, to, o) {
   const st = await settings();
@@ -759,7 +760,11 @@ function attach(app) {
 async function restCheck(w, body) {
   if ((body || {}).force) return;
   const rest = (await require('./classes').restDaysBetween(w.date, w.date).catch(() => ({})))[w.date];
-  if (rest) { const e = new Error(`${tz.dayShort(w.date)} is a rest day (${rest}). Pick another day, or send force to place it there anyway.`); e.status = 400; throw e; }
+  if (rest) {
+    // the nearest day that is not one, so the refusal says where it can go (it used to say "send force", which no page can)
+    const near = await require('./classes').restDaysBetween(tz.shiftKey(w.date, -3), tz.shiftKey(w.date, 3)).catch(() => ({})), today = tz.todayKey();
+    const open = [1, -1, 2, -2, 3, -3].map(k => tz.shiftKey(w.date, k)).filter(k => k >= today && !near[k]);
+    const e = new Error(`${tz.dayShort(w.date)} is a rest day (${rest}), so nothing is planned on it.${open.length ? ` The nearest day that is not: ${tz.dayShort(open[0])}${open[1] ? ', or ' + tz.dayShort(open[1]) : ''}.` : ''}`); e.status = 400; e.rest_day = true; e.nearest = open.slice(0, 2); throw e; }
 }
 async function create(body) {
   const st = await settings(); const d = await db();
