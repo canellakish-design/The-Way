@@ -20,6 +20,8 @@ const auth = (req, res) => { if (req.get('x-the-way-app') === '1') return true; 
 // The pages the coach may read: GET routes only, none that sync, sign in or change anything.
 const READABLE = [
   ['/chain', 'the chain: ten links, this week and today, the verdict'],
+  ['/history?from=YYYY-MM-DD&to=YYYY-MM-DD', 'the look back, one compact row a day (45 days at most): every meal eaten with its numbers, the food score and what it missed, each ride with its time, % of plan and the meal before it, lifts, sleep, recovery, naps, weight. The first thing to read for "what did I eat/do on…", for trends and for habits'],
+  ['/history/patterns', 'what the last 60 days say: his best food days (the model to copy), food habits and ride habits with how many days stand behind each, the last 7 days against the 3 weeks before'],
   ['/food/day?date=YYYY-MM-DD', 'one day of food: targets, meal plan, journal entries with grades, hydration, live fuel, sessions'],
   ['/food/today', 'today\'s food (same as food/day for today)'],
   ['/calendar?from=YYYY-MM-DD&to=YYYY-MM-DD', 'planned sessions and Strava rides with compliance, zones, breathing; up to 62 days'],
@@ -50,7 +52,7 @@ const READABLE = [
   ['/race', 'race plans'],
   ['/flags/today', 'today\'s flags']
 ];
-const ALLOWED = /^\/(chain|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today)(\?[\w=&.,:%-]*)?$/;
+const ALLOWED = /^\/(chain|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today)(\?[\w=&.,:%-]*)?$/;
 
 const TOOLS = [
   { name: 'read_site', description: 'Read any page of The Way as JSON, exactly what the site shows. Paths you can read:\n' + READABLE.map(([p, d]) => `${p}: ${d}`).join('\n') + '\nRead several in parallel when the question spans them. Large answers are cut at about 60,000 characters.',

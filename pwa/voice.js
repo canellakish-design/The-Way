@@ -58,7 +58,14 @@ function sheet(){
 }
 
 function status(t){ const el = $("vStatus"); if (el) el.textContent = t || ""; }
-const msgHTML = h => `<div class="vmsg ${h.role}">${(h.imgs || (h.img ? [h.img] : [])).length ? `<div class="vphotos">${(h.imgs || [h.img]).map(s => `<img class="vphoto" src="${s}" alt="a photo you sent">`).join("")}</div>` : ""}${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`;
+const msgHTML = h => `<div class="vmsg ${h.role}">${(h.imgs || (h.img ? [h.img] : [])).length ? `<div class="vphotos">${(h.imgs || [h.img]).map(s => `<img class="vphoto" src="${s}" alt="a photo you sent">`).join("")}</div>` : ""}${h.role === "assistant" && h.actions && h.actions.length ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div>${h.offer && h === history[history.length - 1] ? `<div class="voffer"><button class="primary" data-offer-yes>${esc(h.offer.label || "Yes, change it")}</button><button data-offer-no>No</button></div>` : ""}</div>`;
+// the coach offered a change: Yes sends back exactly what he proposed, and he makes it; No leaves it
+function wireOffer(el){
+  const last = history[history.length - 1]; if (!el || !last || !last.offer) return;
+  const y = el.querySelector("[data-offer-yes]"), n = el.querySelector("[data-offer-no]"), plan = last.offer.plan;
+  if (y) y.onclick = () => { if (window.primeSound) try{ primeSound(); }catch{} last.offer = null; keep(); send("Yes. Do it: " + plan); };
+  if (n) n.onclick = () => { last.offer = null; keep(); drawThread(); status("Left as it is."); setTimeout(() => status(""), 2500); };
+}
 function drawThread(){
   const el = $("vThread"); if (!el) return;
   // the Coach page (14 Nov 2026: "Is there a way to clean this page up?"): the latest exchange under the box, what
@@ -68,6 +75,7 @@ function drawThread(){
     const last = all.slice(Math.max(0, cut)), before = all.slice(0, Math.max(0, cut));
     el.innerHTML = (last.length ? last.map(msgHTML).join("") : `<div class="small ch-hint">Hold the button and talk, or type. The coach answers out loud and can log or change things for you.</div>`)
       + (before.length ? `<details class="why ch-fold vearlier"><summary>earlier · ${before.filter(h => h.role === "user").length}</summary><div class="vthread">${before.map(msgHTML).join("")}</div></details>` : "");
+    wireOffer(el);
     return;
   }
   el.innerHTML = history.slice(-12).map(h => `<div class="vmsg ${h.role}">${h.role === "assistant" && h.actions ? `<ul class="vacts">${h.actions.map(a => `<li>${a.ok ? "✓" : "✗"} ${esc(a.summary)}</li>`).join("")}</ul>` : ""}<div>${esc(h.text)}</div></div>`).join("")
@@ -212,7 +220,7 @@ async function send(text, photo){
   try{
     const coords = await whereAmI();
     const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", images: photos.length ? photos.map(p => ({ image_base64: p.image_base64, media_type: p.media_type })) : undefined, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
-    history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
+    history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question"), offer: r.offer && r.offer.plan ? r.offer : null }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
     if (r.reply && window.Face && Face.caption) Face.caption(r.reply);   // under the face, as it is said

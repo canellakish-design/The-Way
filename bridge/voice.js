@@ -29,9 +29,11 @@ const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 const SUPPS = () => require('./micro-math').TABLE.supplements.map(s => s.key);
 const FIELDS = ['type', 'text', 'meal', 'supplement', 'medicine', 'lb', 'date', 'time', 'new_date', 'library_key', 'name', 'minutes', 'sport', 'sleep_h', 'sleep_score', 'recovery', 'hrv', 'rhr'];
 const SCHEMA = () => ({
-  type: 'object', additionalProperties: false, required: ['actions', 'reply'],
+  type: 'object', additionalProperties: false, required: ['actions', 'reply', 'offer'],
   properties: {
     reply: { type: 'string' },
+    // a change he has not asked for, put to him as a Yes/No: label = the button, plan = exactly what Yes does
+    offer: { type: 'object', additionalProperties: false, required: ['label', 'plan'], properties: { label: { type: 'string' }, plan: { type: 'string' } } },
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
@@ -153,6 +155,8 @@ async function context() {
     const last = lifts.sessions[lifts.sessions.length - 1];
     lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
   }
+  // the look back (history.js): his last fortnight day by day, his best food days, his habits, the trends
+  try { const hist = await race(require('./history').digest(14), 2500, ''); if (hist) lines.push(hist); } catch (e) { /* the day stands without it */ }
   return lines.join('\n');
 }
 
@@ -198,7 +202,20 @@ Fill every field: "" or 0 where it does not apply.
 The reply, spoken aloud, plain and friendly, to him as "you" (never "he" or "his"), no lists, no numbers he did not ask for:
 - For logged things: one short sentence confirming them (under 20 words).
 - For a question: advise. Pick one option and say the one reason that decides it, from the day's numbers (what the next session needs, the calories and macros still due, fuel and water on board, the rules of the day, the weather, the calendar). Under 45 words. If two options are truly equal, say so and pick the simpler one. Never say "it depends" without then deciding. Coffee with whole milk adds about 3 g fat and 40 kcal over skim; a scoop of Tailwind is 25 g carbs (the plan's bottle on a hard day is two scoops, 50 g); a Huel plant protein shake 20 g protein (he takes no whey). Prefer the choice that serves the next session, then the day's deficit.
-- Times in 12-hour form (3:30p, never 15:30).`;
+- Times in 12-hour form (3:30p, never 15:30).
+
+THE LOOK BACK (the block that begins "LOOK BACK" under where the day stands):
+- It is his real record: every meal he logged with its numbers, each day's food score and what it missed, each ride with its time and the meal before it, lifts, sleep, recovery, weight. Answer "what did I eat on Monday", "how did I sleep last week", "when did I last ride well" from it, naming the foods and the numbers. Never say you cannot see a past day that is in it. A look-back answer may run to 70 words.
+- For a day or a stretch that is not in the block, or when he wants more detail (portions, a whole month), call look_back with the dates first, then answer. One call is enough; ask for the span you need. The record is kept 60 days; say so if he asks for further back.
+- Coach from what has worked FOR HIM. When he asks what to eat, how to fix a low food score or how to keep the chain, point first to one of HIS BEST FOOD DAYS and name its meals ("Monday scored 80: eggs, the teriyaki chicken plate, sushi with rice at dinner; repeat that shape tomorrow"), fitted to what tomorrow's training needs. When a food day is going badly, say which of his own good days it differs from and how.
+- HABITS: the FOOD HABITS and RIDE HABITS lines compare groups of his own days, with the count behind each. Use one when it bears on the question, with its count ("your three rides within 90 minutes of eating all hit plan; the two fasted ones did not"). Under 4 days in a group is a hint, not a rule: say "so far". Never invent a pattern that is not in the lines or the days.
+- TRENDS: say the direction with both numbers when he asks how things are going.
+
+OFFERING A CHANGE (the offer field):
+- When his record points to a better time or order for something on his calendar (a ride that goes better earlier, a session too soon after a meal, a hard day after his usual short night), say the finding in one sentence, say exactly what you would change, and end with "Want me to change it?". Do NOT make the change yet: no action for it. Set offer.label to the few words for the button ("Move Tuesday's ride to 10:30a") and offer.plan to the complete change in plain words with dates and times ("Move the VO2 ride on 2026-11-17 from 16:00 to 10:30.").
+- Offer only what your actions can do (workout_change, workout, remove_workout, event_change) and only one change at a time. Meals are placed by the app around the sessions; never offer to move a meal.
+- No offer: offer.label and offer.plan are "".
+- When he says "Yes. Do it: …" he has pressed Yes on your offer: carry out exactly that plan now with actions and confirm what changed in one sentence. "No" to an offer: say fine and leave it.`;
 }
 
 function promptFor(text, ctx, continuing) {
@@ -214,6 +231,8 @@ He said: "${text}"`;
 // what was answered), so "yes, do that" or "the second one" has something to
 // point at. The prompt with the day's context rides on the latest turn only.
 const MAX_PHOTOS = 4;
+const TOOLS = [{ name: 'look_back', description: 'Read his record for a span of past days (today included), one row a day: every meal eaten with its numbers and portions, the food score and what it missed, each ride with its time of day, how close to plan and the meal before it, lifts, sleep, recovery, naps, weight. Use it when he asks about a day or a stretch that is not in the LOOK BACK block, or wants more detail than the block gives. 45 days at most in one call; the record is kept 60 days.',
+  input_schema: { type: 'object', additionalProperties: false, required: ['from', 'to'], properties: { from: { type: 'string', description: 'first day, YYYY-MM-DD' }, to: { type: 'string', description: 'last day, YYYY-MM-DD' } } } }];
 async function understand(text, history, extra, image) {
   const images = (Array.isArray(image) ? image : image ? [image] : []).slice(0, MAX_PHOTOS);
   const key = (process.env.ANTHROPIC_API_KEY || '').trim();
@@ -224,21 +243,37 @@ async function understand(text, history, extra, image) {
   // the API wants the turns to alternate and to start with him
   const turns = []; for (const t of prior) { if (!turns.length && t.role !== 'user') continue; if (turns.length && turns[turns.length - 1].role === t.role) turns[turns.length - 1].content += '\n' + t.content; else turns.push(t); }
   if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-    body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
-      output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-      system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
-      // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
-      messages: turns.concat([{ role: 'user', content: (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0)) }]) })
-  });
-  const j = await r.json();
-  if (j.usage) console.log('voice usage', JSON.stringify(j.usage));
-  if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
-  const block = (j.content || []).find(c => c.type === 'text');
-  if (!block) throw new Error('no answer');
-  return JSON.parse(block.text.replace(/```json|```/g, '').trim());
+  // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
+  const first = (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, (await context()) + (extra ? '\n' + extra : ''), turns.length > 0));
+  let messages = turns.concat([{ role: 'user', content: first }]);
+  // He can look back (history.js): when the question is about days that are not in front of him, he asks for them
+  // with look_back, reads them and then answers. Two looks at most, so a spoken answer never waits long.
+  const t0 = Date.now();
+  for (let round = 0; ; round++) {
+    const more = round < 2 && Date.now() - t0 < 14000;
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
+      body: JSON.stringify({ model: MODEL, max_tokens: 1500, fallbacks: 'default',
+        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
+        system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
+        tools: TOOLS, tool_choice: more ? { type: 'auto' } : { type: 'none' },
+        messages })
+    });
+    const j = await r.json();
+    if (j.usage) console.log('voice usage', JSON.stringify(j.usage));
+    if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
+    const uses = (j.content || []).filter(c => c.type === 'tool_use');
+    if (j.stop_reason === 'tool_use' && uses.length && more) {
+      const results = await Promise.all(uses.map(async u => { let out; try { out = u.name === 'look_back' ? await require('./history').lookBack(u.input || {}) : { error: 'no such tool' }; } catch (e) { out = { error: e.message }; }
+        return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 60000) }; }));
+      messages = messages.concat([{ role: 'assistant', content: j.content }, { role: 'user', content: results }]);
+      continue;
+    }
+    const block = (j.content || []).find(c => c.type === 'text');
+    if (!block) throw new Error('no answer');
+    return JSON.parse(block.text.replace(/```json|```/g, '').trim());
+  }
 }
 
 const words = t => String(t || '').toLowerCase().split(/\W+/).filter(w => w.length > 2 && !/^(the|that|last|one|from|remove|delete|move|change|my|ride|workout|session|event|today|tomorrow|this|and|for|with)$/.test(w));
@@ -430,7 +465,8 @@ function attach(app) {
         try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
       }
-      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length });
+      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length,
+        offer: u.offer && String(u.offer.plan || '').trim() ? { label: String(u.offer.label || 'Yes, change it').slice(0, 60), plan: String(u.offer.plan).slice(0, 400) } : null });
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
