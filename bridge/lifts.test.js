@@ -89,7 +89,8 @@ ok('the week\'s count: one rule for the Day box and the Lift page, "1 of 1 due" 
   const day3 = L.weekCount([s('2026-11-02', 'push')], '2026-11-04');
   assert.strictEqual(day3.of, 3); assert.strictEqual(day3.word, '1 of 3 due');
   const wk2 = L.weekCount([s('2026-11-02', 'push'), s('2026-11-09', 'pull'), s('2026-11-10', 'pump')], '2026-11-10');
-  assert.strictEqual(wk2.first_week, false); assert.strictEqual(wk2.of, 5); assert.strictEqual(wk2.word, '1 of 5');   // Nov 2 has left the seven days assert.strictEqual(wk2.pumps, 1); assert.strictEqual(wk2.week_no, 2);
+  assert.strictEqual(wk2.first_week, false); assert.strictEqual(wk2.of, 5); assert.strictEqual(wk2.word, '1 of 5');   // Nov 2 has left the seven days
+  assert.strictEqual(wk2.pumps, 1); assert.strictEqual(wk2.week_no, 2);
   const none = L.weekCount([], '2026-11-02');
   assert.strictEqual(none.started, false); assert.strictEqual(none.word, '0 of 5');
 });
@@ -151,6 +152,69 @@ ok('legs sit two to three days before the VO2 session and never the day before o
   assert.notStrictEqual(b2['2026-11-18'], 'upper-2', JSON.stringify(b2)); assert.notStrictEqual(b2['2026-11-20'], 'upper-2', JSON.stringify(b2));
   // legs the day before a VO2 is never chosen while any other day is open
   for (const x of L.placeWeek(days)) if (x.lift === 'legs') { const nx = days[days.findIndex(y => y.date === x.date) + 1]; assert.ok(!(nx && nx.ride && nx.ride.hard), x.date); }
+});
+ok('legs on a hard-ride day only when nothing else is open; the deadlift day counts when it is on the calendar or just done', () => {
+  const ride = (name, minutes, tss) => ({ name, minutes, tss, hard: L.HARD.test(name) });
+  // VO2 on Tuesday and Thursday (the week the old rule put Legs on the Tuesday itself: the 60 for a hard day lost to the 70)
+  const days = [
+    { date: '2026-11-16', ride: null, coaching_min: 0, long_coaching: false, rest: 'three classes' },
+    { date: '2026-11-17', ride: ride('VO2 40/20s', 51, 55), coaching_min: 0, long_coaching: false },
+    { date: '2026-11-18', ride: ride('Z1 trainer 75 min', 75, 48), coaching_min: 0, long_coaching: false },
+    { date: '2026-11-19', ride: ride('VO2 4 x 4 min', 60, 62), coaching_min: 0, long_coaching: false },
+    { date: '2026-11-20', ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false },
+    { date: '2026-11-21', ride: ride('Z1 road 150 min', 150, 100), coaching_min: 0, long_coaching: false },
+    { date: '2026-11-22', ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false }
+  ];
+  const w = L.placeWeek(days), legs = w.find(x => x.lift === 'legs');
+  assert.ok(legs && !legs.ride.hard, 'not on a VO2 day: ' + legs.date);
+  assert.notStrictEqual(legs.date, '2026-11-18', 'nor the day before one');
+  // the deadlift day beside it: with days otherwise alike, Legs is not the day after a Pull just done, nor beside one on the calendar
+  const easy = k => ({ date: `2026-12-0${k}`, ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false });
+  const alike = [1, 2, 3, 4, 5].map(easy);
+  assert.strictEqual(L.placeWeek(alike).find(x => x.lift === 'legs').date, '2026-12-01');
+  assert.strictEqual(L.placeWeek(alike, { recent: { pull: '2026-11-30' } }).find(x => x.lift === 'legs').date, '2026-12-02');
+  const held = alike.map((x, i) => i === 0 ? Object.assign({}, x, { locked: 'pull' }) : x);
+  assert.strictEqual(L.placeWeek(held).find(x => x.lift === 'legs').date, '2026-12-03');
+  assert.ok(L.HARD.test('Sweet spot 3 x 12') && L.HARD.test('FTP test') && !L.HARD.test('Zone 1, 90 min') && !L.HARD.test('THE WAY TEST'));
+});
+ok('the week checked as it stands: a session twice, the one left out, legs and deadlifts before a hard ride, the upper days together', () => {
+  const day = (date, lifts, o) => Object.assign({ date, lifts, done_keys: [], ride: null, rest: null }, o || {});
+  const vo2 = { name: 'VO2 40/20s', hard: true };
+  // Harry's week of 15 Nov as the calendar held it: Legs Sunday (swapped in by hand) and Legs again Wednesday, no Upper 2
+  const week = [day('2026-11-15', ['legs']), day('2026-11-16', [], { rest: 'three classes' }), day('2026-11-17', ['push'], { ride: vo2 }), day('2026-11-18', ['legs']),
+    day('2026-11-19', ['upper-1']), day('2026-11-20', ['pull'], { ride: vo2 }), day('2026-11-21', [])];
+  const P = L.checkWeek(week, [{ date: '2026-11-13', template: 'upper-1' }, { date: '2026-11-14', template: 'pull' }]);
+  const kinds = P.map(p => p.kind);
+  assert.ok(P.some(p => p.kind === 'again' && p.key === 'legs' && p.date === '2026-11-18' && /3 days after another Legs/.test(p.text)), JSON.stringify(P));
+  assert.ok(P.some(p => p.kind === 'missing' && /Upper 2 is not in the week/.test(p.text)), JSON.stringify(P));
+  assert.ok(!kinds.includes('legs_before_hard'), 'Wednesday is two days before Friday: fine');
+  // a clean week says nothing
+  const clean = [day('2026-11-16', [], { rest: 'three classes' }), day('2026-11-17', ['push'], { ride: vo2 }), day('2026-11-18', ['legs']), day('2026-11-19', ['upper-1']),
+    day('2026-11-20', ['pull'], { ride: vo2 }), day('2026-11-21', []), day('2026-11-22', ['upper-2'])];
+  assert.deepStrictEqual(L.checkWeek(clean, []), []);
+  // what each rule catches
+  const bad = [day('2026-11-16', ['upper-2'], { rest: 'three classes' }), day('2026-11-17', ['upper-1']), day('2026-11-18', ['pull']), day('2026-11-19', ['legs'], { ride: vo2 }),
+    day('2026-11-20', ['push'], { ride: vo2, close: [] }), day('2026-11-21', []), day('2026-11-22', [])];
+  const B = L.checkWeek(bad, []).map(p => p.kind).sort();
+  assert.deepStrictEqual(B, ['legs_before_hard', 'pull_before_hard', 'rest_day', 'uppers_together']);
+  // a lift already done is not a problem to fix
+  const done = [day('2026-11-18', ['pull'], { done_keys: ['pull'] }), day('2026-11-19', [], { ride: vo2 })];
+  assert.deepStrictEqual(L.checkWeek(done, [{ date: '2026-11-18', template: 'pull' }]).filter(p => p.kind === 'pull_before_hard'), []);
+  // Legs within three hours of the hard ride on its own day
+  const close = L.checkWeek([day('2026-11-20', ['pull'], { ride: vo2, close: [{ key: 'pull', ride: 'VO2 40/20s', gap_min: 15, after: true }] })], []);
+  assert.ok(close.some(p => p.kind === 'close_to_hard' && /15 min after VO2/.test(p.text)));
+});
+ok('the count is of the five, each once: Legs twice and no Upper 2 is four, and it never reads 6 of 5', () => {
+  const s = (date, template) => ({ date, template, exercises: [] });
+  const all = [s('2026-11-02', 'push'), s('2026-11-10', 'push'), s('2026-11-11', 'pull'), s('2026-11-12', 'upper-1'), s('2026-11-13', 'legs'), s('2026-11-15', 'legs'), s('2026-11-16', 'pump')];
+  const c = L.weekCount(all, '2026-11-16');
+  assert.strictEqual(c.sessions, 4); assert.strictEqual(c.repeats, 1); assert.strictEqual(c.pumps, 1); assert.strictEqual(c.word, '4 of 5');
+});
+ok('the two upper days carry their number in their name, and every older name still reads', () => {
+  assert.strictEqual(L.nameOf('upper-1'), 'Upper 1: upper body and core'); assert.strictEqual(L.nameOf('upper-2'), 'Upper 2: upper body and core');
+  assert.strictEqual(L.templateOf('Upper 2: upper body and core'), 'upper-2'); assert.strictEqual(L.templateOf('Upper 1: upper body and core'), 'upper-1');
+  assert.strictEqual(L.templateOf('Upper body and core (Upper 2)'), 'upper-2'); assert.strictEqual(L.templateOf('Upper body and core'), 'upper-1');
+  assert.strictEqual(L.templateOf('Kettlebell Blast B'), null);
 });
 console.log(n + ' passed');
 

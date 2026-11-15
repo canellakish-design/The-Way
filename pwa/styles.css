@@ -361,6 +361,8 @@ details.card summary{font-family:var(--mono); font-size:12px; font-weight:700; l
 .fit{display:inline-block; font-family:var(--mono); font-size:10.5px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
   border:1px solid; padding:2px 7px; margin-left:4px; vertical-align:middle}
 .cue{border-left:3px solid var(--green); padding:6px 10px; margin:10px 0 2px; background:var(--green-soft)}
+.cue.lprob{border-left-color:var(--amber, #C98A1B); background:transparent; border:1px solid var(--line); border-left:3px solid var(--amber, #C98A1B)}
+.cue.lprob ul{margin:6px 0 2px; padding-left:18px} .cue.lprob li{margin:4px 0; font-size:14px}
 ul.rules{margin:10px 0 0 18px}
 ul.rules li{margin:3px 0}
 ul.checks{margin-top:10px}

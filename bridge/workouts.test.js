@@ -196,4 +196,15 @@ ok('Start keeps what it changed so it can be taken back; clearing the start clea
   const back = clean({ time: '15:27', started_at: null }, started, '00:00');
   assert.deepStrictEqual([back.time, back.started_at, back.started_undo], ['15:27', null, null]);
 });
+ok('a planned lift is done only by the same one of the five: Upper 2 is not done by a saved Legs, nor a Kettlebell Blast by any of them', () => {
+  const legs = [{ key: 'legs', names: ['legs', 'legs', 'legs'] }];
+  assert.strictEqual(liftMatches({ name: 'Upper 2: upper body and core', sport: 'WeightTraining' }, legs, 1), false);
+  assert.strictEqual(liftMatches({ name: 'Upper body and core (Upper 2)', sport: 'WeightTraining' }, legs, 1), false);
+  assert.strictEqual(liftMatches({ name: 'Legs', sport: 'WeightTraining' }, legs, 2), true);
+  assert.strictEqual(liftMatches({ name: 'Kettlebell Blast B', sport: 'WeightTraining' }, legs, 1), false);
+  assert.strictEqual(liftMatches({ name: 'Lift', sport: 'WeightTraining' }, legs, 1), true);
+  const up2 = [{ key: 'upper-2', names: ['upper 2', 'upper 2: upper body and core', 'upper-2'] }];
+  assert.strictEqual(liftMatches({ name: 'Upper body and core (Upper 2)', sport: 'WeightTraining' }, up2, 2), true);
+  assert.strictEqual(liftMatches({ name: 'Upper body and core (Upper 1)', sport: 'WeightTraining' }, up2, 2), false);
+});
 console.log(n + ' passed');

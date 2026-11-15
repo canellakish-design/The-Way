@@ -181,9 +181,10 @@ async function contextNow() {
   if (sig && sig.signature) lines.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 116 and under.`);
   // the lifting
   if (lifts && lifts.sessions) {
-    const wk = lifts.sessions.filter(x => x.date >= tz.shiftKey(today, -6));
+    const LF = require('./lifts'), five = LF.TEMPLATES.map(t => t.key), shortOf = k => (LF.TEMPLATES.find(t => t.key === k) || {}).short || k;
+    const wk = lifts.sessions.filter(x => x.date >= tz.shiftKey(today, -6) && five.includes(x.template)), did = [...new Set(wk.map(x => x.template))];
     const last = lifts.sessions[lifts.sessions.length - 1];
-    lines.push(`Lifting: the Matthews five-day plan (push, pull, upper, legs, upper), five sessions a week, legs placed the day before a day off the bike or a long coaching day; ${wk.length} of 5 this week${last ? `, last ${last.template} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
+    lines.push(`Lifting: the Matthews five-day plan (Push, Pull, Upper 1, Legs, Upper 2), each once every seven days. Where they go: Legs two or three days before a hard ride (VO2, threshold, a race) and never the day before one; deadlifts (Pull) not the day before a hard ride; Legs or Pull three hours from a hard ride on the same day; Upper 1 and Upper 2 never back to back. In the last seven days: ${did.length} of the 5 (${did.map(shortOf).join(', ') || 'none'}${five.some(k => !did.includes(k)) ? '; not yet: ' + five.filter(k => !did.includes(k)).map(shortOf).join(', ') : ''})${last ? `, last ${shortOf(last.template)} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Lifting does not count toward fitness (CTL).`);
   }
   // his Ride with GPS routes (routes.js): the library he can ride from, kept six hours
   try { const RT = require('./routes'); lines.push(RT.libraryText(await race(RT.list(), 2500, null))); } catch (e) { /* no routes line */ }
@@ -340,7 +341,14 @@ async function findWorkout(date, text) {
   const d = await getJSON('plan-workouts', { workouts: {} });
   const onDay = Object.values(d.workouts || {}).filter(w => w.date === date).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
   const ws = words(text);
-  return (ws.length ? onDay.find(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))) : null) || onDay[0] || null;
+  const named = ws.length ? onDay.find(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))) : null;
+  if (named) return named;
+  // "my lift", "the weights", "the gym" name no session, but they are not the ride ("move my lift" on a VO2 morning
+  // took the day's first session, the ride): the kind he said, when the day holds one of that kind
+  const isLift = w => /weight|strength/i.test(String(w.sport || '')), t = String(text || '');
+  const liftish = /\b(lift|lifts|lifting|weights?|gym|strength|kettlebell|blast|pump)\b/i.test(t), rideish = /\b(ride|bike|spin|trainer|zwift|vo2|zone)\b/i.test(t);
+  const pool = liftish && !rideish ? onDay.filter(isLift) : rideish && !liftish ? onDay.filter(w => !isLift(w)) : onDay;
+  return pool[0] || onDay[0] || null;
 }
 // The planned ride on a day that his words point at, else the day's first ride (never a lift).
 async function findRide(date, text) {

@@ -31,9 +31,14 @@ const CHANGE = { training: { before: 15, after: 20 } };
 // Two sessions in two places (the lift at Life Time, then the ride in the pain cave at home: where.js) need the walk
 // and the change between them too.
 const PLACE_CHANGE = 15;
+// A heavy lower-body lift (Legs, or Pull with its deadlifts) and a hard ride on one day sit three hours apart, whichever
+// comes first (the 2026 review of strength work for cyclists; 15 Nov 2026: Pull had been put 15 minutes after the VO2).
+const HARD_GAP = 180;
+const lowerLift = r => r.kind === 'lifting' && /^(legs|pull)$/.test(require('./lifts').templateOf(r.summary) || '');
+const hardRide = r => r.kind !== 'lifting' && require('./lifts').HARD.test(String(r.summary || '').replace(/intervals\.?\s*icu/ig, ''));
 function changeover(a, b) {   // minutes needed between a ending and b starting
   if (!a || !b) return 0;
-  if (a.category === 'training' && b.category === 'training') return require('./where').apart(a.place, b.place) ? PLACE_CHANGE : 0;
+  if (a.category === 'training' && b.category === 'training') return (lowerLift(a) && hardRide(b)) || (hardRide(a) && lowerLift(b)) ? HARD_GAP : require('./where').apart(a.place, b.place) ? PLACE_CHANGE : 0;
   if (a.category === b.category) return 0;
   const after = (CHANGE[a.category] || {}).after || 0, before = (CHANGE[b.category] || {}).before || 0;
   return Math.max(after, before);
@@ -198,6 +203,7 @@ function movesFor(days, today, nowMin, workouts) {
       if (soon(e.start_min) || soon(e.clash.fix_min)) continue;            // started, or the fix is already past
       if (e.category === 'training' && e.workout_id) {
         const w = (workouts || {})[e.workout_id]; if (!w || w.location || w.started_at) continue;   // a session he has started is where it is
+        if (hm(e.clash.fix_min) === w.time) continue;                       // already there (two passes at once): not a move
         out.push({ kind: 'workout', id: w.id, date: day.date, name: w.name, from: w.time, to: hm(e.clash.fix_min), why: e.clash.with, tight: !!e.clash.tight });
         break;
       }
