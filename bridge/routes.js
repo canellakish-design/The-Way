@@ -184,12 +184,16 @@ function nearest(points, here) {
   }
   return best;
 }
-const isLoop = pts => pts.length > 3 && distKm(pts[0], pts[pts.length - 1]) <= 0.4;
+// A loop: its ends meet. Ride with GPS also calls a route a loop (or an out and back) when it ends a short way from
+// where it began (a driveway apart, the other side of a car park): those count too, and the gap is closed by road.
+const endsKm = pts => distKm(pts[0], pts[pts.length - 1]);
+const isLoop = (pts, kind) => pts.length > 3 && (endsKm(pts) <= 0.4 || (/^(loop|out_and_back)$/.test(kind || '') && endsKm(pts) <= 2.5));
 // The same route begun at that point (pure). A loop: from there round to there again, the same way round.
 // A one-way route: from there to its end.
-function restart(points, n) {
+function restart(points, n, o) {
   const at = [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], after = points.slice(n.i + 1), same = (a, b) => a[0] === b[0] && a[1] === b[1];
-  let out = isLoop(points) ? [at].concat(after, points.slice(same(points[0], points[points.length - 1]) ? 1 : 0, n.i + 1), [at]) : [at].concat(after);
+  // o.kind: what Ride with GPS calls the route; o.bridge: the road from its end back to its beginning, where they do not meet
+  let out = isLoop(points, o && o.kind) ? [at].concat(after, (o && o.bridge) || [], points.slice(same(points[0], points[points.length - 1]) ? 1 : 0, n.i + 1), [at]) : [at].concat(after);
   out = out.filter((p, i) => !i || !same(p, out[i - 1]));
   return out;
 }
@@ -218,7 +222,7 @@ async function shapesFor(routes, budgetMs, most) {
   if (need.length) {
     const got = await Promise.race([Promise.all(need.map(r => trackOf(r).then(p => ({ r, p })).catch(() => null))), new Promise(res => setTimeout(() => res(null), budgetMs || 8000))]);
     let changed = false;
-    for (const g of got || []) if (g) { shapes[g.r.id] = { u: g.r.updated || null, p: coarse(g.p), loop: isLoop(g.p) }; changed = true; }
+    for (const g of got || []) if (g) { shapes[g.r.id] = { u: g.r.updated || null, p: coarse(g.p) }; changed = true; }
     if (changed) await setJSON(SHAPES_KEY, { shapes, at: Date.now() }).catch(() => {});
   }
   return shapes;
@@ -245,6 +249,13 @@ async function placeOf(p) {
     return { street: street || null, town: town || null, text: [street, town].filter(Boolean).join(', ') || ad.freeformAddress || null };
   } catch (e) { return null; }
 }
+// the road a bicycle takes between two points (the end of a loop back to its beginning); none when the map service does not answer
+async function roadBetween(a, b) {
+  const k = envStr('TOMTOM_API_KEY'); if (!k) return [];
+  try { const r = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/${a[0].toFixed(5)},${a[1].toFixed(5)}:${b[0].toFixed(5)},${b[1].toFixed(5)}/json?key=${encodeURIComponent(k)}&travelMode=bicycle`, { signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return []; const rt = ((await r.json()).routes || [])[0]; if (!rt) return [];
+    return rt.legs.flatMap(l => l.points || []).map(x => [Math.round(x.latitude * 1e5) / 1e5, Math.round(x.longitude * 1e5) / 1e5]).slice(1, -1); } catch (e) { return []; }
+}
 const mapsTo = p => `https://www.google.com/maps/dir/?api=1&destination=${p[0].toFixed(5)},${p[1].toFixed(5)}`;
 const REACH_KM = 16;   // a route passing more than ten miles away is not "in the area"
 
@@ -264,15 +275,15 @@ async function near(coords, o) {
   const type = SPEED[o.type] ? o.type : 'road', wantKm = o.km > 0 ? o.km : o.minutes > 0 ? SPEED[type] * o.minutes / 60 : 0;
   // the routes whose corners reach him, the ones starting nearest first (their outlines are read first)
   const around = L.routes.filter(r => r.box && boxKm(r.box, here) <= reach).sort((a, b) => (a.first ? distKm(here, a.first) : 1e3) - (b.first ? distKm(here, b.first) : 1e3));
-  const shapes = await shapesFor(around, o.budget_ms || 8000);
+  const shapes = await shapesFor(around, o.budget_ms || 8000, 24);
   const rough = around.map(r => { const s = shapes[r.id]; if (!s) return null; const n = nearest(s.p, here); return n && n.km <= reach + 1 ? Object.assign({ r, join_km: n.km }, { km: r.km }) : null; }).filter(Boolean);
   // the exact point for the best few (the outline is good to a few hundred metres)
   const top = rank(rough, wantKm).slice(0, 5), rows = [];
   await Promise.all(top.map(async x => { try {
     const pts = await trackOf(x.r), n = nearest(pts, here); if (!n || n.km > reach) return;
-    const loop = isLoop(pts), left = loop ? x.r.km : r1(lengthKm(restart(pts, n)));
+    const loop = isLoop(pts, x.r.kind), left = loop ? r1((x.r.km || lengthKm(pts)) + (endsKm(pts) > 0.4 ? endsKm(pts) : 0)) : r1(lengthKm(restart(pts, n)));
     rows.push({ id: x.r.id, name: x.r.name, km: left, miles: left != null ? r1(left / 1.60934) : null, gain_ft: x.r.gain_ft, minutes: left ? Math.round(left / SPEED[type] * 60) : null,
-      loop, kind: x.r.kind || (loop ? 'loop' : 'one way'), surface: x.r.surface, unpaved_pct: x.r.unpaved_pct, url: x.r.url,
+      loop, kind: !loop ? 'one way from there to its end' : x.r.kind === 'out_and_back' ? 'out and back' : 'loop', surface: x.r.surface, unpaved_pct: x.r.unpaved_pct, url: x.r.url,
       join_km: r1(n.km), join_miles: r1(n.km / 1.60934), direction: n.km < 0.15 ? null : compass(here, n.at), start: [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], maps: mapsTo(n.at) });
   } catch (e) { /* that one could not be read */ } }));
   const out = rank(rows, wantKm);
@@ -288,7 +299,7 @@ async function startHere(coords, o) {
   if (o.id) row = N.routes.find(x => x.id === String(o.id));
   if (!row && o.name) { const m = match(L.routes, o.name); row = m ? N.routes.find(x => x.id === m.id) : null;
     if (!row && m) {   // a route of his that is not among the nearest five: still his to start from the closest point on it
-      const pts = await trackOf(m), n = nearest(pts, [N.here.lat, N.here.lon]), loop = isLoop(pts), left = loop ? m.km : r1(lengthKm(restart(pts, n))), p = await placeOf(n.at);
+      const pts = await trackOf(m), n = nearest(pts, [N.here.lat, N.here.lon]), loop = isLoop(pts, m.kind), left = loop ? m.km : r1(lengthKm(restart(pts, n))), p = await placeOf(n.at);
       row = { id: m.id, name: m.name, km: left, miles: left != null ? r1(left / 1.60934) : null, gain_ft: m.gain_ft, minutes: left ? Math.round(left / SPEED.road * 60) : null, loop, url: m.url,
         join_km: r1(n.km), join_miles: r1(n.km / 1.60934), direction: n.km < 0.15 ? null : compass([N.here.lat, N.here.lon], n.at), start: [Math.round(n.at[0] * 1e5) / 1e5, Math.round(n.at[1] * 1e5) / 1e5], maps: mapsTo(n.at), place: p ? p.text : null, street: p ? p.street : null }; } }
   if (!row && !o.name && !o.id) row = N.routes[0];
@@ -298,7 +309,9 @@ async function startHere(coords, o) {
   if (o.save) {
     const have = L.routes.find(r => r.name === out.new_name);   // asked twice from the same spot: the copy already made
     if (have) out.saved = { saved: true, route_id: have.id, url: have.url, already: true };
-    else { const track = await trackOf(L.routes.find(x => x.id === row.id)), pts = restart(track, nearest(track, [N.here.lat, N.here.lon]));
+    else { const r = L.routes.find(x => x.id === row.id), track = await trackOf(r), loop = isLoop(track, r.kind);
+      const bridge = loop && endsKm(track) > 0.15 ? await roadBetween(track[track.length - 1], track[0]) : [];
+      const pts = restart(track, nearest(track, [N.here.lat, N.here.lon]), { kind: r.kind, bridge });
       out.saved = await save(gpx(pts, out.new_name), out.new_name, `"${row.name}" begun at ${row.place || 'the point nearest you'}: ${row.loop ? 'the same loop, the same way round, starting and ending there' : 'from there to its end'}. Made by The Way on ${tz.dayShort(tz.todayKey())}. Look it over before riding it.`, o.wait_ms); }
   }
   return out;
@@ -306,7 +319,7 @@ async function startHere(coords, o) {
 // in words, for the coach and for the page
 function hereText(x) {
   const way = x.join_miles < 0.1 ? 'you are on it now' : `${x.join_miles} mi ${x.direction || ''} of you`.replace(/\s+/g, ' ');
-  return `${x.name}: ${x.miles} mi${x.gain_ft != null ? ', ' + x.gain_ft + ' ft' : ''}${x.minutes ? ', about ' + x.minutes + ' min' : ''}${x.loop ? '' : ' (one way from there)'}; start on ${x.place || 'the route'}, ${way}`;
+  return `${x.name}: ${x.miles} mi${x.gain_ft != null ? ', ' + x.gain_ft + ' ft' : ''}${x.minutes ? ', about ' + x.minutes + ' min' : ''}${x.loop ? (x.kind === 'out and back' ? ' out and back' : '') : ' (one way from there)'}; start on ${x.place || 'the route'}, ${way}`;
 }
 
 // The track of a ride he did on a day (the longest outdoor one), as points.
@@ -350,4 +363,4 @@ function attach(app) {
 }
 
 module.exports = { attach, list, match, gpx, corners, loop, save, rideTrack, home, libraryText, wordsOf, BEARING, SPEED,
-  near, startHere, hereText, tick, nearest, restart, isLoop, boxKm, rank, distKm, lengthKm, compass };
+  near, startHere, hereText, tick, nearest, restart, isLoop, boxKm, rank, distKm, lengthKm, compass, endsKm };

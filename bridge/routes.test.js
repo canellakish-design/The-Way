@@ -73,6 +73,18 @@ ok('a one-way route begun at that point runs from there to its end', () => {
   assert.deepStrictEqual(out[out.length - 1], line[line.length - 1]);
   assert.ok(R.lengthKm(out) < R.lengthKm(line) && R.lengthKm(out) > 4, String(R.lengthKm(out)));
 });
+ok('a loop that ends a short way from where it began: still a loop when Ride with GPS calls it one, the gap closed by the road between', () => {
+  const open = sq.slice(0, 78);                                   // stops about 600 m short of home along the bottom
+  assert.ok(R.endsKm(open) > 0.4 && R.endsKm(open) < 1);
+  assert.ok(!R.isLoop(open) && R.isLoop(open, 'loop') && R.isLoop(open, 'out_and_back') && !R.isLoop(open, 'point_to_point'));
+  const nr = R.nearest(open, [39.0181, -76.95]), bridge = [[39.0, -76.9965], [39.0, -76.998]];
+  const out = R.restart(open, nr, { kind: 'loop', bridge });
+  assert.deepStrictEqual(out[0], out[out.length - 1]);
+  const at = out.findIndex(p => p[0] === bridge[0][0] && p[1] === bridge[0][1]);
+  assert.ok(at > 0 && out[at + 1][1] === bridge[1][1] && out[at + 2][0] === open[0][0] && out[at + 2][1] === open[0][1], 'end, the road between, the beginning');
+  assert.ok(Math.abs(R.lengthKm(out) - (R.lengthKm(open) + R.endsKm(open))) < 0.05);
+  assert.ok(!R.isLoop(sq.slice(0, 41), 'loop'), 'ends miles apart are not a loop whatever it is called');
+});
 ok('the corners box of a route: nothing to cover inside it, the gap outside it', () => {
   const box = [39.0, -77.0, 39.04, -76.95];
   assert.strictEqual(R.boxKm(box, [39.02, -76.97]), 0);
@@ -89,5 +101,6 @@ ok('where to go, in a line', () => {
     'Sugarloaf Loop: 31.2 mi, 1900 ft, about 125 min; start on Clopper Rd, Germantown, 1.3 mi north of you');
   assert.ok(/you are on it now/.test(R.hereText({ name: 'A', miles: 10, loop: true, place: 'Main St', join_miles: 0 })));
   assert.ok(/one way from there/.test(R.hereText({ name: 'A', miles: 10, loop: false, place: null, join_miles: 2, direction: 'east' })));
+  assert.ok(/10 mi out and back; start on Main St/.test(R.hereText({ name: 'A', miles: 10, loop: true, kind: 'out and back', place: 'Main St', join_miles: 1, direction: 'east' })));
 });
 console.log(n + ' passed');
