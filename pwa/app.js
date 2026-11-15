@@ -2628,7 +2628,8 @@ V.today = async function(){
     if (isSession(nx)){
       // what to eat before it: the fuelling row or the open meal between now and the start
       const eat = rows.filter(r => (r.feed || (r.meal && !r.meal.logged)) && r.start < nx.start && r.end > nm - 30).pop();
-      tail = eat ? ` · eat ${eat.feed ? eat.title.replace(/^Fuel for [^:]*:\s*/, "") : short(eat.detail) || eat.title} by ${eat.from}` : "";
+      // (the meal's own words begin "Before Legs: …"; here the session is already named, and a time that has gone by is "now")
+      tail = eat ? ` · eat ${eat.feed ? eat.title.replace(/^Fuel for [^:]*:\s*/, "") : (short(eat.detail) || eat.title).replace(/^Before [^:]{1,60}:\s*/i, "")} ${eat.start <= nm ? "now" : "by " + eat.from}` : "";
     } else if (nx.meal || nx.feed){
       tail = ` · ${nx.feed ? nx.title.replace(/^Fuel for [^:]*:\s*/, "") : short(nx.detail)}`;
       const then = rows.find(r => isSession(r) && r.start > nx.start && r.start - nx.start <= 240 && !done(r));
