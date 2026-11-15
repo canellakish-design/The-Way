@@ -288,9 +288,6 @@ async function understand(text, history, extra, image, opt) {
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
       body: JSON.stringify({ model, max_tokens: 1500, fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-        // a spoken answer does not stop to deliberate (measured 14 Nov 2026: the silent reasoning took an answer from under
-        // 3 seconds to 5 or 6); the researched coach is where the long thinking is done
-        ...(opt && opt.think ? {} : { thinking: { type: 'disabled' } }),
         system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
         tools: TOOLS, tool_choice: more ? { type: 'auto' } : { type: 'none' },
         messages })
@@ -501,7 +498,7 @@ function attach(app) {
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
       const ms = {}, tAll = Date.now();
       const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands.' : '')
-        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : ''), images, { ms, model: (req.body || {}).model, think: images.length > 0 || ((req.body || {}).think === true && require('./sandbox').SANDBOX) });
+        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : ''), images, { ms, model: (req.body || {}).model });
       const actions = [];
       if ((u.actions || []).some(a => a.type !== 'question')) await contextFresh();
       for (const a of (u.actions || []).slice(0, 6)) {
