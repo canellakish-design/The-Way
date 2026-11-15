@@ -125,5 +125,32 @@ ok('a session lifted in the six days before the window is not placed again insid
   // without the recent Push, it is placed as before
   assert.strictEqual(L.placeWeek(days).filter(x => x.lift === 'push').length, 1);
 });
+ok('legs sit two to three days before the VO2 session and never the day before one; the two upper days are not back to back', () => {
+  const ride = (name, minutes, tss) => ({ name, minutes, tss, hard: /vo2|40\s*\/\s*20|threshold/i.test(name) });
+  // Harry's week of 16 Nov: Monday a rest day (three classes), VO2 on Tuesday and Friday, the long ride Saturday
+  const days = [
+    { date: '2026-11-16', ride: null, coaching_min: 0, long_coaching: false, rest: 'three classes' },                 // Mon
+    { date: '2026-11-17', ride: ride('VO2 40/20s', 51, 55), coaching_min: 90, long_coaching: false },                // Tue, hard
+    { date: '2026-11-18', ride: ride('Z1 trainer 75 min', 75, 48), coaching_min: 0, long_coaching: false },           // Wed
+    { date: '2026-11-19', ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false },           // Thu
+    { date: '2026-11-20', ride: ride('VO2 40/20s', 51, 55), coaching_min: 0, long_coaching: false },                 // Fri, hard
+    { date: '2026-11-21', ride: ride('Z1 road 150 min', 150, 100), coaching_min: 0, long_coaching: false },           // Sat, biggest
+    { date: '2026-11-22', ride: ride('Z1 trainer 60 min', 60, 40), coaching_min: 0, long_coaching: false }            // Sun
+  ];
+  const w = L.placeWeek(days), by = Object.fromEntries(w.map(x => [x.date, x.lift]));
+  // Wednesday: two days before Friday's VO2, a day after Tuesday's; not Thursday (the day before the VO2)
+  assert.strictEqual(by['2026-11-18'], 'legs', JSON.stringify(by));
+  assert.ok(/two days before VO2 40\/20s/.test(w[2].why), w[2].why);
+  assert.notStrictEqual(by['2026-11-19'], 'pull', 'no deadlifts the day before the VO2');
+  assert.strictEqual(by['2026-11-16'], null, 'the rest day carries nothing');
+  const u1 = w.findIndex(x => x.lift === 'upper-1'), u2 = w.findIndex(x => x.lift === 'upper-2');
+  if (u1 >= 0 && u2 >= 0) assert.ok(Math.abs(u1 - u2) > 1, JSON.stringify(by));
+  // an upper day already on the calendar: the other upper is not put beside it
+  const locked = days.map(x => x.date === '2026-11-19' ? Object.assign({}, x, { locked: 'upper-1' }) : x);
+  const w2 = L.placeWeek(locked), b2 = Object.fromEntries(w2.map(x => [x.date, x.lift]));
+  assert.notStrictEqual(b2['2026-11-18'], 'upper-2', JSON.stringify(b2)); assert.notStrictEqual(b2['2026-11-20'], 'upper-2', JSON.stringify(b2));
+  // legs the day before a VO2 is never chosen while any other day is open
+  for (const x of L.placeWeek(days)) if (x.lift === 'legs') { const nx = days[days.findIndex(y => y.date === x.date) + 1]; assert.ok(!(nx && nx.ride && nx.ride.hard), x.date); }
+});
 console.log(n + ' passed');
 
