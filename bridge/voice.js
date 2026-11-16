@@ -41,7 +41,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'route_here', 'player', 'lift', 'training_model', 'plan_week', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'route_here', 'player', 'lift', 'training_model', 'plan_week', 'remember', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -86,13 +86,28 @@ async function context() {
   // read a moment ago: say so, and give the time now, so "starts in 12 minutes" is never read as the present
   return age < 20 ? c.text : `${c.text}\n(The lines above were read ${age} seconds ago. The time now is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}; count any "in N min" from there.)`;
 }
+// ---- words the coach is given, kept pure so each correction stays a test (coach-rules.test.js) ----
+// a session that is done: what was ridden, never the plan's length read off its name
+function doneWords(s, work) {
+  const ride = /ride/i.test(String((s && s.sport) || ''));
+  return ride && s.minutes && work && !work.compliant ? ` (ridden: ${s.minutes} min; a number in its name is the plan's, not what was ridden)` : s && s.minutes && (ride || /run/i.test(String(s.sport || ''))) ? ` (done, ${s.minutes} min)` : ' (done)';
+}
+function workWords(work) {
+  return work && work.planned_min ? `RIDING TODAY AGAINST THE PLAN: ${work.done_min} of ${work.planned_min} planned minutes ridden${work.pct != null ? `, graded ${work.pct}% by the site` : ''}${work.compliant ? ' (ridden as planned)' : ' (NOT the full plan: never say the planned ride is done in full)'}. ${work.note || ''}`.trim() : null;
+}
+// last night by itself: the chain carries only the week's average
+function nightWords(sleepLast, today) {
+  const h = sleepLast && sleepLast.date === today && sleepLast.hours != null ? sleepLast.hours : null;
+  return h != null ? `LAST NIGHT he slept ${Math.floor(h)} h ${String(Math.round((h % 1) * 60)).padStart(2, '0')} min (the night into today; his line is 7 h).`
+    : 'LAST NIGHT: no reading for last night has reached the site yet (the watch has not synced today, or it was off). If he asks how he slept, say that; the week\'s average is in THE CHAIN.';
+}
 async function contextNow() {
   const today = tz.todayKey(), tomorrow = tz.shiftKey(today, 1);
   const p = tz.parts(new Date());
   const nowMin = p.h * 60 + p.mi;
   const W = require('./workout-math');
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
-  const [day, sched, wx, week, chain, scores, sig, lifts, weigh] = await Promise.all([
+  const [day, sched, wx, week, chain, scores, sig, lifts, weigh, sleepLast, meds, notebook, said, debrief, win] = await Promise.all([
     race(require('./food').dayReport(today), 6000, null),
     race(require('./calendar').scheduleReport({ days: 2 }), 5000, null),
     race(require('./weather').forecastAt(today, Math.max(nowMin, 7 * 60), 8 * 60), 2500, null),
@@ -101,16 +116,29 @@ async function contextNow() {
     getJSON('scores-last', null).catch(() => null),
     race(require('./signature').report(), 2500, null),
     getJSON('lifts', { sessions: [] }).catch(() => ({ sessions: [] })),
-    race(require('./weighin').state(), 2500, null)
+    race(require('./weighin').state(), 2500, null),
+    getJSON('sleep-last', null).catch(() => null),
+    race(require('./meds').today(), 2000, null),
+    getJSON('coach-notebook', { notes: [] }).catch(() => ({ notes: [] })),
+    getJSON('voice-notes', { notes: [] }).catch(() => ({ notes: [] })),
+    getJSON('coach-debrief-last', null).catch(() => null),
+    race(require('./sleep-window').get(), 1500, null)
   ]);
   const lines = [`Today is ${today}, a ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(today + 'T12:00:00Z').getUTCDay()]}; the time is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}.`];
+  // the weight the food maths runs on is a planning figure; what he weighs is his last weigh-in (weighin.weightWords)
+  lines.push(`Planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}. The food maths runs on ${(day && day.target && day.target.kg) || 98} kg (a planning figure, never quoted as his weight).`);
+  try { lines.push(require('./weighin').weightWords(weigh && weigh.all, today, { start_lb: weigh && weigh.start_lb })); } catch (e) { /* no weight line */ }
+  // how his riding week is shaped (planner.js): he sets it, you plan by it
+  try { lines.push(`TRAINING MODEL (he sets it; change it only when he tells you to): ${require('./planner').modelWords(await require('./planner').model())}`); } catch (e) { /* no model line */ }
+  // his sleep window as Setup has it: the earliest a new session is placed is an hour after waking, 7:00a the floor
+  if (win && win.bed_hm && win.wake_hm) lines.push(`SLEEP WINDOW: ${tz.hm12(win.bed_hm)} to ${tz.hm12(win.wake_hm)}. A new session is placed no earlier than ${tz.hm12(win.earliest_workout_hm || '07:30')} (an hour after waking); he may ask for 7:00a; nothing before 7:00a, ever.`);
+  // last night, by itself: the chain below carries only the week's average (the coach had no reading of the night)
+  lines.push(nightWords(sleepLast, today));
+  // a read that did not come back in time is said, never passed over: without it the model answered from old turns
+  if (!day) lines.push('TODAY\'S FOOD, MEALS, SESSIONS AND FUEL COULD NOT BE READ just now (the read ran out of time). Do not state any of today\'s food, meal, session, fuel or water numbers and log nothing that depends on them: say you cannot see the day at this moment and ask him to ask again in a few seconds.');
+  if (!sched) lines.push('The calendar could not be read just now: do not state what is on it today or tomorrow from memory.');
   if (day) {
     const t = day.target, a = day.actual;
-    // the weight the food maths runs on is a planning figure; what he weighs is his last weigh-in (weighin.weightWords)
-    lines.push(`Planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}. The food maths runs on ${t.kg || 98} kg (a planning figure, never quoted as his weight).`);
-    try { lines.push(require('./weighin').weightWords(weigh && weigh.all, today, { start_lb: weigh && weigh.start_lb })); } catch (e) { /* no weight line */ }
-    // how his riding week is shaped (planner.js): he sets it, you plan by it
-    try { lines.push(`TRAINING MODEL (he sets it; change it only when he tells you to): ${require('./planner').modelWords(await require('./planner').model())}`); } catch (e) { /* no model line */ }
     lines.push(`Food day: ${day.fuel_day}. Whole-day target ${t.kcal} kcal, ${t.carbs_g} g carbs, ${t.protein_g} g protein, ${t.fat_g} g fat (${t.deficit ? `a ${Math.abs(t.deficit)} kcal deficit for weight loss` : 'no deficit today: recovery is low, eat to maintenance'}). Eaten so far: ${a.kcal} kcal, ${a.carbs_g} C / ${a.protein_g} P / ${a.fat_g} F in ${a.meals} meal(s). Still to eat today: ${Math.max(0, t.kcal - a.kcal)} kcal, ${Math.max(0, t.carbs_g - a.carbs_g)} C / ${Math.max(0, t.protein_g - a.protein_g)} P / ${Math.max(0, t.fat_g - a.fat_g)} F.`);
     // where each one is done (where.js): the lift at Life Time, a ride outside or, in bad weather, in the pain cave
     const todayEv = ((sched && sched.days) || []).find(d => d.date === today), evOf = s => todayEv && (todayEv.events || []).find(e => e.category === 'training' && e.summary === s.name);
@@ -126,7 +154,10 @@ async function contextNow() {
       return nowMin < st - 5 ? `planned, starts in ${dur(st - nowMin)}` : nowMin <= st + 5 ? 'planned, starts now'
         : nowMin < en ? `planned: it began ${dur(nowMin - st)} ago and runs until ${endHM}; not logged yet, he may be in it`
         : `planned: its time has passed (it was to end at ${endHM}, ${dur(nowMin - en)} ago); not logged yet`; };
-    if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${whereOf(s)}${s.done ? ' (done)' : ` (${whenOf(s)})`}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
+    const doneOf = s => doneWords(s, day.work);
+    if (day.sessions.length) lines.push('TRAINING TODAY, the complete list, there is no other session: ' + day.sessions.map(s => `${s.name}${s.sport ? ` [${s.sport === 'VirtualRide' ? 'trainer ride' : s.sport === 'Run' ? 'run' : s.sport === 'WeightTraining' ? 'lift' : 'ride'}]` : ''}${s.time ? ' at ' + tz.hm12(s.time) : ''}${whereOf(s)}${s.done ? doneOf(s) : ` (${whenOf(s)})`}`).join('; ') + '. Name a session only by this list: never a run when the list says ride, never a time that is not on it.');
+    // how much of the plan was ridden (Harry rode 51 of 90 minutes on 15 Nov 2026 and the line said "Zone 1, 90 min (done)")
+    if (workWords(day.work)) lines.push(workWords(day.work));
     else lines.push('No training today: no ride, no run, no lift. Do not name one.');
     // naps (naps.js): the one offered today after a short night, or the one he took
     { const todayEv2 = ((sched && sched.days) || []).find(d => d.date === today), naps = todayEv2 ? (todayEv2.events || []).filter(e => e.kind === 'nap') : [];
@@ -163,7 +194,7 @@ async function contextNow() {
       const evs = (d.events || []).map(ev => `${ev.from}–${ev.to} ${ev.summary}${ev.workout_id ? ' [workout]' : ''}`);
       if (evs.length) lines.push(`Calendar ${d.date === today ? 'today' : 'tomorrow'}: ${evs.join('; ')}.`);
     }
-    if (typeof sched.recovery === 'string') lines.push(`WHOOP recovery today: ${sched.recovery} (${sched.recovery === 'green' ? 'ready' : sched.recovery === 'yellow' ? 'moderate, keep it easy' : 'low, rest or Zone 1 only'}).`);
+    if (typeof sched.recovery === 'string') lines.push(`Recovery today (from the watch): ${sched.recovery} (${sched.recovery === 'green' ? 'ready' : sched.recovery === 'yellow' ? 'moderate, keep it easy' : 'low, rest or Zone 1 only'}).`);
   }
   if (wx && wx.summary) lines.push(`Weather for riding today: ${wx.summary}.`);
   // the week ahead, as the plan has it
@@ -183,7 +214,7 @@ async function contextNow() {
     lines.push(`THE CHAIN this week: ${[w('sleep', ' h/night'), w('water', '% of target'), w('food', ' avg'), w('micros'), w('lift', '% of plan'), w('work', '% of plan'), w('recovery', '% vs band'), w('weight', ' lb/wk')].join('; ')}. Verdict: ${chain.verdict}${L.recovery && L.recovery.today_word ? ` This morning's recovery: ${L.recovery.today} (${L.recovery.today_word}).` : L.recovery && L.recovery.today != null ? ` This morning's recovery: ${L.recovery.today}.` : ''}`);
   }
   // the signature and zones
-  if (sig && sig.signature) lines.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 116 and under.`);
+  if (sig && sig.signature) lines.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 100 to 116, a floor as well as a ceiling (the site grades a Zone 1 ride by time at 116 and under); on a one-hour trainer ride he holds near 110.`);
   // the lifting
   if (lifts && lifts.sessions) {
     const LF = require('./lifts'), five = LF.TEMPLATES.map(t => t.key), shortOf = k => (LF.TEMPLATES.find(t => t.key === k) || {}).short || k;
@@ -191,6 +222,18 @@ async function contextNow() {
     const last = lifts.sessions[lifts.sessions.length - 1];
     lines.push(`Lifting: five sessions, each once every seven days: Push, Pull, Upper, Legs 1 (heavy: squat, leg press, Romanian deadlift) and Legs 2 (lighter, one leg at a time, short of failure). Two leg days because leg strength is his limiter (his words, 15 Nov 2026) and the research on strength work for cyclists backs two a week while building. Where they go: each leg day two or three days before a hard ride (VO2, threshold, a race) and never the day before one, with two clear days between the two; deadlifts (Pull) not the day before a hard ride; a leg day or Pull three hours from a hard ride on the same day. The lifting week runs Monday to Sunday; a session missed is moved to a day still open or lost with the week, never stacked. This week so far: ${did.length} of the 5 (${did.map(shortOf).join(', ') || 'none'}${five.some(k => !did.includes(k)) ? '; not yet: ' + five.filter(k => !did.includes(k)).map(shortOf).join(', ') : ''})${last ? `, last ${shortOf(last.template)} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Extra to the five, at home: the Pump and the Kettlebell Blasts A (swing and squat) and B (press and carry), each on the Lift page with its exercises. Lifting does not count toward fitness (CTL).`);
   }
+  // supplements and medicines: what is taken and what is still due today (he asked the coach what he had taken; it could not see)
+  if (day) { try { const SP = require('./supps').dueFor(today, day.sessions, day.entries, nowMin, null, win || undefined);
+      lines.push('SUPPLEMENTS today: ' + SP.due.map(x => `${x.name}${x.taken ? ' taken' : x.past ? ' not taken (its ride is done)' : x.time ? ` due ${tz.hm12(x.time)}, not taken yet` : ' due today, not taken yet'}`).join('; ') + '.'); } catch (e) { /* no supplements line */ } }
+  if (meds && meds.due && meds.due.length) lines.push('MEDICINES today: ' + meds.due.map(m => `${m.name} (${tz.hm12(m.time)}): ${m.taken ? 'taken' : 'not taken yet'}`).join('; ') + '.');
+  // the researched coach's debrief of today's ride, which he has read on the Day page: the two coaches agree
+  if (debrief && debrief.date === today && debrief.say) { const ride = String(debrief.answer || '').split(/\n{2,}/).find(p => /^\s*\*\*The ride\*\*/i.test(p)) || '';
+    lines.push(`THE DEBRIEF of today's ride (${debrief.ride_name || 'the ride'}), written by the researched coach and shown on his Day page; agree with it and build on it: ${debrief.say} ${ride.replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 600)}`); }
+  // one notebook for both coaches (coach.js write_note, the remember action here), and what he has told the coach lately
+  { const nb = ((notebook && notebook.notes) || []).slice(-30);
+    if (nb.length) lines.push('THE NOTEBOOK (kept between conversations by you and the researched coach: decisions made with him, what he asked you to remember, patterns, things to check). Coach by it; when a note is out of date say so:\n' + nb.map(n => `- ${n.date || ''} [${n.kind || 'note'}] ${String(n.note || '').slice(0, 300)}`).join('\n'));
+    const lately = ((said && said.notes) || []).filter(n => n.date >= tz.shiftKey(today, -7)).slice(-10);
+    if (lately.length) lines.push('WHAT HE TOLD YOU in the last week (his words, noted): ' + lately.map(n => `${tz.dayShort(n.date)}: "${String(n.text || '').slice(0, 160)}"`).join('; ') + '.'); }
   // his Ride with GPS routes (routes.js): the library he can ride from, kept six hours
   try { const RT = require('./routes'); lines.push(RT.libraryText(await race(RT.list(), 2500, null))); } catch (e) { /* no routes line */ }
   // his race calendar (races.js): what is ahead and the season's clock
@@ -222,7 +265,8 @@ Action types:
 - event: anything else to put on the calendar (a dentist, a meeting, a drive). name = the title, date = YYYY-MM-DD, time = HH:MM or "" for all day, minutes = length (60 if he gave none), text = notes or "".
 - event_change: move or change a calendar event that is not a workout: text = which event in his words, date = the day it is on now, time = new start HH:MM or "", new_date = the day to move it to or "", minutes = new length or 0, name = new title or "".
 - remove: take something back out of today's food journal. text = what to remove ("the salmon", "the water"), or "" for the last thing logged ("undo", "delete that").
-- note: anything about how he feels or slept, text = his words.
+- note: a passing remark about how he feels or slept today, text = his words. You see the last week of them under WHAT HE TOLD YOU.
+- remember: he tells you something to keep for good: about himself, his kit, his constraints, his preferences or how he wants to be coached ("remember that I can't ride before 9 on Thursdays", "I only have one kettlebell", "don't suggest oatmeal, I hate it"). text = the fact as one plain sentence that will still make sense months from now, with the date if it has one. It goes in THE NOTEBOOK, which you and the researched coach both read on every question. Use it also when he corrects you on a standing fact ("I told you, I never ride at Life Time"). Not for a remark about today (that is a note), and not instead of the action that does the thing: a change to how his training week is shaped is a training_model action too.
 - garmin: he wants a planned ride or run put on his Garmin, or taken off it ("send tomorrow's ride to my Garmin", "put this week's rides on the Garmin", "take Thursday's ride off the Garmin"). It goes through intervals.icu, which passes it to the Garmin. date = the day (the first day of a stretch); new_date = the last day when he means several days ("this week": today to six days on), else ""; text = words that name the session, or "" for every ride and run in the day or stretch; name = "off" to take it off, else "". A session already on the Garmin that you change with workout_change is re-sent by itself; do not add a garmin action for that. Lifts are not sent: he logs them on the Lift tab.
 - route: he wants one of HIS ROUTES (the list under where the day stands) to be the route for a planned ride ("ride the Loch Raven loop on Saturday", "use my Annapolis 30 for tomorrow's ride"). name = the route's name as in the list; date = the ride's day; text = words that name the ride, or "". Only a route in the list.
 - new_route: he wants a new route made and saved to his Ride with GPS library. Two kinds. A loop from home for a ride of a given length ("make me a 90 minute road loop", "build a two hour loop heading north"): minutes = the riding time; text = "direction=north|northeast|east|southeast|south|southwest|west|northwest; type=road|gravel|mtb; start=here", leaving out what he did not say (start=here only when he wants the loop from where he is standing now and not from home); name = a name if he gave one, else "". Or a ride he has already done, kept as a route ("save last Saturday's ride as a route called Davidsonville loop"): text = "from=YYYY-MM-DD" (the day of that ride), minutes 0, name = the name he gave. date = the day of a planned ride it should become the route for, else "". The loop is drawn by a map service on roads a bicycle can use: tell him to look it over in Ride with GPS before he rides it. It reaches the Garmin the way his other Ride with GPS routes do.
@@ -263,7 +307,7 @@ THE LOOK BACK (the block that begins "LOOK BACK" under where the day stands):
 - TRENDS and WEEK BY WEEK: when he asks how things are going, or where he is heading, read the weeks in order and say the direction with the numbers at both ends ("food went 52, 61, 70 over three weeks; sleep is flat at six and a half hours"). You may extrapolate: say where the line leads if nothing changes and the one habit of his own that would bend it. Say plainly when the record is too short to tell.
 
 OFFERING A CHANGE (the offer field):
-- An offer comes from what he asked. Unasked, raise a change only for something in the next few hours that is plainly unsafe or wrong, in one sentence after the answer.
+- An offer comes from what he asked. Unasked, you may raise a change in two cases only, one at a time, in one sentence after the answer: something in the next few hours that is plainly unsafe or wrong; or a finding from his own record that bears on what he just asked about or on a session today or tomorrow (the next bullet).
 - When his record points to a better time or order for something on his calendar (a ride that goes better earlier, a session too soon after a meal, a hard day after his usual short night), say the finding in one sentence, say exactly what you would change, and end with "Want me to change it?". Do NOT make the change yet: no action for it. Set offer.label to the few words for the button ("Move Tuesday's ride to 10:30a") and offer.plan to the complete change in plain words with dates and times ("Move the VO2 ride on 2026-11-17 from 16:00 to 10:30.").
 - Offer only what your actions can do (workout_change, workout, remove_workout, event_change) and only one change at a time. Meals are placed by the app around the sessions; never offer to move a meal.
 - No offer: offer.label and offer.plan are "".
@@ -491,6 +535,14 @@ async function run(a, x) {
       await food.removeEntry(hit.id, tz.todayKey());
       return { ok: true, summary: `Removed: ${hit.name}${hit.time ? ' (' + tz.hm12(hit.time) + ')' : ''}.` };
     }
+    case 'remember': {
+      const fact = String(a.text || '').trim().slice(0, 400);
+      if (!fact) return { ok: false, summary: 'Nothing to remember was said.' };
+      const nb = await getJSON('coach-notebook', { notes: [] });
+      nb.notes = (nb.notes || []).concat([{ date: tz.todayKey(), kind: 'he said', note: fact, by: 'quick' }]).slice(-200);
+      await setJSON('coach-notebook', nb);
+      return { ok: true, summary: `Remembered: ${fact}` };
+    }
     case 'note': {
       const d = await getJSON('voice-notes', { notes: [] });
       d.notes.push({ at: new Date().toISOString(), date: tz.todayKey(), text: String(a.text).slice(0, 500) });
@@ -675,4 +727,4 @@ function attach(app) {
 
 // a write somewhere else in the app: the kept read is out of date (not waited on)
 function contextStale() { ctxKept = null; setJSON(CTX_KEY, { at: 0 }).catch(() => {}); }
-module.exports = { attach, understand, run, context, contextStale, promptFor, resized };
+module.exports = { attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords };

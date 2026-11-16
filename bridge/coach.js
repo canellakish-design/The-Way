@@ -19,6 +19,10 @@ const auth = (req, res) => { if (req.get('x-the-way-app') === '1') return true; 
 
 // The pages the coach may read: GET routes only, none that sync, sign in or change anything.
 const READABLE = [
+  ['/planner/model', 'his training model: how a riding week is shaped (base days as one ride or two, the lengths, the VO2 days), in words and as settings. He sets it'],
+  ['/planner/week?from=YYYY-MM-DD', 'that week of riding laid out by the training model around what his calendar holds, day by day, with what it would change. Nothing is written by reading it'],
+  ['/sleep-window', 'his sleep window as Setup has it, and the earliest a session may start'],
+  ['/meds/today', 'his medicines today: which are due and which are taken'],
   ['/chain', 'the chain: ten links, this week and today, the verdict'],
   ['/history?from=YYYY-MM-DD&to=YYYY-MM-DD', 'the look back, one compact row a day (45 days at most): every meal eaten with its numbers, the food score and what it missed, each ride with its time, % of plan and the meal before it, lifts, sleep, recovery, naps, weight. The first thing to read for "what did I eat/do on…", for trends and for habits'],
   ['/history/patterns', 'what his whole record says: every week rolled up (food score, protein, rides, TSS, lifts, sleep, recovery, weight), his best food days (the model to copy), food habits and ride habits with how many days stand behind each, the last 7 days against the 3 weeks before. Read this for trends and for where he is heading'],
@@ -54,7 +58,7 @@ const READABLE = [
   ['/races', 'his race calendar: every race ahead with date, kind, priority (A/B/C), place, distance, climbing, status and link; past races with results; the season clock'],
   ['/flags/today', 'today\'s flags']
 ];
-const ALLOWED = /^\/(chain|routes|races|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today)(\?[\w=&.,:%-]*)?$/;
+const ALLOWED = /^\/(chain|routes|races|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today|planner\/model|planner\/week|meds\/today|sleep-window)(\?[\w=&.,:%-]*)?$/;
 
 const TOOLS = [
   { name: 'read_site', description: 'Read any page of The Way as JSON, exactly what the site shows. Paths you can read:\n' + READABLE.map(([p, d]) => `${p}: ${d}`).join('\n') + '\nRead several in parallel when the question spans them. Large answers are cut at about 60,000 characters.',
@@ -231,6 +235,8 @@ async function runJob(id, who) {
     job.steps = job.steps.filter((x, i, a) => a.indexOf(x) === i);   // the same search said once
     job.status = 'done'; job.finished = new Date().toISOString();
     await save();
+    // the last debrief, for the quick coach's eyes (voice.js): the two coaches say the same thing about a ride
+    if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-last', { date: tz.todayKey(), ride_id: job.ride_id, ride_name: job.ride_name || null, say: job.say, answer: job.answer, at: job.finished }).catch(() => {});
     if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-' + String(job.ride_id).replace(/[^\w-]/g, ''), { job_id: job.id, status: 'done', ride: { id: job.ride_id, name: job.ride_name || null }, say: job.say, answer: job.answer, usage: job.usage || null, at: job.finished }).catch(() => {});
     const th = await getJSON('coach-thread', { turns: [] });
     th.turns = (th.turns || []).concat([{ role: 'user', text: job.kind === 'debrief' ? `Debrief: ${job.ride_name || 'the ride'}` : job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
@@ -295,7 +301,7 @@ function attach(app) {
     const ride = rides.find(r => r.id === rid) || { id: rid, name: String((req.body || {}).name || 'the ride') };
     const graded = (ride.planned || []).map(p => `${p.name}: ${p.band}${p.pct != null ? ` ${p.pct}%` : ''} (${p.basis})`).join('; ');
     const text = `DEBRIEF the ride "${ride.name}" (${tz.todayKey()}${ride.time ? ' ' + tz.hm12(ride.time) : ''}, ride id ${rid}). Read /rides/${rid}/analysis, /calendar?from=${tz.todayKey()}&to=${tz.todayKey()} (the plan it was graded against), /food/today and /fuel/ahead.
-The site's own grade of it, which you repeat as it stands and never contradict: ${graded || 'not graded against a plan'}. The lines the site uses: Zone 1 is heart rate 116 and under; the VO2 line is 139 (VT2); there is no other heart-rate line. Use only numbers from the pages. The ride's fuel prescription is in /food/today under sessions[].rx (grams before, on the bike and within two hours after; a low before means under 20 g on purpose): judge what he ate against it, not against a rule of your own.
+The site's own grade of it, which you repeat as it stands and never contradict: ${graded || 'not graded against a plan'}. The lines the site uses: Zone 1 is heart rate 100 to 116, graded by time at 116 and under; the VO2 line is 139 (VT2); there is no other heart-rate line. Use only numbers from the pages. The ride's fuel prescription is in /food/today under sessions[].rx (grams before, on the bike and within two hours after; a low before means under 20 g on purpose): judge what he ate against it, not against a rule of your own.
 Then answer in exactly this shape:
 SAY: one sentence to him, warm and specific: the one thing he did well, or the one thing to do differently next time. It must agree with the grade above.
 **The ride**: at most three short lines, each a number from the pages (minutes, the zone split against the plan, heart rate against the goal, power). Encouragement where it is earned; one concrete improvement where it is not, said once.
