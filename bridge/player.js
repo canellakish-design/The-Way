@@ -214,7 +214,8 @@ async function ridesBetween(from, to) {
 
 function attach(app) {
   app.get('/player/session/:id', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json(await sessionFor(req.params.id === 'today' ? 'today' : String(req.params.id))); }
+    // with the signature, so the player follows Maximal Power Available and calls a breakthrough as it happens
+    try { const [s, sig] = await Promise.all([sessionFor(req.params.id === 'today' ? 'today' : String(req.params.id)), require('./signature').forRide(4000)]); res.json(Object.assign({}, s, { signature: sig })); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 
   app.post('/player/ride', async (req, res) => { if (!auth(req, res)) return;

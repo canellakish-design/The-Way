@@ -147,7 +147,8 @@ function attach(app) {
   app.post('/garmin/ride', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await receive(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
   app.get('/garmin/session/today', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json(await sessionToday()); } catch (e) { res.status(500).json({ error: e.message }); } });
+    // with the signature (tp, hie_kj, pp), so the field can follow Maximal Power Available and flag a breakthrough
+    try { const [s, sig] = await Promise.all([sessionToday(), require('./signature').forRide(4000)]); res.json(Object.assign({}, s, { signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp } : null })); } catch (e) { res.status(500).json({ error: e.message }); } });
   // the Edge's lap press at a fuel prompt, and the post-ride rating (garmin-extras.js)
   app.post('/garmin/fuel', async (req, res) => { if (!auth(req, res)) return;
     try { res.json(await require('./garmin-extras').logFuel(req.body || {})); } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message }); } });
