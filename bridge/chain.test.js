@@ -141,6 +141,10 @@ ok('fuel: the meal after an easy ride has three hours, and one that lands in the
   assert.ok(a.late && a.ratio > 0.5 && a.ratio <= 1 && /counted at half/.test(a.word), JSON.stringify(a));
   assert.strictEqual(C.fuelChecks(mk('22:40'))[0].parts.find(p => p.kind === 'after').ratio, 0);   // past the tail: it did not serve the ride
 });
+ok('fuel: a ride planned and never ridden is not a fuel check', () => {
+  const s = easy({ done: false });
+  assert.strictEqual(C.fuelChecks({ date: '2026-11-10', sessions: [s], energy: tankOf(s, 100), entries: [{ time: '12:00', carbs_g: 50, kcal: 400 }] }).length, 0);
+});
 ok('fuel: what was not logged is not scored as missed, and is named', () => {
   const s = easy({ minutes: 90, rx: { kind: 'light', before_g: 26, during_g: 45, after_g: 43, after_protein_g: 45 } });
   const none = C.fuelChecks({ sessions: [s], energy: tankOf(s, 50), entries: [] })[0];
