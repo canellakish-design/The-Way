@@ -278,7 +278,7 @@ function attach(app) {
     const real = (day.done || []).filter(r => (W.isRideSport ? W.isRideSport(r) : true) && (r.minutes || 0) >= 5);
     const keep = real.filter(r => !real.some(o => o !== r && String(o.name) === String(r.name) && ((o.minutes || 0) > (r.minutes || 0) || ((o.minutes || 0) === (r.minutes || 0) && String(o.id) > String(r.id)))));
     return keep.map(r => ({ id: String(r.id), name: r.name, time: r.time || null, minutes: r.minutes || null,
-      planned: (day.planned || []).filter(w => w.compliance).map(w => ({ name: w.name, band: w.compliance.band, pct: w.compliance.pct, basis: w.compliance.basis })) }));
+      planned: (day.planned || []).filter(w => w.compliance && !/weight|lift|strength/i.test(String(w.sport || ''))).map(w => ({ name: w.name, band: w.compliance.band, pct: w.compliance.pct, basis: w.compliance.basis })) }));
   };
   app.get('/coach/debrief/today', async (req, res) => { if (!auth(req, res)) return;
     try {
