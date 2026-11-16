@@ -311,7 +311,9 @@ async function understand(text, history, extra, image, opt) {
   // with look_back, reads them and then answers. Two looks at most, so a spoken answer never waits long.
   const t0 = Date.now();
   for (let round = 0; ; round++) {
-    const more = round < 2 && Date.now() - t0 < 14000;
+    // a week laid out is the last look he needs in a turn, and a yes to a plan ("… plan p_abc") needs no look at all:
+    // each look that is not needed is two or three seconds of his waiting
+    const more = round < 2 && Date.now() - t0 < 14000 && !T.planned && !/\bplan p_[a-z0-9]{4,}\b/i.test(String(text || ''));
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
