@@ -43,7 +43,7 @@ async function report() {
   // --- the signature's rides: TP by week, best five minutes by window
   const sig = await getJSON('signature', { rides: {}, scanned: [] });
   const srides = Object.values(sig.rides || {}).filter(r => r && r.mmp && r.date);
-  const tpAt = t => { const sub = srides.filter(r => r.date <= t && r.date > tz.shiftKey(t, -90)); if (sub.length < 3) return null; const f = S.fit(S.pointsOf(sub), { floor: false }); return f ? f.tp : null; };
+  const tpAt = t => { const sub = srides.filter(r => r.date <= t && r.date > tz.shiftKey(t, -90)); if (sub.length < 3) return null; const f = S.fit(S.pointsOf(sub, t), { floor: false }); return f ? f.tp : null; };
   const tpSeries = weekEnds.map(t => ({ date: t, v: tpAt(t) }));
   const tpNow = tpSeries[tpSeries.length - 1].v, tpBefore = tpAt(nowFrom);
   const p5In = (a, b) => { const v = srides.filter(r => r.date > a && r.date <= b).map(r => r.mmp[300] || 0).filter(Boolean); return v.length ? Math.max(...v) : null; };

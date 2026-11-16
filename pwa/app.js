@@ -291,7 +291,7 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", micros:"Micronutrients", races:"Races" };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", power:"Power", micros:"Micronutrients", races:"Races" };
   const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   // one way back: a page with a parent goes to its parent (the title still goes home), the rest to the Day
   if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a><a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
@@ -1232,7 +1232,7 @@ const RING_R = 42, RING_W = 8, RING_C = (2 * Math.PI * 42).toFixed(2);
    and outlined on its field, and the verdict sits in the wide field beside
    Weight. Every field is the button it was: data-ck opens that link's page,
    data-k keeps the old keys (hydration, workouts). */
-const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Water"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"]];
+const CHAIN = [["plan","plan","Plan"],["sleep","sleep","Sleep"],["water","hydration","Water"],["food","food","Macros"],["micros","micros","Micros"],["lift","lift","Lift"],["fuel","fuel","Fuel"],["work","workouts","Ride"],["recovery","recovery","Recovery"],["weight","weight","Weight"],["power","power","Power"]];
 const ARROW = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2.5l6 5.5-6 5.5" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const CROSS = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"/></svg>';
 const WRAP_ARROW = '<svg class="wsvg" viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden="true"><path d="M96 0 V12 H5 V22" fill="none" stroke="currentColor" stroke-width="2.2" vector-effect="non-scaling-stroke"/></svg><svg class="whead" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 5 4-5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -1275,7 +1275,7 @@ function paintChain(c){
   if (!c || !c.links) return;
   // short units, so each fits beside its number at 390 px. Plan is the planning score (how much of the seven
   // days ahead is placed), not the calendar's "done of plan"; Lift reads as the Lift page counts ("1 of 1 due").
-  const UNIT = { plan: "placed", fuel: "fuelled", sleep: "h", food: "kcal", micros: "avg", water: "bal", work: "done", lift: "of 5", recovery: "band", weight: "lb/wk" };
+  const UNIT = { plan: "placed", fuel: "fuelled", sleep: "h", food: "kcal", micros: "avg", water: "bal", work: "done", lift: "of 5", recovery: "band", weight: "lb/wk", power: "W FTP" };
   const TC = { good: "var(--green)", warn: "var(--amber)", bad: "var(--red)" };   // toneC lives inside the day view; this runs outside it
   for (const [ck, k, label] of CHAIN){
     let L = c.links[ck]; const el = document.querySelector(`.clink[data-ck="${ck}"]`); if (!L || !el) continue;
@@ -1338,6 +1338,8 @@ function macrosFromDay(day){
 }
 // what today's cell says for each link: the number, a word, and a tone of its own
 function todayCell(ck, L){
+  // Power: watts per kilo under the FTP, and the word (the change in four weeks, or the last breakthrough)
+  if (ck === "power") return { num: L.today == null ? "—" : `${L.today}`, word: L.today == null ? (L.today_word || "") : `W/kg · ${L.today_word || ""}`, tone: L.state || "none" };
   const band = (v, good, warn) => v == null ? "none" : v >= good ? "good" : v >= warn ? "warn" : "bad";
   // one headline per box (the week's %); fuel now is a word on the today line, not a second number
   if (ck === "fuel") return L.today != null ? { num: `${L.today}%`, word: L.today_word || "today", tone: L.today_tone || "none" } : { num: "—", word: L.today_word || "no ride yet", tone: "none" };
@@ -2449,7 +2451,7 @@ V.today = async function(){
     };
   };
   // a box of the chain, or its today bar, opens the page for that link; the fitness line still opens its detail here
-  const LINK_PAGE = { plan:"#calendar", sleep:"#sleep", water:"#hydration", food:"#food", micros:"#micros", lift:"#lift", fuel:"#fuel", work:"#ride", recovery:"#recovery", weight:"#weight" };
+  const LINK_PAGE = { plan:"#calendar", sleep:"#sleep", water:"#hydration", food:"#food", micros:"#micros", lift:"#lift", fuel:"#fuel", work:"#ride", recovery:"#recovery", weight:"#weight", power:"#power" };
   view.querySelectorAll(".score").forEach(b => b.onclick = ()=>{
     if (b.dataset.ck && LINK_PAGE[b.dataset.ck]){ location.hash = LINK_PAGE[b.dataset.ck]; return; }
     openScore = openScore === b.dataset.k ? null : b.dataset.k;
