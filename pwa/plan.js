@@ -186,7 +186,8 @@ V.calendar = async function(){
     const dc = d.compliance;
     const verdict = !dc ? "" : dc.band === "extra" ? `<span class="hu-chip hu-water">Unplanned</span>`
       : `<span class="hu-chip ${TONE[dc.band]||"hu-dim"}">${dc.pct}% · ${dc.band==="green"?"done":dc.over?"over":dc.band==="yellow"?"partly":d.done.length?"short":"missed"}</span>`;
-    const sub = [d.totals.planned_min?hm(d.totals.planned_min)+" planned":"", d.totals.done_min?hm(d.totals.done_min)+" done":""].filter(Boolean).join(" · ");
+    // riding planned and done; the lifting beside it, never inside it
+    const sub = [d.totals.planned_min?hm(d.totals.planned_min)+" riding planned":"", d.totals.done_min?hm(d.totals.done_min)+" done":"", d.totals.lift_planned_min?`lifting ${hm(d.totals.lift_planned_min)}${d.totals.lift_done_min >= d.totals.lift_planned_min ? " done" : d.totals.lift_done_min ? ", " + hm(d.totals.lift_done_min) + " done" : ""}`:""].filter(Boolean).join(" · ");
     html += `<div class="card pday hu-stripe ${dc?STRIPE[dc.band]||"":""}${isToday?" today":""}${past?" past":""}${dc&&dc.band!=="extra"?" graded "+dc.band:""}" id="pday-${d.date}">
       <div class="pdayhead"><h4>${esc(dayLabel(d.date))}${isToday?` <span class="ptoday">today</span>`:""}</h4>${verdict}</div>
       ${sub?`<div class="pdaysub">${sub}</div>`:""}

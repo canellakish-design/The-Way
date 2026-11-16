@@ -207,4 +207,14 @@ ok('a planned lift is done only by the same one of the five: Upper 2 is not done
   assert.strictEqual(liftMatches({ name: 'Upper body and core (Upper 2)', sport: 'WeightTraining' }, up2, 2), true);
   assert.strictEqual(liftMatches({ name: 'Upper body and core (Upper 1)', sport: 'WeightTraining' }, up2, 2), false);
 });
+ok('the day\'s percent is the riding\'s: a lift logged is not a ride done, and a day with only a lift has no percent', () => {
+  const lift = { name: 'Legs', sport: 'WeightTraining', compliance: { pct: 100, band: 'green' } };
+  const ride = { name: 'Zone 1, 90 min', sport: 'VirtualRide', compliance: { pct: 57, band: 'yellow' } };
+  // Sunday 15 Nov: it read 79% (the mean of the lift's 100 and the ride's 57)
+  const d = dayCompliance([lift, ride], { planned_min: 90, done_min: 51 }, false, 1);
+  assert.strictEqual(d.pct, 57); assert.strictEqual(d.band, 'yellow'); assert.ok(/rides/.test(d.basis));
+  assert.strictEqual(dayCompliance([lift], { planned_min: 0, done_min: 0 }, true, 0), null);
+  // a run logged by hand still counts with the riding
+  assert.strictEqual(dayCompliance([{ name: 'Treadmill', sport: 'Run', compliance: { pct: 100, band: 'green' } }], { planned_min: 40 }, true, 0).pct, 100);
+});
 console.log(n + ' passed');

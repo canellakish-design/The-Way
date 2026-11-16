@@ -459,11 +459,15 @@ function gradeDay(planned, rides, dayOver, nowMin) {
     return gradeOne(w, mine[i]);
   });
 }
+// The day's percent is about the riding (and a run): a lift is not a ride, and lifting has its own count (Harry, 15
+// Nov 2026: a day read 79% because Legs, logged, counted as a session done at 100% beside a ride that was 57% of
+// its plan; "did you fix the weight training appearing like a ride"). A day with only a lift on it has no percent.
+const isLiftSport = w => /weight|lift|strength/i.test(String((w && (w.sport || w.type)) || ''));
 function dayCompliance(planned, totals, dayOver, rideCount) {
-  const graded = planned.filter(w => w.compliance);
+  const graded = planned.filter(w => w.compliance && !isLiftSport(w));
   if (graded.length) {
     const pct = Math.round(graded.reduce((s, w) => s + w.compliance.pct, 0) / graded.length);
-    return { pct, band: bandOf(pct), over: pct > 120, basis: 'planned sessions against the day\'s rides' };
+    return { pct, band: bandOf(pct), over: pct > 120, basis: 'planned rides against the day\'s rides' };
   }
   if (!totals.planned_min) return rideCount ? { pct: null, band: 'extra', basis: 'ridden with nothing planned' } : null;
   // The plan that day lives in intervals.icu: grade the day's totals instead.
@@ -542,17 +546,20 @@ async function calendar(from, to, o) {
         : pastNow(w, today) && (!(ridesByDate[k] || []).length || !isRideSport(w)) ? markLogged(w) : w);
     const i = icuR.events.filter(e => e.date === k);
     const done = doneR.rides.filter(r => r.date === k);
-    const logged = p.filter(w => w.logged);
-    const plannedMin = Math.round(p.reduce((s, w) => s + w.metrics.duration_s, 0) / 60) + i.reduce((s, e) => s + (e.minutes || 0), 0);
-    const doneMin = done.reduce((s, r) => s + r.minutes, 0) + Math.round(logged.reduce((s, w) => s + w.metrics.duration_s, 0) / 60);
+    // the day's minutes and load are the riding's (and a run's); the lifting is counted beside them, never in them
+    const rideP = p.filter(w => !isLiftSport(w)), liftP = p.filter(isLiftSport), iRide = i.filter(e => !isLiftSport(e)), doneRide = done.filter(r => !isLiftSport(r));
+    const logged = rideP.filter(w => w.logged), mins = ws => Math.round(ws.reduce((s, w) => s + w.metrics.duration_s, 0) / 60);
+    const plannedMin = mins(rideP) + iRide.reduce((s, e) => s + (e.minutes || 0), 0);
+    const doneMin = doneRide.reduce((s, r) => s + r.minutes, 0) + mins(logged);
     const totals = { planned_min: plannedMin, done_min: doneMin,
-      planned_tss: p.reduce((s, w) => s + w.metrics.tss, 0) + i.reduce((s, e) => s + (e.tss || 0), 0),
-      done_tss: done.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0) };
+      planned_tss: rideP.reduce((s, w) => s + w.metrics.tss, 0) + iRide.reduce((s, e) => s + (e.tss || 0), 0),
+      done_tss: doneRide.reduce((s, r) => s + (r.tss || 0), 0) + logged.reduce((s, w) => s + w.metrics.tss, 0),
+      lift_planned_min: mins(liftP), lift_done_min: mins(liftP.filter(w => w.logged)) };
     // Once the day has a ride (or the day is over), each planned session is
     // graded against what Strava recorded.
-    const graded = (k < today || done.length) ? gradeDay(p, done, k < today, (() => { const t = tz.parts(new Date()); return t.h * 60 + t.mi; })()) : p;
+    const graded = (k < today || doneRide.length) ? gradeDay(p, doneRide, k < today, (() => { const t = tz.parts(new Date()); return t.h * 60 + t.mi; })()) : p;
     days.push({ date: k, planned: graded, intervals: i, done,
-      totals, compliance: dayCompliance(graded, totals, k < today, done.length) });
+      totals, compliance: dayCompliance(graded, totals, k < today, doneRide.length) });
     if (days.length > 62) break;
   }
   // sleep first (sleep-window.js): a session still to come that starts under an hour after waking, or ends
