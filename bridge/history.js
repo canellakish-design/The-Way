@@ -114,7 +114,7 @@ function patterns(rows, today) {
   const end = today || tz.todayKey(), wk = all.filter(r => r.date >= tz.shiftKey(end, -7)), prior = all.filter(r => r.date < tz.shiftKey(end, -7) && r.date >= tz.shiftKey(end, -28));
   const tr = (label, f, unit, dec) => { const a = avg(wk.map(f)), b = avg(prior.map(f)); return a == null && b == null ? null : { label, last7: a == null ? null : (dec ? r1(a) : Math.round(a)), before: b == null ? null : (dec ? r1(b) : Math.round(b)), unit }; };
   const mins = rs => rs.reduce((a, r) => a + r.done.reduce((x, d) => x + (d.minutes || 0), 0), 0);
-  const trends = [tr('food score', r => r.food ? r.food.score : null, '', 0), tr('protein', r => r.food ? r.food.protein : null, 'g a day', 0), tr('sleep', r => r.sleep_h, 'h a night', 1), tr('recovery', r => r.recovery, '', 0), tr('weight', r => r.lb, 'lb', 1)].filter(Boolean);
+  const trends = [tr('food score', r => r.food ? r.food.score : null, '', 0), tr('protein', r => r.food ? r.food.protein : null, 'g a day', 0), tr('sleep', r => r.sleep_h, 'h a night', 1), tr('recovery', r => r.recovery, '', 0), tr('weight (the average of the weigh-ins, not his weight today)', r => r.lb, 'lb', 1)].filter(Boolean);
   trends.push({ label: 'riding', last7: mins(wk), before: prior.length ? Math.round(mins(prior) / Math.max(1, prior.length / 7)) : null, unit: 'min a week' });
   return { days: all.length, days_with_food: fed.length, from: all.length ? all[0].date : null, weeks: weeks(all, today), best_food_days: best, worst_food_days: worst, food_habits: foodHabits, ride_habits: rideHabits, good_rides: goodRides, trends };
 }
