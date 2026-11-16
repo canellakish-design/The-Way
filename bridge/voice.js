@@ -67,11 +67,11 @@ const L = ml => (Math.abs(ml) / 1000).toFixed(1) + ' L';
 // or changes through the coach clears it. The clock is never kept: the time of the question is added when it is asked.
 const CTX_KEY = 'voice-context', CTX_TTL = 90000;
 let ctxKept = null;
-const ctxGood = c => c && c.text && c.day === tz.todayKey() && Date.now() - c.at < CTX_TTL;
+const ctxGood = c => c && c.text && c.slow != null && c.day === tz.todayKey() && Date.now() - c.at < CTX_TTL;
 async function contextFresh() { ctxKept = null; try { await setJSON(CTX_KEY, { at: 0 }); } catch (e) { /* it ages out */ } }
 async function contextBuild() {
-  const text = await contextNow();
-  ctxKept = { at: Date.now(), day: tz.todayKey(), text };
+  const now = await contextNow();
+  ctxKept = { at: Date.now(), day: tz.todayKey(), text: now.text, slow: now.slow };
   try { await setJSON(CTX_KEY, ctxKept); } catch (e) { /* kept in this process at least */ }
   return ctxKept;
 }
@@ -80,11 +80,15 @@ async function contextKept() {
   try { const c = await getJSON(CTX_KEY, null); if (ctxGood(c)) { ctxKept = c; return c; } } catch (e) { /* read it fresh */ }
   return null;
 }
-async function context() {
+// the whole of it as one text (advisor.js reads it so)
+async function context() { const p = await contextParts(); return (p.slow ? p.slow + '\n' : '') + p.live; }
+// live: where the day stands at this minute; slow: the standing record, the same from turn to turn
+async function contextParts() {
   const c = (await contextKept()) || (await contextBuild());
   const age = Math.round((Date.now() - c.at) / 1000), p = tz.parts(new Date());
   // read a moment ago: say so, and give the time now, so "starts in 12 minutes" is never read as the present
-  return age < 20 ? c.text : `${c.text}\n(The lines above were read ${age} seconds ago. The time now is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}; count any "in N min" from there.)`;
+  const live = age < 20 ? c.text : `${c.text}\n(The lines above were read ${age} seconds ago. The time now is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}; count any "in N min" from there.)`;
+  return { live, slow: c.slow || '' };
 }
 // ---- words the coach is given, kept pure so each correction stays a test (coach-rules.test.js) ----
 // a session that is done: what was ridden, never the plan's length read off its name
@@ -124,14 +128,17 @@ async function contextNow() {
     getJSON('coach-debrief-last', null).catch(() => null),
     race(require('./sleep-window').get(), 1500, null)
   ]);
+  // what changes slowly (his record, his routes, his races, the lifting, the notebook, the model) is kept apart: it
+  // rides in a second cached block of the prompt, so a conversation pays for it once, not on every turn
+  const slow = [];
   const lines = [`Today is ${today}, a ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(today + 'T12:00:00Z').getUTCDay()]}; the time is ${tz.hm12(String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'))}.`];
   // the weight the food maths runs on is a planning figure; what he weighs is his last weigh-in (weighin.weightWords)
   lines.push(`Planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}. The food maths runs on ${(day && day.target && day.target.kg) || 98} kg (a planning figure, never quoted as his weight).`);
   try { lines.push(require('./weighin').weightWords(weigh && weigh.all, today, { start_lb: weigh && weigh.start_lb })); } catch (e) { /* no weight line */ }
   // how his riding week is shaped (planner.js): he sets it, you plan by it
-  try { lines.push(`TRAINING MODEL (he sets it; change it only when he tells you to): ${require('./planner').modelWords(await require('./planner').model())}`); } catch (e) { /* no model line */ }
+  try { slow.push(`TRAINING MODEL (he sets it; change it only when he tells you to): ${require('./planner').modelWords(await require('./planner').model())}`); } catch (e) { /* no model line */ }
   // his sleep window as Setup has it: the earliest a new session is placed is an hour after waking, 7:00a the floor
-  if (win && win.bed_hm && win.wake_hm) lines.push(`SLEEP WINDOW: ${tz.hm12(win.bed_hm)} to ${tz.hm12(win.wake_hm)}. A new session is placed no earlier than ${tz.hm12(win.earliest_workout_hm || '07:30')} (an hour after waking); he may ask for 7:00a; nothing before 7:00a, ever.`);
+  if (win && win.bed_hm && win.wake_hm) slow.push(`SLEEP WINDOW: ${tz.hm12(win.bed_hm)} to ${tz.hm12(win.wake_hm)}. A new session is placed no earlier than ${tz.hm12(win.earliest_workout_hm || '07:30')} (an hour after waking); he may ask for 7:00a; nothing before 7:00a, ever.`);
   // last night, by itself: the chain below carries only the week's average (the coach had no reading of the night)
   lines.push(nightWords(sleepLast, today));
   // a read that did not come back in time is said, never passed over: without it the model answered from old turns
@@ -214,13 +221,13 @@ async function contextNow() {
     lines.push(`THE CHAIN this week: ${[w('sleep', ' h/night'), w('water', '% of target'), w('food', ' avg'), w('micros'), w('lift', '% of plan'), w('work', '% of plan'), w('recovery', '% vs band'), w('weight', ' lb/wk')].join('; ')}. Verdict: ${chain.verdict}${L.recovery && L.recovery.today_word ? ` This morning's recovery: ${L.recovery.today} (${L.recovery.today_word}).` : L.recovery && L.recovery.today != null ? ` This morning's recovery: ${L.recovery.today}.` : ''}`);
   }
   // the signature and zones
-  if (sig && sig.signature) lines.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 100 to 116, a floor as well as a ceiling (the site grades a Zone 1 ride by time at 116 and under); on a one-hour trainer ride he holds near 110.`);
+  if (sig && sig.signature) slow.push(`Power signature (Xert-style, from the last 90 days): TP ${sig.signature.tp} W, HIE ${sig.signature.hie_kj} kJ, PP ${sig.signature.pp} W, ${sig.confidence} confidence; planning FTP stays ${st.ftp} W unless he changes it. Zone 1 is heart rate 100 to 116, a floor as well as a ceiling (the site grades a Zone 1 ride by time at 116 and under); on a one-hour trainer ride he holds near 110.`);
   // the lifting
   if (lifts && lifts.sessions) {
     const LF = require('./lifts'), five = LF.TEMPLATES.map(t => t.key), shortOf = k => (LF.TEMPLATES.find(t => t.key === k) || {}).short || k;
     const wk = lifts.sessions.filter(x => x.date >= LF.mondayOf(today) && x.date <= today && five.includes(x.template)), did = [...new Set(wk.map(x => x.template))];
     const last = lifts.sessions[lifts.sessions.length - 1];
-    lines.push(`Lifting: five sessions, each once every seven days: Push, Pull, Upper, Legs 1 (heavy: squat, leg press, Romanian deadlift) and Legs 2 (lighter, one leg at a time, short of failure). Two leg days because leg strength is his limiter (his words, 15 Nov 2026) and the research on strength work for cyclists backs two a week while building. Where they go: each leg day two or three days before a hard ride (VO2, threshold, a race) and never the day before one, with two clear days between the two; deadlifts (Pull) not the day before a hard ride; a leg day or Pull three hours from a hard ride on the same day. The lifting week runs Monday to Sunday; a session missed is moved to a day still open or lost with the week, never stacked. This week so far: ${did.length} of the 5 (${did.map(shortOf).join(', ') || 'none'}${five.some(k => !did.includes(k)) ? '; not yet: ' + five.filter(k => !did.includes(k)).map(shortOf).join(', ') : ''})${last ? `, last ${shortOf(last.template)} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Extra to the five, at home: the Pump and the Kettlebell Blasts A (swing and squat) and B (press and carry), each on the Lift page with its exercises. Lifting does not count toward fitness (CTL).`);
+    slow.push(`Lifting: five sessions, each once every seven days: Push, Pull, Upper, Legs 1 (heavy: squat, leg press, Romanian deadlift) and Legs 2 (lighter, one leg at a time, short of failure). Two leg days because leg strength is his limiter (his words, 15 Nov 2026) and the research on strength work for cyclists backs two a week while building. Where they go: each leg day two or three days before a hard ride (VO2, threshold, a race) and never the day before one, with two clear days between the two; deadlifts (Pull) not the day before a hard ride; a leg day or Pull three hours from a hard ride on the same day. The lifting week runs Monday to Sunday; a session missed is moved to a day still open or lost with the week, never stacked. This week so far: ${did.length} of the 5 (${did.map(shortOf).join(', ') || 'none'}${five.some(k => !did.includes(k)) ? '; not yet: ' + five.filter(k => !did.includes(k)).map(shortOf).join(', ') : ''})${last ? `, last ${shortOf(last.template)} on ${tz.dayShort(last.date)}` : ', none logged yet'}. Extra to the five, at home: the Pump and the Kettlebell Blasts A (swing and squat) and B (press and carry), each on the Lift page with its exercises. Lifting does not count toward fitness (CTL).`);
   }
   // supplements and medicines: what is taken and what is still due today (he asked the coach what he had taken; it could not see)
   if (day) { try { const SP = require('./supps').dueFor(today, day.sessions, day.entries, nowMin, null, win || undefined);
@@ -231,16 +238,16 @@ async function contextNow() {
     lines.push(`THE DEBRIEF of today's ride (${debrief.ride_name || 'the ride'}), written by the researched coach and shown on his Day page; agree with it and build on it: ${debrief.say} ${ride.replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 600)}`); }
   // one notebook for both coaches (coach.js write_note, the remember action here), and what he has told the coach lately
   { const nb = ((notebook && notebook.notes) || []).slice(-30);
-    if (nb.length) lines.push('THE NOTEBOOK (kept between conversations by you and the researched coach: decisions made with him, what he asked you to remember, patterns, things to check). Coach by it; when a note is out of date say so:\n' + nb.map(n => `- ${n.date || ''} [${n.kind || 'note'}] ${String(n.note || '').slice(0, 300)}`).join('\n'));
+    if (nb.length) slow.push('THE NOTEBOOK (kept between conversations by you and the researched coach: decisions made with him, what he asked you to remember, patterns, things to check). Coach by it; when a note is out of date say so:\n' + nb.map(n => `- ${n.date || ''} [${n.kind || 'note'}] ${String(n.note || '').slice(0, 300)}`).join('\n'));
     const lately = ((said && said.notes) || []).filter(n => n.date >= tz.shiftKey(today, -7)).slice(-10);
-    if (lately.length) lines.push('WHAT HE TOLD YOU in the last week (his words, noted): ' + lately.map(n => `${tz.dayShort(n.date)}: "${String(n.text || '').slice(0, 160)}"`).join('; ') + '.'); }
+    if (lately.length) slow.push('WHAT HE TOLD YOU in the last week (his words, noted): ' + lately.map(n => `${tz.dayShort(n.date)}: "${String(n.text || '').slice(0, 160)}"`).join('; ') + '.'); }
   // his Ride with GPS routes (routes.js): the library he can ride from, kept six hours
-  try { const RT = require('./routes'); lines.push(RT.libraryText(await race(RT.list(), 2500, null))); } catch (e) { /* no routes line */ }
+  try { const RT = require('./routes'); slow.push(RT.libraryText(await race(RT.list(), 2500, null))); } catch (e) { /* no routes line */ }
   // his race calendar (races.js): what is ahead and the season's clock
-  try { const R = require('./races'); lines.push(R.aheadText(await race(R.report(), 2000, null))); } catch (e) { /* no races line */ }
+  try { const R = require('./races'); slow.push(R.aheadText(await race(R.report(), 2000, null))); } catch (e) { /* no races line */ }
   // the look back (history.js): his last fortnight day by day, his best food days, his habits, the trends
-  try { const hist = await race(require('./history').digest(14), 2500, ''); if (hist) lines.push(hist); } catch (e) { /* the day stands without it */ }
-  return lines.join('\n');
+  try { const hist = await race(require('./history').digest(14), 2500, ''); if (hist) slow.push(hist); } catch (e) { /* the day stands without it */ }
+  return { text: lines.join('\n'), slow: slow.filter(Boolean).join('\n') };
 }
 
 // The standing part of the prompt, the same on every utterance, kept in a cached system block (docs/api-spend.md):
@@ -348,7 +355,10 @@ async function understand(text, history, extra, image, opt) {
   const turns = []; for (const t of prior) { if (!turns.length && t.role !== 'user') continue; if (turns.length && turns[turns.length - 1].role === t.role) turns[turns.length - 1].content += '\n' + t.content; else turns.push(t); }
   if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
   // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
-  const tCtx = Date.now(); const ctxText = await context(); T.context_ms = Date.now() - tCtx;
+  const tCtx = Date.now(); const ctxParts = await contextParts(), ctxText = ctxParts.live; T.context_ms = Date.now() - tCtx;
+  // two cached blocks: the standing prompt, then his standing record; the minute's lines ride with his words
+  const system = [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }]
+    .concat(ctxParts.slow ? [{ type: 'text', text: 'HIS STANDING RECORD, read from the site with the lines under "Where the day stands" in his message and as true as they are (the training model, the sleep window, the signature, the lifting, the notebook, his routes, his races, the look back):\n' + ctxParts.slow, cache_control: { type: 'ephemeral' } }] : []);
   const first = (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, ctxText + (extra ? '\n' + extra : ''), turns.length > 0));
   let messages = turns.concat([{ role: 'user', content: first }]);
   // He can look back (history.js): when the question is about days that are not in front of him, he asks for them
@@ -363,7 +373,7 @@ async function understand(text, history, extra, image, opt) {
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
       body: JSON.stringify({ model, max_tokens: 1500, fallbacks: 'default',
         output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-        system: [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }],
+        system,
         tools: TOOLS, tool_choice: more ? { type: 'auto' } : { type: 'none' },
         messages })
     });

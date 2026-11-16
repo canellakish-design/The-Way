@@ -1,0 +1,16 @@
+[
+  { "id": "weight-latest", "from": "15 Nov: said 217 lb when the last weigh-in was 216.4", "say": "How much do I weigh?", "reply_has_latest_weight": true, "no_actions": ["weigh_in"] },
+  { "id": "no-ride-at-life-time", "from": "\"I will never ride my bike at lifetime\"", "say": "It's raining. Should I just ride a bike at Life Time today?", "reply_not": ["(yes|sure|good idea)[^.]*life ?time", "ride (the|a) (spin|gym|stationary) bike at life ?time"], "reply_has": ["pain cave|trainer|at home|never ride"], "no_actions": ["workout", "workout_change"] },
+  { "id": "no-whey", "from": "9 Nov: \"I don't do whey. Huel plant protein shakes.\"", "say": "What protein shake should I have after my lift?", "reply_has": ["huel"], "reply_not": ["\\b(a|some|scoop of) whey\\b"] },
+  { "id": "no-sweeteners", "from": "standing rule: no artificial sweeteners", "say": "What zero calorie sweetener should I put in my coffee?", "reply_not": ["(use|try|go with|pick|choose) (sucralose|splenda|aspartame|equal|acesulfame|saccharin)"], "reply_has": ["sugar|honey|none|without|black|fruit|artificial"] },
+  { "id": "ftp-196", "from": "standing rule: never 196", "say": "Set my FTP to 196.", "reply_has": ["175|only you|yourself|ride (tab|page)|can't|cannot|won't|not something"], "reply_not": ["(set|changed|updated)[^.]*to 196"], "only_actions": ["question"] },
+  { "id": "before-7am", "from": "sleep first: nothing before 7:00a", "say": "Put a one hour Zone 1 ride on tomorrow at 6:15 in the morning.", "reply_has": ["7"], "no_actions": ["workout", "workout_change"] },
+  { "id": "twelve-hour-clock", "from": "times in the 12-hour clock, never military", "say": "What is on my calendar for the rest of today and tomorrow, with the times?", "reply_not": ["\\b(1[3-9]|2[0-3]):[0-5]\\d\\b"] },
+  { "id": "question-is-not-a-meal", "from": "2 Nov: a remark about lunch must not log food", "say": "Why was my lunch score low? Was that enough carbs?", "no_actions": ["meal", "drink"] },
+  { "id": "next-workout-is-a-question", "from": "1 Nov: the advisor named a run that did not exist", "say": "What's my next workout?", "no_actions": ["workout", "workout_change", "remove_workout"], "reply_not": ["there is nothing called"] },
+  { "id": "shortest-zone-1", "from": "there is no 45-minute Zone 1 ride", "say": "Can I just do a 45 minute Zone 1 ride today instead?", "reply_has": ["hour|60"] },
+  { "id": "plan-a-week", "from": "16 Nov: the coach builds the week", "say": "Plan my riding for next week.", "tools": ["plan_week"], "has_offer": true, "reply_not": ["^written"], "slow": true },
+  { "id": "lift-done-is-not-a-second-copy", "from": "2 Nov: a second Push was added when told the lift was done", "say": "I did my push lift this morning.", "actions": ["lift"], "no_actions": ["workout"], "writes": true },
+  { "id": "remember", "from": "16 Nov: one notebook", "say": "Remember that I don't like oatmeal.", "actions": ["remember"], "writes": true },
+  { "id": "three-beers", "from": "1 Nov: three beers graded on plan, then logged twice", "say": "I had three beers.", "actions_any": ["drink", "meal"], "max_actions": 1, "writes": true }
+]
