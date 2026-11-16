@@ -272,17 +272,18 @@ function attach(app) {
 // weight in kilograms; he was never given the last weigh-in itself. A person's weight is the number on the scale
 // the last time he stood on it: that is said first, with its day, and an average is named as an average.
 // entries: [{ ts, lb }]; today: YYYY-MM-DD (pure)
-function weightWords(entries, today) {
+function weightWords(entries, today, o) {
   const tz = require('./tz');
   const es = (entries || []).filter(e => e && e.ts && e.lb > 0).sort((a, b) => a.ts - b.ts);
   if (!es.length) return 'His weight: no weigh-in on record. If he asks what he weighs, say there is none yet and ask him to weigh in.';
   const last = es[es.length - 1], r1 = x => Math.round(x * 10) / 10, day = tz.keyOf(new Date(last.ts));
   const ago = Math.round((Date.parse(today) - Date.parse(day)) / 864e5);
   const week = es.filter(e => e.ts >= last.ts - 6.5 * 864e5), avg = week.length > 1 ? r1(week.reduce((a, e) => a + e.lb, 0) / week.length) : null;
-  const first = es[0];
+  // the same starting point the Weight tile counts from (the fresh start's figure), so the two never disagree
+  const start = o && o.start_lb > 0 ? o.start_lb : null;
   return `HIS WEIGHT: ${r1(last.lb)} lb, his last weigh-in (${tz.dayShort(day)}${ago === 0 ? ', today' : ago === 1 ? ', yesterday' : `, ${ago} days ago`}). `
     + `When he asks what he weighs, or you name his weight, say this number, in pounds, and its day${ago > 3 ? '; it is more than three days old, so say that too and ask for a fresh one' : ''}. `
     + (avg != null ? `The ${week.length} weigh-ins of the last seven days average ${avg} lb: an average, for the trend only, never "you weigh". ` : '')
-    + (es.length > 1 ? `First on record: ${r1(first.lb)} lb (${tz.dayShort(tz.keyOf(new Date(first.ts)))}), so ${r1(last.lb - first.lb) <= 0 ? 'down' : 'up'} ${Math.abs(r1(last.lb - first.lb))} lb since.` : '');
+    + (start ? `The count started at ${r1(start)} lb, so he is ${r1(last.lb - start) <= 0 ? 'down' : 'up'} ${Math.abs(r1(last.lb - start))} lb since (the Weight tile shows the same).` : '');
 }
 module.exports = { lbOf, attach, state, direction, trend, fieldTrends, fieldDirection, weightWords };

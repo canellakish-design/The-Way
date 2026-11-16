@@ -108,7 +108,7 @@ async function contextNow() {
     const t = day.target, a = day.actual;
     // the weight the food maths runs on is a planning figure; what he weighs is his last weigh-in (weighin.weightWords)
     lines.push(`Planning FTP ${st.ftp} W, threshold heart rate ${st.lthr}. The food maths runs on ${t.kg || 98} kg (a planning figure, never quoted as his weight).`);
-    try { lines.push(require('./weighin').weightWords(weigh && weigh.all, today)); } catch (e) { /* no weight line */ }
+    try { lines.push(require('./weighin').weightWords(weigh && weigh.all, today, { start_lb: weigh && weigh.start_lb })); } catch (e) { /* no weight line */ }
     lines.push(`Food day: ${day.fuel_day}. Whole-day target ${t.kcal} kcal, ${t.carbs_g} g carbs, ${t.protein_g} g protein, ${t.fat_g} g fat (${t.deficit ? `a ${Math.abs(t.deficit)} kcal deficit for weight loss` : 'no deficit today: recovery is low, eat to maintenance'}). Eaten so far: ${a.kcal} kcal, ${a.carbs_g} C / ${a.protein_g} P / ${a.fat_g} F in ${a.meals} meal(s). Still to eat today: ${Math.max(0, t.kcal - a.kcal)} kcal, ${Math.max(0, t.carbs_g - a.carbs_g)} C / ${Math.max(0, t.protein_g - a.protein_g)} P / ${Math.max(0, t.fat_g - a.fat_g)} F.`);
     // where each one is done (where.js): the lift at Life Time, a ride outside or, in bad weather, in the pain cave
     const todayEv = ((sched && sched.days) || []).find(d => d.date === today), evOf = s => todayEv && (todayEv.events || []).find(e => e.category === 'training' && e.summary === s.name);
