@@ -136,6 +136,9 @@
   // stage each time the page is drawn, so he is not loaded again. is3d: he is on screen (the drawing is hidden).
   const C3D_V = "1";
   let holder = null, is3d = false, asked3d = false, closeUp = false, loading3d = false;
+  // side: he is mounted beside something else (the workout player: Harry, 15 Nov 2026, "the coach should be the coach
+  // from the coach page"): head and shoulders, no briefing button, a tap on him does nothing
+  let side = false;
   const voiceState = () => {
     const v = window.CoachVoice, own3 = !!(v && v.playing && v.el);
     if (own3) { const d = v.el.duration; return { playing: true, t: v.el.currentTime, dur: d > 0 && isFinite(d) ? d : 0, env: v.env || null, level: v.level() }; }
@@ -147,7 +150,7 @@
     if (!holder || !host) return;
     const slot = host.querySelector("[data-3d]"); if (!slot) return;
     if (holder.parentNode !== slot) slot.appendChild(holder);
-    if (is3d) { host.classList.remove("wait3d"); host.classList.add("has3d"); window.Coach3D.pause(false); window.Coach3D.view(closeUp ? "upper" : "full"); }
+    if (is3d) { host.classList.remove("wait3d"); host.classList.add("has3d"); window.Coach3D.pause(false); window.Coach3D.view(side || closeUp ? "upper" : "full"); }
     // while he loads the stage is empty with a quiet "loading" mark: the drawn figure is not shown first (Harry,
     // 14 Nov 2026: "The old coach comes up first"). It appears only if 3D cannot be had, or takes over 20 seconds.
     else if (loading3d) host.classList.add("wait3d");
@@ -280,7 +283,7 @@
     raf = requestAnimationFrame(frame);
   }
   // the coach is on screen: mounted on the Coach page, and that page is the one showing
-  const alive = () => location.hash.replace(/^#/, "").split("?")[0] === "coach";
+  const alive = () => { const pg = location.hash.replace(/^#/, "").split("?")[0]; return pg === "coach" || pg === "player"; };
   const live = () => !!(host && host.isConnected && alive());
   function blink(){
     if (!live()) return;
@@ -328,9 +331,10 @@
   function stop(){ try { speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); } catch (e) {} talking = false; subs = []; note = ""; }
 
   // the stage at the top of the Coach page: the figure, its subtitles, "Where am I?" at its feet
-  function mount(el){
+  function mount(el, o){
     if (!el) return;
-    el.classList.remove("faceinline"); el.classList.add("stage");
+    side = !!(o && o.side);
+    el.classList.remove("faceinline"); el.classList.add("stage"); el.classList.toggle("sidestage", side);
     el.innerHTML = `<div class="stagehud tl"><span>COACH // <b class="fstate">STANDBY</b></span><span class="dim">GOAL · MASTERS ELITE</span></div>
       <div class="stagehud tr"><span class="fclock">--:--</span><span class="dim fvoice"></span></div>
       <div class="stage3d" data-3d></div>
@@ -341,14 +345,14 @@
       <button class="primary stagebrief" data-brief>Where am I?</button>`;
     host = el;
     // a tap on him: the whole figure, or closer (the drawn stand-in gives the briefing, as before)
-    el.querySelector(".stagefig").onclick = () => briefing();
-    el.querySelector("[data-3d]").onclick = () => { if (!is3d) return; closeUp = !closeUp; window.Coach3D.view(closeUp ? "upper" : "full"); };
+    el.querySelector(".stagefig").onclick = () => { if (!side) briefing(); };
+    el.querySelector("[data-3d]").onclick = () => { if (!is3d || side) return; closeUp = !closeUp; window.Coach3D.view(closeUp ? "upper" : "full"); };
     load3d();
     el.querySelector("[data-brief]").onclick = () => briefing();
     el.querySelector("[data-stop]").onclick = stop;
     if (!raf) raf = requestAnimationFrame(frame);
     setTimeout(blink, 1200); tickClock();
-    if (pending) { pending = false; setTimeout(briefing, 250); }
+    if (pending && !side) { pending = false; setTimeout(briefing, 250); }
   }
   // anywhere else, the coach is on the Coach page
   function openFace(){ if (!alive()) location.hash = "#coach"; else if (!raf && live()) raf = requestAnimationFrame(frame); }
