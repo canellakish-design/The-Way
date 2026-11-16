@@ -58,4 +58,13 @@ ok('asked on the bike: the coach is given the heart rate and power on the screen
   assert.ok(/heart rate no reading/.test(V.rideWords({ state: 'paused', hr: 'x', power: 0 })) && /\(paused\)/.test(V.rideWords({ state: 'paused' })));
   assert.strictEqual(V.rideWords({ state: 'ended', hr: 120 }), ''); assert.strictEqual(V.rideWords(undefined), '');
 });
+ok('a link turned green is said once: one a day at the most, each link once in three days, and only green', () => {
+  const sleep = { key: 'sleep', name: 'Sleep', to: 'good', text: 'Sleep moved from amber to green: 7 h a night this week' }, food = { key: 'food', name: 'Macros', to: 'warn', text: 'Macros moved from red to amber' };
+  assert.strictEqual(F.winDue([sleep], { sent: {} }, '2026-11-16').key, 'sleep');
+  assert.strictEqual(F.winDue([food], { sent: {} }, '2026-11-16'), null);                                   // amber is progress, not a push
+  assert.strictEqual(F.winDue([sleep], { sent: { 'win-fuel': {} } }, '2026-11-16'), null);                  // one a day
+  assert.strictEqual(F.winDue([sleep], { sent: {}, recent_wins: { sleep: '2026-11-15' } }, '2026-11-16'), null);
+  assert.strictEqual(F.winDue([sleep], { sent: {}, recent_wins: { sleep: '2026-11-12' } }, '2026-11-16').key, 'sleep');
+  assert.strictEqual(F.winDue([], { sent: {} }, '2026-11-16'), null);
+});
 console.log(`\n${n} checks, all good`);

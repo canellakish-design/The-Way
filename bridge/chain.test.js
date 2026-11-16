@@ -155,4 +155,23 @@ ok('fuel: what was not logged is not scored as missed, and is named', () => {
   const water = C.fuelChecks(Object.assign({}, r, { entries: r.entries.concat([{ time: '17:30', carbs_g: 0, kcal: 0, slot: 'on the bike' }]) }))[0];
   assert.strictEqual(water.parts.find(p => p.kind === 'bottle').ratio, 0);      // water logged on the bike: the carbs were not taken
 });
+ok('what got better: a link that moves up a colour is a move, and a win while it holds; grey says nothing', () => {
+  const kept = { sleep: { s: 'warn', w: 6.6 }, food: { s: 'bad', w: 52 }, fuel: { s: 'good', w: 88 }, lift: { s: 'warn', w: 60 } };
+  const links = { sleep: { state: 'good', week: 7 }, food: { state: 'warn', week: 61 }, fuel: { state: 'warn', week: 70 }, lift: { state: 'none', week: null }, power: { state: 'good', week: 148 } };
+  const M = C.movesOf(kept, links, '2026-11-16T12:00:00Z', '2026-11-16');
+  assert.deepStrictEqual(M.moves.map(m => [m.key, m.from, m.to, m.up]), [['sleep', 'warn', 'good', true], ['food', 'bad', 'warn', true], ['fuel', 'good', 'warn', false]]);
+  assert.strictEqual(M.states.lift.s, 'warn');                       // grey today: what was kept stands, and nothing is said
+  assert.strictEqual(M.states.power.s, 'good'); assert.ok(!M.moves.some(m => m.key === 'power'));   // first seen: no move
+  const wins = C.winsOf(M.moves, links, '2026-11-16', 0);
+  assert.deepStrictEqual(wins.map(w => w.key), ['sleep', 'food']);
+  assert.strictEqual(wins[0].text, 'Sleep moved from amber to green: 7 h a night this week');
+  assert.ok(/Macros moved from red to amber/.test(wins[1].text));
+});
+ok('what got better: a link that rose and fell back is not a win, and a win of four days ago is this week\'s, not today\'s', () => {
+  const moves = [{ key: 'sleep', name: 'Sleep', from: 'warn', to: 'good', up: true, date: '2026-11-12' }, { key: 'water', name: 'Hydration', from: 'warn', to: 'good', up: true, date: '2026-11-16' }, { key: 'water', name: 'Hydration', from: 'good', to: 'warn', up: false, date: '2026-11-16' }];
+  const links = { sleep: { state: 'good', week: 7.1 }, water: { state: 'warn', week: 40 } };
+  assert.deepStrictEqual(C.winsOf(moves, links, '2026-11-16', 0).map(w => w.key), []);
+  assert.deepStrictEqual(C.winsOf(moves, links, '2026-11-16', 6).map(w => w.key), ['sleep']);
+  assert.deepStrictEqual(C.winsOf(moves, { sleep: { state: 'warn', week: 6.5 }, water: links.water }, '2026-11-16', 6).map(w => w.key), []);   // it did not hold
+});
 console.log(n + ' passed');

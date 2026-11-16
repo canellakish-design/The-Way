@@ -1087,3 +1087,9 @@ body:has(#chFace) #micBtn{display:none}
 /* the Fuel page: each ride's parts in words under its bar (chain.js fuelChecks, 16 Nov 2026) */
 .fu-parts{display:flex;flex-direction:column;gap:2px;margin:-2px 0 8px;line-height:1.35}
 .fu-part b{font-weight:600;color:var(--ink)}
+/* what got better: a link that moved up a colour (chain.js trackMoves), under the chain and on its box */
+.chainwins{margin:8px 0 2px;display:flex;flex-direction:column;gap:4px}
+.chainwins .cw{font-size:14px;line-height:1.35;color:var(--ink);opacity:.85}
+.chainwins .cw b{color:var(--green);margin-right:4px}
+.chainwins .cw.up{opacity:1;font-weight:600}
+.clink.up .ck > span:first-child::after{content:" ▲";color:var(--green)}
