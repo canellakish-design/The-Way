@@ -91,6 +91,15 @@ async function contextParts() {
   return { live, slow: c.slow || '' };
 }
 // ---- words the coach is given, kept pure so each correction stays a test (coach-rules.test.js) ----
+// he is on the bike in the workout player and asks something: the page sends what the player shows at that second
+// (pwa/player.js live()), so "how am I doing" is answered from his heart rate and power, not from the plan
+function rideWords(r) {
+  if (!r || typeof r !== 'object' || !/^(riding|paused|countin)$/.test(String(r.state || ''))) return '';
+  const n = (v, lo, hi) => { const x = Number(v); return Number.isFinite(x) && x >= lo && x <= hi ? Math.round(x) : null; };
+  const el = n(r.elapsed_s, 0, 86400), total = n(r.total_s, 1, 86400), hr = n(r.hr, 30, 230), pw = n(r.power, 0, 2000), cad = n(r.cadence, 0, 250), tg = n(r.target_w, 0, 2000), left = n(r.step_left_s, 0, 86400);
+  const mm = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`, name = String(r.name || 'the workout').slice(0, 80), step = String(r.step || '').slice(0, 60);
+  return `\nHE IS ON THE BIKE NOW, in the workout player, riding ${name}${r.state === 'paused' ? ' (paused)' : r.state === 'countin' ? ' (about to start)' : ''}: ${el != null ? `${mm(el)} in${total ? ` of ${mm(total)}` : ''}` : 'time not given'}; heart rate ${hr != null ? hr : 'no reading'}; power ${pw != null ? pw + ' W' : 'no reading'}${tg != null ? ` against a target of ${tg} W` : ''}${cad != null ? `; cadence ${cad}` : ''}${step ? `; the step now: ${step}${left != null ? `, ${mm(left)} left in it` : ''}` : ''}${n(r.avg_hr, 30, 230) != null ? `; average heart rate so far ${n(r.avg_hr, 30, 230)}` : ''}${n(r.avg_power, 0, 2000) != null ? `, average power ${n(r.avg_power, 0, 2000)} W` : ''}. Answer as the coach beside him: from these numbers, in one or two short sentences he can take in while pedalling. Zone 1 is heart rate 100 to 116; on a one-hour trainer ride he holds near 110.`;
+}
 // a session that is done: what was ridden, never the plan's length read off its name
 function doneWords(s, work) {
   const ride = /ride/i.test(String((s && s.sport) || ''));
@@ -236,6 +245,11 @@ async function contextNow() {
   // the researched coach's debrief of today's ride, which he has read on the Day page: the two coaches agree
   if (debrief && debrief.date === today && debrief.say) { const ride = String(debrief.answer || '').split(/\n{2,}/).find(p => /^\s*\*\*The ride\*\*/i.test(p)) || '';
     lines.push(`THE DEBRIEF of today's ride (${debrief.ride_name || 'the ride'}), written by the researched coach and shown on his Day page; agree with it and build on it: ${debrief.say} ${ride.replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 600)}`); }
+  // what the coach has already said to him unasked today (coach-first.js): never contradict it without saying why
+  try { const F = await race(require('./coach-first').state(), 1500, null);
+    if (F && F.morning) lines.push(`THIS MORNING'S BRIEFING, which you sent to his phone at ${tz.hm12(new Date(F.morning.at).toLocaleTimeString('en-GB', { timeZone: tz.ZONE, hour: '2-digit', minute: '2-digit' }))}: "${String(F.morning.text).slice(0, 500)}"`);
+    if (F && F.alerts && F.alerts.length) lines.push('ALERTS you sent to his phone today: ' + F.alerts.map(a => `${a.title} (${a.body})`).join('; ').slice(0, 500));
+    if (F && F.review && F.review.status === 'done' && F.review.answer) slow.push(`THE WEEKLY REVIEW of the week of ${F.review.week_of}, written by the researched coach and shown on his Day page; build on it: ${F.review.say} ${String(F.review.answer).replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 900)}`); } catch (e) { /* nothing said yet */ }
   // one notebook for both coaches (coach.js write_note, the remember action here), and what he has told the coach lately
   { const nb = ((notebook && notebook.notes) || []).slice(-30);
     if (nb.length) slow.push('THE NOTEBOOK (kept between conversations by you and the researched coach: decisions made with him, what he asked you to remember, patterns, things to check). Coach by it; when a note is out of date say so:\n' + nb.map(n => `- ${n.date || ''} [${n.kind || 'note'}] ${String(n.note || '').slice(0, 300)}`).join('\n'));
@@ -717,7 +731,7 @@ function attach(app) {
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
       const ms = {}, tAll = Date.now();
       const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands, and routes_near can say which of his routes pass near him.' : '')
-        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : ''), images, { ms, model: (req.body || {}).model, coords });
+        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : '') + rideWords((req.body || {}).ride), images, { ms, model: (req.body || {}).model, coords });
       const actions = [];
       if ((u.actions || []).some(a => a.type !== 'question')) await contextFresh();
       for (const a of (u.actions || []).slice(0, 6)) {
@@ -737,4 +751,4 @@ function attach(app) {
 
 // a write somewhere else in the app: the kept read is out of date (not waited on)
 function contextStale() { ctxKept = null; setJSON(CTX_KEY, { at: 0 }).catch(() => {}); }
-module.exports = { attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords };
+module.exports = { attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords, rideWords };

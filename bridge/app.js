@@ -65,6 +65,7 @@ require('./history').attach(app);
 require('./races').attach(app);
 require('./routes').attach(app);
 require('./planner').attach(app);
+require('./coach-first').attach(app);
 require('./tts').attach(app);
 require('./dayplan').attach(app);
 require('./meds').attach(app);

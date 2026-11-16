@@ -2608,21 +2608,33 @@ V.today = async function(){
     if (stale) paras.splice(i, 1);
     return paras.join("\n\n");
   }
+  // What the coach said first (bridge/coach-first.js): this morning's briefing until the afternoon, and the week's
+  // review on the Sunday it is written and the Monday after. Each can be heard; the review folds away.
+  function firstHTML(){
+    const F = DEB.first, out = []; if (!F) return "";
+    const hm = iso => { const d = new Date(iso); return isNaN(d) ? "" : `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")}${d.getHours() < 12 ? "a" : "p"}`; };
+    if (F.review && F.review.status === "done" && F.review.answer) out.push(`<div class="dc-one"><span class="hu-lab dc-head">Coach · your week <button class="linkish dc-hear" data-hear="review">hear it</button></span>${F.review.say ? `<div class="ch-say dc-say">${esc(F.review.say)}</div>` : ""}<details class="dc-more"><summary>the week in full</summary><div class="ch-body dc-body">${mdLite(F.review.answer)}</div></details></div>`);
+    if (F.morning && F.morning.text && new Date().getHours() < 14) out.push(`<div class="dc-one"><span class="hu-lab dc-head">Coach · this morning${F.morning.at ? ` · ${hm(F.morning.at)}` : ""} <button class="linkish dc-hear" data-hear="morning">hear it</button></span><div class="ch-body dc-body"><p>${esc(F.morning.text)}</p></div></div>`);
+    return out.join("");
+  }
   function paintCoach(isToday){
     const el = document.getElementById("dayCoach"); if (!el) return;
-    if (!isToday || !DEB.rides || !DEB.rides.length){ el.hidden = true; return; }
-    el.innerHTML = DEB.rides.map(x => { const d = x.debrief, r = x.ride;
+    const first = isToday ? firstHTML() : "";
+    if (!isToday || (!first && (!DEB.rides || !DEB.rides.length))){ el.hidden = true; return; }
+    el.innerHTML = first + (DEB.rides || []).map(x => { const d = x.debrief, r = x.ride;
       const at = d && d.at ? new Date(d.at) : null, atWord = at && !isNaN(at) ? `${at.getHours() % 12 || 12}:${String(at.getMinutes()).padStart(2, "0")}${at.getHours() < 12 ? "a" : "p"}` : "";
       const head = `<span class="hu-lab dc-head">Coach · ${esc(r.name || "the ride")}${atWord ? ` · ${atWord}` : ""}${d && d.status === "done" ? ` <button class="linkish dc-redo" data-ride="${esc(r.id)}" data-name="${esc(r.name || "")}">redo</button>` : ""}</span>`;
       if (!d || d.status === "running") return `<div class="dc-one">${head}<div class="small">reading the ride…</div></div>`;
       if (d.status === "error") return `<div class="dc-one">${head}<div class="small">The coach couldn't read it: ${esc(d.error || "")}</div></div>`;
       return `<div class="dc-one">${head}${d.say ? `<div class="ch-say dc-say">${esc(d.say)}</div>` : ""}<div class="ch-body dc-body">${mdLite(debriefNow(d))}</div></div>`; }).join("");
     el.hidden = false;
+    el.querySelectorAll(".dc-hear").forEach(b => b.onclick = () => { const F = DEB.first || {}, t = b.dataset.hear === "review" ? (F.review && F.review.say) : (F.morning && F.morning.text); if (t && typeof speak === "function") speak(t); });
     el.querySelectorAll(".dc-redo").forEach(b => b.onclick = async () => { b.disabled = true;
       try{ await bridge("/coach/debrief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ride_id: b.dataset.ride, name: b.dataset.name, again: true }) }); }catch{ b.disabled = false; return; }
       const x = (DEB.rides || []).find(z => z.ride.id === b.dataset.ride); if (x){ x.debrief = { status: "running" }; DEB.polling[b.dataset.ride] = false; } lsSetD("way-debrief-said-" + b.dataset.ride, ""); loadCoach(); });
   }
   async function loadCoach(){
+    bridge("/coach/first").then(f => { DEB.first = f; paintCoach(offset === 0); }).catch(() => {});
     let t = null; try{ t = await bridge("/coach/debrief/today"); }catch{ return; }
     DEB.rides = (t && t.rides) || [];
     paintCoach(offset === 0);

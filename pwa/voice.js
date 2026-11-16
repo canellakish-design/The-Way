@@ -266,7 +266,7 @@ async function send(text, photo, opts){
   status(photos.length > 1 ? "Looking at the photos…" : photo ? "Looking at the photo…" : "Thinking…");
   try{
     const coords = await whereAmI();
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", images: photos.length ? photos.map(p => ({ image_base64: p.image_base64, media_type: p.media_type })) : undefined, talk: opts && opts.talk ? true : undefined, coords, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text: text || "", images: photos.length ? photos.map(p => ({ image_base64: p.image_base64, media_type: p.media_type })) : undefined, talk: opts && opts.talk ? true : undefined, coords, ride: (window.__player && window.__player.live && window.__player.live()) || undefined, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question"), offer: r.offer && r.offer.plan ? r.offer : null }); keep(); drawThread();
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
@@ -305,7 +305,7 @@ async function heyAsk(text){
   sending = true; heyPause(); toast("…");
   history.push({ role: "user", text }); keep(); drawThread();
   try{
-    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
+    const r = await bridge("/voice", { method:"POST", headers:J, body: JSON.stringify({ text, ride: (window.__player && window.__player.live && window.__player.live()) || undefined, history: history.slice(0, -1).slice(-10).map(h => ({ role: h.role, text: h.text })) }) });
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     toast(r.reply || "Done.");
     if (r.reply && typeof speak === "function") speak(r.reply);
