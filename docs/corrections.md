@@ -124,7 +124,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **12 Nov: 1.** 1 my mistake.
 **13 Nov: 4.** 1 new case, 2 disagreement, 1 my mistake.
 **14 Nov: 13.** 6 new case, 3 disagreement, 3 my mistake, 1 advisor.
-**15 Nov: 17.** 3 new case, 10 disagreement, 4 my mistake.
+**15 Nov: 18.** 3 new case, 11 disagreement, 4 my mistake.
 
 *10 to 15 Nov were not logged at the time. The rows above were written on 15 Nov from the commits and the conversation, so their count is a floor, and the kind is Claude's reading after the fact.*
 
@@ -150,6 +150,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 15 Nov | the lifting audit (a read of the code and the live week) | Pull put 15 minutes after the VO2 by the auto-mover; Legs could land on a hard-ride day (its penalty lost to the new bonus); the count could read "6 of 5"; a planned Upper 2 marked done by a saved Legs; "move my lift" took the ride; Upper 2 at Life Time on a day in New Jersey | `795c1eb`, `b9a4fcf`, and the Monday-to-Sunday commit |
 | 15 Nov | the live check after a push | Ride with GPS read as not connected on the live site (the new code looked for the sign-in in the wrong place) | `c4595ad` |
 | 15 Nov | the push check | The Day page took ten seconds to draw today's meals on a first visit (22 days of schedule asked for before anything was drawn) | today and its neighbours are drawn first |
+| 15 Nov | "I've already eaten dinner and this still appears" (the ride debrief's "Next meal: Dinner, 8:00p" at 9:08p) | The debrief is written once, at 6:57p, and its Next meal line was shown as written for the rest of the day | the line comes off the card once that meal is logged or anything has been eaten since (app.js debriefNow); the Next line above the card is the live one | disagreement |
 
 ## 3 Nov · the VO2 line
 - The VO2 session goal was "8 to 12 min above 152". No ride on record held 152 for more than 18 s (best: Nov 1, max 155), so every VO2 session graded red. Harry set the line at VT2, 139. Tymewear's own VO2max training target is HR 147 and 216 W; the 40/20 "on" blocks at 191 W sit under that.
@@ -180,3 +181,15 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 - The field's steps no longer carry the Zone 1 band (100 to 116) on a free step: the new layout dropped the target line it fed, and the bucket rule plans a free step as nothing. A Zone 1 ride therefore shows no plan, its bars sharing the ride time.
 - The player's ride view mirrors the Edge (buckets on top, time, heart rate and power below, numbers in ink) and the player lost its other colours (status green, the red heart-rate trace, the blue breathing line, the coloured zone ladder): ink and grey now.
 - A Strava ride's bucket seconds leave out stopped time (a gap over five seconds), and use power only from a meter.
+
+## 16 Nov · the coach, after a review of what it is told
+Not corrections of Harry's: found by reading everything the coach is given against the site, after "why did the coach say 217".
+- A ride cut short read "Zone 1, 90 min (done)" to the coach (51 of 90 ridden): a done ride now says its ridden minutes, with a line for minutes ridden against planned.
+- Last night's sleep was not given by itself (only the week's average): it is now, and a night not yet synced is said.
+- A ride on a day with no food logged was counted as a fasted ride in RIDE HABITS: only days with food logged are compared.
+- The briefs carried figures that go out of date (217 lb, "5 to 6 h" of sleep, TP 152 W): removed, each pointing at the live page.
+- When the day could not be read in time its lines were left out silently: the coach is now told it cannot see the day.
+- Supplements, medicines and the researched coach's debrief of today's ride are in the quick coach's view.
+- One notebook: "remember that ..." writes to the notebook both coaches read; the last week of his remarks comes back too.
+- Rules that disagreed are one rule: Zone 1 (100 to 116), the earliest session (an hour after waking, 7:00a the floor), the week's shape (the training model), when a change may be raised unasked.
+- Each of these, and the standing rules he has corrected since 1 Nov, is a check in bridge/coach-rules.test.js, run with the tests before every push.

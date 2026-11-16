@@ -2587,6 +2587,7 @@ V.today = async function(){
     const el = document.getElementById("nowNext");
     if (el) el.textContent = "";
     paintNextLine(rows, nm, isToday);
+    DEB.rows = isToday ? rows : null;
     paintCoach(isToday);
   };
   // The coach's debrief of today's ride: asked for the first time the Day is opened after a ride lands, kept by the
@@ -2594,6 +2595,19 @@ V.today = async function(){
   const DEB = { rides: null, polling: {} };
   const mdLite = t => esc(String(t || "")).split(/\n{2,}/).map(p => { const lines = p.split("\n").map(l => l.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>"));
     return lines.every(l => /^\s*[-•]\s/.test(l)) ? `<ul class="ch-ul">${lines.map(l => `<li>${l.replace(/^\s*[-•]\s/, "")}</li>`).join("")}</ul>` : `<p>${lines.join("<br>")}</p>`; }).join("");
+  // The debrief's "Next meal" line was true when it was written. Once that meal is in the journal, or anything has
+  // been eaten since, it is out of date and comes off the card (Harry, 15 Nov 2026, 9:08p, dinner eaten: "this still
+  // appears"); the Next line above the card is the live one.
+  function debriefNow(d){
+    const paras = String((d && d.answer) || "").split(/\n{2,}/), i = paras.findIndex(p => /^\s*\*\*Next meal\*\*/i.test(p));
+    if (i < 0 || !DEB.rows) return paras.join("\n\n");
+    const p = paras[i].toLowerCase(), slot = /post-?\s?(workout|ride)|after the ride/.test(p) ? "after" : /pre-?\s?(workout|ride)/.test(p) ? "before" : (/(breakfast|lunch|dinner|snack)/.exec(p) || [])[1] || null;
+    const at = d.at ? new Date(d.at) : null, atMin = at && !isNaN(at) ? at.getHours() * 60 + at.getMinutes() : null;
+    const eaten = DEB.rows.filter(r => r.meal && r.meal.logged);
+    const stale = (slot && slot !== "snack" && eaten.some(r => r.meal.slot === slot)) || (atMin != null && eaten.some(r => r.start >= atMin - 10));
+    if (stale) paras.splice(i, 1);
+    return paras.join("\n\n");
+  }
   function paintCoach(isToday){
     const el = document.getElementById("dayCoach"); if (!el) return;
     if (!isToday || !DEB.rides || !DEB.rides.length){ el.hidden = true; return; }
@@ -2602,7 +2616,7 @@ V.today = async function(){
       const head = `<span class="hu-lab dc-head">Coach · ${esc(r.name || "the ride")}${atWord ? ` · ${atWord}` : ""}${d && d.status === "done" ? ` <button class="linkish dc-redo" data-ride="${esc(r.id)}" data-name="${esc(r.name || "")}">redo</button>` : ""}</span>`;
       if (!d || d.status === "running") return `<div class="dc-one">${head}<div class="small">reading the ride…</div></div>`;
       if (d.status === "error") return `<div class="dc-one">${head}<div class="small">The coach couldn't read it: ${esc(d.error || "")}</div></div>`;
-      return `<div class="dc-one">${head}${d.say ? `<div class="ch-say dc-say">${esc(d.say)}</div>` : ""}<div class="ch-body dc-body">${mdLite(d.answer)}</div></div>`; }).join("");
+      return `<div class="dc-one">${head}${d.say ? `<div class="ch-say dc-say">${esc(d.say)}</div>` : ""}<div class="ch-body dc-body">${mdLite(debriefNow(d))}</div></div>`; }).join("");
     el.hidden = false;
     el.querySelectorAll(".dc-redo").forEach(b => b.onclick = async () => { b.disabled = true;
       try{ await bridge("/coach/debrief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ride_id: b.dataset.ride, name: b.dataset.name, again: true }) }); }catch{ b.disabled = false; return; }

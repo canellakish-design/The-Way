@@ -71,7 +71,7 @@ function line(row) {
     bits.push('ate: ' + Object.keys(by).map(s => `${s} ${by[s].map(m => `${m.name} (${m.kcal} kcal, ${m.c}C ${m.p}P${m.time ? ', ' + tz.hm12(m.time) : ''})`).join(' + ')}`).join('; '));
   } else bits.push('no food logged');
   if (row.done.length) bits.push('trained: ' + row.done.map(d => d.kind === 'lift' ? `${d.name} lift${d.volume_lb ? ` (${d.volume_lb} lb moved${d.tops ? ': ' + d.tops.join(', ') : ''})` : ''}`
-    : `${d.name}${d.time ? ' at ' + tz.hm12(d.time) : ''}${d.minutes ? `, ${d.minutes} min` : ''}${d.tss != null ? `, ${d.tss} TSS` : ''}${d.avg_hr ? `, avg HR ${d.avg_hr}` : ''}${d.before ? `, ${d.before.min_before} min after ${d.before.name} (${d.before.c} g carbs)` : ', nothing eaten before it'}`).join('; ')
+    : `${d.name}${d.time ? ' at ' + tz.hm12(d.time) : ''}${d.minutes ? `, ${d.minutes} min` : ''}${d.tss != null ? `, ${d.tss} TSS` : ''}${d.avg_hr ? `, avg HR ${d.avg_hr}` : ''}${d.before ? `, ${d.before.min_before} min after ${d.before.name} (${d.before.c} g carbs)` : row.food ? ', nothing logged before it' : ''}`).join('; ')
     + (row.plan_pct != null ? ` [riding ${row.plan_pct}% of plan]` : ''));
   else if (row.planned.length) bits.push(`planned but not done: ${row.planned.join(', ')}`);
   else bits.push('no training');
@@ -102,11 +102,14 @@ function patterns(rows, today) {
   ].filter(p => p[0].n && p[1].n);
   // session habits: each ride with the day's "% of plan" as how it went
   const rides = []; for (const r of all) for (const d of r.done) if (d.kind === 'ride') rides.push({ r, d, at: toMin(d.time), q: r.plan_pct });
+  // what was eaten before a ride is known only on a day with food in the journal: a day he logged nothing is not a
+  // fasted ride (it was counted as one until 16 Nov 2026)
+  const fedRides = rides.filter(x => x.r.food);
   const q = x => x.q == null ? null : Math.min(120, x.q);
   const rideHabits = [
     [group('rides before 11 a.m.', rides.filter(x => x.at != null && x.at < 660), q), group('rides 11 a.m. to 3 p.m.', rides.filter(x => x.at != null && x.at >= 660 && x.at < 900), q), group('rides after 3 p.m.', rides.filter(x => x.at != null && x.at >= 900), q)],
-    [group('rides within 90 min of eating', rides.filter(x => x.d.before && x.d.before.min_before < 90), q), group('rides 90 min to 3 h after eating', rides.filter(x => x.d.before && x.d.before.min_before >= 90 && x.d.before.min_before <= 180), q), group('rides over 3 h after eating or fasted', rides.filter(x => !x.d.before || x.d.before.min_before > 180), q)],
-    [group('rides with 40 g carbs or more in the meal before', rides.filter(x => x.d.before && x.d.before.c >= 40), q), group('rides with under 40 g carbs before', rides.filter(x => x.d.before && x.d.before.c < 40), q)],
+    [group('rides within 90 min of eating', fedRides.filter(x => x.d.before && x.d.before.min_before < 90), q), group('rides 90 min to 3 h after eating', fedRides.filter(x => x.d.before && x.d.before.min_before >= 90 && x.d.before.min_before <= 180), q), group('rides over 3 h after eating or with nothing logged before them (days with food logged only)', fedRides.filter(x => !x.d.before || x.d.before.min_before > 180), q)],
+    [group('rides with 40 g carbs or more in the meal before', fedRides.filter(x => x.d.before && x.d.before.c >= 40), q), group('rides with under 40 g carbs before', fedRides.filter(x => x.d.before && x.d.before.c < 40), q)],
     [group('rides after 7 h sleep or more', rides.filter(x => x.r.sleep_h != null && x.r.sleep_h >= 7), q), group('rides after under 6.5 h sleep', rides.filter(x => x.r.sleep_h != null && x.r.sleep_h < 6.5), q)]
   ].map(p => p.filter(g => g.n)).filter(p => p.length >= 2);
   const goodRides = rides.filter(x => x.q != null && x.q >= GOOD_RIDE).slice(-6).map(x => ({ date: x.r.date, dow: x.r.dow, name: x.d.name, time: x.d.time, pct: x.q, before: x.d.before, sleep_h: x.r.sleep_h }));
