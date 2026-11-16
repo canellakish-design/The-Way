@@ -91,5 +91,7 @@ ok('what a yes would change: rides kept, changed in place, added, and the ones t
   assert.ok(/Thu, Nov 19: Zone 1, 60 min at 7:00a \(trainer: dark\); Zone 1, 60 min at 4:45p \(trainer: dark\); lift Upper body and core 10:00a/.test(text), text);
   assert.ok(/Sat, Nov 21: Away .*\(comes off: Z1 road 150 min 7:40a\)/.test(text), text);
   assert.ok(/Mon, Nov 16: Rest day \(three classes\)/.test(text), text);
+  assert.ok(/^Fri, Nov 20: no ride$/.test(P.lines([{ date: '2026-11-20', kind: 'base', rides: [], note: '' }], [], [])[0]));
+  assert.ok(/^Fri, Nov 20: No free hour in the day$/.test(P.lines([{ date: '2026-11-20', kind: 'base', rides: [], note: 'no free hour in the day' }], [], [])[0]));
 });
 console.log(n + ' passed');

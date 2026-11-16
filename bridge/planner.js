@@ -217,7 +217,8 @@ function lines(plan, ops, lifts) {
     const label = tz.dayShort(day.date), L = (lifts || []).filter(l => l.date === day.date).map(l => `${l.name} ${tz.hm12(l.time)}`);
     const rides = day.rides.map(r => `${rideName(r)} at ${tz.hm12(r.time)} (${r.type === 'vo2' ? 'trainer' : r.outside ? 'outside' : 'trainer: ' + r.indoor_why})`);
     const gone = ops.filter(o => o.op === 'remove' && o.date === day.date).map(o => `comes off: ${o.was.name}${o.was.time ? ' ' + tz.hm12(o.was.time) : ''}`);
-    out.push(`${label}: ${rides.concat(L.map(x => 'lift ' + x)).join('; ') || (day.kind === 'rest' || day.kind === 'away' || day.kind === 'off' ? '' : 'nothing')}${day.note ? `${rides.length || L.length ? '. ' : ''}${day.note.replace(/^./, c => c.toUpperCase())}` : ''}${gone.length ? ` (${gone.join('; ')})` : ''}`);
+    const things = rides.concat(L.map(x => 'lift ' + x)).join('; '), note = day.note ? day.note.replace(/^./, c => c.toUpperCase()) : '';
+    out.push(`${label}: ${things && note ? things + '. ' + note : things || note || 'no ride'}${gone.length ? ` (${gone.join('; ')})` : ''}`);
   }
   return out;
 }
@@ -287,9 +288,14 @@ async function propose(weekOf, o) {
   const out = { id, at: Date.now(), week_of: G.mon, to: G.sun, model: M, model_words: modelWords(M), tried: o.changes ? parseChanges(o.changes) : null,
     days: plan.filter(d => d.kind !== 'past'), ops, lines: lines(plan, ops, G.lifts), riding_min: { now_planned: before, this_plan: after },
     changes: { add: ops.filter(x => x.op === 'add').length, change: ops.filter(x => x.op === 'change').length, remove: ops.filter(x => x.op === 'remove').length, keep: ops.filter(x => x.op === 'keep').length } };
-  await setJSON(PROPOSAL_KEY, out).catch(() => {});
+  await keep(out);
   return out;
 }
+// the plans on the table: the last five laid out, newest first
+async function table() { const t = await getJSON(PROPOSAL_KEY, null).catch(() => null); return t && Array.isArray(t.list) ? t.list : t && t.id ? [t] : []; }
+async function keep(p) { const list = (await table()).filter(x => x.id !== p.id); list.unshift(p); await setJSON(PROPOSAL_KEY, { list: list.slice(0, 5) }).catch(() => {}); }
+// by its id; with none, the newest one not yet written (and not older than a quarter hour)
+async function proposal(id) { const list = await table(); if (id) return list.find(x => x.id === id) || null; const p = list.find(x => !x.applied_at); return p && Date.now() - p.at < 15 * 60000 ? p : null; }
 // the body of a planned ride, from the library's session of that length, on the road or on the trainer
 function bodyOf(r) {
   const { LIBRARY, notesFor } = require('./workout-library');
@@ -299,8 +305,8 @@ function bodyOf(r) {
 }
 // A yes: the plan that was laid out with that id is written, one change after another.
 async function apply(id) {
-  const P = await getJSON(PROPOSAL_KEY, null).catch(() => null);
-  if (!P || (id && P.id !== id)) { const e = new Error('That plan is no longer the one on the table. Ask for the week again.'); e.status = 409; throw e; }
+  const P = await proposal(id);
+  if (!P) { const e = new Error('That plan is no longer on the table. Ask for the week again.'); e.status = 409; throw e; }
   if (Date.now() - P.at > 6 * 3600e3) { const e = new Error('That plan was laid out more than six hours ago and the day has moved on. Ask for the week again.'); e.status = 409; throw e; }
   if (P.applied_at) return { already: true, week_of: P.week_of, done: P.done || [] };
   const WK = require('./workouts'), done = [], failed = [], today = tz.todayKey();
@@ -312,7 +318,7 @@ async function apply(id) {
       if (w && w.id && o.date <= tz.shiftKey(today, 8)) await WK.send(w.id).catch(() => {}); }
     catch (e) { failed.push(`${rideName(o.ride)} ${tz.dayShort(o.date)}: ${e.message}`); }
   }
-  await setJSON(PROPOSAL_KEY, Object.assign({}, P, { applied_at: Date.now(), done, failed })).catch(() => {});
+  await keep(Object.assign({}, P, { applied_at: Date.now(), done, failed }));
   try { require('./voice').contextStale && require('./voice').contextStale(); } catch (e) { /* the coach reads it fresh next time */ }
   return { applied: true, week_of: P.week_of, done, failed, kept: P.ops.filter(x => x.op === 'keep').length };
 }
@@ -325,4 +331,4 @@ function attach(app) {
   app.post('/planner/apply', wrap(req => apply((req.body || {}).id)));
 }
 
-module.exports = { attach, model, setModel, propose, apply, gather, buildWeek, diff, lines, freeOf, cleanModel, parseChanges, parseOverrides, modelWords, DEFAULT_MODEL, mondayOf };
+module.exports = { attach, model, setModel, propose, apply, proposal, gather, buildWeek, diff, lines, freeOf, cleanModel, parseChanges, parseOverrides, modelWords, DEFAULT_MODEL, mondayOf };
