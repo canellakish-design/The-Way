@@ -1462,19 +1462,29 @@ function dayRows(d, plan, isToday){
         lane: LANE.food, source: "food", href: "#food", meal: { logged: true, match: { key, word, macros: { word: `${e.kcal} kcal` }, rules: { word } }, slot: null }, desc: (e.assessment && e.assessment.why) || null });
     }
   }
+  // what is on the plan and is not a ride (by its name): the five lifts, the Pump, a Kettlebell Blast
+  const NOT_A_RIDE = /\blift|^push\b|^pull\b|^upper\b|^legs\b|weight|strength|kettlebell|\bblast\b|\bpump\b/i;
   // the rides that happened, from Strava, when no planned row already holds them
   if (isToday && HUB.food){
     for (const sx of (HUB.food.sessions || [])){
       if (!sx.done || !sx.time) continue;
+      // rides only: a lift saved on the Lift page is a done session too, and it is not a ride that happened (15 Nov
+      // 2026: Legs done at 7:30a took the afternoon's Zone 1 card to 7:30a, and the ride's real time, 5:51p, then
+      // landed on the Kettlebell Blast planned beside it)
+      if (sx.kind === "lift" || NOT_A_RIDE.test(sx.name || "") || /weight|strength/i.test(sx.sport || "")) continue;
       const a = hhmmToMin(sx.time); if (a == null) continue;
       const held = rows.some(r => (r.source === "plan" || r.source === "intervals") && r.start != null && Math.abs(r.start - a) <= 45 && !r.moved_to_ride);
       const b = a + (sx.minutes || 60);
       // the planned ride it was (Harry, 13 Nov: "when a ride is done, just move the ride to the actual time … you
       // don't need to have two completed rides"): the planned card moves to when it was ridden and is the one card
       const nm = t => String(t || "").toLowerCase().replace(/^zwift - intervals icu: /, "").replace(/\s+/g, " ").trim();
-      const twin = rows.filter(r => (r.source === "plan" || r.source === "intervals") && r.start != null && !r.moved_to_ride && !/lift|push$|pull|upper|legs|weight|strength/i.test(r.title)
-          && (nm(r.title) === nm(sx.name) || (r.wid && WGRADE[r.wid] && WGRADE[r.wid].ridden) || Math.abs(r.start - a) <= 45))
-        .sort((x, y) => Math.abs(x.start - a) - Math.abs(y.start - a))[0];
+      // which planned card it was: the one with its name; else the planned ride nearest in time, within 45 minutes;
+      // else the one planned ride the grading says was ridden. Never a lift, a Kettlebell Blast or the Pump.
+      const cands = rows.filter(r => (r.source === "plan" || r.source === "intervals") && r.start != null && !r.moved_to_ride && !NOT_A_RIDE.test(r.title || "") && !/weight|strength/i.test(r.sport || ""));
+      const byName = cands.filter(r => nm(r.title) === nm(sx.name)).sort((x, y) => Math.abs(x.start - a) - Math.abs(y.start - a))[0];
+      const near = cands.filter(r => Math.abs(r.start - a) <= 45).sort((x, y) => Math.abs(x.start - a) - Math.abs(y.start - a))[0];
+      const riddenOnes = cands.filter(r => r.wid && WGRADE[r.wid] && WGRADE[r.wid].ridden);
+      const twin = byName || near || (riddenOnes.length === 1 ? riddenOnes[0] : null);
       if (twin){
         if (Math.abs(twin.start - a) > 5) twin.detail = `${twin.detail ? twin.detail + " · " : ""}planned ${twin.from}`;
         twin.planned_start = twin.start; twin.planned_end = twin.end;

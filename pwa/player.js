@@ -535,6 +535,7 @@
   // ---------- the simulator (dev only) ----------
   const SIM = { on: false, hr: 92, t: 0 };
   function simFeed(ts){
+    if (SIM.coast){ L.power = 0; L.cadence = 0; L.speed = 0; L.bikeAt = ts; SIM.hr += (78 - SIM.hr) * 0.03; L.hr = Math.round(SIM.hr); L.hrAt = ts; return; }   // off the bike
     const iv = cur();
     const tgt = targetNow();
     let p = tgt != null && ergActive(iv) ? tgt + Math.round((Math.random() - 0.5) * 8) : 125 + Math.round(Math.sin(ts / 9000) * 12);
@@ -547,6 +548,27 @@
 
   // ---------- the ride ----------
   let ride = null, timer = null, nextAt = 0, wake = null, audio = null;
+  // Off the bike, the time and the numbers stop (Harry, 15 Nov 2026: "when I get off the bike I want the time and
+  // measurements to stop … like my 1050 does now"). The Edge calls it Auto Pause and goes by speed. On a trainer the
+  // same thing is read from what the trainer sends every second: three seconds with the cadence at zero and no power
+  // and the clock stops, those three seconds taken back out; the first turn of the pedals starts it again. A pause he
+  // pressed himself stays until he presses Resume. With no trainer heard, nothing is known and nothing pauses.
+  const AUTO = { on: (() => { try{ return localStorage.getItem("way-player-autopause") !== "off"; }catch{ return true; } })(), STILL_S: 3 };
+  const pedalling = () => now() - L.bikeAt <= 3000 && ((L.cadence || 0) >= 20 || (L.power || 0) >= 30);
+  function autoPause(){
+    const r = ride; if (!r || r.state !== "riding") return;
+    let n = 0, first = Math.round(now());
+    while (n < AUTO.STILL_S && r.samples.length){ const a = r.samples[r.samples.length - 1]; if ((a[1] || 0) > 3 || (a[2] || 0) > 0) break; first = a[0]; r.samples.pop(); n++; }
+    r.wt = Math.max(0, r.wt - n); r.still = 0;
+    if (r.bk){ r.bk.actual = { low: 0, high: 0, peak: 0 }; r.bk.n = 0; }   // counted again from the seconds that are left
+    r.state = "paused"; r.autoPaused = true; r.pauses.push([first, null]); if (r.edge) r.edge.stop();
+    beep(520, 0.2); coachSay("Paused. The clock starts again when you pedal.", { every: ["autopause", 30] });
+    flush(); paint();
+  }
+  function autoResume(){
+    const r = ride; if (!r || r.state !== "paused" || !r.autoPaused) return;
+    resume(); coachSay("Riding again.", { quiet: true });
+  }
   const totalOf = r => r.intervals.reduce((s, x) => Math.max(s, x.start_s + x.dur_s), 0);
   function idxAt(r, wt){ for (let k = 0; k < r.intervals.length; k++){ const x = r.intervals[k]; if (wt >= x.start_s && wt < x.start_s + x.dur_s) return k; } return r.intervals.length; }
   const cur = () => ride ? ride.intervals[idxAt(ride, ride.wt)] || null : null;
@@ -642,20 +664,27 @@
     const fresh = at => ts - at <= 3000;
     r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
     if (r.edge){ const a = r.samples[r.samples.length - 1]; edgeDo(r.edge.second({ t: r.samples.length, wt: r.wt, w: a[1], hr: a[3], cad: a[2] })); }
+    coachSecond(r, k, iv, r.samples[r.samples.length - 1]);
     r.wt += 1;
     if (hrLed(iv)) seekStep(iv);
     const k2 = idxAt(r, r.wt);
     const left = iv ? iv.start_s + iv.dur_s - r.wt : null;
     if (iv && left === 3 && r.intervals[k + 1]) beep(880, 0.15);
-    if (k2 !== k){ beep(k2 < r.intervals.length ? 1320 : 660, 0.25); flush(); if (k2 >= r.intervals.length) note("workout done: ride on, or End to save"); }
+    if (k2 !== k){ beep(k2 < r.intervals.length ? 1320 : 660, 0.25); flush(); coachStep(r, k2); if (k2 >= r.intervals.length) note("workout done: ride on, or End to save"); }
     else if (r.samples.length % 5 === 0) flush();
     syncErg();
+    // the pedals have stopped: three such seconds and the clock stops with them
+    r.still = fresh(L.bikeAt) && (L.cadence != null || L.power != null) && !(L.cadence > 0) && !(L.power > 3) ? (r.still || 0) + 1 : 0;
+    if (AUTO.on && r.still >= AUTO.STILL_S) autoPause();
   }
   // called each tick and on each trainer value: every whole second due gets its sample (a throttled tab catches up)
   function pump(){
-    if (!ride || ride.state !== "riding") return;
+    if (!ride) return;
+    // stopped by itself: it watches for the pedals and starts again on the first turn
+    if (ride.state === "paused" && ride.autoPaused){ if (SIM.on) simFeed(now()); if (pedalling()) autoResume(); return; }
+    if (ride.state !== "riding") return;
     const t = now(); let n = 0;
-    while (nextAt <= t && n < 600){ stepSecond(nextAt); nextAt += 1000; n++; }
+    while (ride.state === "riding" && nextAt <= t && n < 600){ stepSecond(nextAt); nextAt += 1000; n++; }
     if (n) paint();
   }
   function startTimer(){ clearInterval(timer); timer = setInterval(pump, Math.max(40, Math.round(250 / CLK.speed))); }
@@ -679,6 +708,7 @@
     ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, date: keyOf(new Date(t0)),
       samples: [], pauses: [], wt: 0, bias: 0, erg: true, raw: {}, rawCount: 0, sim: SIM.on };
     ride.bk = bucketsFor(ride, S);
+    COACH.feed = []; COACH.said = {}; COACH.spokeAt = 0;
     drawRide();
     // the count-in: 3, 2, 1
     const ov = document.getElementById("plCount");
@@ -695,12 +725,13 @@
   }
   function pause(){
     if (!ride || ride.state !== "riding") return;
-    ride.state = "paused"; ride.pauses.push([Math.round(now()), null]); if (ride.edge) ride.edge.stop();
+    ride.state = "paused"; ride.autoPaused = false; ride.pauses.push([Math.round(now()), null]); if (ride.edge) ride.edge.stop();
     ctl([0x08, 0x02], "pause"); flush(); paint();
   }
   function resume(){
     if (ride && ride.edge) ride.edge.state.running = true;
     if (!ride || ride.state !== "paused") return;
+    ride.autoPaused = false; ride.still = 0;
     const t = Math.round(now()), p = ride.pauses[ride.pauses.length - 1];
     if (p && p[1] == null) p[1] = t; else ride.pauses.push([ride.samples.length ? ride.samples[ride.samples.length - 1][0] + 1000 : t, t]);
     ride.state = "riding"; nextAt = t; lockScreen();
@@ -803,35 +834,133 @@
       <div class="pl-note small" id="plNote" hidden></div>`;
   }
 
-  // ---- the Edge 1050 beside the player (pwa/edge.js): the field's own screen, second by second ----
-  let EDGE = null, EDGE_SESS = null, edgeRaf = 0;
+  // ---- the coach beside the ride (Harry, 15 Nov 2026: "On the workout player, don't recreate the 1050. I just want
+  // the coach on the side, giving me feedback through the ride.") ----
+  // The Edge look-alike that stood here is gone. What it worked out still runs (pwa/edge.js, the same rules as the
+  // field on his real Edge: the fuel prompts, the Zone 1 cap, the drift, the VO2 goal, the rating), and the coach says
+  // it: a line on the page, spoken aloud, with a button where the Edge had the lap button. To that he adds what a coach
+  // beside the bike would say: each interval as it comes, ten seconds' warning of a hard one, a slow cadence, a heart
+  // rate under the floor, halfway, done, and that the clock has stopped because the pedals have.
+  let EDGE = null, EDGE_SESS = null;
+  const COACH = { feed: [], said: {}, spokeAt: 0, voice: (() => { try{ return localStorage.getItem("way-player-voice") !== "off"; }catch{ return true; } })() };
   function edgeFor(w, ivs, ftp, rideId){
     if (!window.Edge) return null;
     const sess = EDGE_SESS ? Object.assign({}, EDGE_SESS, { name: w && w.name }) : null;
     return Edge.create({ session: sess, intervals: ivs, ftp, rideId, name: w && w.name, time: w && w.time ? hm12(w.time) : null, lines: BKS.lines, colours: BKS.colours });
   }
-  const edgeAside = () => window.Edge ? `<aside class="pl-edge" aria-label="Edge 1050">${Edge.deviceHTML("plEdgeDev")}<div class="small pl-edge-note">Tap the screen for the next data page. LAP logs fuel at a prompt and answers the rating.</div></aside>` : "";
-  // what the Edge asks for: a buzz is a beep pattern here; a post goes to The Way as the field would send it
+  // o.once: a key said once a ride; o.every: [key, seconds] not again within that much riding; o.force: spoken even
+  // just after another line; o.quiet: written, not spoken
+  function coachSay(text, o){
+    o = o || {}; if (!text) return;
+    const t = ride ? ride.samples.length : 0;
+    if (o.once){ if (COACH.said[o.once]) return; COACH.said[o.once] = 1; }
+    if (o.every){ const k = o.every[0]; if (COACH.said[k] != null && t - COACH.said[k] < o.every[1]) return; COACH.said[k] = t; }
+    COACH.feed.unshift({ text, t: ride ? t : null }); if (COACH.feed.length > 40) COACH.feed.length = 40;
+    // one voice at a time, and not a stream of them: a line within twelve seconds of the last is written only
+    const quiet = o.quiet || !COACH.voice || CLK.speed > 1 || (!o.force && Date.now() - COACH.spokeAt < 12000);
+    if (!quiet){ COACH.spokeAt = Date.now(); try{ if (typeof speak === "function") speak(text); if (window.Face && Face.caption) Face.caption(text); }catch{} }
+    paintCoach();
+  }
+  // the field's short alert, in the coach's words; [words, spoken]
+  function coachWords(a){
+    let m;
+    if ((m = /^Fuel(?: now)?: (.+?) (\d+) g$/.exec(a))) return [`${/^Fuel now/.test(a) ? "Still owed" : "Fuel"}: ${m[1]}, ${m[2]} grams. Tap Had it when it is down.`, true];
+    if ((m = /^Logged: (.+)$/.exec(a))) return [`Logged: ${m[1]}.`, false];
+    if ((m = /^Over (\d+): ease off$/.exec(a))) return [`Heart rate has been over ${m[1]} for half a minute. Ease off.`, true];
+    if (/^Legs\?/.test(a)) return ["Nearly there. How are the legs, 1 to 5? Tap a number.", true];
+    if (/^Breathing\?/.test(a)) return ["And the breathing, 1 to 5?", true];
+    if ((m = /^Rated: legs (\d), breathing (\d)$/.exec(a))) return [`Noted: legs ${m[1]}, breathing ${m[2]}.`, false];
+    if (/^Low fuel/.test(a)) return [ride && ride.samples.length < 300 ? "You are starting this one low on fuel. Eat in the first few minutes." : "About twenty minutes from running low. Eat now.", true];
+    if (/^Drifting/.test(a)) return ["Your heart rate has drifted up 5% for the same power. Ease off, or eat.", true];
+    if ((m = /^(\d+) min above (\d+): goal reached$/.exec(a))) return [`${m[1]} minutes above ${m[2]}: that is the goal. Anything more is a bonus.`, true];
+    return [a, true];
+  }
+  // what the field asks for: a buzz is a beep here and a line from the coach; a post goes to The Way as the field would send it
   function edgeDo(evs){
     for (const e of evs || []){
-      if (e.type === "alert"){ if (e.buzz === "long") beep(520, 0.6); else if (e.buzz === "double"){ beep(700, 0.12); setTimeout(() => beep(700, 0.12), 220); } else beep(900, 0.1); }
+      if (e.type === "alert"){ if (e.buzz === "long") beep(520, 0.6); else if (e.buzz === "double"){ beep(700, 0.12); setTimeout(() => beep(700, 0.12), 220); } else beep(900, 0.1);
+        const [words, spoken] = coachWords(e.text); coachSay(words, { force: e.buzz === "long", quiet: !spoken }); }
       else if (e.type === "post") bridge(e.path, { method: "POST", headers: J, body: JSON.stringify(e.body) }).catch(err => note(`The Way did not take ${e.path}: ${err.message}`));
     }
-    paintEdge();
+    paintCoach();
   }
-  function paintEdge(){
-    const dev = document.getElementById("plEdgeDev"); if (!dev || !EDGE) return;
-    cancelAnimationFrame(edgeRaf);
-    edgeRaf = requestAnimationFrame(() => { const cv = dev.querySelector("canvas"); if (!cv) return; const m = EDGE.model(Date.now()); Edge.draw(cv, m);
-      dev.querySelectorAll(".e-dots i").forEach((d, i) => d.classList.toggle("on", i === m.page)); });
+  // the fuel prompt a tap would answer now: the open one, one missed in the last quarter hour, or one due within five minutes
+  const fuelDue = () => { if (!EDGE || !ride || ride.edge !== EDGE) return null; const st = EDGE.state, t = st.timerS;
+    const open = st.prompts.find(x => x.state === "open"); if (open) return { p: open, word: "Had it" };
+    const late = st.prompts.find(x => x.state === "missed" && t <= x.at + 900); if (late) return { p: late, word: "Had it late" };
+    const soon = st.prompts.find(x => x.state === "due" && x.at - t <= 300); return soon ? { p: soon, word: "Had it early" } : null; };
+  // before the ride: what today is, in his words
+  function preRideWords(){
+    const S = S0, m = EDGE ? EDGE.model(Date.now()) : null; if (!S) return "";
+    const w = S.workout || {}, g = goalOf(S.workout, S.intervals);
+    return `${w.name || "A free ride"}${g ? ": " + g.words : ""}. ${m && m.fuel ? `Fuel: ${m.fuel.product}, ${m.fuel.grams} g, ${m.fuel.total} time${m.fuel.total === 1 ? "" : "s"}; I will call each one.` : "Water only on this one."}${m && m.pre && m.pre.eat ? ` Before: ${m.pre.eat}.` : ""} ${AUTO.on ? "Stop pedalling and the clock stops with you." : ""}`.trim();
   }
+  const edgeAside = () => `<aside class="pl-coach" id="plCoach" aria-label="Coach">
+      <div class="chface plc-stage" id="plcStage"></div>
+      <div class="plc-head"><div class="plc-who"><b>Coach</b><span class="small">with you through the ride</span></div><button id="plcVoice" class="plc-voice"></button></div>
+      <div class="plc-now" id="plcNow" aria-live="polite"></div>
+      <div class="plc-act" id="plcAct"></div>
+      <div class="plc-status small" id="plcStatus"></div>
+      <ul class="plc-feed" id="plcFeed"></ul>
+      <div class="small plc-note">Hold the round button to ask him anything.</div>
+    </aside>`;
+  function paintCoach(){
+    const box = document.getElementById("plCoach"); if (!box) return;
+    const $ = id => document.getElementById(id), m = EDGE ? EDGE.model(Date.now()) : null, first = COACH.feed[0];
+    const nowWords = first ? first.text : ride ? "With you. I will speak up when it matters." : preRideWords();
+    if ($("plcNow").textContent !== nowWords) $("plcNow").textContent = nowWords;
+    // what he can answer: the rating near the end, the fuel that is due
+    let html = "";
+    const due = fuelDue();
+    if (ride && m && m.rating) html = `<div class="plc-q">${m.rating.ask === "legs" ? "Legs" : "Breathing"}: 1 easy, 5 spent${m.rating.presses ? `. <b>${Math.min(5, m.rating.presses)}</b>, saving…` : ""}</div>` + (m.rating.presses ? "" : `<div class="plc-rate">${[1, 2, 3, 4, 5].map(n => `<button data-rate="${n}">${n}</button>`).join("")}</div>`);
+    else if (due) html = `<button class="primary plc-had" data-had>${due.word}: ${esc(due.p.product)} ${due.p.grams} g</button>`;
+    const act = $("plcAct"); if (act.__h !== html){ act.__h = html; act.innerHTML = html; }
+    const st = m && m.fuel ? (m.fuel.next ? (m.fuel.next.open ? "Fuel is due now" : `Next fuel in ${clock(Math.max(0, m.fuel.next.in))}`) + ` · ${m.fuel.eaten} of ${m.fuel.total} taken` : `Fuel: ${m.fuel.eaten} of ${m.fuel.total} taken`) : ride ? "Water only on this one" : "";
+    if ($("plcStatus").textContent !== st) $("plcStatus").textContent = st;
+    const feed = COACH.feed.slice(1, 7).map(f => `<li><span class="t">${f.t != null ? clock(f.t) : ""}</span><span>${esc(f.text)}</span></li>`).join("");
+    const fl = $("plcFeed"); if (fl.__h !== feed){ fl.__h = feed; fl.innerHTML = feed; }
+    const vb = $("plcVoice"); if (vb){ vb.textContent = COACH.voice ? "Voice on" : "Voice off"; vb.classList.toggle("on", COACH.voice); }
+  }
+  const paintEdge = paintCoach;
   function bindEdge(){
-    const dev = document.getElementById("plEdgeDev"); if (!dev) return;
-    dev.querySelector(".e-lap").onclick = () => { if (EDGE && ride && ride.edge === EDGE) edgeDo(EDGE.lap()); };
-    dev.querySelector(".e-start").onclick = () => { if (!ride){ const go = document.getElementById("plStart"); if (go && !go.disabled) go.click(); } else if (ride.state === "riding") pause(); else if (ride.state === "paused") resume(); };
-    dev.querySelector(".e-screen").onclick = () => { if (EDGE){ EDGE.page(EDGE.state.page + 1); paintEdge(); } };
-    // the next event counts down every second even before the ride starts
-    clearInterval(bindEdge.tick); bindEdge.tick = setInterval(() => { if (!document.getElementById("plEdgeDev")) return clearInterval(bindEdge.tick); paintEdge(); }, 1000);
+    const box = document.getElementById("plCoach"); if (!box) return;
+    // the coach himself, the figure from the Coach page (face.js): the same one is moved here, not a second one built
+    try{ const stage = document.getElementById("plcStage"); if (stage && window.Face && Face.mount) Face.mount(stage, { side: true }); }catch{}
+    box.onclick = e => {
+      const live = EDGE && ride && ride.edge === EDGE;
+      if (e.target.closest("#plcVoice")){ COACH.voice = !COACH.voice; try{ localStorage.setItem("way-player-voice", COACH.voice ? "on" : "off"); }catch{} if (!COACH.voice){ try{ speechSynthesis.cancel(); if (window.CoachVoice) CoachVoice.stop(); }catch{} } paintCoach(); return; }
+      if (e.target.closest("[data-had]") && live){ edgeDo(EDGE.lap()); return; }
+      const rb = e.target.closest("[data-rate]"); if (rb && live){ const n = +rb.dataset.rate; let evs = []; for (let k = 0; k < n; k++) evs = evs.concat(EDGE.lap()); edgeDo(evs); }
+    };
+    // the fuel countdown moves every second even before the ride starts
+    clearInterval(bindEdge.tick); bindEdge.tick = setInterval(() => { if (!document.getElementById("plCoach")) return clearInterval(bindEdge.tick); paintCoach(); }, 1000);
+    paintCoach();
+  }
+  // what a coach beside the bike says as the seconds go by. a: the second just recorded; k, iv: its interval
+  function coachSecond(r, k, iv, a){
+    const n = r.samples.length, total = totalOf(r), hr = a[3], g = r.goal || (r.goal = goalOf(r.workout, r.intervals) || { kind: "" });
+    if (n === 1) coachSay(`${(r.workout && r.workout.name) || "A free ride"}${g.words ? ". The goal: " + g.words : ""}.${iv ? ` First: ${iv.label}, ${targetWords(iv, r.bias)}.` : ""}`, { once: "open", force: true });
+    const nx = r.intervals[k + 1] || null, left = iv ? iv.start_s + iv.dur_s - r.wt : null;
+    // ten seconds' warning of a long step that asks for more
+    if (iv && nx && left === 11 && nx.dur_s >= 60 && (nx.target_w || 0) > (iv.target_w || 0) * 1.15) coachSay(`Ten seconds. ${nx.label}: ${targetWords(nx, r.bias)}.`, { force: true });
+    // pedalling slowly for twenty seconds
+    r.slow = a[2] != null && a[2] > 0 && a[2] < 70 && (a[1] || 0) > 30 ? (r.slow || 0) + 1 : 0;
+    if (r.slow === 20) coachSay(`Cadence ${a[2]}. Lighter and quicker: spin toward 90.`, { every: ["cadence", 300] });
+    // a Zone 1 ride under its floor for a minute, once it has had ten minutes to come up
+    r.under = g.kind === "z1" && n > 600 && hr != null && hr >= 30 && hr < HR_Z1_LO ? (r.under || 0) + 1 : 0;
+    if (r.under === 60) coachSay(`Heart rate ${hr}, under the ${HR_Z1_LO} floor. A little more.`, { every: ["under", 300] });
+    // halfway, with where the goal stands
+    if (total >= 1200 && r.wt === Math.floor(total / 2)){ const gn = g.kind ? goalNow(g, r.samples) : null; coachSay(`Halfway.${gn ? ` ${gn.big} ${gn.of} ${gn.lab} so far.` : ""}`, { once: "half" }); }
+    // a long steady stretch: the small things, every quarter hour
+    if (n > 0 && n % 900 === 0 && iv && iv.dur_s >= 900) coachSay("Shoulders down, hands soft, and drink.", { every: ["form", 600] });
+  }
+  // the step that has just begun, said aloud: a long one always, a short repeat only as its block begins
+  function coachStep(r, k2){
+    const nx = r.intervals[k2];
+    if (!nx){ coachSay("That is the session. Ride on, or press End to save.", { once: "done", force: true }); return; }
+    const first = !nx.rep || /^1 of /.test(nx.rep);
+    if (nx.dur_s >= 60) coachSay(`${nx.label}${nx.rep ? ", " + nx.rep : ""}: ${targetWords(nx, r.bias)} for ${clock(nx.dur_s)}.`, { force: nx.dur_s >= 180 });
+    else if (first) coachSay(`${nx.label}${nx.rep ? ": " + nx.rep.replace(/^1 of /, "") + " rounds" : ""}. ${targetWords(nx, r.bias)}. Go on the beep.`, { force: true });
   }
 
   function drawRide(){
@@ -850,7 +979,7 @@
       <div class="pl-ctl">
         <button id="cPause">Pause</button><button id="cSkip">Skip interval</button>
         <button id="cBm" aria-label="Bias minus 5 percent">−5%</button><button id="cBp" aria-label="Bias plus 5 percent">+5%</button>
-        <button id="cErg">ERG off</button><button id="cEnd" class="pl-end">End</button>
+        <button id="cErg">ERG off</button><button id="cAuto"></button><button id="cEnd" class="pl-end">End</button>
       </div>
       <div class="pl-viz"><div class="pf-box pf-ride-box" id="plFollow"></div><div class="pl-goal" id="plGoal"></div></div>
       <div class="hu-fields pl-fields">
@@ -873,6 +1002,7 @@
     $("cBm").onclick = () => { ride.bias = Math.max(-30, ride.bias - 5); syncErg(); paint(); };
     $("cBp").onclick = () => { ride.bias = Math.min(30, ride.bias + 5); syncErg(); paint(); };
     $("cErg").onclick = () => { ride.erg = !ride.erg; syncErg(); paint(); };
+    $("cAuto").onclick = () => { AUTO.on = !AUTO.on; try{ localStorage.setItem("way-player-autopause", AUTO.on ? "on" : "off"); }catch{} paint(); };
     $("cEnd").onclick = () => { $("plConfirm").hidden = false; try{ $("plConfirm").scrollIntoView({ block: "nearest", behavior: "smooth" }); }catch{} };
     $("cBack").onclick = () => { $("plConfirm").hidden = true; };
     $("cSave").onclick = () => { $("cSave").disabled = true; endRide(); };
@@ -886,7 +1016,7 @@
     const r = ride, k = idxAt(r, r.wt), iv = r.intervals[k] || null, nx = r.intervals[k + 1] || null, total = totalOf(r);
     const fresh = at => now() - at <= 3000;
     const tgt = targetNow();
-    $("plPos").textContent = r.state === "paused" ? "Paused" : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
+    $("plPos").textContent = r.state === "paused" ? (r.autoPaused ? "Paused · off the bike" : "Paused") : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
     $("plLbl").textContent = iv ? iv.label + (iv.rep ? " · " + iv.rep : "") : "Ride on, or End to save";
     $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
     $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? (hrLed(iv) && now() - L.hrAt <= 15000 ? ` · holding HR ${HR_Z1_AIM}` : "") : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
@@ -913,6 +1043,7 @@
     $("cPause").textContent = r.state === "paused" ? "Resume" : "Pause";
     $("cPause").classList.toggle("primary", r.state === "paused");
     $("cErg").textContent = r.erg ? "ERG off" : "ERG on";
+    $("cAuto").textContent = AUTO.on ? "Auto-pause on" : "Auto-pause off";
     $("cSkip").disabled = !nx && !iv;
     const left = iv ? iv.start_s + iv.dur_s - r.wt : 0;
     $("plNext").innerHTML = !iv ? "" : nx ? `Next: <b>${esc(nx.label)}${nx.rep ? " " + esc(nx.rep) : ""}</b> · ${esc(targetWords(nx, r.bias))} in <b>${clock(left)}</b>` : `Last interval · ends in <b>${clock(left)}</b>`;
@@ -1017,6 +1148,6 @@
     autoConnect();
   };
 
-  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, DB };
+  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; } } };
   if (location.hash.replace(/^#/, "").split("?")[0] === "player") nav();
 })();
