@@ -113,7 +113,7 @@ async function contextNow() {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
   const [day, sched, wx, week, chain, scores, sig, lifts, weigh, sleepLast, meds, notebook, said, debrief, win] = await Promise.all([
     race(require('./food').dayReport(today), 6000, null),
-    race(require('./calendar').scheduleReport({ days: 2 }), 5000, null),
+    race(require('./calendar').scheduleReport({ days: 2, light: true }), 5000, null),
     race(require('./weather').forecastAt(today, Math.max(nowMin, 7 * 60), 8 * 60), 2500, null),
     race(require('./workouts').calendar(today, tz.shiftKey(today, 6)), 4000, null),
     getJSON('chain-last', null).catch(() => null),
