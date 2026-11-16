@@ -53,6 +53,11 @@ ok('1 Nov and since: the standing rules he has corrected are all still in what t
   assert.ok(/never a run when the list says ride/.test(require('fs').readFileSync(require.resolve('./voice'), 'utf8'))); // 1 Nov, the "1:00 run"
   assert.ok(/ALREADY IN THE JOURNAL/.test(require('fs').readFileSync(require.resolve('./voice'), 'utf8')));              // 1 Nov, the beers logged twice
 });
+ok('10 Nov, "Harry does not like bananas": nothing the site or the coach writes suggests one', () => {
+  const fs = require('fs');
+  for (const f of ['food-math.js', 'energy-math.js', 'coach-first.js', 'expert.js']) assert.ok(!/banana/i.test(fs.readFileSync(require.resolve('./' + f), 'utf8')), f + ' suggests a banana');
+  assert.ok(/does not like bananas/.test(advisor));
+});
 ok('one rule where there were two: Zone 1, the earliest session, the shape of the week, the recovery source', () => {
   const src = require('fs').readFileSync(require.resolve('./voice'), 'utf8');
   assert.ok(!/Zone 1 is heart rate 116 and under\./.test(src) && /Zone 1 is heart rate 100 to 116/.test(src));

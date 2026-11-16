@@ -223,12 +223,12 @@ function cue(day, sessions, nowIso, rx) {
   if (next) {
     const name = next.x.name || 'the ride';
     if (next.dt <= 0) return { key: 'during', text: `${name} is on now: ${onBike(next.x.minutes || 60, /vo2|40\s*\/\s*20|threshold|race/i.test(name)).what}` };
-    if (next.dt <= 60) return { key: 'pre-close', text: `${name} in ${Math.round(next.dt)} min: nothing heavy now. A banana or rice cakes if you need something.` };
+    if (next.dt <= 60) return { key: 'pre-close', text: `${name} in ${Math.round(next.dt)} min: nothing heavy now. Rice cakes with honey or applesauce if you need something.` };
     const early = toMin(next.x.time) != null && toMin(next.x.time) < 7 * 60 + 30;
     if (next.dt <= 180) return { key: 'pre', text: early
-      ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or rice cakes 45 minutes before, breakfast after.`
+      ? (day === 'high' ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: rice cakes with honey or applesauce 45 minutes before, breakfast after.`
                         : rx && rx.train_low ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: coffee and a Huel shake, then go: the low ride of the week. Breakfast after.`
-                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a banana or a Huel shake, then go. Breakfast after.`)
+                        : `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: a clementine or a Huel shake, then go. Breakfast after.`)
       : toMin(next.x.time) != null && toMin(next.x.time) >= 11 * 60
       ? `${name} in ${Math.round(next.dt / 60 * 10) / 10} h: something light with protein now, Greek yogurt, a Huel shake or a small rice bowl. Nothing heavy.`
       : day === 'high'
@@ -462,7 +462,7 @@ function mealPlanOf(day, sessions, target, sleep) {
   // After a late ride (back after 10 p.m., or past midnight) the post-ride meal is a bedtime snack:
   // protein and some carbs, small enough to sleep on. Dinner stays at dinner time.
   const bedtime = (endMin, share, carbShare) => Object.assign(meal(endMin + 30, 'after',
-    'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', share, carbShare, 25), { post_ride: true, ride_end: endMin });
+    'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a clementine, or Greek yogurt with honey.', share, carbShare, 25), { post_ride: true, ride_end: endMin });
   // A carb breakfast wants 2.5 h before a hard ride; a light low-carb one 1.5 h
   // before Zone 1. Breakfast sits at the latest of those, and if that would mean
   // getting up before waking it becomes coffee and a Huel shake 45 minutes out (never before waking), with
@@ -473,7 +473,7 @@ function mealPlanOf(day, sessions, target, sleep) {
   if (start < 11 * 60) {
     // Morning ride: breakfast before it (or nothing before a dawn ride), the post-ride meal, then the day.
     if (early) out.push(meal(Math.max(Math.min(WAKE, start - 30), start - 45), 'before', day === 'high'
-      ? `Small and quick before ${name}: a banana or two rice cakes with honey.`
+      ? `Small and quick before ${name}: applesauce or two rice cakes with honey.`
       : `Coffee and a Huel shake (20 g protein) before ${name}. Zone 1 needs no carbs before it; the protein protects the muscle.`, day === 'high' ? 0.08 : 0.04, day === 'high' ? 0.12 : 0, day === 'high' ? 0 : 20));
     else out.push(bfast(start - gap, name));
     out.push(onBikeSlot);
@@ -492,7 +492,7 @@ function mealPlanOf(day, sessions, target, sleep) {
     // Midday ride: breakfast carries the pre-ride role (as late as 9:30), the post-ride meal is lunch.
     out.push(bfast(Math.min(9 * 60 + 30, start - gap), name));
     if (start - gap > 9 * 60 + 30 + 60) out.push(meal(start - 120, 'before', day === 'high'
-      ? `Two hours before ${name}: rice cakes and honey, or a banana and yogurt.`
+      ? `Two hours before ${name}: rice cakes and honey, or a clementine and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a Huel shake.`, 0.08, day === 'high' ? 0.12 : 0.04, 20));
     out.push(onBikeSlot);
     const hasBefore = start - gap > 9 * 60 + 30 + 60;
@@ -513,7 +513,7 @@ function mealPlanOf(day, sessions, target, sleep) {
     out.push(lunch(13 * 60, 0.27, lC));
     out.push(dinner(dnT, Math.round((1 - b - 0.27 - pre - post) * 100) / 100, Math.round((1 - bC - lC - preC - postC) * 100) / 100));
     if (hasBefore) out.push(meal(start - 90, 'before', day === 'high'
-      ? `Before ${name}: a banana or two rice cakes with honey.`
+      ? `Before ${name}: applesauce or two rice cakes with honey.`
       : `Before ${name}: something light with protein, Greek yogurt or a Huel shake.`, pre, preC, 15));
     out.push(onBikeSlot);
     out.push(bedtime(end, post, postC));
@@ -522,7 +522,7 @@ function mealPlanOf(day, sessions, target, sleep) {
     out.push(bfast(9 * 60));
     out.push(lunch(13 * 60, 0.27, day === 'high' ? 0.25 : 0.30));
     out.push(meal(start - 120, 'before', day === 'high'
-      ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a banana and yogurt.`
+      ? `Two hours before ${name}: carbs that sit light, rice cakes and honey or a clementine and yogurt.`
       : `Two hours before ${name}: something light with protein, Greek yogurt or a Huel shake. No big plate.`, 0.10, day === 'high' ? 0.15 : 0.05, 20));
     out.push(onBikeSlot);
     const lateSnack = end + 30 <= 20 * 60;
@@ -558,7 +558,7 @@ function mealPlanOf(day, sessions, target, sleep) {
     if (dn && s2.end >= 17 * 60 && s2.end + 30 <= 22 * 60 && mmin(dn) < s2.end + 30 && !(dn.post_ride && !ride2)) stamp(dn, s2.end + 30);
     // a second ride that ends late gets its own bedtime snack, not a dinner pushed past midnight
     if (ride2 && s2.end + 30 > 22 * 60 && s2.end - s2.start >= 45 && !out.some(m => m.post_ride && m.ride_end >= s2.end)) {
-      const snackAfter = Object.assign(meal(s2.end + 30, 'after', 'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a banana, or Greek yogurt with honey.', 0.08, 0.10, 25), { post_ride: true, ride_end: s2.end });
+      const snackAfter = Object.assign(meal(s2.end + 30, 'after', 'After the ride, before bed: 25 g protein and some carbs. A glass of milk and a clementine, or Greek yogurt with honey.', 0.08, 0.10, 25), { post_ride: true, ride_end: s2.end });
       if (dn) { dn.kcal = Math.max(0, dn.kcal - snackAfter.kcal); dn.carbs_g = Math.max(0, dn.carbs_g - snackAfter.carbs_g); }   // the day is handed out once
       out.push(snackAfter);
     }
@@ -976,7 +976,7 @@ function rollForward(meals, entries) {
     b.rolled_from = { slot: a.slot, time: a.time, kcal: over.kcal, carbs_g: over.carbs_g, protein_g: over.protein_g, protein_short_g: proteinShort, carbs_short_g: carbShort >= 10 ? carbShort : 0 };
     // what the slot says is written from what is left in it, never from the calories alone
     const carbsLeft = b.carbs_g >= 15, proteinLeft = b.protein_g >= 10;
-    const carbFood = b.carbs_g >= 45 ? 'a banana and two rice cakes with honey' : b.carbs_g >= 30 ? 'a banana and a rice cake with honey' : 'a banana, or two rice cakes with honey';
+    const carbFood = b.carbs_g >= 45 ? 'applesauce and two rice cakes with honey' : b.carbs_g >= 30 ? 'applesauce and a rice cake with honey' : 'a clementine, or two rice cakes with honey';
     if (carbShort >= 10 && carbsLeft) b.what = `The ${aName} covered the calories${over.protein_g >= 10 ? ' and the protein' : ''} but was ${Math.round(carbShort)} g short on carbs: ${b.carbs_g} g of carbs here (${carbFood})${proteinLeft ? `, with ${b.protein_g} g of protein` : '; no more protein needed'}.`;
     else if (b.plan_kcal > 0 && left < 0.4 * b.plan_kcal && carbsLeft) b.what = `The ${aName} ran over, so only the carbs are left here: ${b.carbs_g} g (${carbFood})${proteinLeft ? '' : '; no more protein needed'}.`;
     else if (b.plan_kcal > 0 && left < 0.4 * b.plan_kcal) { b.covered_by = a.slot; b.what = proteinLeft ? `covered by the ${aName}, which ran over; a protein bite if hungry.` : `covered by the ${aName}, which ran over: nothing more is needed here.`; }
@@ -1078,7 +1078,7 @@ function mealMatch(plan, logged, ctx) {
       // the reason in a few words: a flag when one explains it, else the clause of the plate's own reading that starts with "but"
       const clip = why => { const m = /\bbut\s+([^,.;]{8,80})/i.exec(String(why || '')); if (!m) return null; const t = m[1].trim(); return t.length <= 42 ? t : t.slice(0, 42).replace(/\s+\S*$/, ''); };
       // fuel slots (before a ride, on the bike) are judged on their carbs alone: the plate rules (protein, vegetables,
-      // one starch, nothing processed) are for meals, and a gel or a banana before a hard session meets them by design
+      // one starch, nothing processed) are for meals, and a gel or a clementine before a hard session meets them by design
       if (/^(before|on the bike)$/.test(plan.slot || '') && !e.alcohol) { keyR = 'green'; wordR = 'rules met'; continue; }
       wordR = k === 'green' ? 'rules met' : e.alcohol ? (e.alcohol >= 2 ? `${e.alcohol} drinks` : 'one drink') : a.processed ? 'processed' : a.carbs === 'heavy' && (plan.low_carb || (plan.carbs_g || 0) <= 30) ? 'heavy on starch' : (!slotProtein && (plan.protein_g || 0) >= 30) ? 'no protein source' : (!slotVeg && /lunch|dinner/.test(plan.slot || '')) ? 'no vegetables' : clip(a.why) || (k === 'red' ? 'against the rules' : 'rules partly met');
       whyR = plateWhy || a.why || null;

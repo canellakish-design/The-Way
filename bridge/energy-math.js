@@ -199,7 +199,7 @@ function model(o) {
     const by = Math.max(now, s.min - 75);
     const short1 = s.name.replace(/,.*$/, '');
     let advice = null;
-    if (short > 10 && s.min > now && need.quick > 25) advice = `${short} g of carbs by ${say(by)} for ${short1}${short >= 40 ? ': rice or oats and a banana, or a bottle of Tailwind' : ': a banana, or toast'}.${!legsOk && s.hard ? ` Legs are low too (${p.legs_pct}%): a carb dinner tonight, or move it a day.` : ''}`;
+    if (short > 10 && s.min > now && need.quick > 25) advice = `${short} g of carbs by ${say(by)} for ${short1}${short >= 40 ? ': rice or oats and a clementine, or a bottle of Tailwind' : ': a clementine, or toast'}.${!legsOk && s.hard ? ` Legs are low too (${p.legs_pct}%): a carb dinner tonight, or move it a day.` : ''}`;
     else if (!legsOk && s.hard) advice = `Legs are low (${p.legs_pct}%) for ${short1}. A carb dinner tonight, or move it a day.`;
     else if (!legsOk && need.legs) advice = `Legs are low (${p.legs_pct}%) for ${short1}. Carbs on the bike, 60 g an hour, and a carb dinner.`;
     else if (!legsFloor && !s.hard) advice = `Legs are low (${p.legs_pct}%). Ride ${short1} easy and eat carbs tonight.`;
