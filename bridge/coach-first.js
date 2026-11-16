@@ -44,7 +44,7 @@ function alertsFor(day, nowMin) {
     const lead = st - nowMin, lowQuick = s.need != null && s.pct != null && s.pct < s.need, lowLegs = s.need_legs != null && s.legs_pct != null && s.legs_pct < s.need_legs - 5;
     if (lead >= 45 && lead <= 100 && (lowQuick || lowLegs))
       out.push({ key: 'fuel-' + s.time, title: `Eat before ${short(s.name)} at ${hm(s.time)}`,
-        body: `${lowQuick ? `It needs ${s.need}% in the quick store and you will start at ${s.pct}%.` : `Your legs will start at ${s.legs_pct}% and it needs ${s.need_legs}%.`} ${lowQuick ? 'Have 30 to 40 g of carbs now: a banana and toast, or a bottle of Tailwind.' : 'Eat the pre-ride carbs on the plan and keep the effort honest.'}`, url: '/#fuel' });
+        body: `${lowQuick ? `It needs ${s.need}% in the quick store and you will start at ${s.pct}%.` : `Your legs will start at ${s.legs_pct}% and it needs ${s.need_legs}%.`} ${lowQuick ? 'Have 30 to 40 g of carbs now: toast with honey, or a bottle of Tailwind.' : 'Eat the pre-ride carbs on the plan and keep the effort honest.'}`, url: '/#fuel' });
   }
   const eaten = (day.entries || []).filter(e => e && !e.supplement && (e.kcal || 0) > 0);
   // nothing logged by early afternoon: every number later today rests on the journal
