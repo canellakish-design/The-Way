@@ -40,7 +40,7 @@ function stateOf(key, v) {
     // bands map to it as: under 1% down (50 and up) fine, 1 to 1.5% behind, past that dry
     case 'water': return v >= 50 ? 'good' : v >= 25 ? 'warn' : 'bad';
     case 'work': return v >= 0.85 ? 'good' : v >= 0.6 ? 'warn' : 'bad';
-    case 'fuel': return v >= 0.9 && v <= 1.1 ? 'good' : v >= 0.75 && v <= 1.25 ? 'warn' : 'bad';   // 100% is the plan: under or over both count
+    case 'fuel': return v >= 0.8 ? 'good' : v >= 0.6 ? 'warn' : 'bad';   // the share of what the rides asked for that went in; it never passes 100
     case 'lift': return v >= 0.8 ? 'good' : v >= 0.5 ? 'warn' : 'bad';
     case 'recovery': return v >= 67 ? 'good' : v >= 34 ? 'warn' : 'bad';   // the published bands, the same as the tile's
     case 'weight': return v <= -0.8 ? 'good' : v <= 0.3 ? 'warn' : 'bad';
@@ -86,62 +86,106 @@ function verdict(links) {
 const { recoveryState, mean, sd } = require('./recovery');
 
 // ---- the week's facts ----------------------------------------------------
-const ROW_V = 9;   // 9: protein over its figure costs nothing   // 8: the weighted fuel mean   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
-// Fuel for a day, as how much of what the plan asked for went in: for each ride, the carbs eaten in the four
-// hours before it against the plan's carbs for that window, the carbs taken on the bike against the plan's
-// bottle, and (once a day, on the first ride) the pre-ride supplements due against those taken: beetroot on a
-// ride day, bicarbonate before a hard one. Each part is a ratio, so under the plan reads below 100% and over it
-// reads above. A ride's score is the weighted mean of its parts (FUEL_WEIGHT); the week's is the mean of its rides. Lifts and runs are not fuel checks.
+const ROW_V = 10;   // 10: the fuel calculus of 16 Nov (the ride's own prescription, the tank at its start, capped parts, weighted rides)   // 9: protein over its figure costs nothing   // 8: the weighted fuel mean   // 7: the after window and the low before   // 5: fuel checks   // bump when what a row holds changes; older rows are re-read
+// Fuel for a day (the calculus of 16 Nov 2026; Harry: "What do you think of all this fueling? Any way to improve
+// the calculus?" … "Do it"). Each ride is scored on what its own prescription asked for (food-math.js sessionRx,
+// carried on the session as rx), not on whatever meals the plan happened to put near it:
+//   before   was the tank at what the ride needs when it began (the live fuel model's reading at its start: the
+//            quick store and the legs against the ride's need). When he ate does not matter, only what was on
+//            board. A ride the plan keeps low (train-low) is the one place over costs: at or under its 20 g is
+//            the point. With no tank reading, the carbs of the four hours before against the prescription.
+//   bottle   the carbs taken on the bike against the prescription's, when it gives any (none under 75 minutes easy).
+//   after    the meal after: protein and carbs against the prescription, weighted to carbs after a hard or long
+//            ride (recover high, inside two hours) and to protein after an easy one (the next meal, inside three).
+//            What lands in the hour past the window counts at half, so a dinner five minutes late is not a zero.
+//   supp     beetroot before a hard or long ride, bicarbonate before a hard one. Not asked of an easy ride.
+// Every part is a share from 0 to 1 and never more: a surplus in one cannot hide a gap in another, and over is
+// the Macros link's business. The parts are weighed by the kind of ride (FUEL_WEIGHTS) and the week weighs its
+// rides by how much fuelling them matters (RIDE_WEIGHT): one VO2 session counts as three easy hours.
+// What was not logged is not scored as missed: a ride on a day with no food in the journal has no score, and a
+// bottle or a meal after it with nothing at all logged in its window is left out and named (unlogged), so the
+// coach can ask once. Lifts and runs are not fuel checks. A ride is scored from the minute it starts.
 const NOT_RIDE = /lift|weight|strength|push|pull|upper|legs|pump|\brun\b|treadmill/i;
-// A ride's fuel score weighs its parts as a coach would: the bottle most, the food before it next, the meal
-// after, then the pre-ride supplements; a missed beetroot is not the same miss as a ride with no carbs.
-const FUEL_WEIGHT = { bottle: 0.4, pre: 0.3, after: 0.2, supp: 0.1 };
-const fuelMean = parts => { const w = parts.reduce((a, p) => a + (FUEL_WEIGHT[p.kind] || 0.1), 0); return w ? parts.reduce((a, p) => a + p.ratio * (FUEL_WEIGHT[p.kind] || 0.1), 0) / w : null; };
+const FUEL_WEIGHTS = {
+  hard:  { pre: 0.35, bottle: 0.35, after: 0.25, supp: 0.05 },
+  long:  { pre: 0.30, bottle: 0.40, after: 0.25, supp: 0.05 },
+  light: { pre: 0.40, bottle: 0.20, after: 0.40, supp: 0 },
+  low:   { pre: 0.50, bottle: 0, after: 0.50, supp: 0 }
+};
+const RIDE_WEIGHT = { hard: 3, long: 3, light: 1, low: 1 };
+const AFTER_CARB_SHARE = { hard: 0.6, long: 0.6, light: 0.3, low: 0.3 };
+const AFTER_WINDOW_MIN = { hard: 120, long: 120, light: 180, low: 180 }, AFTER_TAIL_MIN = 60;
+const HARD_NAME = /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i;
+const cap1 = v => Math.max(0, Math.min(1, v));
+const fuelMean = (parts, kind) => { const W = FUEL_WEIGHTS[kind] || FUEL_WEIGHTS.light, on = parts.filter(p => !p.unlogged && p.ratio != null && (W[p.kind] || 0) > 0);
+  const w = on.reduce((a, p) => a + W[p.kind], 0); return w ? on.reduce((a, p) => a + p.ratio * W[p.kind], 0) / w : null; };
 function fuelChecks(r) {
   const F = require('./food-math');
   const out = [];
-  const rides = (r.sessions || []).filter(x => F.toMin(x.time) != null && !NOT_RIDE.test(x.name || '') && !/WeightTraining|Run/i.test(x.sport || '') && (x.done || x.planned === false || x.kept || x.awaiting) !== undefined);
-  const ents = (r.entries || []).filter(e => !e.supplement && F.toMin(e.time) != null);
-  const meals = (r.meals || []);
+  const rides = (r.sessions || []).filter(x => F.toMin(x.time) != null && !NOT_RIDE.test(x.name || '') && !/WeightTraining|Run/i.test(x.sport || ''));
+  const food = (r.entries || []).filter(e => !e.supplement);
+  const ents = food.filter(e => F.toMin(e.time) != null);
   const supTaken = k => (r.entries || []).filter(e => e.supplement && e.key === k).length;
-  const hard = rides.some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, '')));
-  // today, only what is due by now is asked for: a 5:45 breakfast or 5:30 beetroot is not missed at 3 a.m.
+  // today a ride is scored from its start, and its after part once the two hours have run
   const nowMin = r.date === tz.todayKey() ? (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })() : 24 * 60;
-  const suppAt = k => { const d = r.supps && (r.supps.due || []).find(x => x.key === k); return d && F.toMin(d.time) != null ? F.toMin(d.time) : null; };
-  rides.forEach((x, i) => {
-    const st = F.toMin(x.time), end = st + (x.minutes || 60), parts = [];
-    const preMeals = meals.filter(m => m.slot !== 'on the bike' && F.toMin(m.time) != null && F.toMin(m.time) >= st - 240 && F.toMin(m.time) < st && F.toMin(m.time) <= nowMin);
-    const planPre = preMeals.reduce((a, m) => a + (m.carbs_g || 0), 0);
+  const starts = (r.energy && r.energy.starts) || [];
+  let suppDone = false;
+  rides.forEach(x => {
+    const st = F.toMin(x.time), mins = x.minutes || 60, end = st + mins;
+    if (st > nowMin) return;
+    const nameHard = HARD_NAME.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''));
+    const rx = x.rx || {}, kind = FUEL_WEIGHTS[rx.kind] ? rx.kind : nameHard ? 'hard' : mins >= 120 ? 'long' : 'light';
+    const base = { kind: 'ride', name: x.name, time: x.time, rx_kind: kind, weight: RIDE_WEIGHT[kind] || 1 };
+    // a day with nothing in the journal says nothing about how the ride was fuelled
+    if (!food.some(e => (e.kcal || 0) > 0 || (e.carbs_g || 0) > 0)) { out.push(Object.assign(base, { ratio: null, pct: null, parts: [], not_logged: true, unlogged: ['the day'], ok: false, near: false })); return; }
+    const parts = [];
+    // ---- before
     const ate = ents.filter(e => F.toMin(e.time) >= st - 240 && F.toMin(e.time) < st).reduce((a, e) => a + (e.carbs_g || 0), 0);
-    // a train-low before is kept low: at or under the plan is the point, over is the miss
-    const lowPre = preMeals.length && preMeals.every(m => m.low_carb);
-    if (planPre > 0) parts.push({ kind: 'pre', got_g: Math.round(ate), plan_g: Math.round(planPre), low: !!lowPre, ratio: lowPre ? (ate <= planPre * 1.25 ? 1 : planPre / ate) : ate / planPre });
-    // the meal after the ride: the carbs within two hours of its end against the plan's, once the window has closed
-    const post = meals.find(m => m.post_ride && Math.abs((m.ride_end || 0) - end) <= 30) || meals.find(m => m.post_ride && F.toMin(m.time) >= end && F.toMin(m.time) <= end + 90);
-    if (post && post.carbs_g > 0 && (x.done || x.kept) && nowMin >= end + 120) {
-      const gotAfter = ents.filter(e => F.toMin(e.time) >= end - 5 && F.toMin(e.time) <= end + 120 && e.slot !== 'on the bike').reduce((a, e) => a + (e.carbs_g || 0), 0);
-      parts.push({ kind: 'after', got_g: Math.round(gotAfter), plan_g: post.carbs_g, ratio: gotAfter / post.carbs_g });
+    const tank = starts.find(q => q.time === x.time && q.name === x.name) || starts.find(q => q.time === x.time) || null;
+    if (kind === 'low' || rx.low) {
+      const lim = (rx.before_g || 20) * 1.25;
+      parts.push({ kind: 'pre', low: true, got_g: Math.round(ate), plan_g: rx.before_g || 20, ratio: ate <= lim ? 1 : cap1(lim / ate), word: ate <= lim ? 'kept low, as planned' : 'over the low the plan asked for' });
+    } else if (tank && tank.need != null) {
+      const q = tank.need > 0 ? tank.pct / tank.need : 1, l = tank.need_legs > 0 ? tank.legs_pct / tank.need_legs : 1, ratio = cap1(Math.min(q, l));
+      parts.push({ kind: 'pre', by: 'tank', tank_pct: tank.pct, need: tank.need, legs_pct: tank.legs_pct, need_legs: tank.need_legs, got_g: Math.round(ate), plan_g: rx.before_g != null ? rx.before_g : null, ratio,
+        word: ratio >= 1 ? `tank ${tank.pct}% at the start, ${tank.need}% needed` : q <= l ? `tank ${tank.pct}% at the start, ${tank.need}% needed` : `legs ${tank.legs_pct}% at the start, ${tank.need_legs}% needed` });
+    } else if (rx.before_g > 0) {
+      parts.push({ kind: 'pre', by: 'grams', got_g: Math.round(ate), plan_g: rx.before_g, ratio: cap1(ate / rx.before_g), word: `${Math.round(ate)} of ${rx.before_g} g carbs in the four hours before` });
     }
-    const bottle = meals.find(m => m.slot === 'on the bike' && F.toMin(m.time) != null && Math.abs(F.toMin(m.time) - st) <= 30);
-    if (bottle && bottle.carbs_g > 0) {
-      const got = ents.filter(e => F.toMin(e.time) >= st - 15 && F.toMin(e.time) <= end + 15 && (e.slot === 'on the bike' || F.toMin(e.time) >= st)).reduce((a, e) => a + (e.carbs_g || 0), 0);
-      parts.push({ kind: 'bottle', got_g: Math.round(got), plan_g: bottle.carbs_g, ratio: got / bottle.carbs_g });
+    // ---- on the bike
+    if (rx.during_g > 0 && nowMin >= end) {
+      const win = (r.entries || []).filter(e => F.toMin(e.time) != null && F.toMin(e.time) >= st - 15 && F.toMin(e.time) <= end + 15);
+      const got = win.filter(e => !e.supplement && (e.slot === 'on the bike' || F.toMin(e.time) >= st)).reduce((a, e) => a + (e.carbs_g || 0), 0);
+      const none = !win.filter(e => !e.supplement).length;
+      parts.push({ kind: 'bottle', got_g: Math.round(got), plan_g: rx.during_g, ratio: none ? null : cap1(got / rx.during_g), unlogged: none || undefined, word: none ? 'nothing logged on the bike' : `${Math.round(got)} of ${rx.during_g} g carbs on the bike` });
     }
-    if (i === 0) {
-      // a supplement is due once its time has come (or the ride has started), or once taken
-      const due = ['beetroot'].concat(hard ? ['sodium_bicarb'] : []).filter(k => supTaken(k) || nowMin >= st || (suppAt(k) != null && suppAt(k) <= nowMin));
-      const taken = due.reduce((a, k) => a + Math.min(2, supTaken(k)), 0);
-      if (due.length) parts.push({ kind: 'supp', got: taken, due: due.length, keys: due, ratio: taken / due.length });
+    // ---- after: the window from the end, once it has run; the hour past it at half
+    const aw = AFTER_WINDOW_MIN[kind] || 120;
+    if ((rx.after_g > 0 || rx.after_protein_g > 0) && (x.done || x.kept) && nowMin >= end + aw) {
+      const share = e => { const t = F.toMin(e.time); return e.slot === 'on the bike' || t < end - 5 || t > end + aw + AFTER_TAIL_MIN ? 0 : t <= end + aw ? 1 : 0.5; };
+      const c = ents.reduce((a, e) => a + (e.carbs_g || 0) * share(e), 0), pr = ents.reduce((a, e) => a + (e.protein_g || 0) * share(e), 0);
+      const none = !ents.some(e => F.toMin(e.time) >= end - 5 && (e.kcal || 0) > 0);            // no food at all logged after it that day
+      const late = ents.some(e => share(e) === 0.5 && (e.kcal || 0) > 0) && !ents.some(e => share(e) === 1 && (e.protein_g || 0) >= 15);
+      const cs = AFTER_CARB_SHARE[kind] != null ? AFTER_CARB_SHARE[kind] : 0.5, pc = rx.after_g > 0 ? cap1(c / rx.after_g) : null, pp = rx.after_protein_g > 0 ? cap1(pr / rx.after_protein_g) : null;
+      const ratio = pc == null ? pp : pp == null ? pc : cs * pc + (1 - cs) * pp, hrs = aw === 120 ? 'two' : 'three';
+      parts.push({ kind: 'after', got_g: Math.round(c), plan_g: rx.after_g || 0, got_protein_g: Math.round(pr), plan_protein_g: rx.after_protein_g || 0, window_min: aw, late: late || undefined, ratio: none ? null : ratio, unlogged: none || undefined,
+        word: none ? 'no food logged after it' : `${Math.round(pr)} of ${rx.after_protein_g || 0} g protein and ${Math.round(c)} of ${rx.after_g || 0} g carbs in the ${hrs} hours after${late ? ' (the meal came late: counted at half)' : ''}` });
     }
+    // ---- supplements: only where they do something, once a day
+    if (!suppDone && (kind === 'hard' || kind === 'long')) {
+      suppDone = true;
+      const due = ['beetroot'].concat(kind === 'hard' ? ['sodium_bicarb'] : []), taken = due.reduce((a, k) => a + Math.min(1, supTaken(k)), 0);
+      parts.push({ kind: 'supp', got: taken, due: due.length, keys: due, ratio: cap1(taken / due.length), word: `${taken} of ${due.length} taken (${due.map(k => k === 'sodium_bicarb' ? 'bicarbonate' : k).join(', ')})` });
+    }
+    const ratio = fuelMean(parts, kind), unlogged = parts.filter(p => p.unlogged).map(p => p.kind === 'bottle' ? 'the bottle' : 'the meal after');
     if (!parts.length) return;
-    const ratio = fuelMean(parts);
-    out.push({ kind: 'ride', name: x.name, time: x.time, ratio: Math.round(ratio * 100) / 100, pct: Math.round(ratio * 100), parts,
-      ok: ratio >= 0.9 && ratio <= 1.1, near: ratio >= 0.75 && ratio <= 1.25 });
+    out.push(Object.assign(base, { ratio: ratio == null ? null : Math.round(ratio * 100) / 100, pct: ratio == null ? null : Math.round(ratio * 100), parts, unlogged: unlogged.length ? unlogged : undefined,
+      not_logged: ratio == null || undefined, ok: ratio != null && ratio >= 0.8, near: ratio != null && ratio >= 0.6 }));
   });
   return out;
 }
-// the week's fuelling: the mean of the rides' scores (1.0 is exactly the plan)
-function fuelScore(list) { const rs = (list || []).filter(c => c.kind === 'ride' && c.ratio != null); return rs.length ? rs.reduce((a, c) => a + c.ratio, 0) / rs.length : null; }
+// the week's fuelling: its rides' scores, each weighed by how much fuelling it matters (1.0 is everything asked for)
+function fuelScore(list) { const rs = (list || []).filter(c => c.kind === 'ride' && c.ratio != null); const w = rs.reduce((a, c) => a + (c.weight || 1), 0); return w ? rs.reduce((a, c) => a + c.ratio * (c.weight || 1), 0) / w : null; }
 async function pastDay(date, store) {
   if (store.days[date] && store.days[date].v === ROW_V) return store.days[date];
   const food = require('./food');
@@ -208,12 +252,8 @@ async function report() {
     const logged = (r.entries || []).some(e => !e.supplement && !e.drink_only && (e.kcal || 0) > 0);
     const h = r.hydration || {};
     // today: the balance now, the same number the tile shows
-    // today counts the rides whose fuelling has begun (from four hours before the start): one further off has had no chance yet
-    const nowT = (() => { const p = tz.parts(new Date()); return p.h * 60 + p.mi; })();
-    // a ride not yet started is scored on what is due so far: the food before it and the supplements, not the bottle
-    const soFar = c => { const parts = (c.parts || []).filter(p => p.kind !== 'bottle'); if (!parts.length) return null; const ratio = fuelMean(parts);
-      return Object.assign({}, c, { parts, ratio: Math.round(ratio * 100) / 100, pct: Math.round(ratio * 100), ok: ratio >= 0.9 && ratio <= 1.1, near: ratio >= 0.75 && ratio <= 1.25, so_far: true }); };
-    todayRow = { fuel: fuelChecks(r).filter(c => require('./food-math').toMin(c.time) - 240 <= nowT).map(c => require('./food-math').toMin(c.time) > nowT ? soFar(c) : c).filter(Boolean), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
+    // today counts the rides that have started: one still ahead has had no chance yet (fuelChecks scores from the start)
+    todayRow = { fuel: fuelChecks(r), fuel_now: r.energy && r.energy.now ? r.energy.now : null, food: logged && r.compliance ? r.compliance.overall : null, logged, water: h.now && h.score != null ? h.score : null, water_now: h.now || null, drunk_ml: h.drunk_ml || null, target_ml: h.target_ml || null,
       supps: (r.entries || []).filter(e => e && e.supplement && e.key).map(e => e.key), rx: r.supps || null,
       ride: (r.sessions || []).some(x => !/lift|weight|strength|push|pull|upper|legs|pump/i.test(x.name || '') && !/WeightTraining/i.test(x.sport || '')),
       hard: (r.sessions || []).some(x => /vo2|40\s*\/\s*20|threshold|race|interval/i.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''))),
@@ -372,9 +412,10 @@ async function report() {
         ok: all.filter(c => c.ok).length, checks: all.length,
         rx: { beetroot: rxWeek.beetroot, sodium_bicarb: rxWeek.sodium_bicarb, today: rxLine('fuel') || null },
         today: todays != null ? Math.round(todays * 100) : null,
-        today_word: todays != null ? `${todays < 0.9 ? 'under' : todays > 1.1 ? 'over' : 'on plan'}${(todayRow.fuel || []).some(c => c.so_far) ? ' so far' : ''}` : (fn ? 'no ride yet' : null),
+        today_word: todays != null ? `${todays >= 0.8 ? 'fuelled' : todays >= 0.6 ? 'a little short' : 'short'}${(todayRow.fuel || []).some(c => c.so_far) ? ' so far' : ''}` : (todayRow && (todayRow.fuel || []).some(c => c.not_logged) ? 'not logged' : fn ? 'no ride yet' : null),
+        unlogged: all.filter(c => c.unlogged && c.unlogged.length).map(c => ({ name: c.name, time: c.time, what: c.unlogged })).slice(-4),
         today_tone: todays != null ? stateOf('fuel', todays) : null, tank_now: fn ? fn.pct : null, legs_today: fn ? fn.legs_pct : null, unit: 'fuelled',
-        basis: 'for each ride in the last seven days: the carbs eaten in the four hours before it against the plan\'s carbs for that window, the carbs taken on the bike against the planned bottle, and the pre-ride supplements due (beetroot on a ride day, bicarbonate before a hard one) against those taken; each part a ratio, a ride the mean of its parts, the week the mean of its rides. 100% is the plan; 90 to 110% green, 75 to 125% amber' };
+        basis: 'each ride in the last seven days against its own fuel prescription. Before: whether the tank was at what the ride needs when it began (the live fuel model; a train-low ride is the one place over costs). On the bike: the carbs taken against the prescription, when it gives any. After: the protein and carbs of the two hours after, weighted to carbs after a hard or long ride and to protein after an easy one. Beetroot and bicarbonate count only before a hard or long ride. Each part runs from 0 to 100 and no further, so a surplus in one cannot hide a gap in another; a hard or long ride counts three times an easy one in the week; and what was not logged at all is left out and named, not scored as missed. 80 and up green, 60 amber' };
     })(),
     work: { week: workRatio == null ? null : Math.round(workRatio * 100), state: stateOf('work', workRatio), planned_min: work.planned_min, done_min: work.done_min, credit_min: work.credit_min,
       in_zone_pct: work.hr_min ? Math.round(work.hr_credit_min / work.hr_min * 100) : null, today: (work.days.find(d => d.date === today) || {}).done_min || 0, today_planned: (work.days.find(d => d.date === today) || {}).planned_min || 0, unit: '% of plan',
@@ -445,7 +486,7 @@ function attach(app) {
       const r = await report();
       // a compact copy for the advisor, which cannot afford the full read inside a turn
       try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at,
-        links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null }])) }); } catch (e) { /* no store */ }
+        links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null, unlogged: r.links[k].unlogged && r.links[k].unlogged.length ? r.links[k].unlogged : undefined }])) }); } catch (e) { /* no store */ }
       res.json(r);
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }

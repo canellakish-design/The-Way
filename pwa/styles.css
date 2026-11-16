@@ -1086,3 +1086,6 @@ body:has(#chFace) #micBtn{display:none}
 .pw-medals{font-size:17px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pw-targets .t{min-width:86px}
 .pw-line{margin-bottom:6px}
+/* the Fuel page: each ride's parts in words under its bar (chain.js fuelChecks, 16 Nov 2026) */
+.fu-parts{display:flex;flex-direction:column;gap:2px;margin:-2px 0 8px;line-height:1.35}
+.fu-part b{font-weight:600;color:var(--ink)}
