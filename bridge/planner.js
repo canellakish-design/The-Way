@@ -276,17 +276,24 @@ async function gather(weekOf) {
   // the Saturday has the drive there, the Sunday has none, and he is still in New Jersey)
   const far = new Map(); for (const d of days) if (d.away) for (const pl of d._places) far.set(pl, d._drive);
   for (const d of days) if (!d.away) { const hit = d._places.find(pl => far.has(pl)); if (hit) d.away = `at a place a ${far.get(hit)} min drive from home`; }
-  return { mon, sun, today, days, have, lifts };
+  // the week before, as it was planned: a week that asks for much more than the last is said to (the model is
+  // applied as it stands; the size of the step is his to judge)
+  const prevMon = tz.shiftKey(mon, -7), prevSun = tz.shiftKey(mon, -1);
+  const prevMin = Object.values(store.workouts || {}).filter(w => w && w.date >= prevMon && w.date <= prevSun && isRideW(w)).reduce((a, w) => a + minsOfW(w), 0);
+  return { mon, sun, today, days, have, lifts, prev_min: prevMin };
 }
 // The week laid out and kept, not written. o: { changes: "base=double; …" (tried, not saved), overrides: "2026-11-20=long:150@14:00" }
 async function propose(weekOf, o) {
   o = o || {};
   const base = await model(), M = cleanModel(Object.assign({}, base, parseChanges(o.changes)));
   const G = await gather(weekOf), plan = buildWeek(G.days, M, parseOverrides(o.overrides)), ops = diff(plan, G.have);
-  const before = G.have.reduce((a, w) => a + w.minutes, 0), after = plan.reduce((a, d) => a + d.rides.reduce((b, r) => b + r.minutes, 0), 0);
+  const keptMin = G.days.reduce((a, d) => a + (d.kept_min || 0), 0);
+  const before = G.have.reduce((a, w) => a + w.minutes, 0) + keptMin, after = plan.reduce((a, d) => a + d.rides.reduce((b, r) => b + r.minutes, 0), 0) + keptMin;
+  const step = G.prev_min > 0 ? Math.round((after - G.prev_min) / G.prev_min * 100) : null;
   const id = 'p_' + Date.now().toString(36);
   const out = { id, at: Date.now(), week_of: G.mon, to: G.sun, model: M, model_words: modelWords(M), tried: o.changes ? parseChanges(o.changes) : null,
-    days: plan.filter(d => d.kind !== 'past'), ops, lines: lines(plan, ops, G.lifts), riding_min: { now_planned: before, this_plan: after },
+    days: plan.filter(d => d.kind !== 'past'), ops, lines: lines(plan, ops, G.lifts), riding_min: { now_planned: before, this_plan: after, last_week_planned: G.prev_min || null },
+    step_pct: step, step_note: step != null && step > 20 ? `This week asks for ${step}% more riding than last week's plan (${Math.round(after / 6) / 10} h against ${Math.round(G.prev_min / 6) / 10} h). A step of more than about 10 to 15% a week is a big one.` : null,
     changes: { add: ops.filter(x => x.op === 'add').length, change: ops.filter(x => x.op === 'change').length, remove: ops.filter(x => x.op === 'remove').length, keep: ops.filter(x => x.op === 'keep').length } };
   await keep(out);
   return out;
