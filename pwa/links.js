@@ -284,13 +284,14 @@
           <span class="u">${esc(dflt || "")}</span>${r && r.too_late && !taken ? `<span class="small hu-dim">${esc(r.word || "too late today")}</span>` : `<button class="fu-log" data-supp="${esc(k)}">${taken ? "log again" : "log it"}</button>`}</div>`; };
       // the week: one thin bar per ride, the target a white tick
       const wk = (L && L.list) || [];
-      // each ride: what went in against the plan, 100% the plan; under reads short, over reads long. The parts underneath.
-      const PART = { pre: "before", bottle: "on the bike", supp: "supplements" };
-      const wrow = c => { if (c.kind !== "ride") return ""; const col = TC[c.ok ? "good" : c.near ? "warn" : "bad"], scale = Math.max(125, c.pct || 0) * 1.05;
-        const parts = (c.parts || []).map(p => p.kind === "supp" ? `${p.got}/${p.due}` : `${p.got_g}/${p.plan_g} g`).join(" · ");
-        return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}<span class="small hu-dim"> ${esc(parts)}</span></span>
-          <span class="hu-track fu-tr"><i class="f" style="width:${Math.max(1.5, Math.min(c.pct || 0, 100) / scale * 100).toFixed(1)}%;background:${col}"></i>${(c.pct || 0) > 100 ? `<i class="over" style="left:${(100 / scale * 100).toFixed(1)}%;width:${(((c.pct || 0) - 100) / scale * 100).toFixed(1)}%"></i>` : ""}<i class="tick" style="left:${(100 / scale * 100).toFixed(1)}%"></i></span>
-          <span class="fu-v"><b style="color:${col}">${c.pct}%</b></span></div>`; };
+      // each ride against its own prescription, 0 to 100 (chain.js fuelChecks): its parts in words underneath, and what
+      // was not logged said as that, not scored as missed
+      const PART = { pre: "before", bottle: "on the bike", after: "after", supp: "supplements" };
+      const wrow = c => { if (c.kind !== "ride") return ""; const scored = c.pct != null, col = scored ? TC[c.ok ? "good" : c.near ? "warn" : "bad"] : TC.none;
+        const parts = (c.parts || []).map(p => `<span class="fu-part"><b>${esc(PART[p.kind] || p.kind)}</b> ${p.unlogged ? "not logged" : Math.round((p.ratio || 0) * 100) + "%"}${p.word ? ` · ${esc(p.word)}` : ""}</span>`).join("");
+        return `<div class="fu-wr"><span class="fu-wl"><span class="t">${c.time ? esc(hm12(c.time)) : ""}</span> ${esc(String(c.name || "").replace(/^Zwift - Intervals icu: /i, ""))}${c.rx_kind === "hard" || c.rx_kind === "long" ? ` <span class="small hu-dim">counts ×3</span>` : ""}</span>
+          <span class="hu-track fu-tr"><i class="f" style="width:${scored ? Math.max(1.5, Math.min(c.pct, 100)).toFixed(1) : 0}%;background:${col}"></i></span>
+          <span class="fu-v"><b style="color:${col}">${scored ? c.pct + "%" : "—"}</b></span></div>${parts || c.not_logged ? `<div class="fu-parts small hu-dim">${c.not_logged && !parts ? "No food was logged that day, so the ride is not scored." : parts}</div>` : ""}`; };
       // one headline: fuel now. The week's share of checks met heads the week's own section below.
       // the headline: how much of what the plan asked for went in, this week and today (100% is the plan)
       const fp = v => v == null ? "—" : `${v}<span class="ln-uu">%</span>`;

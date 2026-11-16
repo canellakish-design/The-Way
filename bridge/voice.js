@@ -222,6 +222,9 @@ async function contextNow() {
     }).filter(Boolean);
     lines.push(ahead.length ? 'THE WEEK AHEAD (planned): ' + ahead.join(' · ') + '.' : 'Nothing planned for the rest of the week yet.');
   }
+  // fuel the journal does not show (chain.js fuelChecks leaves it out of the score and names it): ask, never scold
+  if (chain && chain.links && chain.links.fuel && Array.isArray(chain.links.fuel.unlogged) && chain.links.fuel.unlogged.length)
+    lines.push('FUEL NOT LOGGED (left out of the Fuel score, not counted as missed): ' + chain.links.fuel.unlogged.map(u => `${u.what.join(' and ')} on ${String(u.name || 'a ride').replace(/,.*$/, '')}${u.time ? ' at ' + tz.hm12(u.time) : ''}`).join('; ') + '. When it fits the conversation, ask him once whether he had it, and log what he says with its time; never call it missed.');
   // fitness and form (CTL from the rides), from the last read of the scores
   if (scores && scores.ctl != null) lines.push(`Fitness (CTL) ${scores.ctl}, ${scores.ramp_7d >= 0 ? '+' : ''}${scores.ramp_7d} this week (${scores.ramp}); fatigue (ATL) ${scores.atl}, form ${scores.tsb} (${scores.form}). Green for fitness is a rise of 2 to 6 a week.`);
   // the chain on the front page: the week's links and where it breaks
