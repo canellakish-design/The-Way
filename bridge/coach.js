@@ -235,37 +235,42 @@ async function runJob(id, who) {
     job.steps = job.steps.filter((x, i, a) => a.indexOf(x) === i);   // the same search said once
     job.status = 'done'; job.finished = new Date().toISOString();
     await save();
+    if (job.kind === 'review') await require('./coach-first').reviewDone(job).catch(() => {});
     // the last debrief, for the quick coach's eyes (voice.js): the two coaches say the same thing about a ride
     if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-last', { date: tz.todayKey(), ride_id: job.ride_id, ride_name: job.ride_name || null, say: job.say, answer: job.answer, at: job.finished }).catch(() => {});
     if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-' + String(job.ride_id).replace(/[^\w-]/g, ''), { job_id: job.id, status: 'done', ride: { id: job.ride_id, name: job.ride_name || null }, say: job.say, answer: job.answer, usage: job.usage || null, at: job.finished }).catch(() => {});
     const th = await getJSON('coach-thread', { turns: [] });
-    th.turns = (th.turns || []).concat([{ role: 'user', text: job.kind === 'debrief' ? `Debrief: ${job.ride_name || 'the ride'}` : job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
+    th.turns = (th.turns || []).concat([{ role: 'user', text: job.kind === 'debrief' ? `Debrief: ${job.ride_name || 'the ride'}` : job.kind === 'review' ? `Weekly review: the week of ${job.week_of}` : job.text, at: job.created }, { role: 'assistant', text: final, at: job.finished }]).slice(-40);
     await setJSON('coach-thread', th);
   } catch (e) {
     job.status = 'error'; job.error = String(e.message || e).slice(0, 300);
     await save();
+    if (job.kind === 'review') await require('./coach-first').reviewDone(job).catch(() => {});
     if (job.kind === 'debrief' && job.ride_id) await setJSON('coach-debrief-' + String(job.ride_id).replace(/[^\w-]/g, ''), { job_id: job.id, status: 'error', error: job.error, ride: { id: job.ride_id, name: job.ride_name || null }, at: new Date().toISOString() }).catch(() => {});
   }
+}
+
+// a job starts here, whatever asked for it: a question from the page, a ride that just landed, or the week's review
+// (coach-first.js), which has no request behind it
+async function startJob(text, base, extra) {
+  const id = crypto.randomBytes(6).toString('hex');
+  const job = Object.assign({ id, text, base, status: 'queued', created: new Date().toISOString(), steps: [] }, extra || {});
+  await setJSON('coach-job-' + id, job);
+  try {
+    const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    if (r.status >= 400) throw new Error('background ' + r.status);
+  } catch (e) {
+    // on Netlify the job only ever runs in the background function: a request may live 30 seconds, a question needs minutes
+    if (require('./storage').ON_NETLIFY) { await setJSON('coach-job-' + id, Object.assign(job, { status: 'error', error: 'could not start the coach: ' + e.message })); return id; }
+    runJob(id).catch(() => {});   // the PC bridge has no background function: run it here
+  }
+  return id;
 }
 
 function attach(app) {
   // a job starts here, whatever asked for it: a question from the page, or a ride that just landed
   const baseOf = req => { const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app';
     return /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app'; };
-  const startJob = async (text, base, extra) => {
-    const id = crypto.randomBytes(6).toString('hex');
-    const job = Object.assign({ id, text, base, status: 'queued', created: new Date().toISOString(), steps: [] }, extra || {});
-    await setJSON('coach-job-' + id, job);
-    try {
-      const r = await fetch(base + '/.netlify/functions/coach-background', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-      if (r.status >= 400) throw new Error('background ' + r.status);
-    } catch (e) {
-      // on Netlify the job only ever runs in the background function: a request may live 30 seconds, a question needs minutes
-      if (require('./storage').ON_NETLIFY) { await setJSON('coach-job-' + id, Object.assign(job, { status: 'error', error: 'could not start the coach: ' + e.message })); return id; }
-      runJob(id).catch(() => {});   // the PC bridge has no background function: run it here
-    }
-    return id;
-  };
   app.post('/coach/ask', async (req, res) => { if (!auth(req, res)) return;
     const text = String((req.body || {}).text || '').trim().slice(0, 4000);
     if (!text) return res.status(400).json({ error: 'ask something' });
@@ -320,4 +325,4 @@ No research, no links, nothing else.`;
   app.get('/coach/notebook', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-notebook', { notes: [] })); });
 }
 
-module.exports = { attach, runJob, READABLE, ALLOWED };
+module.exports = { attach, runJob, startJob, READABLE, ALLOWED };

@@ -1148,6 +1148,16 @@
     autoConnect();
   };
 
-  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; } } };
+  // What the ride shows at this second, for the coach when he is asked something on the bike (voice.js sends it with
+  // the question; bridge/voice.js rideWords). Null when no ride is under way.
+  function liveNow(){
+    if (!ride || !/^(riding|paused|countin)$/.test(ride.state)) return null;
+    const iv = cur(), t = now(), mean = k => { let s = 0, n = 0; for (const a of ride.samples){ if (a[k] != null){ s += a[k]; n++; } } return n ? Math.round(s / n) : null; };
+    return { state: ride.state, name: ride.workout && ride.workout.name || null, elapsed_s: Math.round(ride.wt || 0), total_s: Math.round(totalOf(ride)),
+      hr: t - L.hrAt <= 5000 ? L.hr : null, power: t - L.bikeAt <= 5000 ? L.power : null, cadence: t - L.bikeAt <= 5000 ? L.cadence : null,
+      target_w: iv && iv.target_w != null ? Math.round(iv.target_w) : null, step: iv ? (iv.label || iv.kind || null) : null, step_left_s: iv ? Math.max(0, Math.round(iv.start_s + iv.dur_s - ride.wt)) : null,
+      avg_hr: mean(3), avg_power: mean(1) };
+  }
+  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, live: liveNow, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; } } };
   if (location.hash.replace(/^#/, "").split("?")[0] === "player") nav();
 })();
