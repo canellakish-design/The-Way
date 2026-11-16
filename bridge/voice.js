@@ -763,7 +763,7 @@ function attach(app) {
       catch (e) {
         if (!(e && e.deadline)) throw e;
         Object.assign(ms, { total_ms: Date.now() - tAll, deadline: true });
-        const doing = images.length || /^\s*(please\s+|can you\s+|could you\s+)?(plan|build|rebuild|schedule|move|log|add|remove|delete|put|set|send|save|remember|change|start|open|make)\b/i.test(text) || /^\s*(yes|no|ok|okay|do it|go)\b/i.test(text);
+        const doing = images.length || /^\s*(please\s+|can you\s+|could you\s+)?(plan|build|rebuild|schedule|move|log|add|remove|delete|put|set|send|save|remember|change|start|open|make)\b/i.test(text) || /^\s*(yes|no)\b/i.test(text) || /^\s*(ok|okay|do it|go|go ahead)\s*[.!]*\s*$/i.test(text);
         if (doing) return res.json({ heard: text, actions: [], reply: 'That took longer than it should, and I stopped before doing anything. Say it once more: your day is read now, so it will be quick.', slow: true, ms, offer: null });
         const id = await require('./coach').startJob(text, base, { kind: 'handoff' });
         return res.json({ heard: text, actions: [{ type: 'research', ok: true, summary: 'Taking a proper look: the full answer follows in a minute or two.', job: id }],
