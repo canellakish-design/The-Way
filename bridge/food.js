@@ -83,7 +83,7 @@ async function rowsFor(date, g, entries, seen) {
   }
   const dayKcal = Math.round(entries.filter(e => !e.supplement).reduce((a, e) => a + (e.kcal || 0), 0));
   // today, the meals still ahead are fitted to what is left of the day's target (food-math fitRest)
-  return F.dayMeals(plan, entries, { day_kcal: dayKcal, target_kcal: g.target && g.target.kcal, isDrink, hide, now_min: today ? F.toMin(hmNow()) : null });
+  return F.dayMeals(plan, entries, { day_kcal: dayKcal, target_kcal: g.target && g.target.kcal, isDrink, hide, now_min: today ? F.toMin(hmNow()) : null, target_protein: g.target && g.target.protein_g });
 }
 
 // The day's entries as the pages read them, and its rows, for the logging path and the report alike.

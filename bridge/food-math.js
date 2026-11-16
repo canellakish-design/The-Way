@@ -757,7 +757,7 @@ function dayMeals(plan, entries, ctx) {
   }
   out.sort((a, b) => mmin(a) - mmin(b));
   out = rollForward(out, entries);
-  out = fitRest(out, entries, { now_min: c.now_min, target_kcal: c.target_kcal, isDrink });
+  out = fitRest(out, entries, { now_min: c.now_min, target_kcal: c.target_kcal, target_protein: c.target_protein, isDrink });
   return out.map(m => {
     const mine = m._mine || [];
     const food = mine.filter(e => !isDrink(e));
@@ -898,7 +898,9 @@ function band(score) {
 // but dinner still read 1,015 and the snack 265: a slot with food keeps the plan it was eaten under, an open slot
 // comes from the plan as it stands, and nothing made the open ones add up to what was actually left. Now, once
 // something has been eaten today, the meals still ahead share what is left: each keeps its carbs and protein, with
-// at least 10 g of fat, and the calories above that (the fat) give way or grow, up to a quarter more than planned.
+// at least 10 g of fat, and the calories above that (the fat) give way. When more is left than was planned (a longer
+// ride, a meal missed), they grow by 15% at most, and the growth is protein first, as far as the day is short of it:
+// a day far behind by evening is not made up with one plate of fat; what cannot be eaten well stays uneaten.
 // The bottle on the bike and the bite before a session are fuel for the work and are not touched. c.now_min: the
 // minute of the day (today only; a day gone is left as it was).
 function fitRest(rows, entries, c) {
@@ -918,7 +920,13 @@ function fitRest(rows, entries, c) {
   const next = new Map();
   if (left <= planned) { const give = flex.reduce((a, m) => a + (m.kcal - least(m)), 0), room = Math.max(0, left - floor);
     for (const m of flex) next.set(m, least(m) + (give > 0 ? (m.kcal - least(m)) * Math.min(1, room / give) : 0)); }
-  else { const f = Math.min(1.25, left / planned); for (const m of flex) next.set(m, m.kcal * f); }
+  else { const f = Math.min(1.15, left / planned);
+    // the day's protein still unplanned for: it goes onto the growing meals, up to 25 g each
+    const eatenP = (entries || []).filter(e => e && !e.supplement).reduce((a, e) => a + (e.protein_g || 0), 0);
+    let shortP = c.target_protein > 0 ? Math.max(0, c.target_protein - eatenP - ahead.reduce((a, m) => a + (m.protein_g || 0), 0)) : 0;
+    for (const m of flex) { const extra = m.kcal * (f - 1), p = Math.min(25, Math.floor(extra / 4), Math.round(shortP * m.kcal / planned));
+      if (p >= 5) { m.plan_protein_g = m.plan_protein_g ?? m.protein_g; m.protein_g = (m.protein_g || 0) + p; }
+      next.set(m, m.kcal + extra); } }
   for (const m of flex) { const k = r5(next.get(m)); if (Math.abs(k - m.kcal) < 25) continue;
     m.plan_kcal = m.plan_kcal ?? m.kcal; m.fitted = { from: m.kcal, left: Math.round(left) }; m.kcal = k; }
   return rows;

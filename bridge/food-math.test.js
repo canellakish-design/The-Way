@@ -770,9 +770,13 @@ ok('what is left of the day fits what is left to eat: dinner gives up its fat wh
   // eaten far over: the meals ahead go no lower than their carbs and protein with 10 g of fat
   const over = F.dayMeals(plan, entries.concat([Object.assign(ate('lunch', '12:30', 900, 60, 20), { id: 'more' })]), { target_kcal: 2670, day_kcal: eaten + 900, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
   assert.strictEqual(over.kcal, Math.round((4 * (39 + 45) + 90) / 5) * 5);
-  // eaten little: they grow, by a quarter at most
-  const under = F.dayMeals(plan, [ate('breakfast', '08:42', 300, 20, 30)], { target_kcal: 2670, day_kcal: 300, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
-  assert.strictEqual(under.kcal, Math.round(1015 * 1.25 / 5) * 5);
+  // eaten little by evening: they grow by 15% at most, protein first as far as the day is short of it; the rest stays uneaten
+  const under = F.dayMeals(plan, [ate('breakfast', '08:42', 300, 20, 30)], { target_kcal: 2670, target_protein: 187, day_kcal: 300, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
+  assert.strictEqual(under.kcal, Math.round(1015 * 1.15 / 5) * 5);
+  assert.ok(under.protein_g > 45 && under.protein_g <= 70, 'the growth is protein first: ' + under.protein_g);
+  // a longer ride than planned: the target is up, and dinner with it
+  const longer = F.dayMeals(plan, entries, { target_kcal: 3150, target_protein: 187, day_kcal: eaten, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
+  assert.ok(longer.kcal > 1015 && longer.kcal <= Math.round(1015 * 1.15 / 5) * 5, 'dinner grew with the ride: ' + longer.kcal);
 });
 console.log(n + ' passed');
 
