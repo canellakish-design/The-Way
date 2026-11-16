@@ -446,7 +446,7 @@ async function weekDays(n, from0, kept) {
     const { scheduleReport } = require('./calendar');
     // read for the days still ahead only (a day gone needs no placing; the read is the slow part of this page)
     const t0 = tz.todayKey(), last = days[Math.min(days.length, 7) - 1].date, span = Math.round((Date.parse(last) - Date.parse(t0)) / 864e5) + 1;
-    const s = span > 0 ? await scheduleReport({ days: span }) : { days: [] };
+    const s = span > 0 ? await scheduleReport({ days: span, light: true }) : { days: [] };
     for (const day of s.days || []) {
       const x = days.find(y => y.date === day.date); if (!x) continue;
       // a day with a long drive in it is a day away (the game in Somerset, NJ on 22 Nov had Upper 2 at Life Time at 7:30a)

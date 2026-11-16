@@ -750,7 +750,9 @@ async function scheduleReport(q) {
         }
       } catch (e) { /* the day stands without them */ }
       // The day's fuel targets, from the day's training (food-math.js).
-      await attachMacros(days);
+      // (light: the day's fixed things only, without each day's food plan, for a reader that lays out training: the
+      // week planner, the lift placer. The food plan is most of this report's time, a third of a second a day)
+      if (!(q && q.light)) await attachMacros(days);
       const sources = {
         timezone: tz.ZONE,
         calendars: d.accounts.flatMap(a => (a.calendar_list || []).map(c => c.name))

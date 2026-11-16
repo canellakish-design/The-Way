@@ -239,7 +239,7 @@ async function gather(weekOf) {
   const ahead = Math.round((Date.parse(sun) - Date.parse(today)) / 864e5) + 1;
   const SW = require('./sleep-window');
   const [sched, rest, wx, R, store, cal] = await Promise.all([
-    ahead > 0 ? require('./calendar').scheduleReport({ days: Math.min(ahead, 15) }).catch(() => ({ days: [] })) : { days: [] },
+    ahead > 0 ? require('./calendar').scheduleReport({ days: Math.min(ahead, 15), light: true }).catch(() => ({ days: [] })) : { days: [] },
     require('./classes').restDaysBetween(mon, sun).catch(() => ({})),
     require('./weather').outlook(mon, sun).catch(() => null),
     SW.get().catch(() => SW.DEFAULT_RULES),
