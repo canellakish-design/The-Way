@@ -72,4 +72,10 @@ ok('the notebook: he can tell the coach to remember something, and both coaches 
   const src = require('fs').readFileSync(require.resolve('./voice'), 'utf8');
   assert.ok(/case 'remember'/.test(src) && /getJSON\('coach-notebook'/.test(src) && /WHAT HE TOLD YOU/.test(src));
 });
+ok('16 Nov, "a more complex question seems to time out": the answer has a deadline, and a big question is handed on, not dropped', () => {
+  const src = require('fs').readFileSync(require.resolve('./voice'), 'utf8');
+  assert.ok(/- research: /.test(sys) && /case 'research'/.test(src) && /startJob\(text, base, \{ kind: 'handoff' \}\)/.test(src));
+  assert.ok(/AbortSignal\.timeout/.test(src) && /deadline: tAll \+ 20000/.test(src) && /Date\.now\(\) - tStart < 10000/.test(src));
+  assert.ok(/ONLY when he asks for a week to be planned/.test(src));                    // asked about sleep, it laid out a week
+});
 console.log(`\n${n} checks, all good`);

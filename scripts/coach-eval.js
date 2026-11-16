@@ -34,6 +34,9 @@ const rx = s => new RegExp(s, 'i');
       if (c.only_actions && types.some(t => !c.only_actions.includes(t))) fails.push(`actions beyond ${c.only_actions.join(', ')}: ${types.join(', ')}`);
       if (c.max_actions != null && types.length > c.max_actions) fails.push(`${types.length} actions, at most ${c.max_actions}`);
       for (const t of c.tools || []) if (!tools.includes(t)) fails.push(`did not call ${t}`);
+      for (const t of c.no_tools || []) if (tools.includes(t)) fails.push(`called ${t}, which this did not ask for`);
+      if (c.max_seconds && (Date.now() - t0) / 1000 > c.max_seconds) fails.push(`took ${((Date.now() - t0) / 1000).toFixed(1)} s, over ${c.max_seconds}`);
+      if (!reply.trim()) fails.push('an empty reply');
       if (c.has_offer && !(d.offer && d.offer.plan)) fails.push('no offer');
       if (c.reply_has_latest_weight) { if (latest == null) fails.push('(skipped: no weigh-in to compare)'); else if (!reply.includes(String(latest)) && !reply.includes(String(Math.round(latest)))) fails.push(`the reply should give the latest weigh-in, ${latest} lb`); }
       if (d.ms) { cost.in += (d.ms.in_tokens || 0) - (d.ms.cached_tokens || 0); cost.cached += d.ms.cached_tokens || 0; cost.out += d.ms.out_tokens || 0; }
