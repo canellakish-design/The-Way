@@ -133,6 +133,8 @@ function fuelChecks(r) {
   rides.forEach(x => {
     const st = F.toMin(x.time), mins = x.minutes || 60, end = st + mins;
     if (st > nowMin) return;
+    // a ride that was planned and never ridden is not a fuel check; today's, under way or just ended, is
+    if (!(x.done || x.kept) && !(r.date === tz.todayKey() && nowMin < end + 60)) return;
     const nameHard = HARD_NAME.test(String(x.name || '').replace(/intervals\.?\s*icu/ig, ''));
     const rx = x.rx || {}, kind = FUEL_WEIGHTS[rx.kind] ? rx.kind : nameHard ? 'hard' : mins >= 120 ? 'long' : 'light';
     const base = { kind: 'ride', name: x.name, time: x.time, rx_kind: kind, weight: RIDE_WEIGHT[kind] || 1 };
