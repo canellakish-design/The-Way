@@ -659,12 +659,12 @@
 
   // one recorded second: the moment's numbers, then the workout clock moves on
   // Maximal Power Available, second by second (the model in bridge/signature.js mpaTrace, fed with the signature the
-  // session carries): the tank above threshold drains at (power − TP) joules a second and refills below it; MPA
+  // session carries, kept on the ride): the tank above threshold drains at (power − TP) joules a second and refills below it; MPA
   // runs from peak power with a full tank down to TP as it empties. Power above MPA for three seconds running is a
   // breakthrough: the coach says so at once, and the Power page gives it its medal when the ride is read.
   // (Harry, 15 Nov 2026: "Add breakthroughs to the workout player".)
   function mpaStep(r, p){
-    const s = S && S.signature; if (!s || !(s.tp > 0) || !(s.hie_kj > 0) || !(s.pp > s.tp)) return;
+    const s = r.signature; if (!s || !(s.tp > 0) || !(s.hie_kj > 0) || !(s.pp > s.tp)) return;
     const hieJ = s.hie_kj * 1000, M = r.mpa || (r.mpa = { w: hieJ, mpa: s.pp, tank: 100, over_s: 0, run: 0, bt: null, low: s.pp });
     if (p != null){ if (p > s.tp) M.w = Math.max(0, M.w - (p - s.tp)); else M.w = Math.min(hieJ, M.w + (hieJ - M.w) * (s.tp - p) / hieJ); }
     // the share of the gap from TP to peak still there with a fraction u of the tank spent: u / −ln(1 − u). It is the
@@ -729,7 +729,7 @@
     try{ const AC = window.AudioContext || window.webkitAudioContext; if (AC && !audio) audio = new AC(); if (audio && audio.state === "suspended") audio.resume(); }catch{}
     const t0 = now();
     setZones(S.thresholds);
-    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, date: keyOf(new Date(t0)),
+    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, signature: S.signature || null, date: keyOf(new Date(t0)),
       samples: [], pauses: [], wt: 0, bias: 0, erg: true, raw: {}, rawCount: 0, sim: SIM.on };
     ride.bk = bucketsFor(ride, S);
     COACH.feed = []; COACH.said = {}; COACH.spokeAt = 0;
@@ -1160,7 +1160,7 @@
     let S = null, err = null;
     try{ S = await loadSession(id || "today"); }catch(e){ err = e; }
     if (!alive()) return;
-    if (S && !S.workout && !id){ S = Object.assign(FREE_RIDE(S.settings && S.settings.ftp || 175), { none: true, choices: S.choices, lines: S.lines, colours: S.colours }); }
+    if (S && !S.workout && !id){ S = Object.assign(FREE_RIDE(S.settings && S.settings.ftp || 175), { none: true, choices: S.choices, lines: S.lines, colours: S.colours, signature: S.signature || null }); }
     if (!S){ const pend = await pendingHTML(null); el.innerHTML = `${pend}<div class="pl-ttl"><h2 class="pl-h">Workout player</h2></div><div class="small">Couldn't load the workout: ${esc(String(err && err.message || "").replace(/^bridge \d+ — /, "").slice(0, 200))}. <a href="#calendar">Pick one on the Calendar</a>.</div>`; return; }
     S0 = S;
     BKS.lines = S.lines || null; BKS.colours = S.colours || null;
