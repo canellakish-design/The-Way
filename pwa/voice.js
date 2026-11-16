@@ -477,6 +477,9 @@ function mount(){
 function note(asked, reply){ if (asked) history.push({ role: "user", text: asked }); history.push({ role: "assistant", text: reply || "" }); keep(); drawThread(); }
 // micOpen: the microphone is open or being opened (a hold, or the conversation listening): heavy work elsewhere on
 // the page waits for it to close (face.js builds the 3D figure only then)
-window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note, talk: talkToggle, talking: () => talk.on, micOpen: () => listening || state !== "idle" || holding || (talk.on && talk.phase === "listening") };
+window.voiceBits = { open, close, send, supported: !!SR, setHey, mount, note, talk: talkToggle, talking: () => talk.on, micOpen: () => listening || state !== "idle" || holding || (talk.on && talk.phase === "listening"),
+  // micLive: the microphone is taking his words at this moment (not the coach thinking or speaking): what the 3D
+  // figure waits out before it is built (face.js whenQuiet)
+  micLive: () => listening || holding || (talk.on && talk.phase === "listening") };
 mount();   // the Coach page drew before this file loaded
 })();
