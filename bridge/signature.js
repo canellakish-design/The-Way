@@ -230,7 +230,11 @@ function mpaTrace(watts, sig, step) {
     const p = watts[i] || 0;
     if (p > tp) w = Math.max(0, w - (p - tp));
     else w = Math.min(hieJ, w + (hieJ - w) * (tp - p) / hieJ);
-    const mpa = tp + (pp - tp) * (w / hieJ);
+    // with a fraction u of the tank spent, the share of the gap from TP to PP still there is u / −ln(1 − u): the form
+    // under which a steady all-out effort from fresh fails exactly on the curve pd() draws, so the trace through a
+    // ride and the curve the signature is fitted with say the same thing (the workout player follows the same form)
+    const u = 1 - w / hieJ, share = u <= 1e-6 ? 1 : u >= 0.999999 ? 0 : u / -Math.log(1 - u);
+    const mpa = tp + (pp - tp) * share;
     if (mpa < lowest) lowest = mpa;
     if (p > mpa + 2) { over++; maxOverPct = Math.max(maxOverPct, Math.round((p - mpa) / mpa * 100)); }
     if (step && i % step === 0) trace.push({ t: i, p, mpa: Math.round(mpa) });
@@ -364,6 +368,15 @@ async function powerOf(sig, points, rides, bts, nears, today, st) {
     targets };
 }
 
+// The three numbers a screen on the bike needs to follow Maximal Power Available second by second, and so to see a
+// breakthrough as it happens (the workout player, the Edge field). Null when there is no signature yet, or it could
+// not be read in time: the screen then simply shows no MPA.
+async function forRide(ms) {
+  try { const r = await Promise.race([report(), new Promise(res => setTimeout(() => res(null), ms || 4000))]);
+    return r && r.signature ? { tp: r.signature.tp, hie_kj: r.signature.hie_kj, pp: r.signature.pp, targets: r.power ? r.power.targets.map(t => ({ dur_s: t.dur_s, watts: t.watts })) : [] } : null; }
+  catch (e) { return null; }
+}
+
 function attach(app) {
   app.get('/signature', async (req, res) => { if (!auth(req, res)) return;
     try {
@@ -390,4 +403,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, scanRides, newBestsOf, pointsOf, decayOf, medalOf, powerOf };
+module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, scanRides, newBestsOf, pointsOf, decayOf, medalOf, powerOf, forRide };

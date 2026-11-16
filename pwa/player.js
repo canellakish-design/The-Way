@@ -539,6 +539,7 @@
     const iv = cur();
     const tgt = targetNow();
     let p = tgt != null && ergActive(iv) ? tgt + Math.round((Math.random() - 0.5) * 8) : 125 + Math.round(Math.sin(ts / 9000) * 12);
+    if (SIM.force != null) p = SIM.force;   // a test holds a power of its own (window.__player.sim.power)
     if (iv && iv.kind === "hr") SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.04;   // a slower heart, so the seeking has to wait for it
     L.power = Math.max(0, p); L.cadence = 86 + Math.round(Math.random() * 6); L.speed = Math.round(3.6 * Math.cbrt(Math.max(1, p) / 0.24) * 100) / 100; L.bikeAt = ts;
     SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.06; L.hr = Math.round(SIM.hr); L.hrAt = ts;
@@ -653,10 +654,32 @@
     return flushing;
   }
   // what goes into IndexedDB: everything needed to finish and save the ride later
-  const recordOf = r => ({ id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
+  const recordOf = r => ({ mpa: r.mpa ? { bt: r.mpa.bt, over_s: r.mpa.over_s, low: r.mpa.low } : null, id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
     wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, breath: r.breath || [], breath_layout: BR.layout || null, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName, breath: DEV.breathName } });
 
   // one recorded second: the moment's numbers, then the workout clock moves on
+  // Maximal Power Available, second by second (the model in bridge/signature.js mpaTrace, fed with the signature the
+  // session carries): the tank above threshold drains at (power − TP) joules a second and refills below it; MPA
+  // runs from peak power with a full tank down to TP as it empties. Power above MPA for three seconds running is a
+  // breakthrough: the coach says so at once, and the Power page gives it its medal when the ride is read.
+  // (Harry, 15 Nov 2026: "Add breakthroughs to the workout player".)
+  function mpaStep(r, p){
+    const s = S && S.signature; if (!s || !(s.tp > 0) || !(s.hie_kj > 0) || !(s.pp > s.tp)) return;
+    const hieJ = s.hie_kj * 1000, M = r.mpa || (r.mpa = { w: hieJ, mpa: s.pp, tank: 100, over_s: 0, run: 0, bt: null, low: s.pp });
+    if (p != null){ if (p > s.tp) M.w = Math.max(0, M.w - (p - s.tp)); else M.w = Math.min(hieJ, M.w + (hieJ - M.w) * (s.tp - p) / hieJ); }
+    // the share of the gap from TP to peak still there with a fraction u of the tank spent: u / −ln(1 − u). It is the
+    // form that makes a steady all-out effort fail exactly on the signature's own curve, so a breakthrough here is one
+    // on the Power page too
+    const u = 1 - M.w / hieJ, f = u <= 1e-6 ? 1 : u >= 0.999999 ? 0 : u / -Math.log(1 - u);
+    M.mpa = Math.round(s.tp + (s.pp - s.tp) * f); M.tank = Math.round(M.w / hieJ * 100); if (M.mpa < M.low) M.low = M.mpa;
+    // 2% and 3 W over, as the Power page asks of a ride before it gives a medal
+    if (p != null && p >= M.mpa * 1.02 && p - M.mpa >= 3){ M.run++; M.over_s++;
+      if (M.run >= 3 && !M.bt){ M.bt = { wt: r.wt, watts: p, mpa: M.mpa };
+        beep(1568, 0.5); coachSay(`Breakthrough. ${p} watts, where your signature said ${M.mpa} was all you had. Hold it as long as you can.`, { once: "bt", force: true }); } }
+    else { M.run = 0;
+      // deep into an effort and within a few watts of it: one push, said once a minute at most
+      if (p != null && !M.bt && M.tank <= 60 && p >= M.mpa * 0.95) coachSay(`You are ${Math.max(1, M.mpa - p)} watt${M.mpa - p > 1 ? "s" : ""} from a breakthrough. Push now.`, { every: ["near", 60], force: true }); }
+  }
   function stepSecond(ts){
     const r = ride;
     if (SIM.on) simFeed(ts);
@@ -664,6 +687,7 @@
     const fresh = at => ts - at <= 3000;
     r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
     if (r.edge){ const a = r.samples[r.samples.length - 1]; edgeDo(r.edge.second({ t: r.samples.length, wt: r.wt, w: a[1], hr: a[3], cad: a[2] })); }
+    mpaStep(r, r.samples[r.samples.length - 1][1]);
     coachSecond(r, k, iv, r.samples[r.samples.length - 1]);
     r.wt += 1;
     if (hrLed(iv)) seekStep(iv);
@@ -973,7 +997,7 @@
       <div class="pl-big">
         <div class="pl-bn"><span class="k">Time</span><span class="n" id="fT0">0:00</span><span class="u" id="fIl"></span></div>
         <div class="pl-bn pl-hr"><span class="k">Heart rate</span><div class="pl-hrrow"><span class="pl-hrbar" id="fHb" aria-hidden="true"></span><span class="n" id="fH">—</span></div><span class="u" id="fHz"></span></div>
-        <div class="pl-bn pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span></div>
+        <div class="pl-bn pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="fPt"></span><span class="u pl-mpa" id="fMpa" title="Maximal Power Available: the most your signature says you have right now"></span></div>
       </div>
       <div class="pl-next" id="plNext"></div>
       <div class="pl-ctl">
@@ -1019,6 +1043,9 @@
     $("plPos").textContent = r.state === "paused" ? (r.autoPaused ? "Paused · off the bike" : "Paused") : r.state === "countin" ? "Get ready" : iv ? `Interval ${k + 1} of ${r.intervals.length}` : "Workout done";
     $("plLbl").textContent = iv ? iv.label + (iv.rep ? " · " + iv.rep : "") : "Ride on, or End to save";
     $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
+    { const m = $("fMpa"), M = r.mpa; if (m){ const pw = fresh(L.bikeAt) ? L.power : null;
+        m.textContent = !M ? "" : M.bt ? `★ breakthrough · MPA ${M.mpa}` : `MPA ${M.mpa} · tank ${M.tank}%`;
+        m.classList.toggle("bt", !!(M && M.bt)); m.classList.toggle("near", !!(M && !M.bt && pw != null && M.tank <= 60 && pw >= M.mpa * 0.95)); } }
     $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? (hrLed(iv) && now() - L.hrAt <= 15000 ? ` · holding HR ${HR_Z1_AIM}` : "") : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
@@ -1074,6 +1101,7 @@
       </div>` : "";
     el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-dim" : "hu-ink"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
       <div class="pl-result ${ok ? "ok" : "bad"}">${line}</div>
+      ${rec.mpa && rec.mpa.bt ? `<div class="pl-result ok pl-btres">★ Breakthrough at ${clock(rec.mpa.bt.wt)}: ${rec.mpa.bt.watts} W where the signature allowed ${rec.mpa.bt.mpa} W${rec.mpa.over_s > 3 ? `, ${rec.mpa.over_s} seconds above it` : ""}. The <a href="#power">Power</a> page gives it its medal once the ride is read.</div>` : ""}
       ${fields}
       ${!r.empty && rec.samples && rec.samples.length ? (() => { const lines = (rec.bk && rec.bk.lines) || BKS.lines, plan = BK().planFromSteps(rec.intervals || [], rec.ftp || 175, lines);
           const act = BK().actualFromSamples(rec.samples.map(a => ({ w: a[1], hr: a[3] })), lines);
@@ -1158,6 +1186,6 @@
       target_w: iv && iv.target_w != null ? Math.round(iv.target_w) : null, step: iv ? (iv.label || iv.kind || null) : null, step_left_s: iv ? Math.max(0, Math.round(iv.start_s + iv.dur_s - ride.wt)) : null,
       avg_hr: mean(3), avg_power: mean(1) };
   }
-  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, live: liveNow, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; } } };
+  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, live: liveNow, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; }, power(w){ SIM.force = w == null ? null : +w; } } };
   if (location.hash.replace(/^#/, "").split("?")[0] === "player") nav();
 })();

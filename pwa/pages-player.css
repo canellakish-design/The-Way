@@ -219,3 +219,8 @@ body:has(.pl-ride) #micBtn{display:none}
   width:64px; height:22px; padding:0; cursor:pointer; box-shadow:0 2px 0 #0a0a0a }
 .edge1050 button.e-btn:active{ transform:translateY(2px); box-shadow:none }
 .edge1050 button.e-pwr{ position:absolute; left:-5px; top:84px; width:6px; height:46px; border-radius:4px 0 0 4px; z-index:1; cursor:default }
+/* Maximal Power Available under the power, and a breakthrough (player.js mpaStep) */
+.pl-mpa{opacity:.75}
+.pl-mpa.near{opacity:1;color:var(--amber);font-weight:600}
+.pl-mpa.bt{opacity:1;color:#f0c040;font-weight:700}
+.pl-btres a{color:inherit;text-decoration:underline}
