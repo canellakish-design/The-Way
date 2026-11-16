@@ -757,6 +757,7 @@ function dayMeals(plan, entries, ctx) {
   }
   out.sort((a, b) => mmin(a) - mmin(b));
   out = rollForward(out, entries);
+  out = fitRest(out, entries, { now_min: c.now_min, target_kcal: c.target_kcal, isDrink });
   return out.map(m => {
     const mine = m._mine || [];
     const food = mine.filter(e => !isDrink(e));
@@ -892,6 +893,37 @@ function band(score) {
 // short alone); red when the calories or the carbs are further off than
 // that, either way, since on a Zone 1 morning too many carbs is the miss
 // and before a hard session too few is. Slots with no logged entry: null.
+// What is left of the day fits what is left to eat (Harry, 15 Nov 2026, after 51 of a planned 90 minutes: "Why
+// doesn't my dinner adjust to the shorter ride?"). The day's target had fallen with the ride and 907 kcal were left,
+// but dinner still read 1,015 and the snack 265: a slot with food keeps the plan it was eaten under, an open slot
+// comes from the plan as it stands, and nothing made the open ones add up to what was actually left. Now, once
+// something has been eaten today, the meals still ahead share what is left: each keeps its carbs and protein, with
+// at least 10 g of fat, and the calories above that (the fat) give way or grow, up to a quarter more than planned.
+// The bottle on the bike and the bite before a session are fuel for the work and are not touched. c.now_min: the
+// minute of the day (today only; a day gone is left as it was).
+function fitRest(rows, entries, c) {
+  if (!c || c.now_min == null || !(c.target_kcal > 0)) return rows;
+  const isDrink = c.isDrink || (e => !!e.drink_only);
+  const eaten = (entries || []).filter(e => e && !e.supplement).reduce((a, e) => a + (e.kcal || 0), 0);
+  if (!(eaten > 0)) return rows;
+  const ahead = rows.filter(m => !m.frozen && !(m._mine || []).some(e => !isDrink(e)) && (m.kcal || 0) > 0 && mmin(m) != null && mmin(m) >= c.now_min - 45);
+  const fuel = m => !!m.extra || m.slot === 'on the bike' || m.slot === 'before' || !!m.gap_snack;
+  const flex = ahead.filter(m => !fuel(m));
+  if (!flex.length) return rows;
+  const left = c.target_kcal - eaten - ahead.filter(fuel).reduce((a, m) => a + m.kcal, 0), planned = flex.reduce((a, m) => a + m.kcal, 0);
+  if (Math.abs(left - planned) < 75) return rows;
+  // the least each can be: its carbs and protein with 10 g of fat (or what it is planned at, if that is less)
+  const least = m => Math.min(m.kcal, 4 * ((m.carbs_g || 0) + (m.protein_g || 0)) + 90);
+  const floor = flex.reduce((a, m) => a + least(m), 0);
+  const next = new Map();
+  if (left <= planned) { const give = flex.reduce((a, m) => a + (m.kcal - least(m)), 0), room = Math.max(0, left - floor);
+    for (const m of flex) next.set(m, least(m) + (give > 0 ? (m.kcal - least(m)) * Math.min(1, room / give) : 0)); }
+  else { const f = Math.min(1.25, left / planned); for (const m of flex) next.set(m, m.kcal * f); }
+  for (const m of flex) { const k = r5(next.get(m)); if (Math.abs(k - m.kcal) < 25) continue;
+    m.plan_kcal = m.plan_kcal ?? m.kcal; m.fitted = { from: m.kcal, left: Math.round(left) }; m.kcal = k; }
+  return rows;
+}
+
 // A meal that ran over its slot moves the overage into the next slot, when
 // the next slot is near enough (two and a half hours) to be the same
 // stretch of the day: the sushi at 11:39 that was both the post-ride meal
@@ -1161,4 +1193,4 @@ function meterAngle(kcal) {
 const lbPerWeek = avgKcal => avgKcal == null ? null : Math.round(avgKcal * 7 / 3500 * 10) / 10;
 
 module.exports = { notFood, performanceRules, fatOf, placeSnacks, carbLoad, carbLabel, carbWords, CARB_WORD, balanceSeries, meterAngle, lbPerWeek, METER_SCALE, isBlast, BLAST_KCAL_MIN, DAILY_SHARE, burnList, PROFILE, DEFICIT, LABEL, bmr, baseBurn, fuelDay, sessionRx, fuelRx, TRAIN_LOW_PER_WEEK, RX_LABEL, isRideSession, workoutKcal, targets, guidelines, cue, mealPlan, onBike, slotFor, toMin, toHM, dueSoFar, nextSlot, mealMatch, rollForward, alcoholOf, alcoholRule,
-  guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
+  fitRest, guidelineScore, overall, band, FIT_POINTS, endOf, mmin, planSnapshot, slotKeys, pastOnArrival, dayMeals, tidyWhy, normWords, twinOf, workNote, drinksOf, onDrinksList };
