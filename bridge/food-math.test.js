@@ -743,5 +743,36 @@ ok('protein over its figure costs nothing; under still does, and calories, carbs
   assert.strictEqual(scoreDay({ kcal: 2000, carbs_g: 211, protein_g: 91, fat_g: 96 }, t).per_macro.protein_g.direction, 'under');
   assert.ok(scoreDay({ kcal: 2000, carbs_g: 211, protein_g: 91, fat_g: 96 }, t).per_macro.protein_g.score < 15);
 });
+ok('what is left of the day fits what is left to eat: dinner gives up its fat when the ride came up short, the fuel slots are not touched', () => {
+  // Sunday 15 Nov, 7 p.m.: target 2,670 after 51 of 90 minutes; 1,763 eaten; dinner still read 1,015 and the snack 265
+  const plan = [
+    { slot: 'breakfast', time: '08:45', kcal: 370, carbs_g: 20, protein_g: 30, low_carb: true },
+    { slot: 'lunch', time: '12:00', kcal: 940, carbs_g: 126, protein_g: 70 },
+    { slot: 'before', time: '15:50', kcal: 265, carbs_g: 25, protein_g: 20 },
+    { slot: 'on the bike', time: '17:30', kcal: 180, carbs_g: 45, protein_g: 0, extra: true },
+    { slot: 'dinner', time: '20:15', kcal: 1015, carbs_g: 39, protein_g: 45, low_carb: true },
+    { slot: 'snack', time: '21:15', kcal: 265, carbs_g: 20, protein_g: 25 } ];
+  const ate = (slot, time, kcal, c, p) => ({ id: slot + time, slot, time, kcal, carbs_g: c, protein_g: p, plan: { slot, kcal: plan.find(m => m.slot === slot).kcal, carbs_g: plan.find(m => m.slot === slot).carbs_g, protein_g: plan.find(m => m.slot === slot).protein_g, time: plan.find(m => m.slot === slot).time } });
+  const entries = [ate('breakfast', '08:42', 456, 29, 48), ate('lunch', '12:05', 1127, 67, 97), ate('on the bike', '18:00', 180, 45, 0)];
+  const eaten = entries.reduce((a, e) => a + e.kcal, 0);
+  const rows = F.dayMeals(plan, entries, { target_kcal: 2670, day_kcal: eaten, now_min: 19 * 60 + 7 });
+  const by = Object.fromEntries(rows.map(m => [m.slot, m]));
+  const left = 2670 - eaten;
+  assert.ok(by.dinner.kcal < 1015, 'dinner came down: ' + by.dinner.kcal);
+  assert.ok(Math.abs(by.dinner.kcal + by.snack.kcal - left) <= 30, `dinner ${by.dinner.kcal} + snack ${by.snack.kcal} against ${left} left`);
+  assert.strictEqual(by.dinner.carbs_g, 39); assert.strictEqual(by.dinner.protein_g, 45); assert.strictEqual(by.dinner.plan_kcal, 1015);
+  assert.ok(by.dinner.fat_g >= 10 && by.dinner.fat_g < 50, 'the fat gave way: ' + by.dinner.fat_g);
+  assert.strictEqual(by.lunch.kcal, 940, 'a meal eaten keeps the plan it was eaten under');
+  assert.strictEqual(by.before.kcal, 265, 'a slot gone by is left as it was');
+  // a day gone, or nothing eaten yet: the plan stands
+  assert.strictEqual(F.dayMeals(plan, entries, { target_kcal: 2670, day_kcal: eaten }).find(m => m.slot === 'dinner').kcal, 1015);
+  assert.strictEqual(F.dayMeals(plan, [], { target_kcal: 2670, day_kcal: 0, now_min: 7 * 60 }).find(m => m.slot === 'dinner').kcal, 1015);
+  // eaten far over: the meals ahead go no lower than their carbs and protein with 10 g of fat
+  const over = F.dayMeals(plan, entries.concat([Object.assign(ate('lunch', '12:30', 900, 60, 20), { id: 'more' })]), { target_kcal: 2670, day_kcal: eaten + 900, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
+  assert.strictEqual(over.kcal, Math.round((4 * (39 + 45) + 90) / 5) * 5);
+  // eaten little: they grow, by a quarter at most
+  const under = F.dayMeals(plan, [ate('breakfast', '08:42', 300, 20, 30)], { target_kcal: 2670, day_kcal: 300, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
+  assert.strictEqual(under.kcal, Math.round(1015 * 1.25 / 5) * 5);
+});
 console.log(n + ' passed');
 

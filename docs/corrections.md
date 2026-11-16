@@ -106,6 +106,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 | 15 Nov | "I think I only have one 45-pound kettlebell at home" | The Blasts, the Pump and the home notes were written for bells of several sizes, two at a time | every Blast exercise uses the one 45 lb bell and progresses in reps; one-bell carries; the Pump's bell lifts moved to the Bowflex | new case |
 
 | 15 Nov | "Why is my ride logged for this morning. Just finished it" | The Day pairs each ride that happened with its planned card and moves the card to the real time. A lift saved on the Lift page is a done session too, and was taken for a ride: Legs at 7:30a pulled the Zone 1 card to 7:30a, and the ride's real time, 5:51p, then landed on the Kettlebell Blast planned beside it | only rides are rides that happened; a done ride takes the card with its name, else the nearest planned ride, never a lift, a Blast or the Pump | my mistake |
+| 15 Nov | "Why doesn't my dinner adjust to the shorter ride?" (51 of 90 minutes ridden; dinner still 1,015 kcal with 907 left in the day) | The day's target follows the ride that was done, but a slot with food keeps the plan it was eaten under and an open slot comes from the plan as it stands: nothing made the open ones add up to what was left | the meals still ahead share what is left of the day (food-math fitRest): carbs and protein kept, the fat gives way or grows | disagreement |
 **1 Nov: 21 corrections.** 11 new case, 6 disagreement, 2 my mistake, 2 advisor.
 **2 Nov: 8.** 1 new case, 3 disagreement, 3 my mistake, 1 advisor.
 **3 Nov: 2.** 1 disagreement, 1 advisor.
@@ -121,7 +122,7 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 **12 Nov: 1.** 1 my mistake.
 **13 Nov: 4.** 1 new case, 2 disagreement, 1 my mistake.
 **14 Nov: 13.** 6 new case, 3 disagreement, 3 my mistake, 1 advisor.
-**15 Nov: 14.** 3 new case, 7 disagreement, 4 my mistake.
+**15 Nov: 15.** 3 new case, 8 disagreement, 4 my mistake.
 
 *10 to 15 Nov were not logged at the time. The rows above were written on 15 Nov from the commits and the conversation, so their count is a floor, and the kind is Claude's reading after the fact.*
 
@@ -131,10 +132,10 @@ Every time Harry has to correct the site, it goes here: the date, what he saw, w
 |---|---|---|---|---|---|
 | Week 1 (1 to 7 Nov) | 38 | 17 | 11 | 6 | 4 |
 | Week 2 (8 to 14 Nov) | 33 | | | | |
-| 15 Nov alone | 14 | | | | |
+| 15 Nov alone | 15 | | | | |
 
-- **The count has not fallen from daily to weekly.** It fell in the middle of week 2 (one to five a day) and rose again on 14 and 15 Nov (13 and 14), when the scheduler (auto-move, drives, clashes) and the lifting week were being changed.
-- **The kind shifted** from new real-world cases to two parts disagreeing and to Claude's own mistakes in new code. Since 10 Nov: 13 new case, 14 disagreement, 11 my mistake, 1 advisor.
+- **The count has not fallen from daily to weekly.** It fell in the middle of week 2 (one to five a day) and rose again on 14 and 15 Nov (13 and 15), when the scheduler (auto-move, drives, clashes) and the lifting week were being changed.
+- **The kind shifted** from new real-world cases to two parts disagreeing and to Claude's own mistakes in new code. Since 10 Nov: 13 new case, 15 disagreement, 11 my mistake, 1 advisor.
 - **The plan was not kept.** The log stopped on 9 Nov; the feature freeze ended in practice that day (about 110 commits by 15 Nov, most of them features Harry asked for); the weekly Chrome run has not run since 1 Nov.
 - **Changed plan, put to Harry on 15 Nov:** the log is written as part of every fix; lifting reads from one Monday-to-Sunday week; the push check covers lifting; next review 29 Nov. A one-week freeze on the scheduler and lifting (fixes only) is proposed and is his call.
 
