@@ -545,6 +545,8 @@ ul.agenda.zthree .n{min-width:0} ul.agenda.zthree .tag{display:flex; flex-direct
 .vmsg{max-width:88%; padding:8px 12px; border:1px solid var(--line); font-size:16px; line-height:1.35}
 .vmsg.user{align-self:flex-end; background:#1E2024} .vmsg.assistant{align-self:flex-start; background:var(--green-soft); border-color:var(--green)}
 .vmsg .vacts{list-style:none; padding:0; margin:0 0 6px; font-size:13px; color:var(--muted)}
+.vmsg .vacts .vlines{list-style:none; margin:8px 0 4px; padding:8px 10px; border:1px solid var(--line); border-radius:8px; color:var(--ink, inherit); font-size:14px; line-height:1.4}
+.vmsg .vacts .vlines li{padding:5px 0; border-bottom:1px solid var(--line-soft, var(--line))} .vmsg .vacts .vlines li:last-child{border-bottom:0}
 .vmsg .vacts .vlink{display:inline-block; margin:6px 8px 2px 0; padding:9px 13px; border:1px solid var(--line, #d9d9d9); border-radius:10px; font-size:14px; font-weight:600; text-decoration:none; color:inherit}
 .voffer{display:flex; gap:8px; margin:10px 0 2px; flex-wrap:wrap} .voffer button{margin:0; min-height:44px; font-size:13px; padding:8px 14px} .voffer .primary{flex:1 1 auto}
 .vhold{flex:1; min-height:54px} .vhold.live{background:#5A2620; border-color:var(--red); color:var(--ink); animation:micpulse 1s ease-in-out infinite}
