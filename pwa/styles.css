@@ -1081,3 +1081,8 @@ body:has(#chFace) #micBtn{display:none}
 .dc-more{margin-top:8px}
 .dc-more summary{cursor:pointer;font-size:13px;opacity:.75;letter-spacing:.04em}
 .dc-more[open] summary{margin-bottom:6px}
+/* the Power page (links.js V.power): the medals, the FTP line, the breakthrough targets */
+.pw-medal{vertical-align:-2px;margin-right:2px}
+.pw-medals{font-size:17px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pw-targets .t{min-width:86px}
+.pw-line{margin-bottom:6px}

@@ -119,23 +119,38 @@ function fit(points, o) {
 // moved up. Each ride is checked against the curve fitted to the rides
 // before it (once four durations exist), and the curve fitted with it says
 // how far the three numbers moved. Cached against the set of rides read.
-const pointsOf = rides => {
+// Decay, the part of Xert's signature that works between breakthroughs: the signature drifts down when nothing
+// renews it, so that it stays within reach and a real effort shows as a breakthrough. Xert ties its decay to
+// training load and keeps the numbers to itself; here it is the plain form of the same idea. An effort counts in
+// full for four weeks; after that its worth fades a percent a week, to nine tenths at the least, and at ninety days
+// it leaves the window. `asOf` is the day the signature is being read for (a past day for a breakthrough check).
+const DECAY_AFTER_DAYS = 28, DECAY_PER_WEEK = 0.01, DECAY_FLOOR = 0.9;
+const dayGap = (a, b) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 864e5);
+const decayOf = age => age <= DECAY_AFTER_DAYS ? 1 : Math.max(DECAY_FLOOR, 1 - DECAY_PER_WEEK * (age - DECAY_AFTER_DAYS) / 7);
+const pointsOf = (rides, asOf) => {
   const out = [];
   for (const dur of DURS) {
     let best = null;
-    for (const r of rides) { const v = r.mmp && r.mmp[dur]; if (v && (!best || v > best.watts)) best = { dur_s: dur, watts: v, date: r.date, name: r.name, id: r.id }; }
+    for (const r of rides) { const raw = r.mmp && r.mmp[dur]; if (!raw) continue;
+      const k = asOf ? decayOf(dayGap(r.date, asOf)) : 1, v = Math.round(raw * k);
+      if (!best || v > best.watts) best = { dur_s: dur, watts: v, raw_watts: raw, faded: k < 1 ? Math.round((1 - k) * 1000) / 10 : 0, date: r.date, name: r.name, id: r.id }; }
     if (best) out.push(best);
   }
   return out;
 };
-function breakthroughsOf(rides) {
+// The medal, Xert's: bronze when one of the three numbers rose, silver two, gold all three. A ride that came within
+// 3% of the curve without beating it is a near breakthrough: it earns no medal and confirms the signature.
+const NEAR = 0.97;
+const medalOf = moved => { if (!moved) return null; const up = (moved.tp > 0 ? 1 : 0) + (moved.hie_kj > 0 ? 1 : 0) + (moved.pp > 0 ? 1 : 0); return up >= 3 ? 'gold' : up === 2 ? 'silver' : up === 1 ? 'bronze' : null; };
+function breakthroughsOf(rides) { return scanRides(rides).list; }
+function scanRides(rides) {
   const sorted = rides.slice().sort((a, b) => a.date.localeCompare(b.date) || String(a.id).localeCompare(String(b.id)));
-  const out = [];
+  const out = [], nears = [];
   for (let i = 0; i < sorted.length; i++) {
     const r = sorted[i];
     // a baseline needs something to stand on: three rides and eight durations before this one
     if (i < 3) continue;
-    const ptsBefore = pointsOf(sorted.slice(0, i));
+    const ptsBefore = pointsOf(sorted.slice(0, i), r.date);
     if (ptsBefore.filter(p => p.dur_s >= 120).length < 8) continue;
     const before = fit(ptsBefore, { floor: false });
     if (!before || !r.mmp) continue;
@@ -145,17 +160,26 @@ function breakthroughsOf(rides) {
       const curve = pd(dur, before.tp, before.hie_kj * 1000, before.pp);
       if (r.mmp[dur] > curve * 1.02 && r.mmp[dur] - curve >= 3) hits.push({ dur_s: dur, watts: r.mmp[dur], curve_watts: Math.round(curve), over_pct: Math.round((r.mmp[dur] / curve - 1) * 100) });
     }
-    if (!hits.length) continue;
-    const after = fit(pointsOf(sorted.slice(0, i + 1)), { floor: false });
+    if (!hits.length) {
+      // close to the curve without beating it: a near breakthrough
+      let near = null;
+      for (const dur of DURS) { if (dur < 60 || !r.mmp[dur]) continue; const curve = pd(dur, before.tp, before.hie_kj * 1000, before.pp), ratio = r.mmp[dur] / curve;
+        if (ratio >= NEAR && (!near || ratio > near.ratio)) near = { dur_s: dur, watts: r.mmp[dur], curve_watts: Math.round(curve), ratio }; }
+      if (near) nears.push({ id: r.id, date: r.date, name: r.name, dur_s: near.dur_s, watts: near.watts, curve_watts: near.curve_watts, under_pct: Math.max(0, Math.round((1 - near.ratio) * 1000) / 10),
+        text: `${sayDur(near.dur_s)} at ${near.watts} W, within ${Math.max(0, Math.round((1 - near.ratio) * 100))}% of the ${near.curve_watts} W the signature allowed: it confirms the signature.` });
+      continue;
+    }
+    const after = fit(pointsOf(sorted.slice(0, i + 1), r.date), { floor: false });
     const top = hits.slice().sort((a, b) => b.over_pct - a.over_pct)[0];
-    out.push({ id: r.id, date: r.date, name: r.name, minutes: r.minutes, hits, top,
+    const moved = after ? { tp: after.tp - before.tp, hie_kj: Math.round((after.hie_kj - before.hie_kj) * 10) / 10, pp: after.pp - before.pp } : null;
+    out.push({ id: r.id, date: r.date, name: r.name, minutes: r.minutes, hits, top, medal: medalOf(moved) || 'bronze',
       before: { tp: before.tp, hie_kj: before.hie_kj, pp: before.pp },
       after: after ? { tp: after.tp, hie_kj: after.hie_kj, pp: after.pp } : null,
-      moved: after ? { tp: after.tp - before.tp, hie_kj: Math.round((after.hie_kj - before.hie_kj) * 10) / 10, pp: after.pp - before.pp } : null,
+      moved,
       text: `${sayDur(top.dur_s)} at ${top.watts} W, where the signature said ${top.curve_watts} W was the most available (${top.over_pct}% over)` +
         (after ? `. The signature moved: TP ${before.tp} → ${after.tp} W${after.hie_kj !== before.hie_kj ? `, HIE ${before.hie_kj} → ${after.hie_kj} kJ` : ''}${after.pp !== before.pp ? `, PP ${before.pp} → ${after.pp} W` : ''}.` : '.') });
   }
-  return out;
+  return { list: out, nears };
 }
 // New bests: a ride in the last two weeks that rode a length (5 minutes and up) harder than any ride before it
 // in the window. Not the same as a breakthrough: a best beats what you have ridden, a breakthrough beats what
@@ -167,7 +191,7 @@ function newBestsOf(rides, since) {
     const r = sorted[i]; if (r.date < since || !r.mmp) continue;
     const prior = sorted.slice(0, i).filter(x => x.date < r.date);
     if (prior.length < 3) continue;
-    const pts = pointsOf(prior); const sig = pts.filter(p => p.dur_s >= 120).length >= 8 ? fit(pts, { floor: false }) : null;
+    const pts = pointsOf(prior, r.date); const sig = pts.filter(p => p.dur_s >= 120).length >= 8 ? fit(pts, { floor: false }) : null;
     for (const dur of DURS) {
       if (dur < 300 || !r.mmp[dur]) continue;
       let prev = null; for (const x of prior) { const v = x.mmp && x.mmp[dur]; if (v && (!prev || v > prev.watts)) prev = { watts: v, date: x.date, name: x.name }; }
@@ -179,16 +203,16 @@ function newBestsOf(rides, since) {
   return out;
 }
 function sayDur(s) { return s < 60 ? `${s} seconds` : s % 60 === 0 ? `${s / 60} minute${s === 60 ? '' : 's'}` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
-async function breakthroughs() {
+async function breakthroughs(wantNears) {
   const d = await db();
   const today = tz.todayKey(), floor = tz.shiftKey(today, -LOOKBACK_DAYS);
   const rides = Object.values(d.rides).filter(r => r.date >= floor);
-  const key = rides.map(r => r.id).sort().join(',') + '|' + floor;
-  if (d.bt && d.bt.key === key) return d.bt.list;
-  const list = breakthroughsOf(rides);
-  d.bt = { key, list, at: Date.now() };
+  const key = rides.map(r => r.id).sort().join(',') + '|' + floor + '|v3';
+  if (d.bt && d.bt.key === key) return wantNears ? { list: d.bt.list, nears: d.bt.nears || [] } : d.bt.list;
+  const S = scanRides(rides);
+  d.bt = { key, list: S.list, nears: S.nears, at: Date.now() };
   await setJSON('signature', d).catch(() => {});
-  return list;
+  return wantNears ? S : S.list;
 }
 async function breakthroughMap() {
   const list = await breakthroughs();
@@ -263,19 +287,15 @@ async function report() {
   const d = await db();
   const today = tz.todayKey(), floor = tz.shiftKey(today, -LOOKBACK_DAYS);
   const rides = Object.values(d.rides).filter(r => r.date >= floor).sort((a, b) => a.date.localeCompare(b.date));
-  const points = [];
-  for (const dur of DURS) {
-    let best = null;
-    for (const r of rides) { const v = r.mmp && r.mmp[dur]; if (v && (!best || v > best.watts)) best = { dur_s: dur, watts: v, date: r.date, name: r.name, id: r.id }; }
-    if (best) points.push(best);
-  }
+  // the curve is fitted to each effort at what it is worth today (faded past four weeks); the bests are as ridden
+  const points = pointsOf(rides, today), rawPoints = pointsOf(rides);
   const sig = fit(points);
   const bests = {};
   for (const m of BESTS_MIN) {
-    const p = points.find(x => x.dur_s === m * 60);
+    const p = rawPoints.find(x => x.dur_s === m * 60);
     bests[m] = p ? { watts: p.watts, date: p.date, name: p.name, curve: sig ? Math.round(pd(m * 60, sig.tp, sig.hie_kj * 1000, sig.pp)) : null } : null;
   }
-  const bts = await breakthroughs().catch(() => []);
+  const scanned = await breakthroughs(true).catch(() => ({ list: [], nears: [] })), bts = scanned.list, nears = scanned.nears;
   const nbs = newBestsOf(rides, tz.shiftKey(today, -13));
   const newest = points.filter(p => p.dur_s >= 1200).sort((a, b) => b.date.localeCompare(a.date))[0];
   const ageDays = newest ? Math.round((new Date(today) - new Date(newest.date)) / 864e5) : null;
@@ -304,12 +324,44 @@ async function report() {
   const ramp = rampRide ? { date: rampRide.date, name: rampRide.name, one_min_w: rampRide.mmp[60], ftp_est: Math.round(rampRide.mmp[60] * 0.75) } : null;
   return {
     signature: sig ? { tp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, rmse_pct: sig.rmse_pct, points: sig.points, tp_floor: sig.tp_floor, hie_floor_kj: sig.hie_floor_kj } : null,
+    power: await powerOf(sig, points, rides, bts, nears, today, st).catch(() => null), nears: nears.slice(-6),
+    decay: { after_days: DECAY_AFTER_DAYS, pct_per_week: DECAY_PER_WEEK * 100, floor_pct: DECAY_FLOOR * 100 },
     ramp,
     confidence, why, rides: rides.length, lookback_days: LOOKBACK_DAYS, newest_long_effort: newest ? { date: newest.date, name: newest.name, age_days: ageDays } : null,
     planning_ftp: st.ftp, bests, points, breakthroughs: bts.slice(-10), new_bests: nbs,
     curve: sig ? DURS.map(t => ({ dur_s: t, watts: Math.round(pd(t, sig.tp, sig.hie_kj * 1000, sig.pp)) })) : [],
     left: null
   };
+}
+
+// The Power box (chain.js, the Power page): the signature's threshold power as his FTP the way Xert reads it, what it
+// is per kilo, where it was four weeks ago, the last breakthrough and its medal, whether the efforts that hold the
+// curve up are fading, and what would be a breakthrough today at three lengths.
+async function powerOf(sig, points, rides, bts, nears, today, st) {
+  if (!sig) return null;
+  let lb = null; try { const w = await require('./weighin').state(); const all = (w && w.all) || []; lb = all.length ? all[all.length - 1].lb : (w && w.latest ? w.latest.lb : null); } catch (e) { lb = null; }
+  const kg = lb ? lb / 2.2046 : null;
+  // the same reading four weeks ago, from the rides there were then
+  const then = tz.shiftKey(today, -28), before = rides.filter(r => r.date <= then);
+  const ptsThen = pointsOf(before, then), sigThen = ptsThen.filter(p => p.dur_s >= 120).length >= 8 ? fit(ptsThen, { floor: false }) : null;
+  const last = bts.length ? bts[bts.length - 1] : null, lastNear = nears.length ? nears[nears.length - 1] : null;
+  const touch = [last && last.date, lastNear && lastNear.date].filter(Boolean).sort().pop() || null;
+  const binding = new Set(sig.binding_durations || []), holders = points.filter(p => binding.has(p.dur_s));
+  const youngest = holders.length ? Math.min(...holders.map(p => dayGap(p.date, today))) : null;
+  const fading = youngest != null && youngest > DECAY_AFTER_DAYS;
+  const since = bts.filter(b => b.date >= tz.shiftKey(today, -LOOKBACK_DAYS));
+  const count = m => since.filter(b => b.medal === m).length;
+  const targets = [[60, '1 minute'], [300, '5 minutes'], [1200, '20 minutes']].map(([d, word]) => { const c = pd(d, sig.tp, sig.hie_kj * 1000, sig.pp); return { dur_s: d, word, curve_watts: Math.round(c), watts: Math.max(Math.ceil(c * 1.02), Math.round(c) + 3) }; });
+  return { ftp: sig.tp, hie_kj: sig.hie_kj, pp: sig.pp, planning_ftp: st.ftp,
+    weight_lb: lb, wkg: kg ? Math.round(sig.tp / kg * 100) / 100 : null,
+    ftp_28d_ago: sigThen ? sigThen.tp : null, change_w: sigThen ? sig.tp - sigThen.tp : null,
+    last_breakthrough: last ? { date: last.date, name: last.name, medal: last.medal, days_ago: dayGap(last.date, today), text: last.text } : null,
+    last_near: lastNear ? { date: lastNear.date, name: lastNear.name, days_ago: dayGap(lastNear.date, today), text: lastNear.text } : null,
+    days_since_touch: touch ? dayGap(touch, today) : null,
+    medals: { gold: count('gold'), silver: count('silver'), bronze: count('bronze'), near: nears.length },
+    fading, holders_age_days: youngest,
+    fade_note: fading ? `The efforts that hold this number up are ${Math.round(youngest / 7)} weeks old, so it is fading a percent a week. One hard effort renews it.` : null,
+    targets };
 }
 
 function attach(app) {
@@ -338,4 +390,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, newBestsOf, pointsOf };
+module.exports = { attach, mmpCurve, fit, pd, mpaTrace, report, scan, DURS, breakthroughs, breakthroughMap, breakthroughsOf, scanRides, newBestsOf, pointsOf, decayOf, medalOf, powerOf };

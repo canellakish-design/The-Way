@@ -451,6 +451,61 @@
     await draw(true);
   };
 
+  // ---------------- Power ----------------
+  // His FTP the way Xert reads it (bridge/signature.js): the signature's threshold power, its line over eight weeks,
+  // the breakthroughs with their medals, and what would be a breakthrough today (Harry, 15 Nov 2026: "a power box
+  // with an FTP calculated the same way Xert calculates them, and breakthroughs"; "I want to see improvement on my FTP").
+  const MEDAL_C = { gold: "#f0c040", silver: "#b9c0c8", bronze: "#c98a4b" };
+  const medalDot = m => `<svg class="pw-medal" viewBox="0 0 16 16" width="14" height="14" role="img" aria-label="${esc(m || "near")}"><circle cx="8" cy="8" r="6" fill="${MEDAL_C[m] || "none"}" stroke="${MEDAL_C[m] ? "rgba(0,0,0,.35)" : "currentColor"}" stroke-width="1.4"/></svg>`;
+  // one line through the weeks, scaled to its own range so a few watts show; the first and last values are written
+  function ftpLineSVG(series){
+    const pts = (series || []).filter(p => p && p.v != null); if (pts.length < 2) return "";
+    const W = 320, H = 120, lo = Math.min(...pts.map(p => p.v)) - 4, hi = Math.max(...pts.map(p => p.v)) + 4;
+    const x = i => 18 + i * (W - 44) / (pts.length - 1), y = v => H - 22 - (v - lo) / (hi - lo) * (H - 44);
+    const d = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(p.v).toFixed(1)}`).join(" ");
+    const lab = k => new Date(pts[k].date + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const up = pts[pts.length - 1].v - pts[0].v, col = up > 0 ? "var(--green)" : up < 0 ? "var(--amber)" : "var(--muted)";
+    return `<svg class="bars pw-line" viewBox="0 0 ${W} ${H}" role="img" aria-label="FTP by week, ${pts[0].v} to ${pts[pts.length - 1].v} watts">
+      <path d="${d}" fill="none" stroke="${col}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+      ${pts.map((p, i) => `<circle cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${i === pts.length - 1 ? 4 : 2.6}" fill="${col}"><title>${esc(p.date)}: ${p.v} W</title></circle>`).join("")}
+      <text x="${x(0).toFixed(1)}" y="${(y(pts[0].v) - 8).toFixed(1)}" text-anchor="middle" class="barval">${pts[0].v}</text>
+      <text x="${x(pts.length - 1).toFixed(1)}" y="${(y(pts[pts.length - 1].v) - 9).toFixed(1)}" text-anchor="middle" class="barval">${pts[pts.length - 1].v}</text>
+      <text x="${x(0).toFixed(1)}" y="${H - 4}" text-anchor="middle" class="barlab">${esc(lab(0))}</text>
+      <text x="${x(pts.length - 1).toFixed(1)}" y="${H - 4}" text-anchor="middle" class="barlab">${esc(lab(pts.length - 1))}</text></svg>`;
+  }
+  V.power = async function(){
+    const el = page("Power");
+    const draw = (first)=> load(el, "power", ["/chain", "/signature", "/progress"], [1], (chain, sg, prog) => {
+      const L = chain && chain.links && chain.links.power, P = sg && sg.power;
+      if (!P){ el.innerHTML = ttlHTML("Power") + `<div class="card"><div class="small">No power has been read yet. Rides with a power meter are read on the <a href="#zones">Zones</a> page; the signature needs a few of them.</div></div>`; return; }
+      const tone = HU[(L && L.state) || "none"] || HU.none, ch = P.change_w;
+      const series = ((prog && prog.metrics || []).find(m => m.key === "tp") || {}).series || [];
+      const bts = (sg.breakthroughs || []).slice().reverse(), nears = (sg.nears || []).slice().reverse(), bt = P.last_breakthrough;
+      const md = d => new Date(d + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" });
+      el.innerHTML = ttlHTML("Power", bt && bt.days_ago <= 28 ? `<span class="hu-chip hu-go">${esc(bt.medal)} breakthrough · ${bt.days_ago === 0 ? "today" : bt.days_ago + " d ago"}</span>` : P.fading ? `<span class="hu-chip hu-hold">Fading</span>` : "") + `
+        <div class="hu-fields two ln-top">
+          <div class="hu-field big"><span class="k">FTP · the way Xert reads it</span><span class="n ${tone}">${P.ftp}<span class="ln-uu">W</span></span><span class="u">${ch == null ? "no reading four weeks ago" : ch === 0 ? `flat in four weeks` : `${ch > 0 ? "+" : "−"}${Math.abs(ch)} W in four weeks (was ${P.ftp_28d_ago})`}</span></div>
+          <div class="hu-field big"><span class="k">Per kilo</span><span class="n">${P.wkg == null ? "—" : P.wkg}<span class="ln-uu">W/kg</span></span><span class="u">${P.weight_lb ? `at ${P.weight_lb} lb, your latest weigh-in` : "no weigh-in yet"}</span></div>
+        </div>
+        <div class="hu-fields">
+          <div class="hu-field"><span class="k">Tank (HIE)</span><span class="n">${P.hie_kj}</span><span class="u">kJ above FTP</span></div>
+          <div class="hu-field"><span class="k">Peak</span><span class="n">${P.pp}</span><span class="u">W for a few seconds</span></div>
+          <div class="hu-field"><span class="k">Medals · 90 d</span><span class="n pw-medals">${["gold","silver","bronze"].map(m => `${medalDot(m)}${(P.medals || {})[m] || 0}`).join(" ")}</span><span class="u">${(P.medals || {}).near || 0} near</span></div>
+        </div>
+        ${series.filter(p => p.v != null).length >= 2 ? `<div class="ln-sec"><span class="hu-lab">FTP by week · eight weeks</span></div><div class="card">${ftpLineSVG(series)}<div class="small">Each point is the same reading on that week's rides. It rises when an effort beats the curve and drifts down a percent a week once the efforts behind it are four weeks old.</div></div>` : ""}
+        <div class="ln-sec"><span class="hu-lab">What would be a breakthrough today</span></div>
+        <div class="card"><ul class="agenda totals pw-targets">${(P.targets || []).map(t => `<li><span class="t">${esc(t.word)}</span><span class="n">over <b>${t.watts} W</b><span class="small"> the signature allows ${t.curve_watts} W</span></span></li>`).join("")}</ul>
+          <div class="small">Any one of these, all-out on a fresh day, moves the number up. ${P.fade_note ? esc(P.fade_note) + " " : ""}Zone 1 riding builds the engine but cannot show here: this number only moves when an effort proves it. Ask the coach for a breakthrough attempt and it will put one in place of a VO2 session.</div></div>
+        <div class="ln-sec"><span class="hu-lab">Breakthroughs</span></div>
+        <div class="card">${bts.length ? `<ul class="agenda totals zbt">${bts.slice(0, 6).map(b => `<li><span class="t">${esc(md(b.date))}</span><span class="n">${medalDot(b.medal)} ${esc(b.name || "")}<span class="small"> ${esc(b.text || "")}</span></span></li>`).join("")}</ul>` : `<div class="small">None in the last ${sg.lookback_days || 90} days: no ride has beaten the curve.</div>`}
+          ${nears.length ? `<div class="small"><b>Near</b> (within 3% of the curve; no medal, it confirms the number):</div><ul class="agenda totals zbt">${nears.slice(0, 3).map(b => `<li><span class="t">${esc(md(b.date))}</span><span class="n">${medalDot(null)} ${esc(b.name || "")}<span class="small"> ${esc(b.text || "")}</span></span></li>`).join("")}</ul>` : ""}
+          <div class="small">Bronze: one of the three numbers rose. Silver: two. Gold: all three.</div></div>
+        <div class="small">Your plan and zones run on the planning FTP, <b>${P.planning_ftp} W</b>, which only you change. The curve, the efforts behind it and the math are on <a href="#zones">Zones</a>.</div>
+        ${whyHTML(L)}`;
+    }, first);
+    await draw(true);
+  };
+
   // ---------------- Micros ----------------
   V.micros = async function(){
     const el = page("Micronutrients");
@@ -473,5 +528,5 @@
 
   // opened straight onto one of these pages: app.js ran nav() before this file loaded
   const here = location.hash.replace(/^#/, "").split("?")[0];
-  if (["hydration","fuel","sleep","recovery","weight","micros"].includes(here)) nav();
+  if (["hydration","fuel","sleep","recovery","weight","micros","power"].includes(here)) nav();
 })();

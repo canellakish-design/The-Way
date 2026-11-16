@@ -22,7 +22,9 @@ const { auth } = require('./fuel-log');
 const tz = require('./tz');
 
 const DAYS = 7, NEW_PER_CALL = 2;
-const ORDER = ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight'];
+// weight and power close the chain: they are what the links before them produce, so the break is never looked for there
+const ORDER = ['plan', 'sleep', 'water', 'food', 'micros', 'lift', 'fuel', 'work', 'recovery', 'weight', 'power'];
+const OUTCOMES = ['weight', 'power'];
 const PLAN_RIDE_MIN = 360;      // a planned week: six hours of riding on the calendar, five lifts, every ride with a start time
 const avg = xs => { const v = xs.filter(x => x != null && !Number.isNaN(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 const r1 = x => x == null ? null : Math.round(x * 10) / 10;
@@ -49,7 +51,7 @@ function stateOf(key, v) {
 
 // Where the chain breaks, and the sentence. links: { key: { week, state, ... } }
 function verdict(links) {
-  const first = ORDER.slice(0, -1).find(k => links[k] && (links[k].state === 'bad' || links[k].state === 'warn'));
+  const first = ORDER.filter(k => !OUTCOMES.includes(k)).find(k => links[k] && (links[k].state === 'bad' || links[k].state === 'warn'));
   const w = links.weight || {};
   // short: the link, its number, nothing the box already says (Harry, 9 Nov: "too many words")
   const wWord = w.week == null ? null : w.week <= -0.8 ? `down ${Math.abs(w.week)} lb/wk, on pace` : w.week < -0.2 ? `down ${Math.abs(w.week)} lb/wk, under 1 lb` : w.week <= 0.3 ? 'flat' : `up ${w.week} lb/wk`;
@@ -324,6 +326,9 @@ async function report() {
   // weight: the seven-day mean against the seven before
   let weight = null;
   try { weight = await require('./weighin').state(); } catch (e) { weight = null; }
+  // power: his FTP the way Xert reads it, and the breakthroughs (signature.js)
+  let power = null;
+  try { const sg = await Promise.race([require('./signature').report(), new Promise(r => setTimeout(() => r(null), 6000))]); power = sg && sg.power ? sg.power : null; } catch (e) { power = null; }
 
   // last night as the watch (or his own entry) gave it, kept for the Day page's nap offer (naps.js); then the naps:
   // a nap counts toward its day, the night kept apart
@@ -412,6 +417,22 @@ async function report() {
         unit: 'lb a week', since_start: weight ? weight.change_since_start_lb : null, creatine_water: creatineWater, creatine_days: creatineDays,
         trend_days: weight ? weight.trend_days : 0, pace_lb_wk: -1,
         basis: `${weight && weight.trend_lb_wk != null ? `the trend line through the last ${weight.trend_days} days of readings, in lb a week; green at a pound a week down` : 'the seven-day mean weight against the seven days before it, until three weeks of readings draw a trend line; green at a pound a week down'}${creatineWater ? '; creatine started ' + creatineDays + ' days ago, so a pound or two of this is water and the week is not called up until day 14' : ''}` };
+    })(),
+    // Power (Harry, 15 Nov 2026: "a power box with an FTP calculated the same way Xert calculates them, and
+    // breakthroughs"; "I want to see improvement on my FTP"). The big number is the signature's threshold power;
+    // green when it has risen in four weeks or a breakthrough fell inside them, amber when it has faded 3% or
+    // more, grey while it holds. Never red: it is an outcome, read from efforts, not a task for the day.
+    power: (() => {
+      const P = power;
+      if (!P || P.ftp == null) return { week: null, state: 'none', today: null, today_word: 'no power read yet', unit: 'W',
+        basis: 'threshold power from the fitness signature (Xert\'s three numbers, fitted to your rides with power); it needs a few rides read on the Zones page' };
+      const bt = P.last_breakthrough, recent = !!(bt && bt.days_ago <= 28);
+      const state = recent || (P.change_w != null && P.change_w >= 2) ? 'good' : (P.change_w != null && P.change_w <= -Math.max(3, Math.round(P.ftp * 0.03))) ? 'warn' : 'none';
+      const word = bt && bt.days_ago === 0 ? `${bt.medal} breakthrough today` : P.change_w != null && P.change_w !== 0 ? `${P.change_w > 0 ? '+' : '−'}${Math.abs(P.change_w)} W in 4 wk`
+        : bt ? `breakthrough ${bt.days_ago} d ago` : P.fading ? 'fading: no hard effort' : 'holding';
+      return { week: P.ftp, state, today: P.wkg, today_word: word, unit: 'W', wkg: P.wkg, change_w: P.change_w, ftp_28d_ago: P.ftp_28d_ago, fading: !!P.fading,
+        last_breakthrough: bt ? { date: bt.date, medal: bt.medal, days_ago: bt.days_ago } : null, medals: P.medals, planning_ftp: P.planning_ftp,
+        basis: 'your FTP the way Xert reads it: the threshold power of the fitness signature (threshold power, high-intensity energy and peak power, the lowest curve that stays above your hardest efforts of the last 90 days). An effort counts in full for four weeks and then fades a percent a week, so the number drifts down unless a hard effort renews it; a ride that beats the curve is a breakthrough and moves it up (bronze, silver or gold for one, two or three of the numbers rising). Green when it rose in four weeks or a breakthrough fell inside them, amber when it faded 3% or more, grey while it holds. The plan and the zones run on the planning FTP, which only you change' };
     })()
   };
   const v = verdict(links);

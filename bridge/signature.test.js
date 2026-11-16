@@ -68,3 +68,49 @@ console.log(n + ' passed');
   require('assert').strictEqual(S.newBestsOf(rides, '2026-11-02').length, 0);
   console.log('ok newBestsOf: 15 and 20 min bests found, nothing outside the window');
 }
+
+// ---- the Power box: decay, medals, near breakthroughs, what would be one today (Harry, 15 Nov 2026) ----
+(async () => {
+  const assert = require('assert'), S = require('./signature');
+  const mk = (id, date, tp, hie, pp, durs) => { const mmp = {}; for (const t of durs) mmp[t] = Math.round(S.pd(t, tp, hie, pp)); return { id, date, name: 'r' + id, minutes: 60, mmp }; };
+  const base = S.DURS.filter(t => t <= 1800);
+  // decay: full for four weeks, then a percent a week, to nine tenths at the least
+  assert.strictEqual(S.decayOf(0), 1); assert.strictEqual(S.decayOf(28), 1);
+  assert.ok(Math.abs(S.decayOf(35) - 0.99) < 1e-9 && Math.abs(S.decayOf(63) - 0.95) < 1e-9); assert.strictEqual(S.decayOf(400), 0.9);
+  const old = [mk(1, '2026-08-01', 170, 14000, 700, base)];
+  const fresh = S.pointsOf(old, '2026-08-10').find(p => p.dur_s === 1200), faded = S.pointsOf(old, '2026-10-03').find(p => p.dur_s === 1200);
+  assert.strictEqual(fresh.watts, fresh.raw_watts); assert.ok(faded.watts < faded.raw_watts && faded.faded === 5, JSON.stringify(faded));
+  assert.strictEqual(S.pointsOf(old).find(p => p.dur_s === 1200).watts, fresh.raw_watts);           // with no day given, as ridden
+  console.log('ok decay: an effort counts in full for four weeks, then fades a percent a week, never under nine tenths');
+  // medals: one, two or three of the numbers rising
+  assert.strictEqual(S.medalOf({ tp: 5, hie_kj: 0, pp: 0 }), 'bronze'); assert.strictEqual(S.medalOf({ tp: 5, hie_kj: 1.5, pp: -3 }), 'silver');
+  assert.strictEqual(S.medalOf({ tp: 2, hie_kj: 0.5, pp: 12 }), 'gold'); assert.strictEqual(S.medalOf({ tp: 0, hie_kj: 0, pp: 0 }), null);
+  const rides = [mk(1, '2026-09-01', 170, 14000, 700, base), mk(2, '2026-09-08', 170, 14000, 700, base), mk(3, '2026-09-15', 168, 14000, 700, base)];
+  const all = S.scanRides(rides.concat([mk(4, '2026-09-22', 185, 16000, 760, base)]));
+  assert.strictEqual(all.list.length, 1); assert.ok(['bronze', 'silver', 'gold'].includes(all.list[0].medal), all.list[0].medal);
+  assert.ok(all.list[0].moved.tp > 0 && all.list[0].moved.pp > 0 && all.list[0].medal !== 'bronze', JSON.stringify(all.list[0].moved));
+  console.log('ok medals: bronze, silver or gold as one, two or three of the numbers rose');
+  // near: within 3% of the curve without beating it earns no medal and is kept apart
+  const near = S.scanRides(rides.concat([mk(5, '2026-09-22', 167, 14000, 690, base)]));
+  assert.strictEqual(near.list.length, 0); assert.strictEqual(near.nears.length, 1); assert.ok(/confirms the signature/.test(near.nears[0].text) && near.nears[0].under_pct <= 3);
+  const easy = S.scanRides(rides.concat([mk(6, '2026-09-22', 120, 9000, 400, base)]));
+  assert.strictEqual(easy.list.length + easy.nears.length, 0);                                       // an easy ride is neither
+  console.log('ok near breakthroughs: a ride within 3% of the curve confirms it; an easy ride is nothing');
+  // the same effort, ten weeks on, is a breakthrough again: the curve had faded under it
+  const later = S.scanRides(rides.concat([mk(7, '2026-11-24', 170, 14000, 700, base)]));
+  assert.strictEqual(later.list.length, 1, JSON.stringify(later)); assert.strictEqual(later.list[0].id, 7);
+  console.log('ok decay keeps a breakthrough within reach: the same effort ten weeks later beats the faded curve');
+  // the box's summary: FTP, the change in four weeks, the last breakthrough, what would be one today
+  const today = '2026-09-30', set = rides.concat([mk(4, '2026-09-22', 185, 16000, 760, base)]), pts = S.pointsOf(set, today), sig = S.fit(pts);
+  const P = await S.powerOf(sig, pts, set, all.list, all.nears, today, { ftp: 175 });
+  assert.strictEqual(P.ftp, sig.tp); assert.strictEqual(P.planning_ftp, 175);
+  assert.ok(P.ftp_28d_ago != null && P.change_w > 0, JSON.stringify({ was: P.ftp_28d_ago, ch: P.change_w }));   // it rose with the breakthrough
+  assert.strictEqual(P.last_breakthrough.days_ago, 8); assert.strictEqual(P.fading, false);
+  assert.deepStrictEqual(P.targets.map(t => t.dur_s), [60, 300, 1200]);
+  for (const t of P.targets) assert.ok(t.watts >= Math.ceil(t.curve_watts * 1.02) - 1 && t.watts > t.curve_watts, JSON.stringify(t));
+  assert.ok(P.targets[0].watts > P.targets[1].watts && P.targets[1].watts > P.targets[2].watts && P.targets[2].watts > P.ftp);
+  const stale = await S.powerOf(S.fit(S.pointsOf(rides, '2026-11-20')), S.pointsOf(rides, '2026-11-20'), rides, [], [], '2026-11-20', { ftp: 175 });
+  assert.strictEqual(stale.fading, true); assert.ok(/fading a percent a week/.test(stale.fade_note)); assert.strictEqual(stale.last_breakthrough, null);
+  console.log('ok the Power box: FTP, its change in four weeks, the last breakthrough, the targets, and a number resting on old efforts says it is fading');
+  process.exit(0);
+})().catch(e => { console.error(e); process.exit(1); });
