@@ -82,6 +82,53 @@ function verdict(links) {
   return { break_at: first || null, break_state: first ? links[first].state : null, text };
 }
 
+// ---- what got better (Harry, 16 Nov 2026: "when things improve that should be highlighted a bit more by the
+// Coach … I moved from yellow to green for sleep … so we can focus a bit more on the positive") ------------
+// Every time the chain is read, each link's colour is set against the colour it had at the read before, and a
+// change is written down as a move (store: chain-moves). A win is the latest move of a link, upward, that still
+// holds: so a link that rose and fell back is not one. Grey says nothing either way.
+const RANK = { bad: 0, warn: 1, good: 2 };
+const LINK_NAME = { plan: 'Plan', sleep: 'Sleep', water: 'Hydration', food: 'Macros', micros: 'Micros', lift: 'Lift', fuel: 'Fuel', work: 'Ride', recovery: 'Recovery', weight: 'Weight', power: 'Power' };
+const COLOUR = { bad: 'red', warn: 'amber', good: 'green' };
+const valueWord = (k, L) => L.week == null ? '' : k === 'sleep' ? `${L.week} h a night this week` : k === 'food' || k === 'micros' ? `${L.week} on average this week`
+  : k === 'fuel' ? `${L.week}% fuelled this week` : k === 'work' ? `${L.week}% of the riding planned` : k === 'plan' ? `${L.week}% of the week ahead placed` : k === 'water' ? `balance ${L.week} this week`
+  : k === 'lift' ? (L.count_word || `${L.sessions} lifts this week`) : k === 'weight' ? `${L.week > 0 ? '+' : ''}${L.week} lb a week` : k === 'power' ? `FTP ${L.week} W` : k === 'recovery' ? `${L.week}${L.week_kind === 'score' ? ' average' : '% against your band'}` : `${L.week}`;
+// pure: the colours kept and the links now → the colours to keep and the moves made, up or down
+function movesOf(kept, links, at, date) {
+  const states = Object.assign({}, kept || {}), moves = [];
+  for (const k of ORDER) { const L = links[k]; if (!L || RANK[L.state] == null) continue;
+    const was = states[k];
+    if (was && RANK[was.s] != null && was.s !== L.state) moves.push({ key: k, name: LINK_NAME[k], from: was.s, to: L.state, up: RANK[L.state] > RANK[was.s], week: L.week, was: was.w, word: valueWord(k, L), at, date });
+    states[k] = { s: L.state, w: L.week }; }
+  return { states, moves };
+}
+// pure: the wins of the last `days` days (0: today's): the latest move of each link, when it is upward and still holds
+function winsOf(moves, links, today, days) {
+  const from = tz.shiftKey(today, -(days || 0)), last = {};
+  for (const m of moves || []) if (m.date >= from) last[m.key] = m;
+  return Object.values(last).filter(m => m.up && links[m.key] && RANK[links[m.key].state] != null && RANK[links[m.key].state] >= RANK[m.to])
+    .map(m => Object.assign({}, m, { text: `${m.name} moved from ${COLOUR[m.from]} to ${COLOUR[m.to]}${m.word ? `: ${m.word}` : ''}` }));
+}
+async function trackMoves(links, today) {
+  let d = await getJSON('chain-moves', null), fresh = false;
+  if (!d || !d.states) {
+    // the first read has nothing to set against. Sleep and Macros are seeded from the record of the seven days
+    // before today (history.js), so a link that turned on the very day this began is still seen to have moved
+    d = { states: {}, moves: [] }; fresh = true;
+    try { const H = require('./history'), rs = await Promise.race([H.rows(tz.shiftKey(today, -7), tz.shiftKey(today, -1), { budgetMs: 3000 }), new Promise(r => setTimeout(() => r([]), 3500))]);
+      const mean = v => { const x = v.filter(y => y != null); return x.length >= 3 ? x.reduce((a, b) => a + b, 0) / x.length : null; };
+      const sl = mean(rs.map(r => r.sleep_h)), fd = mean(rs.map(r => r.food ? r.food.score : null));
+      if (sl != null) d.states.sleep = { s: stateOf('sleep', sl), w: Math.round(sl * 10) / 10 };
+      if (fd != null) d.states.food = { s: stateOf('food', fd), w: Math.round(fd) };
+    } catch (e) { /* it starts from today's colours */ }
+  }
+  const M = movesOf(d.states, links, new Date().toISOString(), today);
+  const changed = fresh || M.moves.length || ORDER.some(k => M.states[k] && (!d.states[k] || d.states[k].s !== M.states[k].s || d.states[k].w !== M.states[k].w));
+  const moves = (d.moves || []).concat(M.moves).filter(m => m.date >= tz.shiftKey(today, -30)).slice(-80);
+  if (changed) await setJSON('chain-moves', { states: M.states, moves, at: Date.now() }).catch(() => {});
+  return { wins: winsOf(moves, links, today, 0), wins_week: winsOf(moves, links, today, 6), slips: moves.filter(m => m.date === today && !m.up).map(m => ({ key: m.key, name: m.name, from: m.from, to: m.to })) };
+}
+
 // ---- recovery against the rider's own band: recovery.js, the one model the whole site reads ----
 const { recoveryState, mean, sd } = require('./recovery');
 
@@ -479,7 +526,10 @@ async function report() {
     })()
   };
   const v = verdict(links);
-  return { order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays, fresh_start: FS, week_from: weekFrom };
+  // what moved up a colour today and this week, and the box that did it marked
+  let W = { wins: [], wins_week: [], slips: [] };
+  try { W = await trackMoves(links, today); for (const w of W.wins) if (links[w.key]) links[w.key].up = true; } catch (e) { /* the chain stands without it */ }
+  return { wins: W.wins, wins_week: W.wins_week, slips: W.slips, order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays, fresh_start: FS, week_from: weekFrom };
 }
 
 function attach(app) {
@@ -487,10 +537,10 @@ function attach(app) {
     try {
       const r = await report();
       // a compact copy for the advisor, which cannot afford the full read inside a turn
-      try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at,
+      try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at, wins: r.wins || [], wins_week: r.wins_week || [],
         links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null, unlogged: r.links[k].unlogged && r.links[k].unlogged.length ? r.links[k].unlogged : undefined }])) }); } catch (e) { /* no store */ }
       res.json(r);
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { ROW_V, fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };
+module.exports = { movesOf, winsOf, ROW_V, fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };

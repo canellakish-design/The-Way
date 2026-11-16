@@ -1273,6 +1273,11 @@ function drawProgress(v){
 }
 function paintChain(c){
   if (!c || !c.links) return;
+  // what got better (chain.js trackMoves): a line under the chain for each link that moved up a colour, today's first
+  { const host = document.getElementById("scores"); let w = document.getElementById("chainWins");
+    if (!w && host){ w = document.createElement("div"); w.id = "chainWins"; w.className = "chainwins"; host.insertAdjacentElement("afterend", w); }
+    const now = c.wins || [], wk = (c.wins_week || []).filter(x => !now.some(y => y.key === x.key));
+    if (w){ w.hidden = !(now.length || wk.length); w.innerHTML = now.map(x => `<div class="cw up"><b>▲</b> ${esc(x.text)}</div>`).concat(wk.map(x => `<div class="cw"><b>▲</b> This week: ${esc(x.text)}</div>`)).join(""); } }
   // short units, so each fits beside its number at 390 px. Plan is the planning score (how much of the seven
   // days ahead is placed), not the calendar's "done of plan"; Lift reads as the Lift page counts ("1 of 1 due").
   const UNIT = { plan: "placed", fuel: "fuelled", sleep: "h", food: "kcal", micros: "avg", water: "bal", work: "done", lift: "of 5", recovery: "band", weight: "lb/wk", power: "W FTP" };
@@ -1299,6 +1304,7 @@ function paintChain(c){
     if (ck === "plan" && !L.from){ const t0 = new Date(), k = x => x.getFullYear() + "-" + String(x.getMonth()+1).padStart(2,"0") + "-" + String(x.getDate()).padStart(2,"0"); L = Object.assign({}, L, { from: k(t0), to: k(new Date(t0.getTime() + 6 * 864e5)) }); }
     if (ck === "plan" && L.from && L.to){ const kk = el.querySelector(".ck > span"), md = k => new Date(k + "T12:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric" }).split(" ");
       const a = md(L.from), b = md(L.to); if (kk) kk.textContent = `Plan ${a[0]} ${a[1]}–${a[0] === b[0] ? b[1] : b.join(" ")}`; }
+    el.classList.toggle("up", !!L.up);
     const brk = c.break_at === ck; el.classList.toggle("brk", brk); el.classList.toggle("brkwarn", brk && L.state === "warn");
     const mk = el.querySelector(".cmark"); mk.textContent = brk ? (L.state === "warn" ? "!" : "✕") : ""; mk.classList.toggle("warn", brk && L.state === "warn");
     // today, small under the week: its own number, word and colour
