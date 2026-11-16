@@ -271,6 +271,7 @@ async function send(text, photo, opts){
     status("");
     if (r.reply && typeof speak === "function") speak(r.reply);
     if (r.reply && window.Face && Face.caption) Face.caption(r.reply);   // under the face, as it is said
+    watchJobs(r);
     const cheer = (r.actions||[]).find(a => a.celebrate);
     if (cheer && typeof celebrate === "function") celebrate({ slot: cheer.slot || null });
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
@@ -294,6 +295,25 @@ function drawHey(){
   for (const hb of [document.getElementById("vHey"), document.getElementById("p_vHey")]) if (hb) hb.textContent = "Hey Coach: " + (heyOn ? "on" : "off");
   const m = document.getElementById("micBtn"); if (m) m.classList.toggle("hey", heyOn);
 }
+// A question handed to the researched coach (bridge/voice.js: the research action, or a quick answer that ran out of
+// time): the page keeps watch, says it is still at work, and when the answer lands puts it in the conversation and
+// speaks its first line. (Harry, 16 Nov 2026: "if I ask a more complex question it seems like it times out".)
+const watching = {};
+function watchJob(id){
+  if (!id || watching[id]) return; watching[id] = 1; const t0 = Date.now();
+  const say = t => { try{ status(t); }catch{} };
+  const done = (text, spoken) => { delete watching[id]; history.push({ role: "assistant", text, researched: true }); keep(); drawThread(); say("");
+    if (spoken && typeof speak === "function") speak(spoken); if (spoken && window.Face && Face.caption) Face.caption(spoken); };
+  const tick = async () => {
+    let job = null; try{ job = await bridge("/coach/job/" + id); }catch{}
+    if (job && job.status === "done") return done((job.say ? job.say + "\n\n" : "") + String(job.answer || "").replace(/\*\*/g, ""), job.say || "The fuller answer is ready.");
+    if (job && job.status === "error") return done("I could not finish the deeper look: " + (job.error || "it stopped") + ". Ask me again.", null);
+    if (Date.now() - t0 > 16 * 60000) { delete watching[id]; say(""); return; }
+    say(`Working on the fuller answer… ${Math.round((Date.now() - t0) / 1000)} s`); setTimeout(tick, 3000);
+  };
+  setTimeout(tick, 2500);
+}
+const watchJobs = r => { for (const a of (r && r.actions) || []) if (a && a.job) watchJob(a.job); };
 function toast(t){
   let el = document.getElementById("heyToast");
   if (!el){ el = document.createElement("div"); el.id = "heyToast"; el.setAttribute("role", "status"); document.body.appendChild(el); }
@@ -309,6 +329,7 @@ async function heyAsk(text){
     history.push({ role: "assistant", text: r.reply || "", actions: (r.actions||[]).filter(a => a.type !== "question") }); keep(); drawThread();
     toast(r.reply || "Done.");
     if (r.reply && typeof speak === "function") speak(r.reply);
+    watchJobs(r);
     if ((r.actions||[]).some(a => a.ok && a.type !== "question")) { try{ nav(); }catch{} }
   }catch(e){ toast(String(e.message).replace(/^bridge \d+ — /, "")); history.pop(); keep(); }
   sending = false;

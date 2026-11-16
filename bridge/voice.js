@@ -41,7 +41,7 @@ const SCHEMA = () => ({
     actions: { type: 'array', items: { type: 'object', additionalProperties: false,
       required: FIELDS,
       properties: {
-        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'route_here', 'player', 'lift', 'training_model', 'plan_week', 'remember', 'question'] },
+        type: { type: 'string', enum: ['meal', 'drink', 'supplement', 'medicine', 'weigh_in', 'workout', 'workout_change', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'save_place', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'route_here', 'player', 'lift', 'training_model', 'plan_week', 'remember', 'research', 'question'] },
         text: { type: 'string' },
         meal: { type: 'string', enum: ['', 'breakfast', 'lunch', 'dinner', 'snack', 'on the bike'] },
         supplement: { type: 'string', enum: [''].concat(SUPPS()) },
@@ -316,6 +316,7 @@ Action types:
   Never describe what is not in the photo. If it is too dark, cut off or unreadable, say so and ask for another.
 - THE CLOCK: every answer is as of the time given at the top of the day's state. Say "starts now" only of something marked "starts now"; a session marked as begun is under way, and one whose time has passed is over (ask if he did it, never say it is starting). An earlier answer of yours in this conversation was true when you gave it and may be out of date: never repeat its times as if they were now.
 - "Repeat", "say that again", "what did you say": give the same information again, but as it stands at the time now (what has started, ended or is next has moved on since), in fresh words.
+- research: the question is too big for a quick answer and he should not be kept waiting: a study of more than about three weeks day by day, a comparison across months, a "why" with several possible causes that the lines in front of you do not settle, or anything that wants the science looked up. Do NOT chase it with look_back calls. Give your first read in the reply in one or two sentences from what is in front of you, say that you are taking a proper look and that the full answer will follow in a minute or two, and add this action with text = his question in full, with the dates or the detail needed to answer it without this conversation. The researched coach then reads his record at length and the answer appears under yours and is spoken. One research action a turn, and only for a question: never for something to log, plan or change. A question the lines and one look_back can answer is answered now, with no research action.
 - question: he asked for advice or an answer. No other fields; the answer goes in the reply. "What's my next workout", "what's next", "when do I ride", "what's on today" are questions: answer from the calendar above (the next session still to come today, else the next day's), never a workout_change or remove_workout, and never "there is nothing called …". A question or a remark about food already in the journal ("why is my lunch score low", "was that enough carbs", "that was a good lunch") is a question, never a meal or a drink: nothing new was eaten, so nothing is logged.
 Several things in one breath are several actions, in the order said. If nothing actionable was said, return no actions and reply with what you understood.
 A QUESTION ON ITS OWN NEEDS NO ACTION: when all he did was ask, return actions as an empty list and put the answer in the reply (writing the action out only delays the answer). Use the question type only alongside other actions.
@@ -358,7 +359,7 @@ const TOOLS = [{ name: 'look_back', description: 'Read his record for a span of 
   input_schema: { type: 'object', additionalProperties: false, required: ['from', 'to'], properties: { from: { type: 'string', description: 'first day, YYYY-MM-DD' }, to: { type: 'string', description: 'last day, YYYY-MM-DD' } } } },
   { name: 'routes_near', description: 'Which of his Ride with GPS routes pass near where he is standing right now (his location comes with his message), best first. Each row: the route, its length, climbing and riding time from the nearest point, whether it is a loop, and the point ON THE ROUTE nearest him: the street it is on, how far from him and in which direction. Use it when he asks what to ride from where he is, where to go to start a route, or for the best route near him. minutes = the riding time he has or today\'s planned ride length, 0 if unknown.',
     input_schema: { type: 'object', additionalProperties: false, required: ['minutes'], properties: { minutes: { type: 'integer', description: 'riding time he has, in minutes; 0 if unknown' }, type: { type: 'string', enum: ['road', 'gravel', 'mtb'] } } } },
-  { name: 'plan_week', description: 'Lay out a whole week of riding from his TRAINING MODEL around what his calendar really holds: the fixed things, drives, rest days, days away, the lifts, what is already ridden, daylight and the forecast. Nothing is written: the week is laid out, kept, and returned to you day by day with what would change on his calendar. Call it ONCE in a turn, with everything he asked for in that one call. Use it whenever he asks you to plan, build, rebuild or reorganize a week, to see what a change to the model would do before he commits to it, or to set single days by hand. week_of: any day of the week to plan, YYYY-MM-DD (today for this week). changes: settings of the model to TRY for this layout without saving them, as "base=double|single; hours=2; single=90; short=60; long=150; apart=4h; vo2=Tue,Fri|none" ("" for the model as it stands). overrides: days he sets by hand for this week only, as "YYYY-MM-DD=off|vo2|base|double|single:MINUTES@HH:MM|long:MINUTES@HH:MM" separated by ";" (minutes and @time optional, 24-hour), e.g. "2026-11-20=long:150@14:00; 2026-11-21=off" ("" for none).',
+  { name: 'plan_week', description: 'Lay out a whole week of riding from his TRAINING MODEL around what his calendar really holds: the fixed things, drives, rest days, days away, the lifts, what is already ridden, daylight and the forecast. Nothing is written: the week is laid out, kept, and returned to you day by day with what would change on his calendar. Call it ONCE in a turn, with everything he asked for in that one call. ONLY when he asks for a week to be planned, built, rebuilt or changed (never for a question about the past, how something went, or advice on what to change: those are answered in words). Use it whenever he asks you to plan, build, rebuild or reorganize a week, to see what a change to the model would do before he commits to it, or to set single days by hand. week_of: any day of the week to plan, YYYY-MM-DD (today for this week). changes: settings of the model to TRY for this layout without saving them, as "base=double|single; hours=2; single=90; short=60; long=150; apart=4h; vo2=Tue,Fri|none" ("" for the model as it stands). overrides: days he sets by hand for this week only, as "YYYY-MM-DD=off|vo2|base|double|single:MINUTES@HH:MM|long:MINUTES@HH:MM" separated by ";" (minutes and @time optional, 24-hour), e.g. "2026-11-20=long:150@14:00; 2026-11-21=off" ("" for none).',
     input_schema: { type: 'object', additionalProperties: false, required: ['week_of', 'changes', 'overrides'], properties: { week_of: { type: 'string' }, changes: { type: 'string' }, overrides: { type: 'string' } } } }];
 async function understand(text, history, extra, image, opt) {
   const T = (opt && opt.ms) || {}, tStart = Date.now();
@@ -384,11 +385,17 @@ async function understand(text, history, extra, image, opt) {
   // He can look back (history.js): when the question is about days that are not in front of him, he asks for them
   // with look_back, reads them and then answers. Two looks at most, so a spoken answer never waits long.
   const t0 = Date.now();
-  for (let round = 0; ; round++) {
+  const ask = async () => { for (let round = 0; ; round++) {
     // a week laid out is the last look he needs in a turn, and a yes to a plan ("… plan p_abc") needs no look at all:
     // each look that is not needed is two or three seconds of his waiting
-    const more = round < 2 && Date.now() - t0 < 14000 && !T.planned && !/\bplan p_[a-z0-9]{4,}\b/i.test(String(text || ''));
+    // The whole answer has a deadline (the request is cut off by the host at about thirty seconds, and he heard
+    // nothing at all: Harry, 16 Nov 2026, "if I ask a more complex question it seems like it times out"). A look is
+    // allowed only in the first ten seconds; each call to the model is given what is left of the time and no more.
+    const deadline = (opt && opt.deadline) || tStart + 22000, left = deadline - Date.now();
+    if (left < 2500) throw Object.assign(new Error('deadline'), { deadline: true });
+    const more = round < 2 && Date.now() - tStart < 10000 && !T.planned && !/\bplan p_[a-z0-9]{4,}\b/i.test(String(text || ''));
     const r = await fetch('https://api.anthropic.com/v1/messages', {
+      signal: AbortSignal.timeout(Math.max(2000, left)),
       method: 'POST',
       headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
       body: JSON.stringify({ model, max_tokens: 1500, fallbacks: 'default',
@@ -420,7 +427,9 @@ async function understand(text, history, extra, image, opt) {
     const block = (j.content || []).find(c => c.type === 'text');
     if (!block) throw new Error('no answer');
     return JSON.parse(block.text.replace(/```json|```/g, '').trim());
-  }
+  } };
+  // a call cut off at the deadline is a deadline, whatever name the runtime gives it
+  try { return await ask(); } catch (e) { if (e && (e.deadline || e.name === 'TimeoutError' || e.name === 'AbortError')) throw Object.assign(new Error('deadline'), { deadline: true }); throw e; }
 }
 
 const words = t => String(t || '').toLowerCase().split(/\W+/).filter(w => w.length > 2 && !/^(the|that|last|one|from|remove|delete|move|change|my|ride|workout|session|event|today|tomorrow|this|and|for|with)$/.test(w));
@@ -701,6 +710,12 @@ async function run(a, x) {
       const p = await P.add({ name: a.name || a.text || 'this place', lat: c.lat, lon: c.lon, notes: a.text || '', orders });
       return { ok: true, summary: `${p.updated_existing ? 'Updated' : 'Saved'}: ${p.name}${orders.length ? `, order ${orders[0].name}` : ''}. It will come up when you are within ${P.NEAR_M} m.` };
     }
+    case 'research': {
+      const q = String(a.text || '').trim().slice(0, 2000);
+      if (!q) return { ok: false, summary: 'There was no question to look into.' };
+      const id = await require('./coach').startJob(q, (x && x.base) || 'https://thewayforward.netlify.app', { kind: 'handoff' });
+      return { ok: true, summary: 'Taking a proper look: the full answer follows in a minute or two.', job: id };
+    }
     case 'question': return { ok: true, summary: 'Advice below.' };
     default: return { ok: false, summary: 'Did not understand that part.' };
   }
@@ -736,12 +751,28 @@ function attach(app) {
       const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
       let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
       const ms = {}, tAll = Date.now();
-      const u = await understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands, and routes_near can say which of his routes pass near him.' : '')
-        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : '') + rideWords((req.body || {}).ride), images, { ms, model: (req.body || {}).model, coords });
+      const host = req.get('x-forwarded-host') || req.get('host') || '', base = /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app';
+      // The answer has twenty seconds. Past that the host would cut the request off and he would hear nothing, so the
+      // wait ends here instead: a question goes to the researched coach, which has minutes (coach.js), and he is told
+      // so at once; anything that was to be logged, planned or changed is not done, and he is asked to say it again
+      // (the day is read by then, so the second go is quick).
+      let u;
+      try { u = await Promise.race([understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands, and routes_near can say which of his routes pass near him.' : '')
+        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : '') + rideWords((req.body || {}).ride), images, { ms, model: (req.body || {}).model, coords, deadline: tAll + 20000 }),
+          new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('deadline'), { deadline: true })), 21500))]); }
+      catch (e) {
+        if (!(e && e.deadline)) throw e;
+        Object.assign(ms, { total_ms: Date.now() - tAll, deadline: true });
+        const doing = images.length || /^\s*(please\s+|can you\s+|could you\s+)?(plan|build|rebuild|schedule|move|log|add|remove|delete|put|set|send|save|remember|change|start|open|make)\b/i.test(text) || /^\s*(yes|no|ok|okay|do it|go)\b/i.test(text);
+        if (doing) return res.json({ heard: text, actions: [], reply: 'That took longer than it should, and I stopped before doing anything. Say it once more: your day is read now, so it will be quick.', slow: true, ms, offer: null });
+        const id = await require('./coach').startJob(text, base, { kind: 'handoff' });
+        return res.json({ heard: text, actions: [{ type: 'research', ok: true, summary: 'Taking a proper look: the full answer follows in a minute or two.', job: id }],
+          reply: 'That one needs a proper look, more than I can do in a few seconds. I am going through your record now, and the full answer will be here in a minute or two.', slow: true, ms, offer: null });
+      }
       const actions = [];
-      if ((u.actions || []).some(a => a.type !== 'question')) await contextFresh();
+      if ((u.actions || []).some(a => a.type !== 'question' && a.type !== 'research')) await contextFresh();
       for (const a of (u.actions || []).slice(0, 6)) {
-        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images }))); }
+        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images, base }))); }
         catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
       }
       // The reply is written before the actions run (Harry heard "Logged" and then the action asked which leg day it
