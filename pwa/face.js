@@ -162,7 +162,7 @@
     try { const c = document.createElement("canvas"); if (!(c.getContext("webgl2") || c.getContext("webgl"))) return; } catch (e) { return; }
     holder = document.createElement("div"); holder.className = "c3dholder"; loading3d = true;
     place3d();
-    setTimeout(() => { if (loading3d && !is3d && host) host.classList.remove("wait3d"); }, 20000);
+    setTimeout(() => { if (loading3d && !is3d && host) host.classList.remove("wait3d"); }, 32000);
     const go = () => { if (!window.Coach3D || !holder) return;
       window.Coach3D.mount(holder, { url: "avatar/coach.glb?v=" + C3D_V, state: voiceState })
         .then(() => { is3d = true; loading3d = false; place3d(); if (said && talking) window.Coach3D.say(said); if (!live()) window.Coach3D.pause(true); })
@@ -177,13 +177,21 @@
       if (window.Coach3D) go();
       else { window.addEventListener("coach3d-ready", () => whenQuiet(go), { once: true });
         const sc = document.createElement("script"); sc.type = "module"; sc.src = "coach3d.js?v=" + C3D_V; sc.onerror = fail3d; document.head.appendChild(sc); } };
-    lastTouch = Date.now(); whenQuiet(start);
+    lastTouch = Date.now(); quietT0 = Date.now(); whenQuiet(start);
   }
   let lastTouch = 0;
   for (const ev of ["pointerdown", "pointerup", "keydown"]) document.addEventListener(ev, () => { lastTouch = Date.now(); }, { capture: true, passive: true });
-  const micOpen = () => { try { return !!(window.voiceBits && voiceBits.micOpen && voiceBits.micOpen()); } catch (e) { return false; } };
-  const QUIET_MS = 2500;
-  function whenQuiet(fn){ if (!holder) return; if (micOpen() || Date.now() - lastTouch < QUIET_MS) { setTimeout(() => whenQuiet(fn), 400); return; } fn(); }
+  // the microphone taking his words right now; the coach thinking or speaking is not that, and is a good moment to build
+  const micLive = () => { try { return !!(window.voiceBits && (voiceBits.micLive ? voiceBits.micLive() : voiceBits.micOpen && voiceBits.micOpen())); } catch (e) { return false; } };
+  // The build waits for a quiet moment, but never for good (Harry, 16 Nov 2026: "Back to the old coach. The image is
+  // the old coach now"): a conversation kept the page "busy" from its first word to its last, so the figure was never
+  // built and after twenty seconds the drawn stand-in took the stage. Now the wait is for the microphone to stop
+  // taking his words (he is built while the coach thinks or speaks), and after twelve seconds only for his finger
+  // to be off the page for a second.
+  const QUIET_MS = 2500, WAIT_MAX_MS = 12000; let quietT0 = 0;
+  function whenQuiet(fn){ if (!holder) return; const now = Date.now(), waited = now - (quietT0 || now);
+    const busy = waited < WAIT_MAX_MS ? (micLive() || now - lastTouch < QUIET_MS) : now - lastTouch < 1000;
+    if (busy) { setTimeout(() => whenQuiet(fn), 400); return; } fn(); }
 
   // ---- how it moves ---------------------------------------------------------------------------------
   // Each joint is a small spring toward where it wants to be, so nothing snaps and a gesture settles with a
