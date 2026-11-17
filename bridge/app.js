@@ -9,8 +9,9 @@ app.use(express.json({ limit: '15mb' }));
 // a page read (GET) reads each blob once, however many places ask for it (storage.js)
 app.use((req, res, next) => (req.method === 'GET' ? withScope(next) : next()));
 // anything written anywhere (a meal logged on the Food page, a weigh-in, a set saved) makes the coach's kept read of the
-// day out of date: it is dropped, so his next answer reads the day fresh (voice.js)
-app.use((req, res, next) => { if (req.method !== 'GET' && !/^\/voice(\/|$)/.test(req.path.replace(/^\/\.netlify\/functions\/api/, ''))) { try { require('./voice').contextStale(); } catch (e) { /* it ages out */ } } next(); });
+// day out of date: it is dropped, so his next answer reads the day fresh (voice.js). The connector (mcp.js) drops it itself,
+// after a write only: its reads change nothing.
+app.use((req, res, next) => { if (req.method !== 'GET' && !/^\/(voice|mcp)(\/|$)/.test(req.path.replace(/^\/\.netlify\/functions\/api/, ''))) { try { require('./voice').contextStale(); } catch (e) { /* it ages out */ } } next(); });
 app.get('/sandbox', (req, res) => res.json({ sandbox: !!SANDBOX }));
 require('./fuel-log').attach(app);
 require('./plan').attach(app);
@@ -75,6 +76,8 @@ require('./print').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);
 require('./agent').attach(app);
+// The Way as a connector for Claude sessions and projects (bridge/mcp.js): off until WAY_MCP_KEY is set.
+require('./mcp').attach(app);
 // The scale runs on the storage layer now, so it works hosted too. It used to
 // sit in the local-only block below, which meant /withings/auth was a 404 on
 // the deployed site — you could never connect the scale to the real app.
