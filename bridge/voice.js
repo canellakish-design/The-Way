@@ -210,7 +210,10 @@ async function contextNow() {
       const evs = (d.events || []).map(ev => `${ev.from}–${ev.to} ${ev.summary}${ev.workout_id ? ' [workout]' : ''}`);
       if (evs.length) lines.push(`Calendar ${d.date === today ? 'today' : 'tomorrow'}: ${evs.join('; ')}.`);
     }
-    if (typeof sched.recovery === 'string') lines.push(`Recovery today (from the watch): ${sched.recovery} (${sched.recovery === 'green' ? 'ready' : sched.recovery === 'yellow' ? 'moderate, keep it easy' : 'low, rest or Zone 1 only'}).`);
+    // only a reading of this morning is this morning's: yesterday's colour was being read out as today's
+    const recIn = !!(chain && chain.links && chain.links.recovery && chain.links.recovery.today != null && Date.now() - (chain.at || 0) < 6 * 3600e3);
+    if (typeof sched.recovery === 'string' && !recIn) lines.push('RECOVERY: no reading for this morning has reached the site yet. Do not state a recovery colour or number for today, and do not advise from yesterday\'s.');
+    if (typeof sched.recovery === 'string' && recIn) lines.push(`Recovery today (from the watch): ${sched.recovery} (${sched.recovery === 'green' ? 'ready' : sched.recovery === 'yellow' ? 'moderate, keep it easy' : 'low, rest or Zone 1 only'}).`);
   }
   if (wx && wx.summary) lines.push(`Weather for riding today: ${wx.summary}.`);
   // the week ahead, as the plan has it
