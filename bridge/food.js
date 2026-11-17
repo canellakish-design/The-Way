@@ -22,6 +22,8 @@ const crypto = require('crypto');
 const { getJSON, setJSON } = require('./storage');
 const { auth, logMeal } = require('./fuel-log');
 const tz = require('./tz');
+// what the meal placer took as busy for a day, for the push check to read (scripts/smoke.js): GET /food/day?busy=1
+const BUSY_SEEN = {}, BUSY_ERR = {};
 const F = require('./food-math');
 const W = require('./workout-math');
 const MI = require('./micro-math');
@@ -336,7 +338,8 @@ async function guidelinesFor(date) {
         // "lunch" had drifted to 5:45p behind a planning block, the drive, the game and the ride)
         busy = require('./dayplan').blocksOf(ev, { date, eat: true, categories: new Set(['coaching', 'work', 'travel', 'commute']) })
           .map(b => Object.assign(b, { name: String(b.name || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').replace(/^Bethesda Premier Cup: /, '').replace(/ · \d+ min.*$/, '').slice(0, 40) }));
-      } catch (e) { busy = []; }
+      } catch (e) { busy = []; BUSY_ERR[date] = String(e && e.message || e).slice(0, 160); }
+      BUSY_SEEN[date] = busy.map(b => ({ start: b.start, end: b.end, name: b.name }));
       const ss = sessions.filter(s => F.toMin(s.time) != null && !s.done).map(s => ({ start: F.toMin(s.time), end: F.toMin(s.time) + (s.minutes || 60), name: String(s.name || '').replace(/\s*[·(].*$/, ''),
         kind: /weight|strength/i.test(String(s.sport || '')) || /\b(push|pull|upper|legs|lift)\b/i.test(String(s.name || '')) ? (/kettlebell\s*blast|pump/i.test(String(s.name || '')) ? 'easy' : 'lift')
           : /vo2|40\s*\/\s*20|threshold|race|interval|sweet/i.test(String(s.name || '')) ? 'hard' : 'easy' }));
@@ -919,7 +922,8 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/food/day', async (req, res) => { if (!auth(req, res)) return;
-    try { res.json(await dayReport(isDate(req.query.date) ? req.query.date : tz.todayKey())); }
+    try { const date = isDate(req.query.date) ? req.query.date : tz.todayKey(), r = await dayReport(date);
+      res.json(req.query.busy ? Object.assign({}, r, { busy_seen: BUSY_SEEN[date] || null, busy_error: BUSY_ERR[date] || null }) : r); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/food/guidelines', async (req, res) => { if (!auth(req, res)) return;
