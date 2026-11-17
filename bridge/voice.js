@@ -447,7 +447,10 @@ const isTime = t => /^\d{2}:\d{2}$/.test(t || '');
 async function findWorkout(date, text) {
   const d = await getJSON('plan-workouts', { workouts: {} });
   const onDay = Object.values(d.workouts || {}).filter(w => w.date === date).sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')));
-  const ws = words(text);
+  // two sessions of one name on a day (a base day is two Zone 1 rides): its id, or the time it is on now, says which
+  const idm = /\bw_[a-z0-9]{6,}\b/i.exec(String(text || '')); if (idm) return onDay.find(w => w.id === idm[0]) || null;
+  const tm = /\b([01]\d|2[0-3]):[0-5]\d\b/.exec(String(text || '')); if (tm) { const at = onDay.find(w => w.time === tm[0]); if (at) return at; }
+  const ws = words(String(text || '').replace(/\b([01]\d|2[0-3]):[0-5]\d\b/g, ' '));
   const named = ws.length ? onDay.find(w => ws.some(x => String(w.name || '').toLowerCase().includes(x))) : null;
   if (named) return named;
   // "my lift", "the weights", "the gym" name no session, but they are not the ride ("move my lift" on a VO2 morning
