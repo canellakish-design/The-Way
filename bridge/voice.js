@@ -510,7 +510,7 @@ async function run(a, x) {
       const lb = Number(a.lb);
       if (!(lb >= 50 && lb <= 500)) return { ok: false, summary: 'No usable weight heard.' };
       const d = await getJSON('weigh-in', { entries: [] });
-      d.entries.push({ ts: Date.now(), lb: Math.round(lb * 10) / 10, source: 'voice' });
+      d.entries.push({ ts: Date.now(), lb: Math.round(lb * 10) / 10, source: (x && x.source) || 'voice' });
       await setJSON('weigh-in', d);
       return { ok: true, summary: `Weigh-in logged: ${lb} lb.` };
     }
