@@ -351,4 +351,4 @@ No research, no links, nothing else.`;
   app.get('/coach/notebook', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-notebook', { notes: [] })); });
 }
 
-module.exports = { DO_TYPES, doTool, allTools, attach, runJob, startJob, READABLE, ALLOWED };
+module.exports = { DO_TYPES, doTool, allTools, attach, runJob, startJob, READABLE, ALLOWED, readSite };
