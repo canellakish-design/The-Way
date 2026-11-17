@@ -75,6 +75,8 @@ require('./print').attach(app);
 require('./kitchen').attach(app);
 require('./batches').attach(app);
 require('./agent').attach(app);
+// The Way as a connector for Claude sessions and projects (bridge/mcp.js): off until WAY_MCP_KEY is set.
+require('./mcp').attach(app);
 // The scale runs on the storage layer now, so it works hosted too. It used to
 // sit in the local-only block below, which meant /withings/auth was a 404 on
 // the deployed site — you could never connect the scale to the real app.

@@ -795,4 +795,4 @@ function attach(app) {
 
 // a write somewhere else in the app: the kept read is out of date (not waited on)
 function contextStale() { ctxKept = null; setJSON(CTX_KEY, { at: 0 }).catch(() => {}); }
-module.exports = { attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords, rideWords };
+module.exports = { SCHEMA, attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords, rideWords };

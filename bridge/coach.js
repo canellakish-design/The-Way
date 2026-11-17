@@ -60,7 +60,26 @@ const READABLE = [
 ];
 const ALLOWED = /^\/(chain|routes|races|history(\/patterns)?|food\/(day|today)|calendar|schedule|scores|signature(\/ride\/[\w-]+)?|progress|fitness(\/zones)?|lifts|wellness|weigh-in|workouts|workout-debt|rides\/(analysis|[\w-]+\/analysis)|fuel\/ahead|weather\/outlook|route-weather|courses|audit|compliance|intake\/today|macros\/today|profile|status|race|flags\/today|planner\/model|planner\/week|meds\/today|sleep-window)(\?[\w=&.,:%-]*)?$/;
 
-const TOOLS = [
+// Everything the quick coach can do, the deep coach can do too (Harry, 17 Nov 2026: "I want the cycling coach to be able to
+// have full functionality in The Way. Can log medicine. Change the schedule etc."): do_action takes ONE action in the
+// quick coach's own shape and runs it through the same function (voice.js run), so nothing is logged twice or differently.
+// Left to their own tools or to the phone: meal, drink, workout, workout_change (the three tools below), plan_week
+// (the quick coach's own week tool), player, route_here and save_place (they need the phone in his hand), research and
+// question (this coach IS the researched answer).
+const DO_TYPES = ['supplement', 'medicine', 'weigh_in', 'remove_workout', 'event', 'event_change', 'remove', 'note', 'remember', 'wellness', 'nap', 'race', 'garmin', 'route', 'new_route', 'lift', 'training_model'];
+function doTool() {
+  const V = require('./voice');
+  const item = JSON.parse(JSON.stringify(V.SCHEMA().properties.actions.items));
+  item.properties.type.enum = item.properties.type.enum.filter(t => DO_TYPES.includes(t));
+  // the quick coach's own words for each kind of action, so the two coaches read them the same way
+  const lines = []; let keep = false;
+  for (const ln of V.systemText().split('\n')) { const m = /^- ([a-z_]+):/.exec(ln); if (m) keep = DO_TYPES.includes(m[1]); else if (/^\s*$/.test(ln) || /^[A-Z]/.test(ln)) keep = false; if (keep) lines.push(ln); }
+  return { name: 'do_action', description: 'Do one thing in The Way for him, the same way the buttons and the quick coach do it: mark a medicine or a supplement taken, log a weigh-in, a nap, the morning\'s numbers or a lift done, take a session off the calendar, add or move a calendar event, take something back out of today\'s food journal, add a race, send a session to his Garmin, set or make a route, change how his training is shaped, keep a note or something to remember. One call per action; several things are several calls. Every field is required: fill the ones the action uses and leave the rest "" or 0. Only when he asked for it or said it happened. The answer says what was done or why it was refused: tell him that plainly.\n\nThe kinds of action:\n' + lines.join('\n'),
+    input_schema: item, strict: true };
+}
+let ALL = null;
+const allTools = () => ALL || (ALL = FIXED.slice(0, -2).concat([doTool()], FIXED.slice(-2)));
+const FIXED = [
   { name: 'read_site', description: 'Read any page of The Way as JSON, exactly what the site shows. Paths you can read:\n' + READABLE.map(([p, d]) => `${p}: ${d}`).join('\n') + '\nRead several in parallel when the question spans them. Large answers are cut at about 60,000 characters.',
     input_schema: { type: 'object', properties: { path: { type: 'string', description: 'one of the paths above, with its query filled in' } }, required: ['path'], additionalProperties: false }, strict: true },
   { name: 'write_note', description: 'Write one line to your coaching notebook: a decision made with Harry, a pattern you noticed in his data, or something to check next time. Kept between conversations. Not for things the site already records.',
@@ -93,7 +112,7 @@ How you work:
 - Reason to one clear call. Weigh his data against the evidence and his goals; say what you would do, why, and what would change your mind.
 - Write to your notebook when you make a decision with him or notice a pattern worth remembering. Read your notebook (below) before answering.
 - What to eat before or after a session is the plan's meal for that slot in /food/today (meals[]: its time, grams of carbs and protein, its carb label in meals[].carb.word, and what it names). Name the label (Low carb, Balanced, High carb) as the card does whenever you name a meal, and fit the food to it. Size a meal to the plan's meal, never to close the whole day's totals: the day's totals are the plan's job, and a meal built to catch them up (Harry, 9 Nov: a 130 g carb sushi order against a 43 g low carb dinner) is the mistake. If you think the plan's meal is wrong for what is coming (a low carb dinner before a 7:00 a.m. VO2), say so plainly, name both (the plan says X; I would eat Y, because Z) and let him choose. Read it and give those grams; a meal you invent will be graded against the plan's and read as over or under.
-- You can act: schedule_workout puts a session on the calendar or logs one already done, change_workout moves, lengthens or swaps a planned one, log_food logs what he ate or drank. Act when he asks you to, or when he agrees to what you proposed; say plainly in your answer what you changed. Never before 7 a.m.; when a time could be a.m. or p.m., ask. You never delete anything: removals are his, on the page.
+- You can act: schedule_workout puts a session on the calendar or logs one already done, change_workout moves, lengthens or swaps a planned one, log_food logs what he ate or drank. do_action does the rest of what the app does: a medicine or supplement taken, a weigh-in, a nap, a lift done, a session taken off, a calendar event added or moved, a food entry taken back, a race, a route, his Garmin, the shape of his training. The day's medicines are on /meds/today: read it before you say what is still due. Act when he asks you to, or when he agrees to what you proposed; say plainly in your answer what you changed. Never before 7 a.m.; when a time could be a.m. or p.m., ask. You never delete anything: removals are his, on the page.
 
 Your answer has two parts, in this order:
 SAY: one or two sentences, spoken aloud, the call and the reason, to him as "you".
@@ -177,7 +196,7 @@ async function runJob(id, who) {
       try { res = await create({ ...(late() ? { tool_choice: { type: 'none' } } : {}),
         model: MODEL, max_tokens: job.kind === 'debrief' ? 4000 : 16000, fallbacks: 'default',
         thinking: { type: 'adaptive' }, output_config: { effort: job.kind === 'debrief' ? 'medium' : 'high' },
-        system: sys, tools: job.kind === 'debrief' ? TOOLS.filter(t => t.name === 'read_site') : TOOLS, messages: cached(messages)
+        system: sys, tools: job.kind === 'debrief' ? FIXED.filter(t => t.name === 'read_site') : allTools(), messages: cached(messages)
       }, left); }
       catch (e) {
         clearInterval(hb);
@@ -188,7 +207,7 @@ async function runJob(id, who) {
         if (last.role === 'user' && Array.isArray(last.content)) last.content.push({ type: 'text', text: 'Time is up: answer now from what you have read.' });
         else messages.push({ role: 'user', content: 'Time is up: answer now from what you have read so far.' });
         res = await create({ model: MODEL, max_tokens: 8000, fallbacks: 'default', thinking: { type: 'adaptive' }, output_config: { effort: 'medium' },
-          system: sys, tools: TOOLS, tool_choice: { type: 'none' }, messages: cached(messages) }, 150000);
+          system: sys, tools: job.kind === 'debrief' ? FIXED : allTools(), tool_choice: { type: 'none' }, messages: cached(messages) }, 150000);
       }
       clearInterval(hb);
       messages.push({ role: 'assistant', content: res.content });
@@ -211,6 +230,13 @@ async function runJob(id, who) {
             : u.name === 'change_workout' ? { type: 'workout_change', date: i.date, text: i.text, time: i.time, new_date: i.new_date, minutes: i.minutes, library_key: i.library_key }
             : { type: i.kind === 'drink' ? 'drink' : 'meal', text: i.text };
           let out; try { out = await V.run(a, {}); } catch (e) { out = { ok: false, summary: e.message }; }
+          await step(`${out.ok ? 'done' : 'refused'}: ${String(out.summary || '').slice(0, 90)}`);
+          return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out), is_error: !out.ok };
+        }
+        if (u.name === 'do_action') {
+          const V = require('./voice'), a = u.input || {};
+          let out; if (!DO_TYPES.includes(a.type)) out = { ok: false, summary: `"${a.type}" is not something do_action does.` };
+          else { try { out = await V.run(a, { base: job.base }); } catch (e) { out = { ok: false, summary: e.message }; } }
           await step(`${out.ok ? 'done' : 'refused'}: ${String(out.summary || '').slice(0, 90)}`);
           return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out), is_error: !out.ok };
         }
@@ -325,4 +351,4 @@ No research, no links, nothing else.`;
   app.get('/coach/notebook', async (req, res) => { if (!auth(req, res)) return; res.json(await getJSON('coach-notebook', { notes: [] })); });
 }
 
-module.exports = { attach, runJob, startJob, READABLE, ALLOWED };
+module.exports = { DO_TYPES, doTool, allTools, attach, runJob, startJob, READABLE, ALLOWED, readSite };
