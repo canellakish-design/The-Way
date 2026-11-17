@@ -325,6 +325,15 @@ function placeSnacks(meals, opts) {
     // no free half hour that far from the meal before it (practice, then a meeting until ten): the spacing gives
     // way before the meal sits inside something (Harry, 13 Nov: "Make sure stuff like that doesn't happen again")
     if (nt == null && !D.freeAt(t, 30, busy)) nt = D.nearestFree(t, 30, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
+    // Still nowhere, and it is a snack (17 Nov 2026: the evening snack sat at 8:45p inside a practice that ran 8:30 to
+    // 10:00p after a 7:15p photo night): a snack is quick, so a free quarter hour will do; with none of those either
+    // it folds into the meal before it. It is never left inside something.
+    if (nt == null && !D.freeAt(t, 30, busy) && !isMain(m)) {
+      const q = D.nearestFree(t, 15, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
+      if (q != null) nt = q;
+      else if (prev) { prev.kcal = (prev.kcal || 0) + (m.kcal || 0); prev.carbs_g = (prev.carbs_g || 0) + (m.carbs_g || 0); prev.protein_g = (prev.protein_g || 0) + (m.protein_g || 0);
+        prev.what = `${String(prev.what || '').replace(/\s*$/, '')} This carries the ${m.slot} too: there is no free time for one later.`.trim(); m._folded = true; continue; }
+    }
     // A main meal that would land more than two and a half hours from its time, or more than six hours after the
     // meal before it, is packed and eaten at the field between the games instead.
     { const sm1 = starvedAt(nt == null ? t : nt); if (sm1) { atSeam(sm1); continue; } }

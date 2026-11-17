@@ -326,7 +326,10 @@ async function guidelinesFor(date) {
       // the snack rules (food-math placeSnacks): the day's coaching, classes and work, and its sessions
       let busy = [];
       try {
-        const ev = await require('./calendar').eventsBetween(date, date);
+        // read with a day either side (blocksOf keeps this date's): a special school schedule is an all-day note that
+        // a one-day read can miss, and then the classes stand at their usual times, not that day's (17 Nov 2026:
+        // Friday's breakfast sat at 8:30a inside a first period the Day page showed at 8:30)
+        const ev = await require('./calendar').eventsBetween(tz.shiftKey(date, -1), tz.shiftKey(date, 1));
         // the day's blocks (dayplan.js): classes, coaching from its arrival, the drives, travel, family, his own blocks
         // a meal waits only for what keeps his hands busy: driving, classes, a game from its warm-up, travel. His own
         // desk blocks (Cycle 3 Planning) and the hour at the field before warm-ups are times he can eat (Harry, 13 Nov:

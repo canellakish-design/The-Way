@@ -778,5 +778,15 @@ ok('what is left of the day fits what is left to eat: dinner gives up its fat wh
   const longer = F.dayMeals(plan, entries, { target_kcal: 3150, target_protein: 187, day_kcal: eaten, now_min: 19 * 60 + 7 }).find(m => m.slot === 'dinner');
   assert.ok(longer.kcal > 1015 && longer.kcal <= Math.round(1015 * 1.15 / 5) * 5, 'dinner grew with the ride: ' + longer.kcal);
 });
+ok('17 Nov: a snack with no free half hour takes a free quarter hour, and with none folds into the meal before it; never left inside a practice', () => {
+  const meals = [{ slot: 'dinner', time: '18:15', kcal: 700, carbs_g: 70, protein_g: 45, what: 'Dinner.' }, { slot: 'snack', time: '20:45', kcal: 270, carbs_g: 30, protein_g: 25, what: 'A Huel shake.' }];
+  const busy = [{ start: 18 * 60 + 45, end: 20 * 60, name: 'Media Day Photo' }, { start: 18 * 60 + 47, end: 19 * 60, name: 'Drive to the field' }, { start: 20 * 60, end: 22 * 60, name: 'Practice' }, { start: 22 * 60 + 15, end: 22 * 60 + 26, name: 'Drive home' }];
+  const out = F.placeSnacks(meals, { busy, sessions: [], wake: 390, bed: 1350 }), sn = out.find(m => m.slot === 'snack');
+  assert.strictEqual(sn.time, '22:00'); assert.strictEqual(sn.moved_from, '20:45');           // the quarter hour after practice
+  const full = busy.concat([{ start: 22 * 60, end: 22 * 60 + 15, name: 'Pack up' }, { start: 22 * 60 + 26, end: 22 * 60 + 30, name: 'Home' }]);
+  const out2 = F.placeSnacks(meals, { busy: full, sessions: [], wake: 390, bed: 1350 });
+  assert.ok(!out2.some(m => m.slot === 'snack')); const d = out2.find(m => m.slot === 'dinner');
+  assert.strictEqual(d.kcal, 970); assert.strictEqual(d.protein_g, 70); assert.ok(/carries the snack too/.test(d.what), d.what);
+});
 console.log(n + ' passed');
 
