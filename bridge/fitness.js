@@ -19,10 +19,13 @@ const Z = require('./zones');
 const MAX_EFFORTS = 400, MAX_SEGMENTS = 2000, MAX_LOG = 200, MAX_WELLNESS = 120;
 
 async function db() {
-  return getJSON('fitness', {
-    efforts: [], segments: [], wellness: [], test: null, override: null,
-    accepted: null, log: [], scanned: []
-  });
+  const blank = { efforts: [], segments: [], wellness: [], test: null, override: null, accepted: null, log: [], scanned: [] };
+  const d = await getJSON('fitness', blank);
+  // a stored record that lacks one of its lists (17 Nov 2026: /fitness answered "Cannot read properties of undefined
+  // (reading 'map')" on the live site, so the page's own FTP read failed quietly) reads as an empty list, never an error
+  if (!d || typeof d !== 'object') return blank;
+  for (const k of ['efforts', 'segments', 'wellness', 'log', 'scanned']) if (!Array.isArray(d[k])) d[k] = [];
+  return d;
 }
 
 /* ---- wellness history -------------------------------------------------

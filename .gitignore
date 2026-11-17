@@ -41,3 +41,10 @@ bridge/fuel-legs.json
 bridge/hydration-calibration.json
 bridge/hydration-days.json
 bridge/orders.json
+# written by the tests when they run on a PC (the connector's and the coach's): local storage, never data
+bridge/meds-*.json
+bridge/coach-notebook.json
+bridge/voice-notes.json
+bridge/voice-context.json
+bridge/wellness-manual.json
+bridge/signature.json
