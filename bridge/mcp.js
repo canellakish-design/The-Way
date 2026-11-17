@@ -2,7 +2,8 @@
 // then, through his Chief of Staff the same day: his Claude projects, Cycling Coach and Chief of Staff, use The Way directly
 // instead of driving a browser. The Way is his source of truth for the meal plan and the food log).
 //
-//   POST /mcp/<WAY_MCP_KEY>   MCP over HTTP: initialize, tools/list, tools/call; JSON answers, no streams.
+//   POST /mcp   with the header Authorization: Bearer <WAY_MCP_KEY>   (or POST /mcp/<WAY_MCP_KEY>)
+//   MCP over HTTP: initialize, tools/list, tools/call; JSON answers, no streams.
 //
 // READS give the day as the site shows it, cut down to what a reader needs: get_day (the timeline, rides, lifts, meals
 // planned and logged with their macros, supplements, medicines, drives), get_week, get_recovery_and_sleep, get_weight,
@@ -59,7 +60,7 @@ const isLift = w => /weight|strength/i.test(str(w && (w.sport || w.type)));
 // a session read from the calendar page carries its length; one read from the store is measured from its steps
 const minutesOf = w => { if (w.metrics && w.metrics.duration_s) return Math.round(w.metrics.duration_s / 60); try { const s = require('./workouts').durationOf(w.steps); return s > 0 ? Math.round(s / 60) : null; } catch (e) { return null; } };
 const planned = w => Object.assign({ id: w.id, name: w.name, sport: w.sport, date: w.date, time: w.time || null, time_12h: hm12(w.time),
-  minutes: minutesOf(w), tss: w.metrics ? w.metrics.tss : null },
+  minutes: minutesOf(w) }, w.metrics && w.metrics.tss != null ? { tss: w.metrics.tss } : {},
   w.logged ? { done: true } : {}, w.started_at ? { started_at: w.started_at } : {}, w.compliance ? { compliance_pct: w.compliance.pct } : {},
   w.sync && w.sync.state === 'synced' ? { on_garmin: true } : {}, w.auto_moved ? { moved_by_the_site_from: w.auto_moved.from } : {});
 const ridden = r => Object.assign(pick(r, ['id', 'name', 'type', 'time', 'minutes', 'miles', 'avg_w', 'np_w', 'avg_hr', 'tss']), { time_12h: hm12(r.time) },
@@ -203,6 +204,22 @@ function sessionDiff(before, after) {
   Object.keys(ch).forEach(k => { if (!ch[k].length) delete ch[k]; });
   return Object.keys(ch).length ? ch : null;
 }
+// which session a move or a removal means: by its id, by the time it is on now, or by words from its name. Two that fit
+// are never guessed between (a base day is two rides of one name): the answer names both and asks which.
+async function whichSession(a) {
+  if (!isDate(a.date)) refuse('date is needed: the day the session is on now, YYYY-MM-DD.');
+  if (a.at && !isTime(a.at)) refuse('at is the time the session is on now, HH:MM on the 24-hour clock.');
+  const all = Object.values(await sessions()).filter(w => w.date === a.date).sort((x, y) => str(x.time).localeCompare(str(y.time)));
+  if (!all.length) refuse(`No planned session on ${tz.dayShort(a.date)}.`);
+  const say = w => `${w.name}${w.time ? ' at ' + w.time_12h : ''} (session_id ${w.id})`;
+  if (str(a.session_id)) { const w = all.find(x => x.id === str(a.session_id)); if (!w) refuse(`No session ${str(a.session_id)} on ${tz.dayShort(a.date)}. That day has: ${all.map(say).join('; ')}.`); return w.id; }
+  const ws = str(a.name).toLowerCase().split(/[^a-z0-9]+/).filter(x => x.length > 1 && !['the', 'my', 'ride', 'session', 'workout', 'min'].includes(x));
+  let fit = ws.length ? all.filter(w => ws.some(x => str(w.name).toLowerCase().includes(x))) : all;
+  if (ws.length && !fit.length) refuse(`Nothing on ${tz.dayShort(a.date)} is called "${str(a.name)}". That day has: ${all.map(say).join('; ')}.`);
+  if (isTime(a.at)) { const t = fit.filter(w => w.time === a.at); if (!t.length) refuse(`Nothing at ${tz.hm12(a.at)} on ${tz.dayShort(a.date)}. That day has: ${all.map(say).join('; ')}.`); fit = t; }
+  if (fit.length > 1) refuse(`${fit.length} sessions on ${tz.dayShort(a.date)} fit that: ${fit.map(say).join('; ')}. Send session_id, or at (the time it is on now).`);
+  return fit[0].id;
+}
 async function withSessions(a, base) { const before = await sessions(); const out = await act(a, base); const ch = sessionDiff(before, await sessions());
   return { ok: true, summary: out.summary, changed: ch || 'nothing on the calendar changed' }; }
 
@@ -330,11 +347,13 @@ function tools() {
       description: 'Mark one medicine or one supplement as taken now, today. One call each. Only when he says he took it. A medicine already marked, or a supplement already logged today, is not logged twice: the answer says so.' },
     { name: 'move_workout', annotations: RW('The Way: move or change a planned session'),
       inputSchema: obj({ date: Object.assign({}, DATE, { description: 'The date the session is on now, YYYY-MM-DD.' }), name: { type: 'string', description: 'Words from the session\'s name ("VO2", "Zone 1", "Push") when the day has more than one.' },
+        session_id: { type: 'string', description: 'The session\'s id from get_day or get_week (w_...). The surest way to say which one.' }, at: Object.assign({}, TIME, { description: 'The time it is on now, HH:MM, when two sessions that day have the same name.' }), 
         new_date: Object.assign({}, DATE, { description: 'The date to move it to, YYYY-MM-DD. Leave out to keep the day.' }), time: Object.assign({}, TIME, { description: 'The new start time, HH:MM on the 24-hour clock. Leave out to keep the time.' }),
         minutes: { type: 'integer', description: 'A new length in minutes, to shorten or lengthen it. Leave out to keep the length.' }, library_key: Object.assign({}, P.library_key, { enum: P.library_key.enum.filter(Boolean), description: 'Swap it for this session from the library. Leave out to keep the session.' }) }, ['date']),
-      description: 'Move a planned ride or lift to another day or time, shorten or lengthen it, or swap it for a library session. The site\'s own rules still apply (nothing before his earliest session time, spacing between sessions) and it says so when it refuses. The answer is the session before and after.' },
+      description: 'Move a planned ride or lift to another day or time, shorten or lengthen it, or swap it for a library session. The site\'s own rules still apply (nothing before his earliest session time, spacing between sessions) and it says so when it refuses. When two sessions on the day fit, nothing is guessed: the answer lists them and asks which. The answer is the session before and after.' },
     { name: 'remove_workout', annotations: RW('The Way: take a planned session off', true),
-      inputSchema: obj({ date: Object.assign({}, DATE, { description: 'The date the session is on, YYYY-MM-DD.' }), name: { type: 'string', description: 'Words from the session\'s name when the day has more than one.' } }, ['date']),
+      inputSchema: obj({ date: Object.assign({}, DATE, { description: 'The date the session is on, YYYY-MM-DD.' }), name: { type: 'string', description: 'Words from the session\'s name when the day has more than one.' },
+        session_id: { type: 'string', description: 'The session\'s id from get_day or get_week (w_...). The surest way to say which one.' }, at: Object.assign({}, TIME, { description: 'The time it is on now, HH:MM, when two sessions that day have the same name.' }) }, ['date']),
       description: 'Take one planned ride or lift off the calendar. Only when he asked for it to come off. It can be put back with schedule_workout. The answer is the session that was removed.' },
     { name: 'schedule_workout', annotations: RW('The Way: put a session on the calendar'), inputSchema: sched, description: of('schedule_workout').description + ' Fields you do not use may be left out. The answer is the session as it was added.' },
     { name: 'move_event', annotations: RW('The Way: move a calendar event'),
@@ -362,10 +381,10 @@ async function callTool(name, a, base) {
   else if (name === 'log_wellness') out = await logMorning(a, base);
   else if (name === 'mark_taken') out = await markTaken(a, base);
   else if (name === 'add_note') out = await addNote(a, base);
-  else if (name === 'move_workout') { if (!isDate(a.date)) refuse('date is needed: the day the session is on now, YYYY-MM-DD.');
+  else if (name === 'move_workout') {
     if (!isDate(a.new_date) && !isTime(a.time) && !(int(a.minutes) > 0) && !str(a.library_key)) refuse('Say what to change: new_date, time, minutes or library_key.');
-    out = await withSessions({ type: 'workout_change', date: a.date, text: str(a.name), new_date: str(a.new_date), time: str(a.time), minutes: int(a.minutes), library_key: str(a.library_key) }, base); }
-  else if (name === 'remove_workout') { if (!isDate(a.date)) refuse('date is needed: the day the session is on, YYYY-MM-DD.'); out = await withSessions({ type: 'remove_workout', date: a.date, text: str(a.name) }, base); }
+    out = await withSessions({ type: 'workout_change', date: a.date, text: await whichSession(a), new_date: str(a.new_date), time: str(a.time), minutes: int(a.minutes), library_key: str(a.library_key) }, base); }
+  else if (name === 'remove_workout') out = await withSessions({ type: 'remove_workout', date: a.date, text: await whichSession(a) }, base);
   else if (name === 'schedule_workout') out = await withSessions({ type: 'workout', date: str(a.date), time: str(a.time), library_key: str(a.library_key), name: str(a.name), sport: str(a.sport), minutes: int(a.minutes) }, base);
   else if (name === 'move_event') { if (!isDate(a.date) || !str(a.name).trim()) refuse('date (YYYY-MM-DD) and name (words from the event\'s title) are needed.');
     const r = await act({ type: 'event_change', date: a.date, text: str(a.name), new_date: str(a.new_date), time: str(a.time), minutes: int(a.minutes), name: str(a.new_name) }, base);
@@ -396,20 +415,24 @@ function attach(app) {
   // its own pages are read from its own host: the live site, or a copy of it (a preview); never a host a request merely names
   const baseOf = req => { if (!ON_NETLIFY) return 'http://' + (req.get('host') || '127.0.0.1');
     const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app'; return /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app'; };
-  app.all('/mcp/:key', async (req, res) => {
-    res.set({ 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Accept, Mcp-Session-Id, Mcp-Protocol-Version', 'Access-Control-Allow-Methods': 'POST, OPTIONS' });
+  // the key comes in the address (/mcp/<key>) or, better, in a request header claude.ai sends with every call
+  // (Authorization: Bearer <key>, or x-way-key: <key>, to plain /mcp): a header stays out of addresses and logs
+  const keyFrom = req => { if (req.params.key) return req.params.key; const a = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || ''); return (a && a[1]) || req.get('x-way-key') || ''; };
+  const serve = async (req, res) => {
+    res.set({ 'Cache-Control': 'no-store', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization, x-way-key, Mcp-Session-Id, Mcp-Protocol-Version', 'Access-Control-Allow-Methods': 'POST, OPTIONS' });
     if (req.method === 'OPTIONS') return res.status(204).end();
     // the copy keeps its own store and is already open to the site's own header: /mcp/copy is the way in for tests there
     const copyDoor = SANDBOX && req.params.key === 'copy' && req.get('x-the-way-app') === '1';
     if (!copyDoor) {
       if (!keySet()) return res.status(503).send('The connector is off: WAY_MCP_KEY is not set.');
-      if (!keyOK(req.params.key)) return res.status(401).send('Unauthorized');
+      if (!keyOK(keyFrom(req))) return res.status(401).send('Unauthorized');
     }
     if (req.method !== 'POST') return res.status(405).set('Allow', 'POST, OPTIONS').end();
     const msg = req.body; if (!msg || typeof msg !== 'object') return res.status(400).json(rpcErr(null, -32700, 'Parse error'));
     const base = baseOf(req);
     if (Array.isArray(msg)) { const out = (await Promise.all(msg.map(x => handle(x, base)))).filter(x => x != null); return out.length ? res.json(out) : res.status(202).end(); }
     const out = await handle(msg, base); return out == null ? res.status(202).end() : res.json(out);
-  });
+  };
+  app.all('/mcp', serve); app.all('/mcp/:key', serve);
 }
 module.exports = { attach, tools, callTool, handle, blank, sessionDiff, mondayOf };

@@ -23,6 +23,10 @@ const KEY = 'stand-in-key-0123456789abcdef';
     assert.strictEqual((await post('wrong-key-0123456789abcdefgh', { jsonrpc: '2.0', id: 1, method: 'ping' })).status, 401);
     assert.strictEqual((await post('copy', { jsonrpc: '2.0', id: 1, method: 'ping' }, { 'x-the-way-app': '1' })).status, 401);
     assert.strictEqual((await fetch(`http://127.0.0.1:${port}/mcp/${KEY}`)).status, 405);
+    // the key in a header instead of the address: the same door
+    const hdr = async h => (await fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST', headers: Object.assign({ 'Content-Type': 'application/json' }, h), body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'ping' }) })).status;
+    assert.strictEqual(await hdr({}), 401); assert.strictEqual(await hdr({ Authorization: 'Bearer wrong-key-0123456789abcdefgh' }), 401);
+    assert.strictEqual(await hdr({ Authorization: 'Bearer ' + KEY }), 200); assert.strictEqual(await hdr({ 'x-way-key': KEY }), 200);
     const init = await post(KEY, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
     assert.strictEqual(init.j.result.serverInfo.name, 'the-way'); assert.strictEqual(init.j.result.protocolVersion, '2025-06-18'); assert.ok(/source of truth/.test(init.j.result.instructions));
     assert.strictEqual((await post(KEY, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '1999-01-01' } })).j.result.protocolVersion, '2025-06-18');
@@ -83,9 +87,17 @@ const KEY = 'stand-in-key-0123456789abcdef';
     assert.strictEqual(a1.changed.added.length, 1); assert.strictEqual(a1.changed.added[0].time, '10:00'); assert.strictEqual(a1.changed.added[0].minutes, 60); assert.strictEqual(a1.changed.added[0].time_12h, '10:00a');
     const a2 = await good('move_workout', { date: day, name: 'Connector test', new_date: next, time: '16:30' });
     assert.strictEqual(a2.changed.changed.length, 1); assert.deepStrictEqual([a2.changed.changed[0].before.date, a2.changed.changed[0].before.time], [day, '10:00']); assert.deepStrictEqual([a2.changed.changed[0].after.date, a2.changed.changed[0].after.time], [next, '16:30']);
-    await bad('move_workout', { date: next, name: 'Connector test' }, /Say what to change/); await bad('move_workout', { date: tz.shiftKey(today, 40), time: '10:00' }, /No planned session/);
+    await bad('move_workout', { date: next, name: 'Connector test' }, /Say what to change/); await bad('move_workout', { date: tz.shiftKey(today, 40), time: '10:00' }, /No planned session/); await bad('move_workout', { date: next, name: 'Nonesuch', time: '10:00' }, /Nothing on .* is called/);
     const a3 = await good('remove_workout', { date: next, name: 'Connector test' }); assert.strictEqual(a3.changed.removed.length, 1); assert.strictEqual(a3.changed.removed[0].name, 'Connector test ride');
     await bad('remove_workout', { date: next, name: 'Connector test' }, /No planned session/); await bad('remove_workout', {}, /date is needed/);
+    // two rides of one name on a day (a base day): never guessed between; the id or the time it is on says which
+    const b1 = (await good('schedule_workout', { date: day, time: '09:00', name: 'Connector twin', sport: 'Ride', minutes: 60 })).changed.added[0];
+    const b2 = (await good('schedule_workout', { date: day, time: '15:00', name: 'Connector twin', sport: 'Ride', minutes: 60 })).changed.added[0];
+    await bad('move_workout', { date: day, name: 'Connector twin', time: '16:00' }, /2 sessions .* fit that.*session_id/);
+    const c1 = await good('move_workout', { date: day, name: 'Connector twin', at: '15:00', time: '16:00' }); assert.strictEqual(c1.changed.changed.length, 1); assert.strictEqual(c1.changed.changed[0].after.id, b2.id); assert.strictEqual(c1.changed.changed[0].after.time, '16:00');
+    const c2 = await good('move_workout', { date: day, session_id: b1.id, time: '09:30' }); assert.strictEqual(c2.changed.changed[0].after.id, b1.id); assert.strictEqual(c2.changed.changed[0].after.time, '09:30');
+    await bad('remove_workout', { date: day, session_id: 'w_000000000000' }, /No session w_000000000000/); await bad('move_workout', { date: day, name: 'Connector twin', at: '11:11', time: '12:00' }, /Nothing at 11:11a/);
+    assert.strictEqual((await good('remove_workout', { date: day, session_id: b2.id })).changed.removed[0].id, b2.id); assert.strictEqual((await good('remove_workout', { date: day, name: 'twin' })).changed.removed[0].id, b1.id);
 
     // ── food: refused before anything is read or written ──
     await bad('log_meal', { text: '  ' }, /text is needed/); await bad('log_meal', { text: 'rice', time: '7pm' }, /24-hour/); await bad('log_meal', { text: 'rice', date: tz.shiftKey(today, 1) }, /today or one of the last seven/);
@@ -100,8 +112,8 @@ const KEY = 'stand-in-key-0123456789abcdef';
     assert.ok((await call('delete_everything', {})).isError);
     console.log('the way connector: ok');
   } finally {
-    for (const k of Object.keys(keep)) { if (keep[k] != null) await setJSON(k, keep[k]); }
-    try { const W = require('./wellness'); if (!keep['wellness-manual']) await W.remove(today); } catch (e) { /* nothing to take back */ }
+    const EMPTY = { 'weigh-in': { entries: [] }, 'wellness-manual': { days: {} }, 'voice-notes': { notes: [] }, 'coach-notebook': { notes: [] }, 'plan-workouts': { workouts: {} } };
+    for (const k of Object.keys(keep)) await setJSON(k, keep[k] != null ? keep[k] : EMPTY[k]);
     srv.close();
   }
   process.exit(0);   // the app keeps timers of its own
