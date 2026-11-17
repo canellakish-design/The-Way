@@ -28,7 +28,7 @@ const fail = m => { fails.push(m); console.log('FAIL ' + m); };
     for (const m of meals) {
       if (m.slot === 'on the bike' || (m.logged || []).length) continue;   // the bottle is the ride; a logged meal is where he ate it
       if (m.seam) continue;   // packed, eaten at the field between two back-to-back games
-      const t = toMin(m.time), hit = blocks.find(b => t < b.e && t + (m.gap_snack ? 15 : 30) > b.s);   // the added shake is a quarter hour
+      const t = toMin(m.time), hit = blocks.find(b => t < b.e && t + (m.gap_snack || m.quick ? 15 : 30) > b.s);   // the added shake is a quarter hour
       if (hit) fail(`${d.date}: ${m.slot} at ${hm(t)} is inside "${hit.name.slice(0, 40)}"`);
     }
     // a meal "before" a session is before one: a training session starts after it
