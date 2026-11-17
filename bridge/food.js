@@ -23,7 +23,7 @@ const { getJSON, setJSON } = require('./storage');
 const { auth, logMeal } = require('./fuel-log');
 const tz = require('./tz');
 // what the meal placer took as busy for a day, for the push check to read (scripts/smoke.js): GET /food/day?busy=1
-const BUSY_SEEN = {}, BUSY_ERR = {}, EV_SEEN = {};
+const BUSY_SEEN = {}, BUSY_ERR = {};
 const F = require('./food-math');
 const W = require('./workout-math');
 const MI = require('./micro-math');
@@ -336,7 +336,6 @@ async function guidelinesFor(date) {
         // a meal waits only for what keeps his hands busy: driving, classes, a game from its warm-up, travel. His own
         // desk blocks (Cycle 3 Planning) and the hour at the field before warm-ups are times he can eat (Harry, 13 Nov:
         // "lunch" had drifted to 5:45p behind a planning block, the drive, the game and the ride)
-        EV_SEEN[date] = (ev || []).filter(e => e && String(e.start || e.date || '').slice(0, 10) >= tz.shiftKey(date, -1)).map(e => ({ s: String(e.summary || '').slice(0, 40), c: e.category, start: e.start || e.date, allDay: !!e.allDay, sm: e.start_min })).slice(0, 60);
         busy = require('./dayplan').blocksOf(ev, { date, eat: true, categories: new Set(['coaching', 'work', 'travel', 'commute']) })
           .map(b => Object.assign(b, { name: String(b.name || '').replace(/^U\d{2} G MARYLAND UNITED ECNL - /i, '').replace(/^\(CP\)\s*/, '').replace(/^Bethesda Premier Cup: /, '').replace(/ · \d+ min.*$/, '').slice(0, 40) }));
       } catch (e) { busy = []; BUSY_ERR[date] = String(e && e.message || e).slice(0, 160); }
@@ -924,7 +923,7 @@ function attach(app) {
 
   app.get('/food/day', async (req, res) => { if (!auth(req, res)) return;
     try { const date = isDate(req.query.date) ? req.query.date : tz.todayKey(), r = await dayReport(date);
-      res.json(req.query.busy ? Object.assign({}, r, { busy_seen: BUSY_SEEN[date] || null, busy_error: BUSY_ERR[date] || null, events_seen: EV_SEEN[date] || null }) : r); }
+      res.json(req.query.busy ? Object.assign({}, r, { busy_seen: BUSY_SEEN[date] || null, busy_error: BUSY_ERR[date] || null }) : r); }
     catch (e) { res.status(500).json({ error: e.message }); } });
 
   app.get('/food/guidelines', async (req, res) => { if (!auth(req, res)) return;

@@ -621,7 +621,10 @@ async function eventsBetween(firstKey, lastKey) {
   const localEvents = (d.local_events || []).map(e => ({ ...e, category: classify(e.summary, d.manual, null) }));
   const liveEvents = applyOverrides((d.events || []).concat(icsEvents, localEvents), d.overrides);
   const covered = new Set(liveEvents.map(e => String(e.start || e.date).slice(0, 10)));
-  const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered);
+  // the snapshot's events are categorised here as the Day page's read does (scheduleReport): without it his classes,
+  // which come from the snapshot, had no category for anything that reads through here, so the meal placer did not
+  // know a class was in the way (17 Nov 2026: Friday's breakfast planned at 8:30a, inside first period)
+  const snapEvents = require('./snapshot').eventsInRange(firstKey, lastKey, covered).map(e => ({ ...e, category: e.category || classify(e.summary, d.manual, calendarCategory(e.calendar)) }));
   // the drive to McDonogh and home on class days (commute.js)
   // what he is going to (attend.js): the rest stays as information, blocking nothing
   const A = await require('./attend').load().catch(() => null);

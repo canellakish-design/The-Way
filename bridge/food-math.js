@@ -330,7 +330,7 @@ function placeSnacks(meals, opts) {
     // it folds into the meal before it. It is never left inside something.
     if (nt == null && !D.freeAt(t, 30, busy) && !isMain(m)) {
       const q = D.nearestFree(t, 15, busy, Math.max(wake, prev ? mmin(prev) + 30 : wake), bed);
-      if (q != null) nt = q;
+      if (q != null) { nt = q; m.quick = true; }   // a quarter hour: the push check reads it so
       else if (prev) { prev.kcal = (prev.kcal || 0) + (m.kcal || 0); prev.carbs_g = (prev.carbs_g || 0) + (m.carbs_g || 0); prev.protein_g = (prev.protein_g || 0) + (m.protein_g || 0);
         prev.what = `${String(prev.what || '').replace(/\s*$/, '')} This carries the ${m.slot} too: there is no free time for one later.`.trim(); m._folded = true; continue; }
     }
