@@ -783,7 +783,8 @@ async function addPhoto(body) {
   const g = await guidelinesFor(date);
   const meal = MEAL_WORDS.includes(body.meal) ? body.meal : null;
   const notes = body.notes ? String(body.notes).slice(0, 300) : '';
-  const nowHM = hmNow();
+  // a meal told after the fact (the connector, 17 Nov 2026) goes in at the time it was eaten, earlier today, so its slot is chosen for that time
+  const nowHM = /^([01]\d|2[0-3]):[0-5]\d$/.test(body.time || '') && body.time <= hmNow() ? body.time : hmNow();
   // The slot is chosen once, here, from the rows the day shows this minute (after 8 p.m. with dinner
   // open, a meal is dinner), and the coach is told it, so the verdict, the card and the Day row agree.
   let pick = { slot: null, row: null };
@@ -813,6 +814,8 @@ async function addPhoto(body) {
     micros: null, micros_matched_pct: null, micros_unknown: [],
     fluid_ml: Math.max(0, Math.min(3000, Math.round(a.fluid_ml || 0))), drink: String(a.drink || '').slice(0, 40) || null
   };
+  // his own numbers (a label, a scale, another app) are stored as given, over the reader's
+  if (body.given && typeof body.given === 'object') { let any = false; for (const k of ['kcal', 'carbs_g', 'protein_g', 'fat_g']) { const v = Number(body.given[k]); if (body.given[k] != null && Number.isFinite(v) && v >= 0) { entry[k] = Math.round(v); any = true; } } if (any) { entry.confidence = 'high'; entry.given = true; } }
   // Nothing was eaten or drunk: words that were a question or a remark, not food (Harry, 14 Nov 2026: "Question about
   // your lunch score (no new food)" was saved into his lunch at 0 kcal). Words alone that read as no food are never
   // saved; a photo always is.

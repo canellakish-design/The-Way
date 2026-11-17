@@ -491,7 +491,7 @@ async function run(a, x) {
         if (twin) return { ok: false, summary: `Already in the journal at ${tz.hm12(twin.time)}: ${twin.name}. Not logged again; say "another ${String(a.text).slice(0, 30)}" if it was more.` }; }
       // a question or a remark is never a meal (food.js refuses words with nothing eaten in them)
       // with a photo in the turn, the reader sees the plate itself, not only the coach's words for it
-      let e; try { e = await food.addPhoto({ text: a.text, meal: a.meal || undefined, images: x && x.images && x.images.length ? x.images : x && x.image ? [x.image] : undefined }); }
+      let e; try { e = await food.addPhoto({ text: a.text, meal: a.meal || undefined, images: x && x.images && x.images.length ? x.images : x && x.image ? [x.image] : undefined, time: x && x.time, given: x && x.given }); }
       catch (err) { if (err && err.not_food) return { ok: false, type: 'question', summary: 'Nothing logged: that was a question, not food.' }; throw err; }
       // a meal that lands on the plan (green against its slot) is worth a cheer on the page
       let celebrate = false, slot = null;

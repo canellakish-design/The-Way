@@ -144,7 +144,7 @@ async function getRecovery(base) {
       nights: (s.nights || []).map(x => Object.assign({ date: x.date, hours: x.hours, score: x.score }, x.manual ? { entered_by_hand_from: x.manual } : {})),
       magnesium: s.rx ? s.rx.magnesium : null };
     if (!n) out.sleep.note = 'last night has not reached the site yet'; }
-  if (p.scores && p.scores.recovery && out.recovery && out.recovery.today_has_a_reading) out.recovery.this_morning = pick(p.scores.recovery, ['hrv', 'hrv_baseline', 'hrv_delta_pct', 'rhr', 'rhr_baseline', 'resp', 'spo2', 'sleep_h', 'sleep_performance']);
+  if (p.scores && p.scores.recovery && out.recovery && out.recovery.today_has_a_reading) { const m = pick(p.scores.recovery, ['hrv', 'hrv_baseline', 'hrv_delta_pct', 'rhr', 'rhr_baseline', 'resp', 'spo2', 'sleep_h', 'sleep_performance']); Object.keys(m).forEach(k => { if (typeof m[k] === 'number') m[k] = Math.round(m[k] * 10) / 10; }); out.recovery.this_morning = m; }
   if (p.sleep_window) out.sleep_window = pick(p.sleep_window, ['bed_hm', 'wake_hm', 'hours', 'earliest_workout_hm']);
   if (p.naps) out.naps_today = (p.naps.naps || []).map(n => pick(n, ['time', 'minutes']));
   if (p.missed.length) out.could_not_read = p.missed;
@@ -156,7 +156,7 @@ async function getWeight(base) {
   return { latest: w.latest ? Object.assign(pick(w.latest, ['lb', 'at', 'source']), { weighed_today: !!w.latest.logged_today }) : null,
     seven_day_mean_lb: w.ma7_lb, trend_lb_a_week: w.trend_lb_wk, week_change_lb: w.week_change_lb, direction: w.direction ? w.direction.word : null,
     start_lb: w.start_lb, change_since_start_lb: w.change_since_start_lb, composition: w.composition || null, readings_last_7_days: w.readings_7d,
-    scale_connected: !!w.withings_connected, readings: (w.all || []).slice(-30) };
+    scale_connected: !!w.withings_connected, readings: (w.all || []).slice(-30).map(r => ({ date: r.ts ? tz.keyOf(new Date(r.ts)) : r.date || null, lb: r.lb })) };
 }
 
 async function getFitness(base) {
@@ -214,23 +214,23 @@ async function logMeal(a, base) {
   if (dayNo(date) > dayNo(today) || dayNo(date) < dayNo(today) - 7) refuse('date must be today or one of the last seven days.');
   const given = {}; ['kcal', 'carbs_g', 'protein_g', 'fat_g'].forEach(k => { if (a[k] != null && a[k] !== '' && Number.isFinite(Number(a[k])) && Number(a[k]) >= 0) given[k] = Math.round(Number(a[k])); });
   const stated = Object.keys(given).length ? ` (${[given.kcal != null ? given.kcal + ' kcal' : null, given.carbs_g != null ? given.carbs_g + ' g carbs' : null, given.protein_g != null ? given.protein_g + ' g protein' : null, given.fat_g != null ? given.fat_g + ' g fat' : null].filter(Boolean).join(', ')}, as measured)` : '';
-  const out = await act({ type: a.kind === 'drink' ? 'drink' : 'meal', text: (text.slice(0, 560 - stated.length) + stated), meal: str(a.meal) }, base);
+  const sent = text.slice(0, 560 - stated.length) + stated;
+  // the same words sent again within twenty minutes are a retry, whatever time he said he ate: never a second entry
+  const twin = ((await F.dayDocFor(today)).entries || []).find(e => e.written === sent && Date.now() - Date.parse(e.at) < 20 * 60000);
+  if (twin) refuse(`Already in the journal (${twin.name}, ${tz.hm12(twin.time)}, logged a few minutes ago). Not logged again; change the words if it really was a second helping.`);
+  // his own numbers and the time he ate go in with the entry itself, so the meal is chosen for that time once
+  const out = await act({ type: a.kind === 'drink' ? 'drink' : 'meal', text: sent, meal: str(a.meal) }, base, { time: isTime(a.time) ? a.time : undefined, given: Object.keys(given).length ? given : undefined });
   const find = async d => ((await F.dayDocFor(d)).entries || []).find(e => e.id === out.entry_id) || null;
   let e = await find(today); if (!e) refuse('It was logged (' + out.summary + ') but the entry could not be read back.');
-  // his own numbers win over the reader's, and a meal eaten earlier goes to its own time and day: the Food page's own correction
-  const fix = {}; Object.keys(given).forEach(k => { if (Number(e[k]) !== given[k]) fix[k] = given[k]; });
-  if (Object.keys(fix).length) Object.keys(given).forEach(k => { fix[k] = given[k]; });   // all of his numbers together, so none is scaled from another
-  if (isTime(a.time) && a.time !== e.time) fix.time = a.time;
-  if (date !== today) fix.to_date = date;
-  let corrected = null;
-  if (Object.keys(fix).length) { const before = macros(e), t0 = e.time;
-    await site(base, '/food/' + encodeURIComponent(e.id), { method: 'PUT', body: Object.assign({ date: today }, fix), ms: 18000 });
-    e = (await find(date)) || e;
-    corrected = Object.assign({}, Object.keys(given).some(k => before[k] !== given[k]) ? { macros_read_from_the_words: before, macros_set_to_his: macros(e) } : {}, fix.time ? { time_from: t0, time_to: e.time } : {}, fix.to_date ? { moved_to: date } : {}); }
+  let moved = null;
+  if (date !== today) {   // eaten on an earlier day: the Food page's own move, which re-slots it into that day's plan
+    await site(base, '/food/' + encodeURIComponent(e.id), { method: 'PUT', body: Object.assign({ date: today, to_date: date }, isTime(a.time) ? { time: a.time } : {}), ms: 16000 });
+    e = (await find(date)) || e; moved = { moved_to: date }; }
+  const note = isTime(a.time) && a.time !== e.time ? { time_note: `logged at ${tz.hm12(e.time)}: a time later than now is not taken` } : {};
   const all = ((await F.dayDocFor(date)).entries || []).filter(x => !x.supplement);
   return { ok: true, summary: out.summary, changed: Object.assign({ added: entry(e), macros_are: Object.keys(given).length === 4 ? 'the numbers given' : Object.keys(given).length ? 'the numbers given, the rest read from the words' : 'read from the words by The Way' },
     e.plan ? { the_plan_for_that_meal: Object.assign(pick(e.plan, ['slot', 'time', 'kcal', 'carbs_g', 'protein_g']), { what: str(e.plan.what).slice(0, 200) }) } : {},
-    corrected ? { corrected } : {}, { day_logged_now: Object.assign(sumOf(all), { entries: all.length, date }) }) };
+    moved || {}, note, { day_logged_now: Object.assign(sumOf(all), { entries: all.length, date }) }) };
 }
 
 async function logWeight(a, base) {
