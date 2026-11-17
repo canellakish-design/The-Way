@@ -532,15 +532,18 @@ async function report() {
   return { wins: W.wins, wins_week: W.wins_week, slips: W.slips, order: ORDER, links, break_at: v.break_at, break_state: v.break_state || null, verdict: v.text, days: DAYS, read_days: readDays, fresh_start: FS, week_from: weekFrom };
 }
 
+// a compact copy of the chain for the advisor, which cannot afford the full read inside a turn; kept whenever the
+// chain is read in full (the page's GET, and the morning briefing's own read in coach-first.js)
+async function saveLast(r) { try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at, wins: r.wins || [], wins_week: r.wins_week || [],
+        links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null, unlogged: r.links[k].unlogged && r.links[k].unlogged.length ? r.links[k].unlogged : undefined }])) }); } catch (e) { /* no store */ } }
+
 function attach(app) {
   app.get('/chain', async (req, res) => { if (!auth(req, res)) return;
     try {
       const r = await report();
-      // a compact copy for the advisor, which cannot afford the full read inside a turn
-      try { await setJSON('chain-last', { at: Date.now(), verdict: r.verdict, break_at: r.break_at, wins: r.wins || [], wins_week: r.wins_week || [],
-        links: Object.fromEntries(ORDER.map(k => [k, { week: r.links[k].week, state: r.links[k].state, today: r.links[k].today, today_word: r.links[k].today_word || null, why: r.links[k].why || null, unlogged: r.links[k].unlogged && r.links[k].unlogged.length ? r.links[k].unlogged : undefined }])) }); } catch (e) { /* no store */ }
+      await saveLast(r);
       res.json(r);
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { movesOf, winsOf, ROW_V, fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };
+module.exports = { saveLast, movesOf, winsOf, ROW_V, fuelChecks, fuelScore, attach, report, macrosToday, planWeekLabel, verdict, stateOf, recoveryState, ORDER };

@@ -24,7 +24,18 @@ const DEFAULT_R = { wake: 390, bed: 1350 };
 // awake and not in the last hour before bed: the only minutes anything is sent
 const mayReach = (nowMin, R) => nowMin >= R.wake + 20 && nowMin <= R.bed - 60;
 // the morning briefing: from twenty minutes after waking until noon
-const morningDue = (nowMin, R, kept, today) => nowMin >= R.wake + 20 && nowMin < 12 * 60 && !(kept && kept.date === today);
+// It waits for last night to reach the site (the watch's sync, or his own morning numbers), up to two hours after
+// waking, and then goes without it. (17 Nov 2026: the first one went out at 6:50a, before the night had synced: it
+// called Sleep green on the old week and read yesterday's recovery as that morning's, which was 76.)
+const MORNING_WAIT_MIN = 120;
+const morningDue = (nowMin, R, kept, today, hasNight) => nowMin >= R.wake + 20 && nowMin < 12 * 60 && !(kept && kept.date === today)
+  && (hasNight === undefined || !!hasNight || nowMin >= R.wake + MORNING_WAIT_MIN);
+// last night is on the site: the chain has read it today (sleep-last), or he entered the morning himself
+async function nightIn(today) {
+  try { const s = await getJSON('sleep-last', null); if (s && s.date === today && s.hours != null) return true; } catch (e) { /* look on */ }
+  try { const w = await require('./wellness').all(); const d = w && w.days && w.days[today]; if (d && d.sleep_h != null) return true; } catch (e) { /* not in */ }
+  return false;
+}
 // the week a review is owed for, or null. Sunday from 6:00p (its own week); Monday morning until noon (the week just
 // ended) when Sunday's was missed. dow: 0 Sunday … 6 Saturday
 function reviewDue(today, dow, nowMin, R, kept) {
@@ -66,7 +77,7 @@ async function morning(force) {
   const kept = await getJSON('coach-morning', null);
   if (!force && kept && kept.date === today) return { kept: true };
   // the night and the chain are read first, so the briefing has this morning's numbers (chain.js keeps sleep-last)
-  await race(require('./chain').report(), 12000, null);
+  { const C = require('./chain'), r = await race(C.report(), 12000, null); if (r) await C.saveLast(r); }
   const V = require('./voice'); V.contextStale();
   const u = await V.understand('Give me my morning briefing.', [], MORNING);
   const text = String(u.reply || '').trim().slice(0, 700);
@@ -149,7 +160,13 @@ async function tick(now) {
   const R = await race(require('./sleep-window').get(), 2000, null) || DEFAULT_R;
   const out = { now: nowMin };
   if (!mayReach(nowMin, R)) return Object.assign(out, { quiet: true });
-  try { if (morningDue(nowMin, R, await getJSON('coach-morning', null), today)) out.morning = await morning(); } catch (e) { out.morning = { error: e.message }; }
+  try { const kept = await getJSON('coach-morning', null);
+    if (morningDue(nowMin, R, kept, today)) {
+      let has = await nightIn(today);
+      // not in yet: the chain is read every quarter of an hour, which pulls the watch's night when it has landed
+      if (!has && nowMin < R.wake + MORNING_WAIT_MIN && p.mi % 15 < 5) { await race(require('./chain').report(), 12000, null); has = await nightIn(today); }
+      out.morning = morningDue(nowMin, R, kept, today, has) ? await morning() : { waiting: 'last night has not reached the site yet' };
+    } } catch (e) { out.morning = { error: e.message }; }
   try { out.alerts = await alerts(nowMin); } catch (e) { out.alerts = { error: e.message }; }
   try { out.win = await win(); } catch (e) { out.win = { error: e.message }; }
   try { const week = reviewDue(today, dow, nowMin, R, await getJSON('coach-review', null));
@@ -182,4 +199,4 @@ function attach(app) {
     } catch (e) { res.status(500).json({ error: e.message }); } });
 }
 
-module.exports = { attach, tick, state, morning, alerts, review, reviewDone, alertsFor, mayReach, morningDue, reviewDue, reviewText, winDue, win };
+module.exports = { attach, tick, state, morning, alerts, review, reviewDone, alertsFor, mayReach, morningDue, reviewDue, reviewText, winDue, win, nightIn };

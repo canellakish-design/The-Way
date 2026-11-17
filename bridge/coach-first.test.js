@@ -18,6 +18,11 @@ ok('the morning briefing: once a day, from twenty minutes after waking until noo
   assert.strictEqual(F.morningDue(6 * 60 + 55, R, { date: '2026-11-16' }, '2026-11-16'), false);   // already written
   assert.strictEqual(F.morningDue(7 * 60, R, { date: '2026-11-15' }, '2026-11-16'), true);        // yesterday's does not count
   assert.strictEqual(F.morningDue(12 * 60, R, null, '2026-11-16'), false);                         // a day begun after noon gets none
+  // it waits for last night to reach the site, two hours at the most (17 Nov: it went out before the night had synced)
+  assert.strictEqual(F.morningDue(6 * 60 + 50, R, null, '2026-11-17', false), false);
+  assert.strictEqual(F.morningDue(7 * 60 + 20, R, null, '2026-11-17', true), true);
+  assert.strictEqual(F.morningDue(8 * 60 + 25, R, null, '2026-11-17', false), false);
+  assert.strictEqual(F.morningDue(8 * 60 + 30, R, null, '2026-11-17', false), true);              // two hours on: it goes without it
 });
 ok('the review: Sunday from 6:00p for its own week, Monday morning for the week just ended, once', () => {
   assert.strictEqual(F.reviewDue('2026-11-22', 0, 17 * 60 + 55, R, null), null);
