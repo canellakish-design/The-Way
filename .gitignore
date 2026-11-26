@@ -56,3 +56,6 @@ bridge/player-spike.json
 bridge/ride-v3-*.json
 bridge/thresholds.json
 bridge/fitness.json
+
+# Netlify CLI link state
+.netlify
