@@ -48,3 +48,11 @@ bridge/voice-notes.json
 bridge/voice-context.json
 bridge/wellness-manual.json
 bridge/signature.json
+
+# The player run locally (node bridge/server.js): its rides and settings, written by bridge/storage.js
+bridge/player-ride-*.json
+bridge/player-rides.json
+bridge/player-spike.json
+bridge/ride-v3-*.json
+bridge/thresholds.json
+bridge/fitness.json
