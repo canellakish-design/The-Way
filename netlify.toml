@@ -10,8 +10,8 @@
   to = "/.netlify/functions/api/:splat"
   status = 200
 
-# The copy of The Way: deploy previews (the copy is draft pull request 2, deploy-preview-2--thewayforward.netlify.app) run
-# on their own store, seeded from the real one, and never write to intervals.icu or Google Calendar.
+# Previews and branch deploys run on their own store and never upload a ride to intervals.icu (bridge/sandbox.js):
+# a test ride on a preview stays on the preview. Only the production site uploads.
 [context.copy.environment]
   THE_WAY_SANDBOX = "1"
 [context.deploy-preview.environment]

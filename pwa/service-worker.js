@@ -1,61 +1,19 @@
-// The Way — service worker v44. Network-first, and it only caches genuine
-// successes of the right content type.
-const SHELL = "the-way-shell-v337";   // bumped whenever the shell changes, so a held copy is dropped on activate
-const COACH = "the-way-coach-v1";   // the 3D coach's files: kept across shell updates
+// The Way player — service worker. Network-first; a copy of the page is kept for when the network drops, and only
+// genuine successes of the right content type are kept. (26 Nov 2026: the site is only the workout player; the
+// push reminders and the 3D coach's cache went with the rest of the site.)
+const SHELL = "the-way-player-v1";
 self.addEventListener("install", e => { self.skipWaiting(); });
 self.addEventListener("activate", e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== SHELL && k !== COACH).map(k => caches.delete(k)))
-  ).then(() => self.clients.claim()));
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim()));
 });
+const SHELL_PATHS = ["/", "/index.html", "/shell.js", "/fit.js", "/buckets.js", "/edge.js", "/player.js", "/player-test.html", "/styles.css", "/pages-player.css"];
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
-  // the 3D coach's engine and figure (2.6 MB): fetched once, then served from the phone, so he is there at once.
-  // Their ?v= names the version; a new one is a new address and is fetched afresh.
-  if (e.request.method === "GET" && u.origin === self.location.origin && (u.pathname === "/coach3d.js" || u.pathname === "/avatar/coach.glb")) {
-    e.respondWith(caches.open(COACH).then(c => c.match(e.request).then(hit => hit || fetch(e.request).then(r => {
-      if (r.ok && r.status === 200 && !(r.headers.get("content-type") || "").includes("html")) c.put(e.request, r.clone());
-      return r; }))));
-    return;
-  }
-  const shellPaths = ["/", "/index.html", "/splash.js", "/ptr.js", "/app.js", "/plan.js", "/food.js", "/links.js", "/ride.js", "/flags.js", "/races.js", "/face.js", "/fit.js", "/buckets.js", "/light.js", "/edge.js", "/player.js", "/styles.css", "/pages-app.css", "/pages-food.css", "/pages-ride.css", "/pages-calendar.css", "/pages-player.css"];
-  if (shellPaths.includes(u.pathname)) {
-    e.respondWith(fetch(e.request).then(r => {
-      // Only cache a real success. A 404 page, or the API function answering
-      // for /app.js during a bad deploy, would otherwise be cached and served
-      // as the app itself — a blank page that survives reloads.
-      const type = r.headers.get("content-type") || "";
-      const cacheable = r.ok && r.status === 200
-        && (/\.css$/.test(u.pathname) ? type.includes("css")
-          : (u.pathname === "/splash.js" || u.pathname === "/ptr.js" || u.pathname === "/app.js" || u.pathname === "/plan.js" || u.pathname === "/food.js" || u.pathname === "/links.js" || u.pathname === "/ride.js" || u.pathname === "/flags.js" || u.pathname === "/races.js" || u.pathname === "/face.js" || u.pathname === "/fit.js" || u.pathname === "/buckets.js" || u.pathname === "/light.js" || u.pathname === "/edge.js" || u.pathname === "/player.js") ? type.includes("javascript")
-          : type.includes("html"));
-      if (cacheable) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
-      return r;
-    }).catch(() => caches.match(e.request)));
-  }
-});
-
-// Reminders (bridge/push.js): each supplement and medicine at its time. "Taken" logs every item in the
-// notification without opening the app; tapping the notification itself (the only choice on an iPhone,
-// where notifications carry no buttons) opens a one-tap "Taken" page.
-const API = "/.netlify/functions/api";
-self.addEventListener("push", e => {
-  let p = {}; try { p = e.data ? e.data.json() : {}; } catch (err) { p = { title: "The Way", body: e.data ? e.data.text() : "" }; }
-  e.waitUntil(self.registration.showNotification(p.title || "The Way", {
-    body: p.body || "", tag: p.tag || "way", renotify: true, requireInteraction: true,
-    icon: "icon-192.png", badge: "icon-192.png",
-    data: { items: p.items || [], url: p.url || "/#today" },
-    actions: (p.items || []).length ? [{ action: "taken", title: "Taken" }] : []
-  }));
-});
-const logItem = it => fetch(API + (it.kind === "med" ? "/meds/taken" : "/food/supplement"), {
-  method: "POST", headers: { "Content-Type": "application/json", "x-the-way-app": "1" }, body: JSON.stringify({ key: it.key }) });
-self.addEventListener("notificationclick", e => {
-  const d = e.notification.data || {}; e.notification.close();
-  if (e.action === "taken"){ e.waitUntil(Promise.all((d.items || []).map(logItem)).catch(() => {})); return; }
-  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
-    const url = d.url || "/#today", open = list.find(c => "focus" in c);
-    if (open) return open.focus().then(c => (c && c.navigate) ? c.navigate(url) : c);
-    return self.clients.openWindow(url);
-  }));
+  if (e.request.method !== "GET" || u.origin !== self.location.origin || !SHELL_PATHS.includes(u.pathname)) return;
+  e.respondWith(fetch(e.request).then(r => {
+    const type = r.headers.get("content-type") || "";
+    const want = /\.css$/.test(u.pathname) ? "css" : /\.js$/.test(u.pathname) ? "javascript" : "html";
+    if (r.ok && r.status === 200 && type.includes(want)) { const copy = r.clone(); caches.open(SHELL).then(c => c.put(e.request, copy)); }
+    return r;
+  }).catch(() => caches.match(e.request)));
 });

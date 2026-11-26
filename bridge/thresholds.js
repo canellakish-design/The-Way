@@ -53,7 +53,7 @@ async function remove(date) {
 }
 
 function attach(app) {
-  const { auth } = require('./fuel-log');
+  const { auth } = require('./auth');
   app.get('/thresholds', async (req, res) => { if (!auth(req, res)) return;
     try { const d = await all(); res.json({ current: await current(), history: d.history, defaults: DEFAULTS }); }
     catch (e) { res.status(500).json({ error: e.message }); } });

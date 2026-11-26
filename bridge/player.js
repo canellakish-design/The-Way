@@ -1,12 +1,13 @@
 // The workout player (docs/workout-player-spec.md, player v1). The page is pwa/player.js (#player).
 //   GET  /player/session/:id     the workout to ride: its steps as a flat list of intervals in watts at the
 //   GET  /player/session/today   planning FTP, and the ride's fuel slots from the day's food plan
-//   POST /player/ride            { summary, samples, fit_base64, raw } -> the ride is kept here (it counts on
-//                                Day and Calendar at once) and its FIT goes to intervals.icu -> { ok, stored, intervals_id | error }
+//   POST /player/ride            { summary, samples, fit_base64, raw } -> the ride is kept here first, then its FIT
+//                                goes to intervals.icu, paired with the planned event -> { ok, stored, intervals_id | error }
+// Since 26 Nov 2026 the site is only the player: the workouts come from the intervals.icu calendar (icu-workouts.js).
 //   POST /player/spike, GET /player/spike   the trainer test page's findings (pwa/player-test.html)
 // A ride's id is its start time in ms: numeric, because the ride caches key on String(id).replace(/\D/g, '').
 const { getJSON, setJSON } = require('./storage');
-const { auth } = require('./fuel-log');
+const { auth } = require('./auth');
 const tz = require('./tz');
 const W = require('./workout-math');
 const R = require('./ride-math');
@@ -57,23 +58,25 @@ function fuelSlots(meals, time) {
 
 async function sessionFor(id) {
   const st = W.settingsOf(await getJSON('workout-settings', W.DEFAULTS));
-  const all = Object.values((await getJSON('plan-workouts', { workouts: {} })).workouts || {});
   const today = tz.todayKey();
+  // today's rides as planned in intervals.icu (bridge/icu-workouts.js), and any still kept on the site itself
+  let icu = [], icuError = null;
+  try { icu = await require('./icu-workouts').ridesOn(today, st); } catch (e) { icuError = e.message; }
+  const all = Object.values((await getJSON('plan-workouts', { workouts: {} })).workouts || {}).concat(icu);
   const todays = all.filter(w => w.date === today && isRide(w)).sort((a, b) => (a.time || '99') < (b.time || '99') ? -1 : 1);
   let w;
   if (id === 'today') {
     // today's next ride: the first whose end has not passed, else the day's last
     const p = tz.parts(new Date()), now = p.h * 60 + p.mi;
     w = todays.find(x => toMin(x.time) == null || toMin(x.time) + Math.round(W.metrics(x.steps || [], st).duration_s / 60) > now) || todays[todays.length - 1] || null;
-    if (!w) { const BK = require('./buckets'); const L = await BK.currentLines(today); return { workout: null, settings: st, choices: [], date: today, lines: BK.pick(L), colours: Object.assign({}, BK.COLOURS), buckets_plan: null }; }
+    if (!w) { const BK = require('./buckets'); const L = await BK.currentLines(today); return { workout: null, settings: st, choices: [], date: today, lines: BK.pick(L), colours: Object.assign({}, BK.COLOURS), buckets_plan: null, intervals_error: icuError }; }
   } else {
     w = all.find(x => x.id === id);
     if (!w) { const e = new Error('no such workout'); e.status = 404; throw e; }
   }
   const intervals = expand(w.steps || [], st);
   const m = W.metrics(W.normItems(w.steps || []), st);
-  let fuel = [];
-  try { const g = await require('./food').guidelinesFor(w.date); fuel = fuelSlots(g.meals, w.time); } catch (e) { fuel = []; }
+  const fuel = [];   // the food plan is no longer on the site (26 Nov 2026): no fuel cues from it
   // the lines: the thresholds store (a Tymewear test entered by hand, bridge/thresholds.js) when it holds one;
   // else a ramp test on the fitness page; else Tymewear's of 14 Aug 2026, the store's defaults
   const BK = require('./buckets');
@@ -215,7 +218,8 @@ async function ridesBetween(from, to) {
 function attach(app) {
   app.get('/player/session/:id', async (req, res) => { if (!auth(req, res)) return;
     // with the signature, so the player follows Maximal Power Available and calls a breakthrough as it happens
-    try { const [s, sig] = await Promise.all([sessionFor(req.params.id === 'today' ? 'today' : String(req.params.id)), require('./signature').forRide(4000)]); res.json(Object.assign({}, s, { signature: sig })); }
+    // (Maximal Power Available, signature.js, read the ride history from Strava and the old site: not on the player-only site)
+    try { res.json(Object.assign({}, await sessionFor(req.params.id === 'today' ? 'today' : String(req.params.id)), { signature: null })); }
     catch (e) { res.status(e.status || 500).json({ error: e.message }); } });
 
   app.post('/player/ride', async (req, res) => { if (!auth(req, res)) return;

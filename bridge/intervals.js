@@ -8,7 +8,7 @@
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const tz = require('./tz');
-const { auth } = require('./fuel-log');
+const { auth } = require('./auth');
 
 // Credentials pasted into a hosting dashboard pick up stray whitespace,
 // newlines and sometimes the quotes around them. Providers then reject the

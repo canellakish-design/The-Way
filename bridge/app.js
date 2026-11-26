@@ -1,84 +1,27 @@
-// The Way — Express app (shared by server.js locally and the Netlify
-// Function in production). No listen() here.
+// The Way — the workout player's bridge (Express, shared by server.js locally and the Netlify Function in
+// production). No listen() here.
+// Since 26 Nov 2026 The Way is only the workout player, and free: Harry plans, logs and is coached inside Claude.
+// The workouts come from intervals.icu, the finished ride goes back to intervals.icu. Everything else the site
+// used to do (the Day, Calendar, Food, the coaches, the logs) was taken off; it is all in git history.
 const express = require('express');
 const path = require('path');
-require('./sandbox');   // the copy of the site never writes outside itself
-require('./free-guard');   // no paid service is ever called: The Way runs free (free-guard.js)
-const { ON_NETLIFY, SANDBOX, withScope } = require('./storage');
+require('./sandbox');      // a preview never writes outside itself (no upload to intervals.icu from a preview)
+require('./free-guard');   // no paid service is ever called (free-guard.js)
+const { ON_NETLIFY, SANDBOX, withScope, getJSON, setJSON } = require('./storage');
+const W = require('./workout-math');
+const { auth } = require('./auth');
 const app = express();
 app.use(express.json({ limit: '15mb' }));
-// a page read (GET) reads each blob once, however many places ask for it (storage.js)
 app.use((req, res, next) => (req.method === 'GET' ? withScope(next) : next()));
-// anything written anywhere (a meal logged on the Food page, a weigh-in, a set saved) makes the coach's kept read of the
-// day out of date: it is dropped, so his next answer reads the day fresh (voice.js). The connector (mcp.js) drops it itself,
-// after a write only: its reads change nothing.
-app.use((req, res, next) => { if (req.method !== 'GET' && !/^\/(voice|mcp)(\/|$)/.test(req.path.replace(/^\/\.netlify\/functions\/api/, ''))) { try { require('./voice').contextStale(); } catch (e) { /* it ages out */ } } next(); });
 app.get('/sandbox', (req, res) => res.json({ sandbox: !!SANDBOX }));
-require('./fuel-log').attach(app);
-require('./plan').attach(app);
-require('./weather').attach(app);
-require('./courses').attach(app);
-require('./chain').attach(app);
-require('./player').attach(app);
-require('./race').attach(app);
-require('./whoop').attach(app);
-require('./calendar').attach(app);
-require('./ics').attach(app);
-require('./intervals').attach(app);
-// The plan: workouts authored here, sent to the Garmin through intervals.icu,
-// and the week calendar that puts planned next to done.
-require('./workouts').attach(app);
-// The front page: Training, Recovery, Fatigue.
-require('./scores').attach(app);
-// Food: the journal, scored against the day's guidelines (logged by words and numbers; the photo reader is gone).
-require('./food').attach(app);
-// Every ride, read: heart rate and breathing from the streams.
-require('./rides').attach(app);
-require('./flags').attach(app);
-// voice.js keeps the actions the connector runs (run, SCHEMA); its talking coach, which called Claude, is gone.
-require('./macros').attach(app);
-require('./intake').attach(app);
-require('./status').attach(app);
-require('./weighin').attach(app);
-require('./fitness').attach(app);
-require('./zone-report').attach(app);
-require('./places').attach(app);
-require('./wellness').attach(app);
-require('./progress').attach(app);
-require('./audit').attach(app);
-require('./signature').attach(app);
-require('./lifts').attach(app);
-require('./strava').attach(app);
-require('./garmin').attach(app);
-require('./thresholds').attach(app);
-require('./fresh-start').attach(app);
-require('./body').attach(app);
-require('./energy-meter').attach(app);
-require('./sleep-window').attach(app);
-require('./commute').attach(app);
-require('./attend').attach(app);
-require('./pack').attach(app);
-require('./suggest').attach(app);
-require('./where').attach(app);
-require('./naps').attach(app);
-require('./history').attach(app);
-require('./races').attach(app);
-require('./routes').attach(app);
-require('./planner').attach(app);
-require('./dayplan').attach(app);
-require('./meds').attach(app);
-require('./push').attach(app);
-require('./nights').attach(app);
-require('./print').attach(app);
-// The Way as a connector for Claude sessions and projects (bridge/mcp.js): off until WAY_MCP_KEY is set.
-require('./mcp').attach(app);
-// The scale runs on the storage layer now, so it works hosted too. It used to
-// sit in the local-only block below, which meant /withings/auth was a 404 on
-// the deployed site — you could never connect the scale to the real app.
-require('./withings-weight').attach(app);
-// Local-only extras: static PWA + podcast cache need a real disk.
-if (!ON_NETLIFY) {
-  try { require('./podcasts')(app); } catch (e) {}
-  app.use(express.static(path.join(__dirname, '..', 'pwa')));
-}
+app.get('/status', (req, res) => res.json({ ok: true, app: 'the-way-player', sandbox: !!SANDBOX }));
+// The planning numbers the player rides at: FTP 175, LTHR 139 unless Harry changes them (only he does).
+app.get('/workouts/settings', async (req, res) => { if (!auth(req, res)) return; res.json(W.settingsOf(await getJSON('workout-settings', W.DEFAULTS))); });
+app.put('/workouts/settings', async (req, res) => { if (!auth(req, res)) return;
+  const st = W.settingsOf(Object.assign({}, await getJSON('workout-settings', W.DEFAULTS), req.body || {}));
+  await setJSON('workout-settings', st); res.json(st); });
+require('./player').attach(app);       // the session to ride, the finished ride, the trainer test page's findings
+require('./intervals').attach(app);    // /intervals/ping and /intervals/status: is intervals.icu connected
+require('./thresholds').attach(app);   // the Tymewear lines (VT1, VT2) the player's zones are drawn from
+if (!ON_NETLIFY) app.use(express.static(path.join(__dirname, '..', 'pwa')));
 module.exports = app;

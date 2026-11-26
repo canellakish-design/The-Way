@@ -3,7 +3,6 @@
 const assert = require('assert');
 const FIT = require('../pwa/fit.js');
 const P = require('./player');
-const { playerRideAsDone, dedupeRides, gradeOne } = require('./workouts');
 
 let n = 0;
 function ok(name, fn) { fn(); n++; console.log('ok ' + name); }
@@ -97,38 +96,18 @@ ok('expand: repeats laid out in order, % of FTP as watts at 175, HR and free ste
   assert.strictEqual(x[8].kind, 'free'); assert.strictEqual(x[8].label, 'Ride by feel');
 });
 
-ok('fuel: the "before" meal ahead of this ride and its bottle, not the evening ride\'s', () => {
-  const meals = [{ slot: 'breakfast', time: '07:30' }, { slot: 'before', time: '10:30', what: 'Banana', carbs_g: 30 }, { slot: 'on the bike', time: '12:00', what: 'Bottle', carbs_g: 40 },
-    { slot: 'before', time: '16:30', what: 'Toast' }, { slot: 'on the bike', time: '18:00', what: 'Bottle 2' }];
-  assert.deepStrictEqual(P.fuelSlots(meals, '12:00').map(m => m.what), ['Banana', 'Bottle']);
-  assert.strictEqual(P.fuelSlots(meals, null).length, 4);
-});
-
-ok('a player ride on the Calendar: the Strava shape, load from NP at FTP 175, Zone 1 minutes from the strap', () => {
+ok('a finished ride as the site keeps it: summary from the samples, Zone 1 from the strap', () => {
   const ride = fakeRide();
   const S = P.cleanSamples({ t: ride.samples.map((s, k) => k), p: ride.samples.map(s => s.power), c: ride.samples.map(s => s.cadence),
     h: ride.samples.map(s => s.hr), s: ride.samples.map(s => s.speed), i: ride.samples.map(s => s.i) });
   const sum = P.summarize({ start_ms: ride.startMs, name: 'Zone 1, 10 min', workout_id: 'w_abc', ftp: 175 }, S);
   assert.strictEqual(sum.id, ride.startMs); assert.strictEqual(sum.date, '2026-11-03'); assert.strictEqual(sum.time, '07:00');   // noon UTC is 7:00a Eastern
   assert.strictEqual(sum.seconds, 600); assert.strictEqual(sum.max_hr, 140);
-  const r = playerRideAsDone(Object.assign({}, sum, { intervals_id: 'i99' }), { ftp: 175, lthr: 139, hr_rest: 55 });
-  assert.strictEqual(r.type, 'VirtualRide'); assert.strictEqual(r.source, 'player'); assert.strictEqual(r.device_watts, true);
-  assert.strictEqual(r.minutes, 10); assert.strictEqual(r.np_w, sum.np_w); assert.ok(r.avg_w > 150 && r.avg_w < 170);
-  assert.strictEqual(r.tss, Math.round(600 / 3600 * Math.pow(sum.np_w / 175, 2) * 100)); assert.strictEqual(r.tss_basis, 'power');
-  assert.strictEqual(r.avg_hr, sum.avg_hr); assert.strictEqual(r.max_hr, 140); assert.strictEqual(r.workout_id, 'w_abc');
-  // the analysis the Calendar reads: heart rate 116 and under is Zone 1 (the zone function rides.js uses)
   const a = P.analysisOf(sum, S, 175);
   assert.strictEqual(a.hr.seconds, 599);
   const under = S.h.filter(v => v != null && v <= 116).length;
   assert.strictEqual(a.hr.zone_pct.z1, Math.round(under / 599 * 100));
   assert.ok(a.power && a.power.np > 0); assert.ok(a.sources.hr.includes('player'));
-  // a Garmin copy of the same ride with no power folds into the player's
-  const twin = { id: 1, date: r.date, time: '07:01', name: 'Indoor Cycling', type: 'VirtualRide', minutes: 10, avg_w: null, avg_hr: 120 };
-  const kept = dedupeRides([twin, r]);
-  assert.strictEqual(kept.length, 1); assert.strictEqual(kept[0].source, 'player'); assert.strictEqual(kept[0].twin.id, 1);
-  // graded against its planned session as any ride is
-  const g = gradeOne({ name: 'Zone 1, 10 min', metrics: { duration_s: 600, tss: r.tss } }, [Object.assign({}, r, { analysis: { hr: a.hr } })]);
-  assert.strictEqual(g.compliance.pct, 100);
 });
 
 console.log(n + ' passed');

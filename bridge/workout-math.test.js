@@ -1,7 +1,6 @@
 // node bridge/workout-math.test.js
 const assert = require('assert');
 const W = require('./workout-math');
-const { LIBRARY } = require('./workout-library');
 const st = { ftp: 175, lthr: 139, hr_rest: 55 };
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok', name); };
 
@@ -59,17 +58,5 @@ ok('zwo: steady states, ramps, IntervalsT for simple on/off repeats', () => {
   assert.ok(z.includes('<Ramp Duration="900" PowerLow="0.500" PowerHigh="0.800"/>'));
   assert.ok(z.includes('<IntervalsT Repeat="13" OnDuration="30" OffDuration="15" OnPower="1.371" OffPower="0.629"/>'));
   assert.ok(z.includes('<name>A &amp; B</name>'));
-});
-ok('library: every template normalises, and the session lengths are right', () => {
-  const byKey = Object.fromEntries(LIBRARY.map(t => [t.key, W.metrics(W.normItems(t.steps), st)]));
-  // Four kinds of session: Zone 1, VO2 40/20s, mountain bike handling, lifting.
-  assert.deepStrictEqual([...new Set(LIBRARY.map(t => t.key.split('-')[0]))], ['z1', 'vo2', 'mtb', 'lift']);
-  assert.strictEqual(byKey['z1-60'].duration_s, 60 * 60); assert.ok(!byKey['z1-45'], 'no 45-minute Zone 1');
-  assert.strictEqual(byKey['z1-150'].duration_s, 150 * 60);
-  // Zwift's 40/20's #1 is 50 min
-  assert.strictEqual(byKey['vo2-4020'].duration_s, 50 * 60 + 50);
-  assert.strictEqual(byKey['mtb-60'].duration_s, 60 * 60);
-  for (const t of LIBRARY) assert.ok(/EAT/.test(t.notes), t.key + ' has eating guidelines');
-  for (const t of LIBRARY) assert.ok(W.toIntervalsText(W.normItems(t.steps), st).length > 0);
 });
 console.log(n + ' passed');

@@ -1,5 +1,5 @@
-// node bridge/free.test.js — The Way runs free (26 Nov 2026): no paid service is ever called, food is logged by
-// its numbers, and a finished ride is always kept, whatever happens with intervals.icu.
+// node bridge/free.test.js — The Way runs free (26 Nov 2026): no paid service is ever called, the site is the
+// workout player only, and a finished ride is always kept, whatever happens with intervals.icu.
 const assert = require('assert');
 const storage = require('./storage');
 const mem = {};
@@ -50,14 +50,12 @@ let n = 0; const ok = (name, fn) => Promise.resolve().then(fn).then(() => { n++;
     const src = require('fs').readFileSync(require.resolve('../pwa/player.js'), 'utf8');
     assert.ok(/const HR_Z1 = 116/.test(src) && /HR_Z1_AIM = 110/.test(src) && /function seekStep\(iv\)/.test(src) && /ctl\(ergWatts\(want\)/.test(src));
   });
-  await ok('food is logged by its numbers: no model reads it', async () => {
-    const src = require('fs').readFileSync(require.resolve('./food'), 'utf8');
-    const a = src.indexOf('const NUM'), b = src.indexOf('async function analyze');
-    const m = {}; new Function('m', src.slice(a, b) + '; m.numbersIn = numbersIn; m.nameOf = nameOf;')(m);
-    assert.deepStrictEqual(m.numbersIn('oatmeal 420 kcal 70c 14p 8f'), { kcal: 420, carbs_g: 70, protein_g: 14, fat_g: 8 });
-    assert.deepStrictEqual(m.numbersIn('rice bowl, 650 kcal, 80 g carbs, 45 g protein, 12 g fat'), { kcal: 650, carbs_g: 80, protein_g: 45, fat_g: 12 });
-    assert.deepStrictEqual(m.numbersIn('water 750 ml 0 kcal'), { kcal: 0, fluid_ml: 750 });
-    assert.strictEqual(m.nameOf('oatmeal with berries 420 kcal 70c 14p 8f'), 'oatmeal with berries');
+  await ok('the site is the player only: one function, no schedules, no pages but the player', async () => {
+    const fs = require('fs'), path = require('path');
+    assert.deepStrictEqual(fs.readdirSync(path.join(__dirname, '..', 'netlify', 'functions')), ['api.js']);
+    const html = fs.readFileSync(path.join(__dirname, '..', 'pwa', 'index.html'), 'utf8');
+    const scripts = [...html.matchAll(/<script src="([a-z-]+)\.js/g)].map(m => m[1]);
+    assert.deepStrictEqual(scripts, ['shell', 'buckets', 'fit', 'edge', 'player']);
   });
   console.log(`${n} passed`);
 })().catch(e => { console.error(e); process.exit(1); });

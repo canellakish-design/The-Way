@@ -6,9 +6,10 @@
    A ride is always saved, never just exited: every second goes into IndexedDB ('the-way-player' / 'rides'),
    written every 5 s and at each interval change, so a crash or a closed tab loses seconds, and the next visit
    offers to finish and save it. On End the page builds a FIT file (pwa/fit.js) and posts it with the samples
-   to the bridge, which keeps the ride (it counts on Day and Calendar at once) and sends the FIT to intervals.icu.
+   to the bridge, which keeps the ride and sends the FIT to intervals.icu. Since 26 Nov 2026 the site is only this
+   player: the workouts come from the intervals.icu calendar (bridge/icu-workouts.js), and pwa/shell.js is the page.
    Dev switch, not shown anywhere: #player?id=…&sim=1[&speed=30] feeds made-up power, heart rate and cadence.
-   Loads after app.js and fit.js and uses their globals: V, view, bridge, esc, hm12, FIT. */
+   Loads after shell.js and fit.js and uses their globals: V, view, bridge, esc, hm12, speak, FIT. */
 (function(){
   const J = { "Content-Type": "application/json" };
   const alive = () => location.hash.split("?")[0] === "#player";
@@ -74,30 +75,9 @@
     return (meals || []).filter(m => m && (m.slot === "before" || m.slot === "on the bike")).filter(m => { if (sm == null) return true; const mm = toMin(m.time); if (mm == null) return true; return m.slot === "before" ? mm >= sm - 300 && mm <= sm : Math.abs(mm - sm) <= 30; })
       .map(m => ({ slot: m.slot, time: m.time || null, what: m.what || "", carbs_g: m.carbs_g || null }));
   }
-  async function loadSession(id){
-    try { return await bridge("/player/session/" + encodeURIComponent(id || "today")); }
-    catch (e){
-      if (e.body && e.body.error === "no such workout") throw e;
-      const st = await bridge("/workouts/settings").catch(() => ({ ftp: 175 }));
-      const ftp = st && st.ftp || 175, today = keyOf(new Date());
-      let w = null, choices = [];
-      if (id && id !== "today") w = await bridge("/workouts/" + encodeURIComponent(id));
-      else {
-        const l = ((await bridge(`/workouts?from=${today}&to=${today}`)) || {}).workouts || [];
-        const rides = l.filter(x => !/weight|lift|strength|^run$|walk|hike/i.test(x.sport || "")).sort((a, b) => (a.time || "99") < (b.time || "99") ? -1 : 1);
-        const nm = new Date().getHours() * 60 + new Date().getMinutes();
-        w = rides.find(x => toMin(x.time) == null || toMin(x.time) + Math.round((x.metrics && x.metrics.duration_s || 0) / 60) > nm) || rides[rides.length - 1] || null;
-        choices = rides.map(x => ({ id: x.id, name: x.name, time: x.time || null }));
-      }
-      if (!w) return { workout: null, settings: { ftp }, choices, date: today };
-      let fuel = [];
-      if (w.date === today){ try{ const f = await bridge("/food/today"); fuel = fuelSlots(f && f.meals, w.time); }catch{} }
-      const m = w.metrics || {};
-      return { date: w.date, settings: { ftp }, fuel, choices,
-        workout: { id: w.id, name: w.name, date: w.date, time: w.time || null, sport: w.sport, duration_s: m.duration_s, tss: m.tss, np_w: m.np_w, intervals_event_id: w.sync && w.sync.intervals_event_id || null },
-        intervals: expand(w.steps, ftp) };
-    }
-  }
+  // the bridge works the session out from intervals.icu; the old fallback to the site's own plan and food pages is gone
+  async function loadSession(id){ return bridge("/player/session/" + encodeURIComponent(id || "today")); }
+
   const FREE_RIDE = ftp => ({ workout: { id: null, name: "Free ride", date: keyOf(new Date()), time: null, duration_s: 4 * 3600 }, settings: { ftp }, fuel: [], choices: [],
     intervals: [{ label: "Free ride", start_s: 0, dur_s: 4 * 3600, target_w: null, target_w_end: null, target_hr: null, kind: "free", rep: null }] });
 
@@ -926,7 +906,7 @@
       <div class="plc-act" id="plcAct"></div>
       <div class="plc-status small" id="plcStatus"></div>
       <ul class="plc-feed" id="plcFeed"></ul>
-      <div class="small plc-note">Hold the round button to ask him anything.</div>
+      <div class="small plc-note">Voice on: the device reads each line aloud.</div>
     </aside>`;
   function paintCoach(){
     const box = document.getElementById("plCoach"); if (!box) return;
@@ -1091,8 +1071,8 @@
     const s = sum || (r.summary) || {};
     const icu = r.intervals_id ? `<a href="https://intervals.icu/activities/${encodeURIComponent(r.intervals_id)}" target="_blank" rel="noopener">Open it on intervals.icu</a>` : "";
     const head = r.empty ? "Nothing was recorded" : ok ? "Ride saved" : r.stored ? "Saved in The Way" : "Not saved yet";
-    const line = r.empty ? "The ride ended before its first second." : ok ? (r.held_back ? "In The Way, on Day and Calendar now. This is the copy, so the intervals.icu upload was held back." : `In The Way, on Day and Calendar now, and uploaded to intervals.icu. ${icu}`)
-      : r.stored ? `It counts on Day and Calendar now. intervals.icu didn't take it: ${esc(rec.error || "")}`
+    const line = r.empty ? "The ride ended before its first second." : ok ? (r.held_back ? "Saved on the site. This is a preview, so the intervals.icu upload was held back." : `Saved, and uploaded to intervals.icu. ${icu}`)
+      : r.stored ? `Saved on the site. intervals.icu didn't take it yet: ${esc(rec.error || "")}. Retry sends it again.`
       : `It's kept on this computer. The upload failed: ${esc(rec.error || "")}`;
     const fields = s.seconds ? `<div class="hu-fields pl-sum">
         <div class="hu-field"><span class="k">Ridden</span><span class="n">${clock(s.seconds)}</span><span class="u">${esc(day12(rec.id))} · ${esc(time12(rec.id))}</span></div>
@@ -1101,13 +1081,14 @@
       </div>` : "";
     el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-dim" : "hu-ink"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
       <div class="pl-result ${ok ? "ok" : "bad"}">${line}</div>
-      ${rec.mpa && rec.mpa.bt ? `<div class="pl-result ok pl-btres">★ Breakthrough at ${clock(rec.mpa.bt.wt)}: ${rec.mpa.bt.watts} W where the signature allowed ${rec.mpa.bt.mpa} W${rec.mpa.over_s > 3 ? `, ${rec.mpa.over_s} seconds above it` : ""}. The <a href="#power">Power</a> page gives it its medal once the ride is read.</div>` : ""}
+      ${rec.mpa && rec.mpa.bt ? `<div class="pl-result ok pl-btres">★ Breakthrough at ${clock(rec.mpa.bt.wt)}: ${rec.mpa.bt.watts} W where the signature allowed ${rec.mpa.bt.mpa} W${rec.mpa.over_s > 3 ? `, ${rec.mpa.over_s} seconds above it` : ""}. </div>` : ""}
       ${fields}
       ${!r.empty && rec.samples && rec.samples.length ? (() => { const lines = (rec.bk && rec.bk.lines) || BKS.lines, plan = BK().planFromSteps(rec.intervals || [], rec.ftp || 175, lines);
           const act = BK().actualFromSamples(rec.samples.map(a => ({ w: a[1], hr: a[3] })), lines);
           return `<div class="pl-bkres"><span class="hu-lab">Buckets${plan.planned ? ", ridden against the plan" : ""}</span>${BK().miniHTML({ plan: plan.planned ? plan : null, actual: act, colours: (rec.bk && rec.bk.colours) || BKS.colours })}</div>`; })() : ""}
       ${!r.empty && goalOf(rec.workout, rec.intervals) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(rec.workout, rec.intervals), rec.samples, 120)}</div>` : ""}
-      <div class="pl-ctl">${ok ? "" : `<button class="primary" id="cRetry">Retry</button>`}${lastFit && lastFit.id === rec.id ? `<button id="cFit">Download the FIT file</button>` : ""}<a class="btn" href="#today">‹ Day</a><a class="btn" href="#calendar">Calendar</a></div>
+      <div class="pl-ctl">${ok ? "" : `<button class="primary" id="cRetry">Retry</button>`}${lastFit && lastFit.id === rec.id ? `<button id="cFit">Download the FIT file</button>` : ""}<a class="btn" href="#player">Back to the player</a></div>
+      ${!r.empty && lastFit && lastFit.id === rec.id ? `<div class="small pl-garmin">For Garmin Connect: download the FIT file, then in Garmin Connect on the web choose Import Data and pick the file. Garmin lets no free service (intervals.icu included) send a finished ride there for you.</div>` : ""}
       <div class="pl-note small" id="plNote" hidden></div>`;
     const rt = document.getElementById("cRetry"); if (rt) rt.onclick = () => { rt.disabled = true; saveRide(rec); };
     const fb = document.getElementById("cFit"); if (fb) fb.onclick = () => { const u = URL.createObjectURL(new Blob([lastFit.bytes], { type: "application/octet-stream" })); const a = document.createElement("a"); a.href = u; a.download = `the-way-${keyOf(new Date(rec.id))}-${pad2(new Date(rec.id).getHours())}${pad2(new Date(rec.id).getMinutes())}.fit`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 5000); };
@@ -1165,10 +1146,11 @@
     S0 = S;
     BKS.lines = S.lines || null; BKS.colours = S.colours || null;
     EDGE_SESS = null; EDGE = edgeFor(S.workout, S.intervals, S.settings && S.settings.ftp || 175, null);
-    if (S.workout && S.workout.date === keyOf(new Date())) bridge("/garmin/session/today").then(x => { if (!x || (x.workout_id && S.workout.id && x.workout_id !== S.workout.id)) return; EDGE_SESS = x; if (EDGE) EDGE.setSession(Object.assign({}, x, { name: S.workout.name })); paintEdge(); }).catch(() => {});
+    if (false && S.workout)   // the Garmin field's session (bridge/garmin.js) is not on the player-only site
+      bridge("/garmin/session/today").then(x => { if (!x || (x.workout_id && S.workout.id && x.workout_id !== S.workout.id)) return; EDGE_SESS = x; if (EDGE) EDGE.setSession(Object.assign({}, x, { name: S.workout.name })); paintEdge(); }).catch(() => {});
     const pend = await pendingHTML(S);
     if (!alive()) return;
-    el.innerHTML = `<div class="pl-wrap"><div class="pl-startcol">` + (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). <a href="#calendar">Plan one on the Calendar</a>.</div>` : "") + startHTML(S, pend) + `</div>${edgeAside()}</div>`;
+    el.innerHTML = `<div class="pl-wrap"><div class="pl-startcol">` + (S.none ? `<div class="small pl-none">Nothing to ride is planned for today, so this is a free ride (no targets, the trainer on a flat road). Plan one in <a href="https://intervals.icu/calendar" target="_blank" rel="noopener">intervals.icu</a> and open this page again.${S.intervals_error ? ` (intervals.icu: ${esc(S.intervals_error)})` : ""}</div>` : "") + startHTML(S, pend) + `</div>${edgeAside()}</div>`;
     bindEdge(); paintEdge();
     const go = document.getElementById("plStart");
     drawWhole(S);
