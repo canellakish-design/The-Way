@@ -89,8 +89,8 @@ function corners(start, perimeterKm, bearingDeg) {
 // A loop from a start point for a ride of about `km`, on roads a bicycle may use. Roads wind, so the triangle is
 // drawn smaller than the ride and tried again once if the road distance comes out more than 12% off.
 async function loop(o) {
-  const k = envStr('TOMTOM_API_KEY');
-  if (!k) { const e = new Error('The map service is not set up (TOMTOM_API_KEY), so a loop cannot be drawn.'); e.status = 400; throw e; }
+  const k = '' /* TomTom (paid) taken out: The Way runs free */;
+  if (!k) { const e = new Error('Drawing a new loop used TomTom, a paid map service, and was taken out: pick one of your Ride with GPS routes instead.'); e.status = 400; throw e; }
   const type = SPEED[o.type] ? o.type : 'road', want = o.km > 0 ? o.km : Math.round(SPEED[type] * (o.minutes || 60) / 60);
   if (!(want >= 5 && want <= 250)) { const e = new Error('A loop needs a length between 5 and 250 km.'); e.status = 400; throw e; }
   const start = o.start, tries = BEARING[String(o.direction || '').toLowerCase().replace(/[\s-]/g, '')] != null ? [BEARING[String(o.direction).toLowerCase().replace(/[\s-]/g, '')]] : [315, 270, 0, 225, 180];
@@ -240,7 +240,7 @@ async function tick() {
 
 // the street a point is on, in a few words ("Clopper Rd, Germantown"); null when the map service does not say
 async function placeOf(p) {
-  const k = envStr('TOMTOM_API_KEY'); if (!k) return null;
+  const k = '' /* TomTom (paid) taken out: The Way runs free */; if (!k) return null;
   try {
     const r = await fetch(`https://api.tomtom.com/search/2/reverseGeocode/${p[0].toFixed(5)},${p[1].toFixed(5)}.json?key=${encodeURIComponent(k)}&radius=200`, { signal: AbortSignal.timeout(3500) });
     if (!r.ok) return null;
@@ -251,7 +251,7 @@ async function placeOf(p) {
 }
 // the road a bicycle takes between two points (the end of a loop back to its beginning); none when the map service does not answer
 async function roadBetween(a, b) {
-  const k = envStr('TOMTOM_API_KEY'); if (!k) return [];
+  const k = '' /* TomTom (paid) taken out: The Way runs free */; if (!k) return [];
   try { const r = await fetch(`https://api.tomtom.com/routing/1/calculateRoute/${a[0].toFixed(5)},${a[1].toFixed(5)}:${b[0].toFixed(5)},${b[1].toFixed(5)}/json?key=${encodeURIComponent(k)}&travelMode=bicycle`, { signal: AbortSignal.timeout(6000) });
     if (!r.ok) return []; const rt = ((await r.json()).routes || [])[0]; if (!rt) return [];
     return rt.legs.flatMap(l => l.points || []).map(x => [Math.round(x.latitude * 1e5) / 1e5, Math.round(x.longitude * 1e5) / 1e5]).slice(1, -1); } catch (e) { return []; }

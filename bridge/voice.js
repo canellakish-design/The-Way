@@ -18,7 +18,9 @@
 // decides it: "whole milk: you are 30 g of fat under and the ride is
 // Zone 1, so the fat is welcome."
 //
-//   POST /voice { text }  →  { heard, actions:[{type, ok, summary}], reply }
+//   26 Nov 2026: the model that read the words (POST /voice) called Claude
+//   through the paid API and was taken out; The Way runs free. What stays is
+//   run(): the actions themselves, which the connector (mcp.js) still runs.
 // ============================================================
 const { getJSON, setJSON } = require('./storage');
 const { auth } = require('./fuel-log');
@@ -257,11 +259,7 @@ async function contextNow() {
   // the researched coach's debrief of today's ride, which he has read on the Day page: the two coaches agree
   if (debrief && debrief.date === today && debrief.say) { const ride = String(debrief.answer || '').split(/\n{2,}/).find(p => /^\s*\*\*The ride\*\*/i.test(p)) || '';
     lines.push(`THE DEBRIEF of today's ride (${debrief.ride_name || 'the ride'}), written by the researched coach and shown on his Day page; agree with it and build on it: ${debrief.say} ${ride.replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 600)}`); }
-  // what the coach has already said to him unasked today (coach-first.js): never contradict it without saying why
-  try { const F = await race(require('./coach-first').state(), 1500, null);
-    if (F && F.morning) lines.push(`THIS MORNING'S BRIEFING, which you sent to his phone at ${tz.hm12(new Date(F.morning.at).toLocaleTimeString('en-GB', { timeZone: tz.ZONE, hour: '2-digit', minute: '2-digit' }))}: "${String(F.morning.text).slice(0, 500)}"`);
-    if (F && F.alerts && F.alerts.length) lines.push('ALERTS you sent to his phone today: ' + F.alerts.map(a => `${a.title} (${a.body})`).join('; ').slice(0, 500));
-    if (F && F.review && F.review.status === 'done' && F.review.answer) slow.push(`THE WEEKLY REVIEW of the week of ${F.review.week_of}, written by the researched coach and shown on his Day page; build on it: ${F.review.say} ${String(F.review.answer).replace(/\*\*/g, '').replace(/\s+/g, ' ').slice(0, 900)}`); } catch (e) { /* nothing said yet */ }
+  // the coach's morning briefing and weekly review (coach-first.js) are gone with it: they called Claude
   // one notebook for both coaches (coach.js write_note, the remember action here), and what he has told the coach lately
   { const nb = ((notebook && notebook.notes) || []).slice(-30);
     if (nb.length) slow.push('THE NOTEBOOK (kept between conversations by you and the researched coach: decisions made with him, what he asked you to remember, patterns, things to check). Coach by it; when a note is out of date say so:\n' + nb.map(n => `- ${n.date || ''} [${n.kind || 'note'}] ${String(n.note || '').slice(0, 300)}`).join('\n'));
@@ -368,76 +366,8 @@ const TOOLS = [{ name: 'look_back', description: 'Read his record for a span of 
     input_schema: { type: 'object', additionalProperties: false, required: ['minutes'], properties: { minutes: { type: 'integer', description: 'riding time he has, in minutes; 0 if unknown' }, type: { type: 'string', enum: ['road', 'gravel', 'mtb'] } } } },
   { name: 'plan_week', description: 'Lay out a whole week of riding from his TRAINING MODEL around what his calendar really holds: the fixed things, drives, rest days, days away, the lifts, what is already ridden, daylight and the forecast. Nothing is written: the week is laid out, kept, and returned to you day by day with what would change on his calendar. Call it ONCE in a turn, with everything he asked for in that one call. ONLY when he asks for a week to be planned, built, rebuilt or changed (never for a question about the past, how something went, or advice on what to change: those are answered in words). Use it whenever he asks you to plan, build, rebuild or reorganize a week, to see what a change to the model would do before he commits to it, or to set single days by hand. week_of: any day of the week to plan, YYYY-MM-DD (today for this week). changes: settings of the model to TRY for this layout without saving them, as "base=double|single; hours=2; single=90; short=60; long=150; apart=4h; vo2=Tue,Fri|none" ("" for the model as it stands). overrides: days he sets by hand for this week only, as "YYYY-MM-DD=off|vo2|base|double|single:MINUTES@HH:MM|long:MINUTES@HH:MM" separated by ";" (minutes and @time optional, 24-hour), e.g. "2026-11-20=long:150@14:00; 2026-11-21=off" ("" for none).',
     input_schema: { type: 'object', additionalProperties: false, required: ['week_of', 'changes', 'overrides'], properties: { week_of: { type: 'string' }, changes: { type: 'string' }, overrides: { type: 'string' } } } }];
-async function understand(text, history, extra, image, opt) {
-  const T = (opt && opt.ms) || {}, tStart = Date.now();
-  // on the copy only: another model to time against the usual one (never on the real site)
-  const images = (Array.isArray(image) ? image : image ? [image] : []).slice(0, MAX_PHOTOS);
-  // on the copy only: another model to time against the usual one (never on the real site)
-  const model = (opt && opt.model && require('./sandbox').SANDBOX) ? opt.model : images.length ? MODEL : QUICK_MODEL;
-  const key = (process.env.ANTHROPIC_API_KEY || '').trim();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
-  const prior = (Array.isArray(history) ? history : []).slice(-10)
-    .filter(h => h && (h.role === 'user' || h.role === 'assistant') && h.text)
-    .map(h => ({ role: h.role, content: String(h.text).slice(0, 600) }));
-  // the API wants the turns to alternate and to start with him
-  const turns = []; for (const t of prior) { if (!turns.length && t.role !== 'user') continue; if (turns.length && turns[turns.length - 1].role === t.role) turns[turns.length - 1].content += '\n' + t.content; else turns.push(t); }
-  if (turns.length && turns[turns.length - 1].role === 'user') turns.pop();
-  // a photo he sent rides in front of his words (Harry, 14 Nov 2026: "upload a photo onto the coach and have him analyze")
-  const tCtx = Date.now(); const ctxParts = await contextParts(), ctxText = ctxParts.live; T.context_ms = Date.now() - tCtx;
-  // two cached blocks: the standing prompt, then his standing record; the minute's lines ride with his words
-  const system = [{ type: 'text', text: systemText(), cache_control: { type: 'ephemeral' } }]
-    .concat(ctxParts.slow ? [{ type: 'text', text: 'HIS STANDING RECORD, read from the site with the lines under "Where the day stands" in his message and as true as they are (the training model, the sleep window, the signature, the lifting, the notebook, his routes, his races, the look back):\n' + ctxParts.slow, cache_control: { type: 'ephemeral' } }] : []);
-  const first = (p => images.length ? images.map(im => ({ type: 'image', source: { type: 'base64', media_type: im.media_type, data: im.image_base64 } })).concat([{ type: 'text', text: p }]) : p)(promptFor(text, ctxText + (extra ? '\n' + extra : ''), turns.length > 0));
-  let messages = turns.concat([{ role: 'user', content: first }]);
-  // He can look back (history.js): when the question is about days that are not in front of him, he asks for them
-  // with look_back, reads them and then answers. Two looks at most, so a spoken answer never waits long.
-  const t0 = Date.now();
-  const ask = async () => { for (let round = 0; ; round++) {
-    // a week laid out is the last look he needs in a turn, and a yes to a plan ("… plan p_abc") needs no look at all:
-    // each look that is not needed is two or three seconds of his waiting
-    // The whole answer has a deadline (the request is cut off by the host at about thirty seconds, and he heard
-    // nothing at all: Harry, 16 Nov 2026, "if I ask a more complex question it seems like it times out"). A look is
-    // allowed only in the first ten seconds; each call to the model is given what is left of the time and no more.
-    const deadline = (opt && opt.deadline) || tStart + 22000, left = deadline - Date.now();
-    if (left < 2500) throw Object.assign(new Error('deadline'), { deadline: true });
-    const more = round < 2 && Date.now() - tStart < 10000 && !T.planned && !/\bplan p_[a-z0-9]{4,}\b/i.test(String(text || ''));
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      signal: AbortSignal.timeout(Math.max(2000, left)),
-      method: 'POST',
-      headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-      body: JSON.stringify({ model, max_tokens: 1500, fallbacks: 'default',
-        output_config: { effort: 'low', format: { type: 'json_schema', schema: SCHEMA() } },
-        system,
-        tools: TOOLS, tool_choice: more ? { type: 'auto' } : { type: 'none' },
-        messages })
-    });
-    const j = await r.json();
-    if (j.usage) { console.log('voice usage', JSON.stringify(j.usage)); T.out_tokens = (T.out_tokens || 0) + (j.usage.output_tokens || 0); T.in_tokens = (j.usage.input_tokens || 0) + (j.usage.cache_read_input_tokens || 0) + (j.usage.cache_creation_input_tokens || 0); T.cached_tokens = j.usage.cache_read_input_tokens || 0; }
-    T.rounds = round + 1; T.model_ms = Date.now() - tStart - (T.context_ms || 0); T.model = j.model || model;
-    if (!r.ok) throw new Error('voice ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 160));
-    const uses = (j.content || []).filter(c => c.type === 'tool_use');
-    if (j.stop_reason === 'tool_use' && uses.length && more) {
-      T.tools = (T.tools || []).concat(uses.map(u => u.name));
-      const results = await Promise.all(uses.map(async u => { let out; try { out = u.name === 'look_back' ? await require('./history').lookBack(u.input || {})
-          : u.name === 'routes_near' ? await (async () => { const R = require('./routes'), N = await R.near(opt && opt.coords, { minutes: (u.input || {}).minutes, type: (u.input || {}).type, budget_ms: 6000 });
-              return { reach_miles: N.reach_miles, routes: N.routes.map(x => ({ name: x.name, miles: x.miles, gain_ft: x.gain_ft, minutes: x.minutes, kind: x.kind, surface: x.surface, unpaved_pct: x.unpaved_pct, start_on: x.place, miles_from_him: x.join_miles, direction_from_him: x.direction })),
-                note: N.routes.length ? 'Best first. The start is the point on the route nearest him, not the route\'s own start.' : `None of his routes passes within ${N.reach_miles} miles of him. A loop can be drawn from where he stands (new_route with start=here).` }; })()
-          : u.name === 'plan_week' ? await (async () => { if (T.planned) return Object.assign({}, T.planned, { note: 'You already laid a week out in this turn: this is that same plan. Do not call plan_week again; answer from it.' });
-              const P = await require('./planner').propose((u.input || {}).week_of, { changes: (u.input || {}).changes, overrides: (u.input || {}).overrides });
-              return (T.planned = { plan_id: P.id, week_of: P.week_of, model: P.model_words, tried_not_saved: P.tried, days: P.lines, riding_minutes: P.riding_min, step_from_last_week: P.step_note, would_change: P.changes,
-                note: 'Laid out, not written. Tell him the week in a few sentences (the page shows it day by day when you add a plan_week action with text "show"), and put the writing to him as an offer whose plan names this plan_id.' }); })()
-          : { error: 'no such tool' }; } catch (e) { out = { error: e.message }; }
-        return { type: 'tool_result', tool_use_id: u.id, content: JSON.stringify(out).slice(0, 60000) }; }));
-      messages = messages.concat([{ role: 'assistant', content: j.content }, { role: 'user', content: results }]);
-      continue;
-    }
-    const block = (j.content || []).find(c => c.type === 'text');
-    if (!block) throw new Error('no answer');
-    return JSON.parse(block.text.replace(/```json|```/g, '').trim());
-  } };
-  // a call cut off at the deadline is a deadline, whatever name the runtime gives it
-  try { return await ask(); } catch (e) { if (e && (e.deadline || e.name === 'TimeoutError' || e.name === 'AbortError')) throw Object.assign(new Error('deadline'), { deadline: true }); throw e; }
-}
+// understand(): the model that read his words and chose the actions. It called Claude through the paid API and was
+// taken out on 26 Nov 2026 (The Way runs free). The actions it chose still run here, through run(), for the connector.
 
 const words = t => String(t || '').toLowerCase().split(/\W+/).filter(w => w.length > 2 && !/^(the|that|last|one|from|remove|delete|move|change|my|ride|workout|session|event|today|tomorrow|this|and|for|with)$/.test(w));
 const isDate = d => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
@@ -720,82 +650,16 @@ async function run(a, x) {
       const p = await P.add({ name: a.name || a.text || 'this place', lat: c.lat, lon: c.lon, notes: a.text || '', orders });
       return { ok: true, summary: `${p.updated_existing ? 'Updated' : 'Saved'}: ${p.name}${orders.length ? `, order ${orders[0].name}` : ''}. It will come up when you are within ${P.NEAR_M} m.` };
     }
-    case 'research': {
-      const q = String(a.text || '').trim().slice(0, 2000);
-      if (!q) return { ok: false, summary: 'There was no question to look into.' };
-      const id = await require('./coach').startJob(q, (x && x.base) || 'https://thewayforward.netlify.app', { kind: 'handoff' });
-      return { ok: true, summary: 'Taking a proper look: the full answer follows in a minute or two.', job: id };
-    }
+    case 'research': return { ok: false, summary: 'The researched coach was taken out (it called a paid AI): The Way runs free.' };
     case 'question': return { ok: true, summary: 'Advice below.' };
     default: return { ok: false, summary: 'Did not understand that part.' };
   }
 }
 const toHM24 = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
 
-function attach(app) {
-  // The coach's face (pwa/face.js) asks for this: a spoken briefing from the whole plan. Where he is, what to adjust,
-  // what to do this week toward the goal (Harry, 14 Nov 2026).
-  app.get('/voice/briefing', async (req, res) => { if (!auth(req, res)) return;
-    try {
-      const u = await understand('Give me my briefing.', [], 'This is a briefing, spoken to him by his coach\'s face, not a question to act on: take no actions. Three short parts in plain speech, no lists, under 110 words in all: where he is now, with two or three of the real numbers (fitness, the week\'s riding, sleep, weight) and his rung on the watts-per-kilo ladder; the one limiter to fix now and why, as an expert coach would name it; and what to do this week to move toward being a high-level masters cyclist. Speak to him as "you". Warm, direct, a coach who knows him.');
-      res.json({ reply: String(u.reply || '').slice(0, 900) });
-    } catch (e) { res.status(500).json({ error: e.message }); } });
-  // read the day ahead of the question (the page calls this as he opens the Coach page or starts to talk)
-  app.get('/voice/warm', async (req, res) => { if (!auth(req, res)) return;
-    try { const t = Date.now(), had = await contextKept(); if (!had || Date.now() - had.at > 30000) await contextBuild(); res.json({ ok: true, fresh: !had, ms: Date.now() - t }); }
-    catch (e) { res.status(500).json({ error: e.message }); } });
-  app.post('/voice', async (req, res) => { if (!auth(req, res)) return;
-    try {
-      // a Siri Shortcut named "The Way" can pass its own name along ("The way what's my next workout"): it is the
-      // name of the door, not part of the sentence
-      let text = String((req.body || {}).text || '').trim().replace(/^(hey\s+)?(siri[\s,]+)?the\s*way\b[\s,:.!?-]*/i, '').trim().slice(0, 1000);
-      // photos: up to four, as the Food page sends them (Harry, 14 Nov 2026: "I should be able to add multiple
-      // photos"); `image` is the one-photo form older pages send. With no words it is "look at this"
-      const sent = Array.isArray((req.body || {}).images) ? req.body.images : (req.body || {}).image ? [req.body.image] : [];
-      const okImg = img => img && typeof img.image_base64 === 'string' && img.image_base64.length > 200 && img.image_base64.length < 7e6 && /^[A-Za-z0-9+/=]+$/.test(img.image_base64.slice(0, 200));
-      const images = sent.filter(okImg).slice(0, MAX_PHOTOS).map(img => ({ image_base64: img.image_base64, media_type: /^image\/(jpeg|png|webp|gif)$/.test(String(img.media_type || '')) ? img.media_type : 'image/jpeg' }));
-      if (sent.length && !images.length) return res.status(400).json({ error: 'That photo could not be read. Try another.' });
-      const image = images[0] || null;
-      if (image && !text) text = images.length > 1 ? `Look at these ${images.length} photos and tell me what matters.` : 'Look at this photo and tell me what matters.';
-      if (!text) return res.status(400).json({ error: 'nothing heard' });
-      const coords = (req.body || {}).coords && Math.abs(Number(req.body.coords.lat)) <= 90 ? { lat: Number(req.body.coords.lat), lon: Number(req.body.coords.lon) } : null;
-      let here = null; try { here = coords ? await require('./places').here(coords) : null; } catch (e) { here = null; }
-      const ms = {}, tAll = Date.now();
-      const host = req.get('x-forwarded-host') || req.get('host') || '', base = /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app';
-      // The answer has twenty seconds. Past that the host would cut the request off and he would hear nothing, so the
-      // wait ends here instead: a question goes to the researched coach, which has minutes (coach.js), and he is told
-      // so at once; anything that was to be logged, planned or changed is not done, and he is asked to say it again
-      // (the day is read by then, so the second go is quick).
-      let u;
-      try { u = await Promise.race([understand(text, (req.body || {}).history, here ? `Where he is right now: at ${here.name}, one of his saved places (${here.dist_m} m)${(here.orders || []).length ? `; what he orders there: ${here.orders.map(o => o.name).join(', ')}` : ''}${here.notes ? `; note: ${here.notes}` : ''}.` : (coords ? 'His location came with this message, so a place can be saved where he stands, and routes_near can say which of his routes pass near him.' : '')
-        + ((req.body || {}).talk ? '\nTHIS IS A LIVE SPOKEN CONVERSATION: he is talking to you out loud and you answer out loud, turn after turn. Speak like a coach across a table: one to three short sentences, under 40 words unless he asks for detail. Do not repeat what you said in an earlier turn. When you need one fact to coach well, ask one short question back and stop. Speech recognition wrote his words down: read past small mishearings.' : '') + rideWords((req.body || {}).ride), images, { ms, model: (req.body || {}).model, coords, deadline: tAll + 20000 }),
-          new Promise((_, rej) => setTimeout(() => rej(Object.assign(new Error('deadline'), { deadline: true })), 21500))]); }
-      catch (e) {
-        if (!(e && e.deadline)) throw e;
-        Object.assign(ms, { total_ms: Date.now() - tAll, deadline: true });
-        const doing = images.length || /^\s*(please\s+|can you\s+|could you\s+)?(plan|build|rebuild|schedule|move|log|add|remove|delete|put|set|send|save|remember|change|start|open|make)\b/i.test(text) || /^\s*(yes|no)\b/i.test(text) || /^\s*(ok|okay|do it|go|go ahead)\s*[.!]*\s*$/i.test(text);
-        if (doing) return res.json({ heard: text, actions: [], reply: 'That took longer than it should, and I stopped before doing anything. Say it once more: your day is read now, so it will be quick.', slow: true, ms, offer: null });
-        const id = await require('./coach').startJob(text, base, { kind: 'handoff' });
-        return res.json({ heard: text, actions: [{ type: 'research', ok: true, summary: 'Taking a proper look: the full answer follows in a minute or two.', job: id }],
-          reply: 'That one needs a proper look, more than I can do in a few seconds. I am going through your record now, and the full answer will be here in a minute or two.', slow: true, ms, offer: null });
-      }
-      const actions = [];
-      if ((u.actions || []).some(a => a.type !== 'question' && a.type !== 'research')) await contextFresh();
-      for (const a of (u.actions || []).slice(0, 6)) {
-        try { actions.push(Object.assign({ type: a.type }, await run(a, { coords, here, image, images, base }))); }
-        catch (e) { actions.push({ type: a.type, ok: false, summary: e.message.slice(0, 120) }); }
-      }
-      // The reply is written before the actions run (Harry heard "Logged" and then the action asked which leg day it
-      // was). What he is told is what happened: an action that did not go through, or came back with a question,
-      // is the answer; and a week written is confirmed from what was written, not from what was meant.
-      const failed = actions.find(x => x.ok === false), wrote = actions.find(x => x.ok && x.type === 'plan_week' && /^Written:/.test(x.summary || ''));
-      if (failed) u.reply = failed.summary; else if (wrote) u.reply = wrote.summary;
-      if (!String(u.reply || '').trim() && actions.length) u.reply = actions.map(x => x.summary).filter(Boolean)[0] || '';   // never an empty answer
-      res.json({ heard: text, actions, reply: String(u.reply || '').slice(0, image ? 900 : 600), photo: !!image, photos: images.length, ms: Object.assign(ms, { total_ms: Date.now() - tAll }),
-        offer: u.offer && String(u.offer.plan || '').trim() ? { label: String(u.offer.label || 'Yes, change it').slice(0, 60), plan: String(u.offer.plan).slice(0, 400) } : null });
-    } catch (e) { res.status(500).json({ error: e.message }); } });
-}
+// The talking coach's routes (POST /voice, /voice/briefing, /voice/warm) called Claude and are gone.
+function attach() {}
 
 // a write somewhere else in the app: the kept read is out of date (not waited on)
 function contextStale() { ctxKept = null; setJSON(CTX_KEY, { at: 0 }).catch(() => {}); }
-module.exports = { SCHEMA, attach, understand, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords, rideWords };
+module.exports = { SCHEMA, attach, run, context, contextStale, promptFor, resized, systemText, doneWords, workWords, nightWords, rideWords };

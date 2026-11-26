@@ -51,7 +51,7 @@ async function routesNear(p, o) {
   } catch (e) { errors.strava = e.message; /* no Strava: the dirt may still answer */ }
   // the dirt: mountain-bike trails and parks TomTom lists near it
   try {
-    const k = String(process.env.TOMTOM_API_KEY || '').trim();
+    const k = '' /* TomTom (paid) taken out: The Way runs free */;
     if (k) {
       const r = await fetch(`https://api.tomtom.com/search/2/search/${encodeURIComponent('mountain bike trail')}.json?key=${encodeURIComponent(k)}&lat=${p.lat}&lon=${p.lon}&radius=${NEAR_KM * 1000}&limit=6&countrySet=US`);
       const j = r.ok ? await r.json() : {};
@@ -173,7 +173,7 @@ function turnPoint(a, b, perimeterKm) {
   return { lat: midLat + (vx / len) * d / ky, lon: midLon - (vy / len) * d / kx };   // a right angle off the segment
 }
 async function loopFor(route, minutes) {
-  const k = String(process.env.TOMTOM_API_KEY || '').trim();
+  const k = '' /* TomTom (paid) taken out: The Way runs free */;
   const km = Math.round(SPEED[route.type] * minutes / 60);
   if (!k || route.type !== 'road' || !route.end) return { km, gpx: false };
   const start = { lat: route.lat, lon: route.lon };

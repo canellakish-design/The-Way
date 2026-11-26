@@ -147,7 +147,10 @@ function celebrate(opts){
   }catch{}
 }
 window.celebrate = celebrate; window.primeSound = primeSound;
-// The coach's own voice (bridge/tts.js): a natural voice when a key is set in Netlify, played through the page's
+// The coach's natural voice (bridge/tts.js, OpenAI) cost money and was taken out on 26 Nov 2026: every line is spoken
+// by the phone's or computer's own voice (speechSynthesis), which is free. CoachVoice stays as a shell so the
+// callers that stop or unlock it still work.
+// Before: the coach's own voice (bridge/tts.js): a natural voice when a key is set in Netlify, played through the page's
 // audio (unlocked by the tap that asked), with its loudness read off the sound so the face's mouth follows the real
 // words (face.js). With no key, no sound unlocked, or any failure: the phone's voice, as before.
 // Played as media (an <audio> element), not through Web Audio (Harry, 13 Nov: "The voice didn't work": an iPhone on
@@ -176,17 +179,7 @@ const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, l
     const m = /^(.{25,170}?[.!?])\s+(\S[\s\S]{30,})$/.exec(t);
     return m ? [m[1], m[2]] : [t];
   },
-  async clip(text){
-    const r = await bridge("/voice/speak", { method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ text }) });
-    const bin = atob(r.audio_b64), bytes = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    // the loudness curve, fifty readings a second (decoding works whatever the silent switch says)
-    let env = null;
-    try{ const AC = window.AudioContext || window.webkitAudioContext; const ctx = __audio || (AC ? (__audio = new AC()) : null);
-      if (ctx) { const audio = await new Promise((ok, no) => ctx.decodeAudioData(bytes.buffer.slice(0), ok, no));
-        const ch = audio.getChannelData(0), win = Math.max(1, Math.floor(audio.sampleRate / 50)); env = [];
-        for (let i = 0; i < ch.length; i += win) { let q = 0; const n = Math.min(win, ch.length - i); for (let j = 0; j < n; j++) q += ch[i + j] * ch[i + j]; env.push(Math.sqrt(q / n)); } } }catch{ env = null; }
-    return { text, env, blob: new Blob([bytes], { type: r.mime || "audio/mpeg" }) };
-  },
+  async clip(){ throw new Error("phone voice"); },
   // one part through the page's audio; resolves when its last word is out
   play(c, gen){
     return new Promise((done, fail) => {
@@ -203,7 +196,7 @@ const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, l
     });
   },
   async say(t){
-    if (this.on === false) { this.last = "phone"; throw new Error("phone voice"); }
+    this.on = false; this.last = "phone"; throw new Error("phone voice");   // free: always the device's own voice
     const gen = this.gen = (this.gen || 0) + 1, parts = this.parts(t);
     const jobs = parts.map(x => this.clip(x)); jobs.slice(1).forEach(j => j.catch(()=>{}));
     let first; try{ first = await jobs[0]; }
@@ -218,7 +211,7 @@ const CoachVoice = { on: null, el: null, env: null, playing: false, url: null, l
   } };
 window.CoachVoice = CoachVoice;
 // asked once at load, so a phone with no key set goes straight to its own voice with no wait
-try{ setTimeout(()=>{ if (typeof bridge === "function") bridge("/voice/speak").then(r => { CoachVoice.on = !!(r && r.on); }).catch(()=>{}); }, 1500); }catch{}
+CoachVoice.on = false;   // no paid voice to ask about (taken out, 26 Nov 2026)
 function speak(t){
   __lastSpoken = t; __ttsPending = Date.now();
   try{ speechSynthesis.cancel(); }catch{}
@@ -291,10 +284,10 @@ function nav(){
   // tap away from one of them.
   // The chain is the navigation: each box opens its detail, and the detail's button goes to the page that fixes it.
   // Off the day, the header carries the way back (and, a level down, the way back to that page's parent).
-  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", coach:"Coach", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", power:"Power", micros:"Micronutrients", races:"Races" };
+  const TITLES = { ride:"Ride", calendar:"Calendar", food:"Food", live:"Live", lift:"Lift", zones:"Zones", workout:"Workout", settings:"Settings", player:"Player", flags:"Flags", take:"Taken", plan:"The plan", analyze:"Ride", hydration:"Hydration", fuel:"Fuel", sleep:"Sleep", recovery:"Recovery", weight:"Weight", power:"Power", micros:"Micronutrients", races:"Races" };
   const PARENT = { zones:["ride","Ride"], workout:["calendar","Calendar"], live:["fuel","Fuel"] };
   // one way back: a page with a parent goes to its parent (the title still goes home), the rest to the Day
-  if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a><a class="navback coachlink" href="#coach">Coach</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
+  if (navEl) navEl.innerHTML = h === "today" ? `<a class="navback playerlink" href="#player">Player</a>` : PARENT[h] ? `<a class="navback" id="navParent" href="#${PARENT[h][0]}">‹ ${PARENT[h][1]}</a>` : `<a class="navback day" href="#today">‹ Day</a>`;
   { const t = document.querySelector("header h1"); if (t && !t.dataset.home){ t.dataset.home = "1"; t.style.cursor = "pointer"; t.onclick = ()=>{ location.hash = "#today"; }; } }
   (V[h] || V.settings)();
 }
@@ -307,13 +300,16 @@ function defaultView(){
    It used to be its own small coach with its own listening loop, which did not hold a conversation (Harry, 14 Nov
    2026: "the kind of open back and forth conversation isn't working"). There is one coach now: this card starts the
    open conversation with him (voice.js), on the Coach page, and what is typed here is asked there. */
+// The coach card started a conversation with the talking coach, which called Claude: taken out (26 Nov 2026).
 function coachCard(persona){
+  return "";
   return `<span class="eyebrow" style="margin-top:16px;display:block">Coach</span>
     <div class="card"><div class="small">Talk it through with your coach: he knows your plan, your food, your sleep and your record.</div>
       <button class="ptt" id="convBtn">Start conversation</button>
       <input id="coachTyped" placeholder="…or type here and press Enter"></div>`;
 }
 function wireCoach(persona){
+  return;
   const btn = document.getElementById("convBtn"), typed = document.getElementById("coachTyped");
   if (typed) typed.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.value.trim()){ const t = e.target.value.trim(); e.target.value = ""; if (window.primeSound) primeSound(); if (window.voiceBits) voiceBits.send(t); } });
   if (!btn) return;
@@ -459,7 +455,7 @@ V.plan = async function(){
     const src = document.getElementById("prSource");
     try{
       const plan = await bridge("/plan");
-      const b = await bridge("/batches");
+      const b = { batches: [] };   // batch prep read scoops with a paid AI: taken out (26 Nov 2026)
       __preRideBatches = b.batches || [];
       const intensitySel = document.getElementById("prIntensity");
       const hoursInput = document.getElementById("prHours");
@@ -2491,7 +2487,8 @@ V.today = async function(){
       get("/scores", v => { scoresData = v; }),
       get("/compliance", v => { complianceData = v; }),
       get("/food/today", v => { foodData = v; HUB.food = v; if (chainData) paintChain(chainData); if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } { const tk = document.getElementById("chainTodayKind"); if (tk && v && v.fuel_day) tk.textContent = v.fuel_day; }
-        if (v && v.stale_readings && v.stale_key && window.__recheckTried !== v.stale_key) { window.__recheckTried = v.stale_key;
+        if (false && v && v.stale_readings) {   // the re-read called a paid AI: taken out (26 Nov 2026)
+          window.__recheckTried = v.stale_key;
           bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({})}).then(r => { if (r && r.day) { foodData = r.day; HUB.food = r.day; if (window.__repaintDay) { try{ window.__repaintDay(); }catch{} } } }).catch(()=>{}); } }),
       get("/chain", v => { chainData = v; paintChain(v); drawScores(); }),
       get("/energy/meter", v => { energyData = v; }),
@@ -2638,7 +2635,9 @@ V.today = async function(){
       try{ await bridge("/coach/debrief", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ride_id: b.dataset.ride, name: b.dataset.name, again: true }) }); }catch{ b.disabled = false; return; }
       const x = (DEB.rides || []).find(z => z.ride.id === b.dataset.ride); if (x){ x.debrief = { status: "running" }; DEB.polling[b.dataset.ride] = false; } lsSetD("way-debrief-said-" + b.dataset.ride, ""); loadCoach(); });
   }
+  // the ride debrief and the morning briefing were written by Claude: taken out (26 Nov 2026), so the card stays hidden
   async function loadCoach(){
+    paintCoach(false); return;
     bridge("/coach/first").then(f => { DEB.first = f; paintCoach(offset === 0); }).catch(() => {});
     let t = null; try{ t = await bridge("/coach/debrief/today"); }catch{ return; }
     DEB.rides = (t && t.rides) || [];

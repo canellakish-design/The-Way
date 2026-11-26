@@ -414,7 +414,10 @@ async function handle(m, base) {
 function attach(app) {
   // its own pages are read from its own host: the live site, or a copy of it (a preview); never a host a request merely names
   const baseOf = req => { if (!ON_NETLIFY) return 'http://' + (req.get('host') || '127.0.0.1');
-    const host = req.get('x-forwarded-host') || req.get('host') || 'thewayforward.netlify.app'; return /(^|\.|--)thewayforward\.netlify\.app$/.test(host) ? 'https://' + host : 'https://thewayforward.netlify.app'; };
+    // the site's own name comes from Netlify (URL), so a new site (26 Nov 2026: the old one was deleted) needs no change here
+    const site = (() => { try { return new URL(process.env.URL || 'https://thewayforward.netlify.app').host; } catch (e) { return 'thewayforward.netlify.app'; } })();
+    const host = req.get('x-forwarded-host') || req.get('host') || site;
+    return host === site || host.endsWith('--' + site) ? 'https://' + host : 'https://' + site; };
   // the key comes in the address (/mcp/<key>) or, better, in a request header claude.ai sends with every call
   // (Authorization: Bearer <key>, or x-way-key: <key>, to plain /mcp): a header stays out of addresses and logs
   const keyFrom = req => { if (req.params.key) return req.params.key; const a = /^Bearer\s+(.+)$/i.exec(req.get('authorization') || ''); return (a && a[1]) || req.get('x-way-key') || ''; };

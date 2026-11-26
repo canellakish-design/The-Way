@@ -3,6 +3,7 @@
 const express = require('express');
 const path = require('path');
 require('./sandbox');   // the copy of the site never writes outside itself
+require('./free-guard');   // no paid service is ever called: The Way runs free (free-guard.js)
 const { ON_NETLIFY, SANDBOX, withScope } = require('./storage');
 const app = express();
 app.use(express.json({ limit: '15mb' }));
@@ -18,7 +19,6 @@ require('./plan').attach(app);
 require('./weather').attach(app);
 require('./courses').attach(app);
 require('./chain').attach(app);
-require('./coach').attach(app);
 require('./player').attach(app);
 require('./race').attach(app);
 require('./whoop').attach(app);
@@ -30,19 +30,18 @@ require('./intervals').attach(app);
 require('./workouts').attach(app);
 // The front page: Training, Recovery, Fatigue.
 require('./scores').attach(app);
-// Food: the photo journal, scored against the day's guidelines.
+// Food: the journal, scored against the day's guidelines (logged by words and numbers; the photo reader is gone).
 require('./food').attach(app);
 // Every ride, read: heart rate and breathing from the streams.
 require('./rides').attach(app);
 require('./flags').attach(app);
-require('./voice').attach(app);
+// voice.js keeps the actions the connector runs (run, SCHEMA); its talking coach, which called Claude, is gone.
 require('./macros').attach(app);
 require('./intake').attach(app);
 require('./status').attach(app);
 require('./weighin').attach(app);
 require('./fitness').attach(app);
 require('./zone-report').attach(app);
-require('./advisor').attach(app);
 require('./places').attach(app);
 require('./wellness').attach(app);
 require('./progress').attach(app);
@@ -66,16 +65,11 @@ require('./history').attach(app);
 require('./races').attach(app);
 require('./routes').attach(app);
 require('./planner').attach(app);
-require('./coach-first').attach(app);
-require('./tts').attach(app);
 require('./dayplan').attach(app);
 require('./meds').attach(app);
 require('./push').attach(app);
 require('./nights').attach(app);
 require('./print').attach(app);
-require('./kitchen').attach(app);
-require('./batches').attach(app);
-require('./agent').attach(app);
 // The Way as a connector for Claude sessions and projects (bridge/mcp.js): off until WAY_MCP_KEY is set.
 require('./mcp').attach(app);
 // The scale runs on the storage layer now, so it works hosted too. It used to

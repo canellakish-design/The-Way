@@ -1,5 +1,6 @@
 "use strict";
-/* THE WAY — Food (#food): the photo journal.
+/* THE WAY — Food (#food): the journal. (26 Nov 2026: logged by words and numbers; the paid photo reader was taken out.)
+   Before:
    Point the camera at the plate, the bridge reads it (bridge/food.js), and the
    day is scored against the day's guidelines. Loads after app.js and uses its
    globals: V, view, bridge, esc, fileToBase64. */
@@ -281,9 +282,9 @@ V.food = async function(){
     ${isToday ? `<div id="fWeek"></div>` : ""}
     ${isToday ? `<div class="fd-log" id="snap">
       <div class="hu-tiles fd-tiles">
-        <button class="hu-tile primary snapbtn" id="snapBtn">${ICON.cam}<b>Snap a meal</b></button>
-        <button class="hu-tile snapbtn" id="rollBtn">${ICON.roll}<b>From camera roll</b></button>
-        <button class="hu-tile" id="writeBtn">${ICON.pen}<b>Write</b></button>
+        <button class="hu-tile primary snapbtn" id="snapBtn" hidden>${ICON.cam}<b>Snap a meal</b></button>
+        <button class="hu-tile snapbtn" id="rollBtn" hidden>${ICON.roll}<b>From camera roll</b></button>
+        <button class="hu-tile primary" id="writeBtn">${ICON.pen}<b>Write</b></button>
         <button class="hu-tile talkbtn" id="talkBtn">${ICON.mic}<b>Say</b></button></div>
       <input id="snapFile" type="file" accept="image/*" capture="environment" hidden>
       <input id="rollFile" type="file" accept="image/*" multiple hidden>
@@ -293,14 +294,14 @@ V.food = async function(){
         <label for="snapNote">Your words with the photo (optional)</label>
         <textarea id="snapNote" rows="3" placeholder="What the photo can't show: chicken thigh 180 g, rice 1 cup, cooked in olive oil, a glass of milk"></textarea>
         <div class="small">Weights from a scale are taken as exact; the coach reads your words and the photo together as one meal.</div>
-        <label for="snapMeal">Meal</label><select id="snapMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select>
+        <label for="snapMeal">Meal</label><select id="snapMeal"><option value="">by the time of day</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select>
         <button class="primary" id="snapLog">Log it</button> <button id="snapCancel">Cancel</button>
         <div class="small" id="snapMsg"></div></div>
       <div id="writeForm" hidden>
-        <label for="writeText">What is on the plate, in your words</label>
-        <textarea id="writeText" rows="3" placeholder="Rice bowl: jasmine rice 200 g, grilled salmon 150 g, edamame 80 g, kimchi, a soft egg, a splash of soy"></textarea>
-        <div class="small">Add weights when you have them: "rice 200 g, salmon 150 g". <button class="linkish" id="writePhoto">+ add a photo</button> <button class="linkish" id="writeRoll">+ from camera roll</button></div>
-        <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">let the coach guess</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
+        <label for="writeText">What you ate, with its numbers</label>
+        <textarea id="writeText" rows="3" placeholder="Rice bowl with salmon 650 kcal 80c 45p 12f"></textarea>
+        <div class="small">The calories are needed; carbs, protein and fat in grams if you have them: "420 kcal 70c 14p 8f", or "70 g carbs". A drink: "water 750 ml 0 kcal". (The photo reader is gone: it called a paid AI.) <button class="linkish" id="writePhoto" hidden>+ add a photo</button> <button class="linkish" id="writeRoll" hidden>+ from camera roll</button></div>
+        <div class="row2"><span><label>Meal</label><select id="writeMeal"><option value="">by the time of day</option>${MEALS.map(m=>`<option>${m}</option>`).join("")}</select></span>
           <span><label>&nbsp;</label><button class="primary" id="writeLog">Log it</button> <button id="writeCancel">Cancel</button></span></div>
         <div class="small" id="writeMsg"></div></div>
       <div id="snapResult"></div>
@@ -460,7 +461,8 @@ V.food = async function(){
     recheck();
   };
   // earlier sentences of the day are re-read whenever something newer has landed; once per newest entry
-  const recheck = async (force)=>{
+  // the re-read called a paid AI and was taken out (26 Nov 2026): each sentence stands as written
+  const recheck = async (force)=>{ return;
     if (!day || !day.stale_readings || !day.stale_key || (!force && window.__recheckTried === day.stale_key)) return;
     window.__recheckTried = day.stale_key;
     try{ const r = await bridge("/food/recheck",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({ date })}); if (r && r.day && location.hash.split("?")[0] === "#food"){ day = r.day; draw(); } }catch{}
@@ -548,7 +550,7 @@ V.food = async function(){
     const msg = document.getElementById("writeMsg"), btn = document.getElementById("writeLog");
     if (!text){ msg.textContent = "Write what you ate first."; document.getElementById("writeText").focus(); return; }
     if (window.primeSound) primeSound();
-    btn.disabled = true; msg.textContent = "Reading it…";
+    btn.disabled = true; msg.textContent = "Logging it…";
     try{
       const r = await bridge("/food/text",{method:"POST",headers:J,body:JSON.stringify({ text, meal: document.getElementById("writeMeal").value || undefined, force: force ? true : undefined })});
       showVerdict(r.entry, r.day);

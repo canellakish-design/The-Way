@@ -16,7 +16,7 @@
 //
 // Each photo is also written to the fuel ledger (fuel-log.js), so the Energy
 // Bank and the prescriptions keep reading the same meals.
-// Env: ANTHROPIC_API_KEY (shared with agent.js), FOOD_MODEL to override.
+// No model: entries are logged with his own numbers (the paid photo reader was taken out, 26 Nov 2026).
 // ============================================================
 const crypto = require('crypto');
 const { getJSON, setJSON } = require('./storage');
@@ -30,7 +30,6 @@ const MI = require('./micro-math');
 const HL = require('./hydration-live');
 const EM = require('./energy-math');
 
-const MODEL = process.env.FOOD_MODEL || 'claude-opus-5-5';
 const KEEP_DAYS = 60;
 const isDate = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s || ''));
 const dayKey = date => 'food-' + date;
@@ -381,60 +380,34 @@ const SCHEMA = {
   }
 };
 
-// What the reader is told on every plate, the same every time, so the API keeps it cached (see docs/api-spend.md);
-// the day's targets, plan and journal follow in the message.
-const READER = `You are the nutrition coach for one cyclist. He photographs every meal; you read the photo, or his words when there is no photo.
-Identify the food and estimate the portion and its macros as eaten (read a scale display if one is in the photo). Several photos are the same meal from different angles, or its courses and its drink: one entry, the whole of it added together, never counted twice.
-List the ingredients you can see with grams each, in plain names (white rice, salmon, spinach, soy sauce), and estimate the plate's micronutrients: iron, calcium, magnesium, potassium, sodium, zinc, vitamin D, B12, folate, vitamin C, vitamin A, omega-3 EPA and DHA, fibre.
-Drinks: fluid_ml is the millilitres of drinkable liquid in the photo as drunk, the glass, mug, bottle or bowl of broth (a mug 300, a pint glass 500, a bike bottle 600 or 750 by its size, a can 330); coffee, tea, milk, smoothies, sports drink and soup count in full, alcohol counts 0, and 0 when there is no drink. drink names it in two or three words, or is empty. A photo of only a bottle or a glass is a drink, not a meal: food_name is the drink (with the count: "three pints of lager"), kcal as drunk, meal_guess snack; fits yes for water, coffee, tea, milk or a planned sports drink. Alcohol is never "yes": one drink on a rest day is "partly", two or more, or any before a training session, is "no", and why names the calories it adds and what it costs the plan.
-protein_source is true when the plate's main item is a protein food: eggs (two or more), meat, poultry, fish, Greek yogurt, cottage cheese, tofu, beans with a grain, a protein shake (his is Huel plant protein), cheese as a main part, even under 30 g; it is false only when no such food is on the plate; carbs is none, some or heavy by the starch and sugar on the plate; vegetables counts fruit.
-processed is true only for ultra-processed food, NOVA group 4: industrially formulated products such as chips and crisps, candy and sweets, pastries and packaged cakes, soft drinks, packaged snack bars, instant noodles, hot dogs and deli meats, sugary cereals, or a deep-fried fast-food plate. Whole and minimally processed foods are never processed, cooked at home or not: eggs, bread and toast, fruit, plain Greek yogurt, milk, cheese, rice, oats, potatoes, meat, fish, vegetables, nuts, olive oil, butter. Judge processed by what is on this plate only.
-fits is "yes" when the plate does what today's rules ask, "partly" when it does most of it, "no" when it works against them. why is one or two whole sentences, at most 35 words in all, direct, the way a coach at the trainer would say it, to him as "you" (never "he" or "his"); every text field speaks to him the same way. He has already eaten this plate: never tell him to skip it, swap it, leave part of it, or save it for tomorrow, and never say "skip the rice"; say what it means for what comes next (the next slot on the plan, or the rest of the evening).`;
-
-function promptFor(g, meal, notes, written, photos) {
-  const rules = g.guidelines.map(x => '- ' + x.text).join('\n');
-  return `${written && photos ? `
-This time he sent the photo AND wrote about the plate: "${written}". Read the two together as one meal. His words win on what a photo cannot show: weights he gives are from a kitchen scale and are exact, and he names the oil, the sauce, what is under the rice, what the bowl holds, the brand. The photo shows the portion and anything he did not mention. Never count the same food twice because it is both in the photo and in his words.` : written ? `
-This time there is no photo: he wrote the meal down instead. Read his words as the plate: "${written}". Weights he gives are from a kitchen scale and are exact: use them as given. Where he gives none, assume the usual portions for a ${g.kg || 98} kg cyclist and say so in the portion field, written to him ("your usual", never "his").` : ''}
-Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
-Today's guidelines:
-${rules}
-${g.work ? `What happened on the bike: ${g.work.note}\n` : ''}Today's meal plan, timed around the training:
-${(g.rows || g.meals || []).map(m => `- ${tz.hm12(m.time)}${m.next_day ? ' (after midnight)' : ''} ${m.slot}: ${m.what}${m.kcal ? ` (~${m.kcal} kcal, ${m.carbs_g} g carbs${m.protein_g ? `, ${m.protein_g} g protein` : ''})` : ''}${(m.logged || []).length ? ' [already eaten]' : ''}`).join('\n')}
-${g.cue ? `Where the day stands right now: ${g.cue.text}\n` : ''}${g.logged && g.logged.length ? `Already in the journal today (do not ask for a meal he has already eaten): ${g.logged.map(e => `${e.time} ${e.meal}: ${e.name} (${e.kcal} kcal, ${e.carbs_g} C / ${e.protein_g} P / ${e.fat_g} F${e.fluid_ml ? `, ${e.fluid_ml} ml` : ''})`).join('; ')}. Eaten so far: ${g.logged.reduce((a, e) => a + (e.kcal || 0), 0)} kcal, ${g.logged.reduce((a, e) => a + (e.carbs_g || 0), 0)} C / ${g.logged.reduce((a, e) => a + (e.protein_g || 0), 0)} P / ${g.logged.reduce((a, e) => a + (e.fat_g || 0), 0)} F.\n` : ''}${meal ? `He says this is ${meal}.` : 'Guess which meal this is from the food and the time of day.'}${notes ? `\nHis note, which overrides what you can see: "${notes}"` : ''}
-
-${g.slotRow ? `This plate goes in his ${g.slotRow.slot} slot (planned ${tz.hm12(g.slotRow.time)}: ~${g.slotRow.kcal} kcal, ${g.slotRow.carbs_g} g carbs${g.slotRow.protein_g ? `, ${g.slotRow.protein_g} g protein` : ''}${(g.slotRow.logged || []).length ? `, and already holding what he ate earlier in it` : ''}). Call it by that name, and judge it against that slot and today's guidelines.` : 'This plate falls outside the plan\'s slots: judge it against today\'s guidelines and what is left of the day.'}
-Current time of day where he is: ${tz.hm12(hmNow())}.`;
-}
-
-async function analyze(images, g, meal, notes, written) {
-  const key = (process.env.ANTHROPIC_API_KEY || '').trim();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
-  const content = (images || []).slice(0, 4).map(img => ({ type: 'image',
-    source: { type: 'base64', media_type: img.media_type || 'image/jpeg', data: img.image_base64 } }));
-  content.push({ type: 'text', text: promptFor(g, meal, notes, written, images.length) });
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json',
-      'anthropic-beta': 'server-side-fallback-2026-07-01' },
-    body: JSON.stringify({
-      model: MODEL, max_tokens: 2000,
-      fallbacks: 'default',
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
-      system: [{ type: 'text', text: READER, cache_control: { type: 'ephemeral' } }],
-      messages: [{ role: 'user', content }]
-    })
-  });
-  const j = await r.json();
-  if (j.usage) console.log('food reader usage', JSON.stringify(j.usage));
-  if (!r.ok) throw new Error('vision ' + r.status + ': ' + ((j.error && j.error.message) || JSON.stringify(j)).slice(0, 200));
-  if (j.stop_reason === 'refusal') throw new Error('the model declined to read this photo' + (j.stop_details && j.stop_details.explanation ? ': ' + j.stop_details.explanation : ''));
-  const block = (j.content || []).find(c => c.type === 'text');
-  if (!block) throw new Error('no answer from the vision model');
-  let out;
-  try { out = JSON.parse(block.text.replace(/```json|```/g, '').trim()); }
-  catch { throw new Error('vision answer was not JSON: ' + block.text.slice(0, 160)); }
+// The reader. Until 26 Nov 2026 a photo or his words went to Claude (the paid API), which named the food and
+// estimated its macros. The Way runs free now: there is no model. An entry is logged from his words and the numbers
+// in them ("oatmeal with berries 420 kcal 70c 14p 8f", or "... 420 kcal, 70 g carbs, 14 g protein, 8 g fat"), or the
+// numbers the connector sends with them (given). A photo alone can no longer be read.
+const NUM = '(\\d+(?:\\.\\d+)?)';
+function numbersIn(text) {
+  const t = String(text || '').toLowerCase(), out = {};
+  const grab = (k, res) => { for (const re of res) { const m = re.exec(t); if (m) { out[k] = Math.round(Number(m[1])); return; } } };
+  grab('kcal', [new RegExp(NUM + '\\s*(?:kcal|cal(?:ories)?)\\b')]);
+  grab('carbs_g', [new RegExp(NUM + '\\s*g?\\s*(?:of\\s+)?carb(?:s|ohydrates?)?\\b'), new RegExp('\\b' + NUM + '\\s*c\\b')]);
+  grab('protein_g', [new RegExp(NUM + '\\s*g?\\s*(?:of\\s+)?protein\\b'), new RegExp('\\b' + NUM + '\\s*p\\b')]);
+  grab('fat_g', [new RegExp(NUM + '\\s*g?\\s*(?:of\\s+)?fat\\b'), new RegExp('\\b' + NUM + '\\s*f\\b')]);
+  grab('fluid_ml', [new RegExp(NUM + '\\s*ml\\b')]);
   return out;
+}
+const nameOf = text => String(text || '').replace(/\b\d+(?:\.\d+)?\s*(?:kcal|cal(?:ories)?|ml|g?\s*(?:of\s+)?(?:carb(?:s|ohydrates?)?|protein|fat)|[cpf])\b[,;]?/gi, ' ').replace(/\s{2,}/g, ' ').replace(/[\s,;:-]+$/, '').trim();
+async function analyze(images, g, meal, notes, written, given) {
+  const n = Object.assign({}, numbersIn(written), given && typeof given === 'object' ? given : {});
+  if (!(Number(n.kcal) >= 0) || n.kcal == null) {
+    const e = new Error(images && images.length && !written
+      ? 'The photo reader was taken out (it called a paid AI). Type the meal with its numbers, e.g. "oatmeal 420 kcal 70c 14p 8f".'
+      : 'Add the numbers: at least the calories, e.g. "oatmeal 420 kcal 70c 14p 8f" (carbs, protein, fat in grams).');
+    e.status = 400; throw e;
+  }
+  const carbs = Number(n.carbs_g) || 0, protein = Number(n.protein_g) || 0, fluid = Number(n.fluid_ml) || 0;
+  return { food_name: nameOf(written) || 'meal', portion: 'as logged', kcal: Number(n.kcal) || 0, carbs_g: carbs, protein_g: protein, fat_g: Number(n.fat_g) || 0,
+    confidence: 'medium', meal_guess: meal || null, protein_source: protein >= 25, carbs: carbs >= 45 ? 'heavy' : carbs >= 15 ? 'some' : 'none', vegetables: false, processed: false,
+    fits: 'partly', why: 'Logged with your own numbers.', ingredients: [], micronutrients: null, fluid_ml: fluid, drink: fluid > 0 && Number(n.kcal) < 60 ? nameOf(written).slice(0, 40) : '' };
 }
 
 // ---- rechecks: a sentence written at 7:20 must not speak for the day at 9:00 ----
@@ -442,56 +415,14 @@ async function analyze(images, g, meal, notes, written) {
 // sentences are re-read against the day as it now stands, in one cheap text call, and kept with
 // the time of the re-read; the first words are kept as why_then. The verdict on the plate itself
 // (fits) never changes here: only what the sentence says about the rest of the day.
-const RECHECK_MODEL = process.env.FOOD_RECHECK_MODEL || 'claude-haiku-5-5';
 function staleOf(entries) {
   const live = entries.filter(e => !e.supplement && e.assessment && e.assessment.why && e.at);
   if (live.length < 2) return { latest: null, stale: [] };
   const latest = live.slice().sort((a, b) => String(a.at).localeCompare(String(b.at))).pop();
   return { latest, stale: live.filter(e => e.id !== latest.id && e.why_as_of !== latest.id) };
 }
-async function recheckDay(date) {
-  const doc = await dayDoc(date);
-  const { latest, stale } = staleOf(doc.entries);
-  if (!latest || !stale.length) return { rechecked: 0 };
-  const key = (process.env.ANTHROPIC_API_KEY || '').trim();
-  if (!key) throw new Error('ANTHROPIC_API_KEY is not set in Netlify');
-  const g = await guidelinesFor(date);
-  const sum = k => Math.round(doc.entries.filter(e => !e.supplement).reduce((a, e) => a + (e[k] || 0), 0));
-  const line = e => `${tz.hm12(e.time)} ${e.drink_only ? 'drink' : e.slot || e.meal}: ${e.name}, ${e.kcal} kcal, ${e.carbs_g} g carbs, ${e.protein_g} g protein, ${e.fat_g} g fat${F.alcoholOf(e) ? ` (alcohol, ${F.alcoholOf(e)} drink${F.alcoholOf(e) === 1 ? '' : 's'})` : ''}`;
-  const prompt = `You are the nutrition coach for one cyclist, 48, 98 kg, losing weight slowly while training. Each journal entry carries one sentence you wrote when it was logged. The day has moved on since; rewrite the sentences below so each is true of the day AS IT NOW STANDS.
-Today is a ${g.fuel_day}. Targets for the whole day: ${g.target.kcal} kcal, ${g.target.carbs_g} g carbs, ${g.target.protein_g} g protein, ${g.target.fat_g} g fat.
-Today's rules:
-${g.guidelines.map(x => '- ' + x.text).join('\n')}
-The journal now, in order:
-${doc.entries.filter(e => !e.supplement).slice().sort((a, b) => String(a.time).localeCompare(String(b.time))).map(line).join('\n')}
-Totals now: ${sum('kcal')} kcal, ${sum('carbs_g')} g carbs, ${sum('protein_g')} g protein, ${sum('fat_g')} g fat.
-Sentences to rewrite:
-${stale.map(e => `- id ${e.id}, ${tz.hm12(e.time)} ${e.name}: "${e.assessment.why}"`).join('\n')}
-For each: one whole plain sentence, at most 35 words, spoken to him as "you" (never "he" or "his"), about that item in the light of everything logged since. Keep its own verdict (a good plate stays good, a poor one poor, a pint is still a pint). Never ask for food a later entry already brought: if the pint's sentence asked for protein at dinner and the shrimp at 8:53 brought 112 g, say the shrimp closed it. Name later entries by what they were. Everything in the journal has been eaten: never tell him to skip, swap or undo any of it, or to save it for tomorrow; say only what is next. Times in 12-hour form. Answer with JSON only: {"readings":[{"id":"...","why":"..."}]}.`;
-  const schema = { type: 'object', additionalProperties: false, required: ['readings'], properties: { readings: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'why'], properties: { id: { type: 'string' }, why: { type: 'string' } } } } } };
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'x-api-key': key, 'anthropic-version': '2023-06-01', 'Content-Type': 'application/json', 'anthropic-beta': 'server-side-fallback-2026-07-01' },
-    body: JSON.stringify({ model: RECHECK_MODEL, max_tokens: 6000, fallbacks: 'default', output_config: { effort: 'low', format: { type: 'json_schema', schema } }, messages: [{ role: 'user', content: prompt }] })
-  });
-  const j = await r.json();
-  if (!r.ok) throw new Error('recheck ' + r.status + ': ' + ((j.error && j.error.message) || '').slice(0, 200));
-  const text = (j.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
-  let out; try { out = JSON.parse(text.replace(/```json|```/g, '').trim()); }
-  catch { const m = /\{[\s\S]*\}/.exec(text); try { out = JSON.parse(m ? m[0] : ''); } catch { throw new Error(`recheck answer was not JSON (${j.stop_reason || 'no stop reason'}; ${(j.content || []).map(c => c.type).join(',') || 'no content'}): ${text.slice(0, 120)}`); } }
-  const nowHM = (() => { const p = tz.parts(new Date()); return String(p.h).padStart(2, '0') + ':' + String(p.mi).padStart(2, '0'); })();
-  let n = 0;
-  const fresh = await dayDoc(date);      // re-read: a log may have landed while the model thought
-  for (const rd of (out.readings || [])) {
-    const e = fresh.entries.find(x => x.id === rd.id); if (!e || !e.assessment || !rd.why) continue;
-    const why = F.tidyWhy(rd.why, 420);
-    if (why !== e.assessment.why) { e.why_then = e.why_then || e.assessment.why; e.assessment.why = why; e.why_at = nowHM; n++; }
-    e.why_as_of = latest.id;
-  }
-  for (const e of stale) { const x = fresh.entries.find(y => y.id === e.id); if (x) x.why_as_of = latest.id; }   // asked and answered, even if unchanged
-  await setJSON(dayKey(date), fresh);
-  return { rechecked: n, asked: stale.length };
-}
+// The re-read of the day's earlier sentences called Claude (the paid API) and was taken out: each sentence stands as written.
+async function recheckDay() { return { rechecked: 0, removed: true }; }
 
 async function dayReport(date) {
   const g = await guidelinesFor(date);
@@ -796,7 +727,7 @@ async function addPhoto(body) {
     // The coach sees what is already in the journal, so it never asks for a meal just eaten.
     g.logged = st.entries.filter(e => !e.supplement).map(e => ({ time: e.time, meal: e.drink_only ? 'drink' : e.meal, name: e.name, kcal: e.kcal, carbs_g: e.carbs_g, protein_g: e.protein_g, fat_g: e.fat_g, fluid_ml: e.fluid_ml || 0 }));
   } catch (e) { g.logged = g.logged || []; }
-  const a = await analyze(images, g, meal, notes, written);
+  const a = await analyze(images, g, meal, notes, written, body.given);
   const id = 'f_' + crypto.randomBytes(5).toString('hex');
   const entry = {
     id, at: new Date().toISOString(), date, time: nowHM,
@@ -937,13 +868,6 @@ function attach(app) {
   app.post('/food/item', async (req, res) => { if (!auth(req, res)) return;
     try { const entry = await addKnown(req.body); res.json({ ok: true, entry, day: await dayReport(entry.date) }); }
     catch (e) { res.status(400).json({ ok: false, error: e.message }); } });
-  // re-read the day's earlier sentences against the day as it now stands
-  app.post('/food/recheck', async (req, res) => { if (!auth(req, res)) return;
-    try {
-      const date = /^\d{4}-\d{2}-\d{2}$/.test((req.body || {}).date || '') ? req.body.date : tz.todayKey();
-      const r = await recheckDay(date);
-      res.json(Object.assign({ ok: true }, r, { day: await dayReport(date) }));
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
   // The same words again within twenty minutes are caught here, before the read, as the voice catches
   // them: 409 with the earlier entry; sent again with force: true, both are kept.
   app.post('/food/text', async (req, res) => { if (!auth(req, res)) return;
@@ -958,11 +882,8 @@ function attach(app) {
       res.json({ ok: true, entry, day: await dayReport(entry.date) });
     } catch (e) { res.status(e.status || 500).json({ ok: false, error: e.message, not_food: e.not_food || undefined }); } });
 
-  app.post('/food/photo', async (req, res) => { if (!auth(req, res)) return;
-    try {
-      const entry = await addPhoto(req.body || {});
-      res.json({ ok: true, entry, day: await dayReport(entry.date) });
-    } catch (e) { res.status(500).json({ ok: false, error: e.message }); } });
+  // POST /food/photo is gone: the photo reader called a paid AI.
+  app.post('/food/photo', (req, res) => res.status(410).json({ ok: false, error: 'The photo reader was taken out (it called a paid AI). Type the meal with its numbers.' }));
 
   // A supplement is an entry without a photo: one tap, its nutrients counted.
   // the legs tap after a ride, and the fuel verdicts for the days ahead (calendar dots)

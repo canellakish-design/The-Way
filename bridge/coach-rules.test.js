@@ -55,7 +55,7 @@ ok('1 Nov and since: the standing rules he has corrected are all still in what t
 });
 ok('10 Nov, "Harry does not like bananas": nothing the site or the coach writes suggests one', () => {
   const fs = require('fs');
-  for (const f of ['food-math.js', 'energy-math.js', 'coach-first.js', 'expert.js']) assert.ok(!/banana/i.test(fs.readFileSync(require.resolve('./' + f), 'utf8')), f + ' suggests a banana');
+  for (const f of ['food-math.js', 'energy-math.js', 'expert.js']) assert.ok(!/banana/i.test(fs.readFileSync(require.resolve('./' + f), 'utf8')), f + ' suggests a banana');
   assert.ok(/does not like bananas/.test(advisor));
 });
 ok('one rule where there were two: Zone 1, the earliest session, the shape of the week, the recovery source', () => {
@@ -72,10 +72,5 @@ ok('the notebook: he can tell the coach to remember something, and both coaches 
   const src = require('fs').readFileSync(require.resolve('./voice'), 'utf8');
   assert.ok(/case 'remember'/.test(src) && /getJSON\('coach-notebook'/.test(src) && /WHAT HE TOLD YOU/.test(src));
 });
-ok('16 Nov, "a more complex question seems to time out": the answer has a deadline, and a big question is handed on, not dropped', () => {
-  const src = require('fs').readFileSync(require.resolve('./voice'), 'utf8');
-  assert.ok(/- research: /.test(sys) && /case 'research'/.test(src) && /startJob\(text, base, \{ kind: 'handoff' \}\)/.test(src));
-  assert.ok(/AbortSignal\.timeout/.test(src) && /deadline: tAll \+ 20000/.test(src) && /Date\.now\(\) - tStart < 10000/.test(src));
-  assert.ok(/ONLY when he asks for a week to be planned/.test(src));                    // asked about sleep, it laid out a week
-});
+// (16 Nov, the talking coach's deadline: that coach called Claude and was taken out on 26 Nov 2026.)
 console.log(`\n${n} checks, all good`);

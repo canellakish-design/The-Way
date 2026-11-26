@@ -374,7 +374,8 @@
     u.onerror = e => { talking = false; subChar = -1; if (was.err) was.err(e); };
     u.onboundary = e => { if (e.name === "word" || e.name === undefined) { lastWord = performance.now(); if (e.charIndex != null) subChar = e.charIndex; target = 0.55 + Math.random() * 0.45; setTimeout(() => { target = 0.15; }, 140); } if (was.b) was.b(e); };
   }
-  async function briefing(){
+  // the spoken briefing was written by Claude (POST /voice/briefing, a paid API): taken out on 26 Nov 2026
+  async function briefing(){ return;
     if (window.primeSound) try { primeSound(); } catch (e) {}   // the tap that asked unlocks the sound
     if (!live()) { pending = true; location.hash = "#coach"; return; }
     if (busy) return;

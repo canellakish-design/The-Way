@@ -46,7 +46,7 @@ const WALK_KM = 1.2;   // nearer than this to home: a walk, not a drive
 const FAR_KM = 400;    // an errand looked up further than this is a wrong match (a game can be that far: PDA)
 
 const clampInt = (v, lo, hi, d) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d; };
-const trafficKey = () => String(process.env.TOMTOM_API_KEY || '').trim();
+const trafficKey = () => '' /* TomTom (paid) taken out: The Way runs free */;
 const iso = (date, min) => { const [y, mo, d] = date.split('-').map(Number); return tz.zonedToUTC(y, mo, d, Math.floor(min / 60), min % 60).toISOString(); };
 const hmOf = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(((m % 60) + 60) % 60).padStart(2, '0');
 const hm = m => tz.hm12(hmOf(m));
@@ -315,7 +315,7 @@ async function check(now) {
   const ahead = (Math.floor(nowMin / 5) % 6) + 1, aday = tz.shiftKey(date, ahead);
   const aevs = ahead === 1 ? evs : await require('./calendar').eventsBetween(aday, aday).catch(() => []);
   await refresh(aday, aevs).catch(() => null);
-  if (!s.notify || !trafficKey()) return { skipped: !s.notify ? 'notifications off' : 'no traffic key (TOMTOM_API_KEY)' };
+  if (!s.notify || !trafficKey()) return { skipped: !s.notify ? 'notifications off' : 'live traffic used TomTom, a paid service, and was taken out' };
   const trips = chain(tripsFor(date, evs, s), store, s);
   const log = await getJSON('commute-sent', { date, sent: {} });
   if (log.date !== date) { log.date = date; log.sent = {}; }

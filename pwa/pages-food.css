@@ -196,3 +196,5 @@ details.ln-fold .primary{margin-top:10px}
 .eb-key i.k2{border-top:2px dashed var(--muted)} .eb-key i.k6{border-top:2px dotted var(--green)}
 .eb-key i.k3,.eb-key i.k4{width:9px; height:9px; border-radius:50%; border:0; background:var(--green)} .eb-key i.k4{background:transparent; border:2px solid var(--amber); width:8px; height:8px}
 .eb-key i.k5{height:9px; border:0; background:var(--water); opacity:.35}
+/* the photo tiles and links are hidden: the paid photo reader was taken out (26 Nov 2026) */
+.fd-tiles [hidden], .linkish[hidden]{display:none !important}
