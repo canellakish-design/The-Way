@@ -15,7 +15,7 @@
   const alive = () => location.hash.split("?")[0] === "#player";
   const params = () => new URLSearchParams(location.hash.split("?")[1] || "");
   const FTMS = 0x1826, BIKE_DATA = 0x2ad2, CONTROL = 0x2ad9, CPS = 0x1818;
-  const LS = { trainer: "way-player-trainer", strap: "way-player-strap", breath: "way-player-breath" };
+  const LS = { trainer: "way-player-trainer", strap: "way-player-strap", breath: "way-player-breath", meter: "way-player-meter" };
   // On an easy ride the heart rate leads and the player aims for 110 (Harry, 14 Nov 2026: "it creeped below 100 at
   // times. I'd like to be more in like the 110 range"): 108 to 112 is on target, 116 is still the ceiling.
   const HR_Z1_AIM = 110, HR_AIM_BAND = 2;
@@ -23,6 +23,15 @@
   const RAW_CAP_EACH = 4000, RAW_CAP_ALL = 12000;        // raw strap values kept per ride, for decoding breathing later
   const lsGet = k => { try{ return localStorage.getItem(k); }catch{ return null; } };
   const lsSet = (k, v) => { try{ localStorage.setItem(k, v); }catch{} };
+  // Course mode (Harry, 26 Nov 2026): his settings and his courses, kept on this computer
+  const CSET_KEY = "way-course-settings", CLIB_KEY = "way-courses", MODE_KEY = "way-player-mode";
+  // Physics (Fitness Coach, 26 Nov 2026): his weight (98.4 kg to start) plus the bike (8 kg), CdA 0.36 and Crr 0.004, all
+  // his to change; no drafting, no wind. The speed always uses the course's true grade: the difficulty changes the feel only.
+  const CSET_DEFAULT = { difficulty: 50, max_grade: 10, descent_cap: -5, rider_kg: 98.4, bike_kg: 8, cda: 0.36, crr: 0.004, view: "2d", mapillary_token: "" };
+  function courseSettings(){ let x = {}; try{ x = JSON.parse(lsGet(CSET_KEY) || "{}") || {}; }catch{} delete x.mass_kg; const o = Object.assign({}, CSET_DEFAULT, x); o.mass_kg = Math.round(((+o.rider_kg || 98.4) + (+o.bike_kg || 8)) * 10) / 10; return o; }
+  function saveCourseSettings(x){ const o = Object.assign({}, x); delete o.mass_kg; lsSet(CSET_KEY, JSON.stringify(o)); }
+  function courseLib(){ try{ const xs = JSON.parse(lsGet(CLIB_KEY) || "[]"); return Array.isArray(xs) ? xs : []; }catch{ return []; } }
+  function saveCourseLib(xs){ try{ localStorage.setItem(CLIB_KEY, JSON.stringify(xs)); return null; }catch(e){ return "this computer has no room left for more courses: remove one first"; } }
   const pad2 = n => String(n).padStart(2, "0");
   const clock = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return h ? `${h}:${pad2(m)}:${pad2(x)}` : `${m}:${pad2(x)}`; };
   const keyOf = d => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -316,8 +325,10 @@
   }
 
   // ---------- the devices ----------
-  const L = { power: null, cadence: null, speed: null, hr: null, bikeAt: 0, hrAt: 0 };
-  const DEV = { trainer: null, control: null, strap: null, breath: null, trainerName: null, strapName: null, breathName: null, sent: undefined, chooseNext: { trainer: false, strap: false, breath: false } };
+  const L = { power: null, cadence: null, speed: null, hr: null, bikeAt: 0, hrAt: 0, src: null, pmAt: 0, pm: null, pmCad: null };
+  // the power in use: the bike's meter while it is heard (the last 3 s), else the trainer's own (Fitness Coach, 26 Nov 2026)
+  const meterLive = () => !!DEV.meter && now() - L.pmAt <= 3000;
+  const DEV = { trainer: null, control: null, strap: null, breath: null, meter: null, trainerName: null, strapName: null, breathName: null, meterName: null, sent: undefined, chooseNext: { trainer: false, strap: false, breath: false, meter: false } };
   const ctlLog = window.__playerCtl = [];
   let ctlQ = Promise.resolve();
   function ctl(bytes, what){
@@ -365,13 +376,48 @@
     const ftms = await gatt.getPrimaryService(FTMS);
     const data = await ftms.getCharacteristic(BIKE_DATA);
     await data.startNotifications();
-    if (!data.__way){ data.__way = true; data.addEventListener("characteristicvaluechanged", e => { const d = parseBikeData(e.target.value); if (d.power != null) L.power = d.power; if (d.cadence != null) L.cadence = Math.round(d.cadence); if (d.speed != null) L.speed = d.speed; L.bikeAt = now(); pump(); }); }
+    if (!data.__way){ data.__way = true; data.addEventListener("characteristicvaluechanged", e => { const d = parseBikeData(e.target.value); if (d.power != null && !meterLive()){ L.power = d.power; L.src = "trainer"; } if (d.cadence != null) L.cadence = Math.round(d.cadence); if (d.speed != null) L.speed = d.speed; L.bikeAt = now(); pump(); }); }
     const control = await ftms.getCharacteristic(CONTROL);
     await control.startNotifications().catch(() => {});
     DEV.control = control; DEV.trainer = dev; DEV.trainerName = dev.name || "Trainer"; DEV.sent = undefined;
     await ctl([0x00], "request control");
     drawDevices();
     if (ride && ride.state === "riding"){ await ctl([0x07], "start"); syncErg(true); }
+  }
+  // The bike's own power meter, over Bluetooth (Cycling Power Service 0x1818, Cycling Power Measurement 0x2A63): he picks
+  // it in the browser's list (the trainer may show there too: pick the bike's). Its power is used while it is heard.
+  async function connectMeter(auto){
+    if (SIM.on){ DEV.meterName = "Simulated power meter"; DEV.meter = { sim: true }; drawDevices(); return; }
+    if (!navigator.bluetooth) return;
+    setDevState("meter", "connecting…");
+    try{
+      const dev = await pickDevice("meter", { filters: [{ services: [CPS] }], optionalServices: [CPS, "battery_service", "device_information"] });
+      await attachMeter(dev);
+      lsSet(LS.meter, dev.name || "");
+      if (!dev.__wayWatch){ dev.__wayWatch = true; dev.addEventListener("gattserverdisconnected", () => { DEV.meter = null; drawDevices(); note("power meter disconnected: the trainer's power is used"); if (ride && ride.state === "riding") reconnect(dev, attachMeter, "meter"); }); }
+    }catch(e){ if (!auto) DEV.chooseNext.meter = true; setDevState("meter", auto ? "not in range yet" : /cancel/i.test(e.message) ? "not connected" : `not connected: ${e.message}`); throw e; }
+  }
+  // flags (uint16), instantaneous power (sint16), then by flag: pedal balance (1), torque (2), wheel revolutions (4+2),
+  // crank revolutions (2) and the last crank event (2, 1/1024 s): the cadence when there is no trainer to give it
+  function parsePower(dv){
+    const f = dv.getUint16(0, true); let i = 4; const out = { power: dv.getInt16(2, true) };
+    if (f & 0x01) i += 1; if (f & 0x04) i += 2; if (f & 0x10) i += 6;
+    if (f & 0x20 && dv.byteLength >= i + 4){ out.revs = dv.getUint16(i, true); out.evt = dv.getUint16(i + 2, true); }
+    return out;
+  }
+  async function attachMeter(dev){
+    const gatt = await dev.gatt.connect();
+    const svc = await gatt.getPrimaryService(CPS);
+    const ch = await svc.getCharacteristic(0x2A63);
+    await ch.startNotifications();
+    if (!ch.__way){ ch.__way = true; let last = null; ch.addEventListener("characteristicvaluechanged", e => {
+      const d = parsePower(e.target.value), t = now();
+      L.pm = d.power; L.pmAt = t; L.power = Math.max(0, d.power); L.src = "meter";
+      if (d.revs != null){ if (last && d.evt !== last.evt){ const dr = (d.revs - last.revs + 65536) % 65536, dt = ((d.evt - last.evt + 65536) % 65536) / 1024; if (dt > 0 && dr < 10) L.pmCad = Math.round(dr / dt * 60); } last = d; }
+      if (!DEV.trainer){ L.bikeAt = t; if (L.pmCad != null) L.cadence = L.pmCad; }
+      pump(); }); }
+    DEV.meter = dev; DEV.meterName = dev.name || "Power meter";
+    drawDevices();
   }
   async function connectStrap(auto){
     if (SIM.on){ DEV.strapName = "Simulated strap"; DEV.strap = { sim: true }; drawDevices(); return; }
@@ -497,6 +543,7 @@
       if (!DEV.trainer && lsGet(LS.trainer) && !DEV.chooseNext.trainer) connectTrainer(true).catch(() => {});
       if (!DEV.strap && lsGet(LS.strap) && !DEV.chooseNext.strap) connectStrap(true).catch(() => {});
       if (!DEV.breath && lsGet(LS.breath) && !DEV.chooseNext.breath) connectBreath(true).catch(() => {});
+      if (!DEV.meter && lsGet(LS.meter) && !DEV.chooseNext.meter) connectMeter(true).catch(() => {});
       if (DEV.trainer && DEV.strap) clearInterval(autoTimer);
     };
     go(); autoTimer = setInterval(go, 4000);
@@ -504,9 +551,9 @@
   function reconnect(dev, attach, kind){
     let tries = 0;
     const go = async () => {
-      if (!ride || ride.state === "ended" || (kind === "trainer" ? DEV.trainer : kind === "breath" ? DEV.breath : DEV.strap)) return;
+      if (!ride || ride.state === "ended" || DEV[kind]) return;
       tries++;
-      try{ await attach(dev); note(`${kind === "trainer" ? "trainer" : "strap"} back`); }
+      try{ await attach(dev); note(`${kind === "trainer" ? "trainer" : kind === "meter" ? "power meter" : kind === "breath" ? "breathing sensor" : "strap"} back`); }
       catch(e){ if (tries < 20) setTimeout(go, 3000); }
     };
     setTimeout(go, 1500);
@@ -518,7 +565,7 @@
     if (SIM.coast){ L.power = 0; L.cadence = 0; L.speed = 0; L.bikeAt = ts; SIM.hr += (78 - SIM.hr) * 0.03; L.hr = Math.round(SIM.hr); L.hrAt = ts; return; }   // off the bike
     const iv = cur();
     const tgt = targetNow();
-    let p = tgt != null && ergActive(iv) ? tgt + Math.round((Math.random() - 0.5) * 8) : 125 + Math.round(Math.sin(ts / 9000) * 12);
+    let p = tgt != null && ergActive(iv) ? tgt + Math.round((Math.random() - 0.5) * 8) : ride && ride.course ? Math.round(150 + 9 * (ride.cst.sent || 0) + (Math.random() - 0.5) * 10) : 125 + Math.round(Math.sin(ts / 9000) * 12);
     if (SIM.force != null) p = SIM.force;   // a test holds a power of its own (window.__player.sim.power)
     if (iv && iv.kind === "hr") SIM.hr += ((72 + p * 0.3) - SIM.hr) * 0.04;   // a slower heart, so the seeking has to wait for it
     L.power = Math.max(0, p); L.cadence = 86 + Math.round(Math.random() * 6); L.speed = Math.round(3.6 * Math.cbrt(Math.max(1, p) / 0.24) * 100) / 100; L.bikeAt = ts;
@@ -561,6 +608,7 @@
   function hrBand(iv){
     if (!iv || !ride) return null;
     const z1 = b => b.hi <= HR_Z1 && b.lo >= 90;
+    if (iv.kind === "hr" && iv.target_hr && iv.target_hr.aim != null){ const b = iv.target_hr; return { lo: b.lo, hi: b.hi, aim: b.aim, z1: b.aim <= HR_Z1, watts: false }; }   // a target he typed: held at that number
     if (iv.kind === "hr" && iv.target_hr){ const b = iv.target_hr; return { lo: b.lo, hi: b.hi, aim: z1(b) ? Math.min(HR_Z1_AIM, b.hi - HR_AIM_BAND) : Math.round((b.lo + b.hi) / 2), z1: z1(b), watts: false }; }
     if (iv.kind === "power" && iv.target_w != null && iv.target_w_end == null && iv.dur_s >= 600 && iv.target_w <= ride.ftp * 0.72) return { lo: HR_Z1_LO, hi: HR_Z1, aim: HR_Z1_AIM, z1: true, watts: true };
     return null;
@@ -571,7 +619,7 @@
   // 8 W toward the band, 12 W in the first minute of the first such interval; the watts found carry into the next
   // heart-rate interval, so the first effort calibrates and the rest ride what it learned. Bounded to half and
   // 1.3 times the seed, so a dropped strap can never run the trainer away.
-  const seekSeed = (iv, ftp) => iv.kind === "power" && iv.target_w != null ? iv.target_w : iv.target_hr && iv.target_hr.lo >= 130 ? Math.round(ftp * 1.17) : iv.target_hr && iv.target_hr.hi <= HR_Z1 ? Math.round(ftp * 0.6) : Math.round(ftp * 0.85);
+  const seekSeed = (iv, ftp) => iv.target_hr && iv.target_hr.aim != null ? Math.round(ftp * Math.min(1, 0.6 + Math.max(0, iv.target_hr.aim - HR_Z1) * 0.015)) : iv.kind === "power" && iv.target_w != null ? iv.target_w : iv.target_hr && iv.target_hr.lo >= 130 ? Math.round(ftp * 1.17) : iv.target_hr && iv.target_hr.hi <= HR_Z1 ? Math.round(ftp * 0.6) : Math.round(ftp * 0.85);
   // what was learned is kept apart for easy riding and for hard efforts: the watts a VO2 effort found never start a Zone 1 step
   const seekKey = iv => { const b = hrBand(iv); return b && b.z1 ? "seekWz1" : "seekW"; };
   function seekWatts(iv){
@@ -609,6 +657,7 @@
   }
   function syncErg(force){
     if (!ride || ride.state !== "riding") return;
+    if (ride.course){ courseSend(force); return; }    // course mode: the course's grade, never watts
     const want = ergActive(cur()) ? targetNow() : "free";
     if (!force && want === DEV.sent) return;
     DEV.sent = want;
@@ -634,7 +683,7 @@
     return flushing;
   }
   // what goes into IndexedDB: everything needed to finish and save the ride later
-  const recordOf = r => ({ mpa: r.mpa ? { bt: r.mpa.bt, over_s: r.mpa.over_s, low: r.mpa.low } : null, id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
+  const recordOf = r => ({ psrc: r.psrc || null, course: r.course ? { id: r.course.id || null, name: r.course.name, dist_m: r.course.dist_m, ascent_m: r.course.ascent_m } : null, cset: r.cset || null, mpa: r.mpa ? { bt: r.mpa.bt, over_s: r.mpa.over_s, low: r.mpa.low } : null, id: r.id, status: r.status, state: r.state, workout: r.workout, intervals: r.intervals, ftp: r.ftp, date: r.date, samples: r.samples, pauses: r.pauses,
     wt: r.wt, bias: r.bias, erg: r.erg, raw: r.raw || {}, rawCount: r.rawCount || 0, breath: r.breath || [], breath_layout: BR.layout || null, sim: !!r.sim, updated: r.updated, error: r.error || null, result: r.result || null, devices: { trainer: DEV.trainerName, strap: DEV.strapName, breath: DEV.breathName } });
 
   // one recorded second: the moment's numbers, then the workout clock moves on
@@ -660,21 +709,41 @@
       // deep into an effort and within a few watts of it: one push, said once a minute at most
       if (p != null && !M.bt && M.tank <= 60 && p >= M.mpa * 0.95) coachSay(`You are ${Math.max(1, M.mpa - p)} watt${M.mpa - p > 1 ? "s" : ""} from a breakthrough. Push now.`, { every: ["near", 60], force: true }); }
   }
+  // ---- course mode: one second along the course. The power moves him (pwa/course.js); the trainer is sent the grade
+  // (times the difficulty, between the caps) when it changes or every ten seconds. Heart rate never enters it.
+  function courseSend(force){
+    const r = ride; if (!r || !r.course) return;
+    const g = r.cst.sent != null ? r.cst.sent : Course.trainerGrade(Course.gradeAt(r.course, r.cst.x), r.cset);
+    if (!force && DEV.sentGrade === g) return;
+    DEV.sentGrade = g; r.cst.sent = g;
+    ctl(Course.simBytes(g), `grade ${g.toFixed(1)} %`);
+  }
+  function courseSecond(r, ts){
+    const fresh = ts - L.bikeAt <= 3000, w = fresh && L.power != null ? L.power : 0;
+    const was = r.cst.done;
+    Object.assign(r.cst, Course.second(r.course, r.cst, w, r.cset));
+    if (r.cst.send){ DEV.sentGrade = r.cst.sent; ctl(Course.simBytes(r.cst.sent), `grade ${r.cst.sent.toFixed(1)} %`); }
+    if (r.cst.done && !was){ beep(1320, 0.4); note(`${r.course.name}: done. ${(r.course.dist_m / 1000).toFixed(1)} km and ${r.course.ascent_m} m climbed. Ride on (the road is flat now) or End to save.`); flush(); }
+    return { v_kmh: Math.round(r.cst.v * 3.6 * 100) / 100 };
+  }
   function stepSecond(ts){
     const r = ride;
     if (SIM.on) simFeed(ts);
+    const cs = r.course ? courseSecond(r, ts) : null;
+    if (L.src){ r.psrc = r.psrc || { meter: 0, trainer: 0 }; r.psrc[meterLive() ? "meter" : "trainer"]++; }
     const k = idxAt(r, r.wt), iv = r.intervals[k] || null, tgt = targetNow();
     const fresh = at => ts - at <= 3000;
-    r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]);
+    r.samples.push([ts, fresh(L.bikeAt) ? L.power : null, fresh(L.bikeAt) ? L.cadence : null, fresh(L.hrAt) ? L.hr : null, cs ? cs.v_kmh : fresh(L.bikeAt) ? L.speed : null, tgt, ergActive(iv) ? 1 : 0, iv ? k : null, r.wt]
+      .concat(cs ? [Math.round(r.cst.x * 10) / 10, Math.round(r.cst.alt * 10) / 10, r.cst.sent, r.cst.real] : []));   // a course second: distance, height, grade sent, real grade
     if (r.edge){ const a = r.samples[r.samples.length - 1]; edgeDo(r.edge.second({ t: r.samples.length, wt: r.wt, w: a[1], hr: a[3], cad: a[2] })); }
     mpaStep(r, r.samples[r.samples.length - 1][1]);
-    coachSecond(r, k, iv, r.samples[r.samples.length - 1]);
+    if (!r.course) coachSecond(r, k, iv, r.samples[r.samples.length - 1]);   // course mode: no heart-rate coaching
     r.wt += 1;
     if (hrLed(iv)) seekStep(iv);
     const k2 = idxAt(r, r.wt);
     const left = iv ? iv.start_s + iv.dur_s - r.wt : null;
     if (iv && left === 3 && r.intervals[k + 1]) beep(880, 0.15);
-    if (k2 !== k){ beep(k2 < r.intervals.length ? 1320 : 660, 0.25); flush(); coachStep(r, k2); if (k2 >= r.intervals.length) note("workout done: ride on, or End to save"); }
+    if (k2 !== k && !r.course){ beep(k2 < r.intervals.length ? 1320 : 660, 0.25); flush(); coachStep(r, k2); if (k2 >= r.intervals.length) note("workout done: ride on, or End to save"); }
     else if (r.samples.length % 5 === 0) flush();
     syncErg();
     // the pedals have stopped: three such seconds and the clock stops with them
@@ -709,7 +778,7 @@
     try{ const AC = window.AudioContext || window.webkitAudioContext; if (AC && !audio) audio = new AC(); if (audio && audio.state === "suspended") audio.resume(); }catch{}
     const t0 = now();
     setZones(S.thresholds);
-    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, signature: S.signature || null, date: keyOf(new Date(t0)),
+    ride = { id: Math.round(t0), status: "riding", state: "countin", workout: S.workout, intervals: S.intervals, course: S.course || null, cset: S.cset || null, cst: S.course ? { v: 0, x: 0, t: 0, sent: null, sentAt: 0, done: false, alt: S.course.ele[0], real: 0 } : null, ftp: S.settings && S.settings.ftp || 175, thresholds: S.thresholds || null, signature: S.signature || null, date: keyOf(new Date(t0)),
       samples: [], pauses: [], wt: 0, bias: 0, erg: true, raw: {}, rawCount: 0, sim: SIM.on };
     ride.bk = bucketsFor(ride, S);
     COACH.feed = []; COACH.said = {}; COACH.spokeAt = 0;
@@ -720,10 +789,10 @@
     if (ov) ov.hidden = true;
     if (!ride || ride.state !== "countin") return;      // ended during the count-in
     ride.id = Math.round(now()); ride.state = "riding"; nextAt = ride.id;
-    ride.edge = EDGE = edgeFor(ride.workout, ride.intervals, ride.ftp, ride.id);
+    ride.edge = EDGE = ride.course ? null : edgeFor(ride.workout, ride.intervals, ride.ftp, ride.id);   // the Edge's rules (Zone 1 cap, fuel) are for workouts, not courses
     lockScreen();
     await ctl([0x00], "request control"); await ctl([0x07], "start");
-    DEV.sent = undefined; syncErg(true);
+    DEV.sent = undefined; DEV.sentGrade = undefined; syncErg(true);
     await flush();
     startTimer(); paint();
   }
@@ -762,15 +831,17 @@
   // ---------- saving: the FIT, then the bridge (and through it intervals.icu) ----------
   let lastFit = null;
   function fitOf(rec){
-    const samples = (rec.samples || []).map(a => ({ t: a[0], power: a[1], cadence: a[2], hr: a[3], speed: a[4], i: a[7] }));
-    return FIT.buildActivity({ startMs: rec.id, samples, pauses: (rec.pauses || []).filter(p => p && p[1] != null), ftp: rec.ftp });
+    const samples = (rec.samples || []).map(a => ({ t: a[0], power: a[1], cadence: a[2], hr: a[3], speed: a[4], i: a[7], dist_m: rec.course ? a[9] : null, alt_m: rec.course ? a[10] : null }));
+    // a course ride is a virtual ride: the course's distance and heights, no positions (course mode, 26 Nov 2026)
+    return FIT.buildActivity({ startMs: rec.id, samples, pauses: (rec.pauses || []).filter(p => p && p[1] != null), ftp: rec.ftp, virtual: !!rec.course });
   }
   function bodyOf(rec, fit){
     const S = { t: [], p: [], c: [], h: [], s: [], tg: [], e: [], i: [] };
     for (const a of rec.samples){ S.t.push(Math.round((a[0] - rec.id) / 1000)); S.p.push(a[1]); S.c.push(a[2]); S.h.push(a[3]); S.s.push(a[4]); S.tg.push(a[5]); S.e.push(a[6]); S.i.push(a[7]); }
     const w = rec.workout || {};
     return { summary: { start_ms: rec.id, name: w.name || "Indoor ride", workout_id: w.id || null, ftp: rec.ftp, intervals_event_id: w.intervals_event_id || null, pauses: rec.pauses,
-        intervals: rec.intervals.map(x => ({ label: x.label, start_s: x.start_s, dur_s: x.dur_s, target_w: x.target_w })), sim: !!rec.sim },
+        intervals: rec.intervals.map(x => ({ label: x.label, start_s: x.start_s, dur_s: x.dur_s, target_w: x.target_w })), sim: !!rec.sim,
+        course: rec.course ? { name: rec.course.name, dist_m: rec.course.dist_m, ascent_m: rec.course.ascent_m, ridden_m: fit.summary.distance_m, climbed_m: fit.summary.ascent_m, type: "VirtualRide" } : null },
       samples: S, fit_base64: FIT.toBase64(fit.bytes), raw: Object.assign({}, rec.raw || {}, { inventory: [[0, JSON.stringify(INV)]] }) };
   }
   async function saveRide(rec){
@@ -789,21 +860,206 @@
     drawResult(rec, fit.summary);
   }
 
+
+  // ---------- course mode: the screens (Harry, 26 Nov 2026) ----------
+  // Two modes, chosen at the start: Heart rate (the trainer moves the watts to hold a heart rate) and Course (the
+  // trainer follows the course's gradient only; heart rate, power, cadence and breathing are shown and kept, never fed
+  // back into the trainer).
+  let CMAP = null, CPHOTO = null, CSEL = null;
+  const simQ = () => { const q = params(), o = []; if (q.get("sim")) o.push("sim=1"); if (q.get("speed")) o.push("speed=" + q.get("speed")); return o.length ? "&" + o.join("&") : ""; };
+  const modeTabs = m => `<div class="pl-modes" role="tablist" aria-label="Mode">
+      <a role="tab" class="pl-mode${m === "hr" ? " on" : ""}" aria-selected="${m === "hr"}" href="#player?mode=hr${simQ()}">Heart rate</a>
+      <a role="tab" class="pl-mode${m === "course" ? " on" : ""}" aria-selected="${m === "course"}" href="#player?mode=course${simQ()}">Course</a></div>`;
+  const km = m => (m / 1000).toFixed(m < 10000 ? 2 : 1);
+  // the elevation profile, with the same arrow as the map at his place
+  function courseProfileSVG(C, x, w, h){
+    const P = Course.profilePath(C, w, h, 6);
+    const mx = P.X(x), my = P.Y(Course.eleAt(C, x));
+    // the arrow points along the profile as drawn here (the slope on this scale, not the real grade)
+    const a = Math.max(0, x - 150), b = Math.min(C.dist_m, x + 150), ang = Math.atan2(P.Y(Course.eleAt(C, b)) - P.Y(Course.eleAt(C, a)), P.X(b) - P.X(a)) * 180 / Math.PI;
+    const ticks = []; const every = C.dist_m > 60000 ? 10000 : C.dist_m > 15000 ? 5000 : C.dist_m > 4000 ? 1000 : 500;
+    for (let d = every; d < C.dist_m; d += every) ticks.push(`<line class="cp-tick" x1="${P.X(d).toFixed(1)}" x2="${P.X(d).toFixed(1)}" y1="${h - 6}" y2="${h - 2}"/><text class="cp-km" x="${P.X(d).toFixed(1)}" y="${h - 9}" text-anchor="middle">${d / 1000}</text>`);
+    return `<svg class="cp-svg" viewBox="0 0 ${w} ${h}" width="100%" height="${h}" preserveAspectRatio="none" role="img" aria-label="Elevation profile, ${km(C.dist_m)} km, ${C.ascent_m} m of climbing">
+      <path class="cp-fill" d="${P.path}"/>
+      <clipPath id="cpDone"><rect x="0" y="0" width="${mx.toFixed(1)}" height="${h}"/></clipPath><path class="cp-done" d="${P.path}" clip-path="url(#cpDone)"/>
+      ${ticks.join("")}
+      <text class="cp-ax" x="8" y="14">${Math.round(C.ele_max)} m</text><text class="cp-ax" x="8" y="${h - 14}">${Math.round(C.ele_min)} m</text>
+      <g class="cp-mk" transform="translate(${mx.toFixed(1)},${my.toFixed(1)}) rotate(${(ang + 90).toFixed(1)})"><path d="M0,-13 L8,8 L0,4 L-8,8 Z"/></g></svg>`;
+  }
+  function courseSettingsHTML(st){
+    const feels = Course.trainerGrade(8, st);
+    return `<div class="pl-sec cr-set">
+      <span class="hu-lab">Trainer</span>
+      <label class="cr-row"><span>Difficulty <b id="crDiffV">${st.difficulty}%</b></span><input id="crDiff" type="range" min="0" max="100" step="5" value="${st.difficulty}"></label>
+      <div class="small" id="crDiffW">An 8% climb feels like ${feels}%.</div>
+      <div class="cr-grid">
+        <label>Max grade <input id="crMax" type="number" min="0" max="20" step="0.5" value="${st.max_grade}"> %</label>
+        <label>Descent cap <input id="crMin" type="number" min="-20" max="0" step="0.5" value="${st.descent_cap}"> %</label>
+      </div>
+      <span class="hu-lab">Speed on the course</span>
+      <div class="cr-grid">
+        <label>Rider <input id="crKg" type="number" min="40" max="180" step="0.1" value="${st.rider_kg}"> kg</label>
+        <label>Bike <input id="crBk" type="number" min="4" max="30" step="0.1" value="${st.bike_kg}"> kg</label>
+        <label>CdA <input id="crCda" type="number" min="0.15" max="0.7" step="0.005" value="${st.cda}"> m²</label>
+        <label>Crr <input id="crCrr" type="number" min="0.001" max="0.02" step="0.0005" value="${st.crr}"></label>
+      </div>
+      <div class="small">The speed uses the course's true grade, never the difficulty: the slider changes how it feels, not the time. No drafting, no wind.</div>
+      <div class="cr-row"><span>Map</span><span class="cr-seg"><button data-view="2d" class="${st.view !== "3d" ? "on" : ""}">2D</button><button data-view="3d" class="${st.view === "3d" ? "on" : ""}">3D</button></span></div>
+      <details class="why"><summary>Street photo (Mapillary): ${st.mapillary_token ? "on" : "off"}</summary>
+        <div class="small">Off until you enter your own Mapillary token (free account, mapillary.com/dashboard/developers). It stays on this computer. The photo comes straight from Mapillary to this page.</div>
+        <label class="cr-row"><span>Token</span><input id="crTok" type="password" autocomplete="off" value="${esc(st.mapillary_token || "")}" placeholder="MLY|…"></label></details>
+    </div>`;
+  }
+  function courseStartHTML(pend){
+    const lib = courseLib(), st = courseSettings();
+    const sel = CSEL && lib.find(c => c.id === CSEL.id) ? CSEL : lib[0] || null; CSEL = sel;
+    const list = lib.map(c => `<button class="cr-pick${sel && c.id === sel.id ? " on" : ""}" data-cid="${esc(c.id)}"><b>${esc(c.name)}</b><span class="small">${km(c.dist_m)} km · ${c.ascent_m} m</span></button>`).join("");
+    return `${pend}${support()}${modeTabs("course")}
+      <div class="pl-ttl"><h2 class="pl-h">${sel ? esc(sel.name) : "Ride a course"}</h2>${sel ? `<span class="hu-chip hu-dim">${km(sel.dist_m)} km · ${sel.ascent_m} m climbing · top ${Math.round(sel.ele_max)} m</span>` : ""}</div>
+      ${sel ? `<div class="cr-mapbox cr-pre"><div class="cr-map" id="crMap"></div></div><div class="cr-prof" id="crProf"></div>` : `<div class="small">Import a GPX or FIT course you have downloaded (Ride with GPS, Garmin Connect). The trainer follows its hills; nothing else changes the resistance.</div>`}
+      <div class="pl-sec"><span class="hu-lab">Your courses</span><div class="cr-list">${list || `<span class="small">None yet.</span>`}</div>
+        <div class="cr-imp"><label class="btn cr-file">Import GPX or FIT<input id="crFile" type="file" accept=".gpx,.fit,application/gpx+xml" hidden></label>
+        <button id="crTest">Add the test course (made up)</button>${sel ? `<button id="crDel" class="linkish">Remove this course</button>` : ""}</div>
+        <div class="pl-note small" id="crMsg" hidden></div></div>
+      ${courseSettingsHTML(st)}
+      <div class="pl-sec">
+        <div class="pl-devs">${devHTML("trainer")}${devHTML("meter")}${devHTML("strap")}${devHTML("breath")}</div>
+        <button class="primary pl-go" id="plStart"${!sel || (!navigator.bluetooth && !SIM.on) ? " disabled" : ""}>${!sel ? "Pick a course first" : DEV.trainer ? "Start the course" : "Start without the trainer"}</button>
+        <div class="small pl-hint">Course mode follows the gradient only. Heart rate, power, cadence and breathing are shown and saved, never used to change the trainer. End always saves the ride.</div>
+      </div>
+      <div class="pl-note small" id="plNote" hidden></div>`;
+  }
+  async function drawCourseStart(el, pend){
+    if (CMAP){ CMAP.destroy(); CMAP = null; }
+    el.innerHTML = `<div class="pl-wrap pl-cwrap"><div class="pl-startcol">${courseStartHTML(pend)}</div></div>`;
+    const $ = id => document.getElementById(id), msg = t => { const m = $("crMsg"); if (m){ m.textContent = t; m.hidden = !t; } };
+    const C = CSEL;
+    if (C){
+      const pr = $("crProf"); if (pr) pr.innerHTML = courseProfileSVG(C, 0, Math.max(300, pr.clientWidth || 800), 120);
+      CMAP = CourseMap.create($("crMap"), C, { view: "2d", follow: false });
+      if (CMAP.ok) CMAP.update(0, true);
+    }
+    const st = courseSettings();
+    const keep = () => { saveCourseSettings(st); const w = $("crDiffW"); if (w) w.textContent = `An 8% climb feels like ${Course.trainerGrade(8, st)}%.`; };
+    $("crDiff").oninput = e => { st.difficulty = +e.target.value; $("crDiffV").textContent = st.difficulty + "%"; keep(); };
+    $("crMax").onchange = e => { st.max_grade = Math.max(0, Math.min(20, +e.target.value || 0)); keep(); };
+    $("crMin").onchange = e => { st.descent_cap = Math.max(-20, Math.min(0, +e.target.value || 0)); keep(); };
+    $("crKg").onchange = e => { st.rider_kg = Math.max(40, Math.min(180, +e.target.value || 98.4)); keep(); };
+    $("crBk").onchange = e => { st.bike_kg = Math.max(4, Math.min(30, +e.target.value || 8)); keep(); };
+    $("crCda").onchange = e => { st.cda = Math.max(0.15, Math.min(0.7, +e.target.value || 0.36)); keep(); };
+    $("crCrr").onchange = e => { st.crr = Math.max(0.001, Math.min(0.02, +e.target.value || 0.004)); keep(); };
+    $("crTok").onchange = e => { st.mapillary_token = String(e.target.value || "").trim(); keep(); };
+    el.querySelectorAll(".cr-seg button").forEach(b => b.onclick = () => { st.view = b.dataset.view; keep(); el.querySelectorAll(".cr-seg button").forEach(x => x.classList.toggle("on", x === b)); });
+    el.querySelectorAll("[data-cid]").forEach(b => b.onclick = () => { CSEL = courseLib().find(c => c.id === b.dataset.cid) || null; drawCourseStart(el, pend); });
+    const add = (c) => { const lib = courseLib().filter(x => x.id !== c.id); lib.unshift(c); const err = saveCourseLib(lib.slice(0, 12)); if (err){ msg(err); return; } CSEL = c; drawCourseStart(el, pend); };
+    $("crFile").onchange = async e => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      try{
+        const data = /\.fit$/i.test(f.name) ? new Uint8Array(await f.arrayBuffer()) : await f.text();
+        const c = Course.read(f.name, data); c.id = "c" + Date.now().toString(36); c.file = f.name; add(c);
+      }catch(err){ msg(`Couldn't read ${f.name}: ${err.message}`); }
+    };
+    $("crTest").onclick = () => { const c = Course.build(Course.testCourse()); c.id = "test-ventoux"; add(c); };
+    if ($("crDel")) $("crDel").onclick = () => { if (!CSEL) return; saveCourseLib(courseLib().filter(x => x.id !== CSEL.id)); CSEL = null; drawCourseStart(el, pend); };
+    const go = $("plStart");
+    if (go && C) go.onclick = () => {
+      go.disabled = true; clearInterval(autoTimer);
+      const ftp = S0 && S0.settings && S0.settings.ftp || 175;
+      begin({ workout: { id: "course-" + C.id, name: C.name, date: keyOf(new Date()), time: null }, intervals: [{ label: C.name, start_s: 0, dur_s: 12 * 3600, kind: "course", target_w: null, target_w_end: null, target_hr: null, rep: null }],
+        settings: { ftp }, course: C, cset: Object.assign({}, courseSettings()), lines: S0 && S0.lines, colours: S0 && S0.colours, thresholds: S0 && S0.thresholds });
+    };
+    autoConnect();
+  }
+  function drawCourseRide(){
+    const el = page(); if (!el || !ride) return;
+    const C = ride.course, st = ride.cset;
+    if (CMAP){ CMAP.destroy(); CMAP = null; }
+    try{ window.scrollTo(0, 0); }catch{}
+    el.innerHTML = `<div class="pl-wrap pl-cwrap"><div class="pl-ride cr-ride">
+      <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl">${esc(C.name)}</span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("meter")}${devHTML("strap")}${devHTML("breath")}</div></div>
+      <div class="cr-mapbox"><div class="cr-map" id="crMap"></div><div class="cr-photo" id="crPhoto" hidden></div></div>
+      <div class="cr-prof" id="crProf"></div>
+      <div class="pl-big">
+        <div class="pl-bn"><span class="k">Grade</span><span class="n" id="cG">—</span><span class="u" id="cGt"></span></div>
+        <div class="pl-bn pl-pw"><span class="k">Power</span><span class="n" id="fP">—</span><span class="u" id="cV"></span></div>
+        <div class="pl-bn pl-hr"><span class="k">Heart rate</span><div class="pl-hrrow"><span class="pl-hrbar" id="fHb" aria-hidden="true"></span><span class="n" id="fH">—</span></div><span class="u" id="fHz"></span></div>
+      </div>
+      <div class="pl-next" id="cNext"></div>
+      <div class="pl-ctl">
+        <button id="cPause">Pause</button>
+        <button id="cDm" aria-label="Difficulty down 10">Difficulty −</button><button id="cDp" aria-label="Difficulty up 10">Difficulty +</button>
+        <button id="cView"></button><button id="cAuto"></button><button id="cEnd" class="pl-end">End</button>
+      </div>
+      <div class="hu-fields pl-fields cr-fields">
+        <div class="hu-field"><span class="k">Distance left</span><span class="n" id="cD">—</span><span class="u" id="cDr"></span></div>
+        <div class="hu-field"><span class="k">Climbing left</span><span class="n" id="cU">—</span><span class="u" id="cUr"></span></div>
+        <div class="hu-field"><span class="k">Time</span><span class="n" id="fT0">0:00</span><span class="u" id="cH"></span></div>
+        <div class="hu-field pl-cad"><span class="k">Cadence</span><span class="n" id="fC">—</span><span class="u">rpm</span></div>
+        <div class="hu-field"><span class="k">Breathing</span><span class="n" id="cBr">—</span><span class="u">breaths/min</span></div>
+      </div>
+      <div class="pl-confirm" id="plConfirm" hidden><div><b>End the ride and save it?</b><div class="small">It is saved here and sent to intervals.icu as a virtual ride. Nothing is thrown away.</div></div><button class="primary" id="cSave">Save the ride</button><button id="cBack">Keep riding</button></div>
+      <div class="pl-note small" id="plNote" hidden></div>
+      <div class="pl-count" id="plCount" hidden></div>
+    </div></div>`;
+    const $ = id => document.getElementById(id);
+    CMAP = CourseMap.create($("crMap"), C, { view: st.view, follow: true });
+    CPHOTO = CourseMap.photo($("crPhoto"), st.mapillary_token);
+    const diff = d => { st.difficulty = Math.max(0, Math.min(100, st.difficulty + d)); const x = courseSettings(); x.difficulty = st.difficulty; saveCourseSettings(x); ride.cst.sent = Course.trainerGrade(Course.gradeAt(C, ride.cst.x), st); courseSend(true); paint(); };
+    $("cPause").onclick = () => ride.state === "paused" ? resume() : pause();
+    $("cDm").onclick = () => diff(-10); $("cDp").onclick = () => diff(10);
+    $("cView").onclick = () => { st.view = st.view === "3d" ? "2d" : "3d"; const x = courseSettings(); x.view = st.view; saveCourseSettings(x); if (CMAP) CMAP.setView(st.view); paint(); };
+    $("cAuto").onclick = () => { AUTO.on = !AUTO.on; try{ localStorage.setItem("way-player-autopause", AUTO.on ? "on" : "off"); }catch{} paint(); };
+    $("cEnd").onclick = () => { $("plConfirm").hidden = false; try{ $("plConfirm").scrollIntoView({ block: "nearest", behavior: "smooth" }); }catch{} };
+    $("cBack").onclick = () => { $("plConfirm").hidden = true; };
+    $("cSave").onclick = () => { $("cSave").disabled = true; endRide(); };
+    paint();
+  }
+  let profAt = -1;
+  function paintCourse(){
+    const $ = id => document.getElementById(id); if (!$("cG")) return;
+    const r = ride, C = r.course, st = r.cset, x = r.cst.x, fresh = at => now() - at <= 3000;
+    $("plPos").textContent = r.state === "paused" ? (r.autoPaused ? "Paused · off the bike" : "Paused") : r.state === "countin" ? "Get ready" : r.cst.done ? "Course done · flat road" : "Course";
+    const real = Course.gradeAt(C, x);
+    $("cG").textContent = `${real >= 0 ? "" : "−"}${Math.abs(real).toFixed(1)}%`;
+    $("cGt").textContent = `trainer ${r.cst.sent != null ? r.cst.sent.toFixed(1) : "—"}% · difficulty ${st.difficulty}%`;
+    $("fP").textContent = fresh(L.bikeAt) && L.power != null ? L.power : "—";
+    $("cV").textContent = `${(r.cst.v * 3.6).toFixed(1)} km/h · ${meterLive() ? "bike meter" : DEV.trainer ? "trainer power" : "no power"}`;
+    const hr = fresh(L.hrAt) ? L.hr : null;
+    $("fH").textContent = hr != null ? hr : "—";
+    { const bk = bucketsNow(r), hb = hr != null ? BK().bucketOf({ hr }, bk.lines) : null;
+      $("fHb").style.background = hb == null ? "transparent" : bk.colours[BK().KEYS[hb]]; $("fHb").style.borderColor = hb == null ? "#8A8A86" : bk.colours[BK().KEYS[hb]];
+      const zin = hrZoneOf(hr); $("fHz").textContent = zin ? `Z${zin.z} ${zin.name}` : ""; }
+    $("fC").textContent = fresh(L.bikeAt) && L.cadence != null ? L.cadence : "—";
+    const br = (r.breath || [])[(r.breath || []).length - 1]; $("cBr").textContent = br && r.wt - br[0] <= 15 ? br[1] : "—";
+    $("fT0").textContent = clock(r.samples.length);
+    $("cH").textContent = `${Math.round(r.cst.alt)} m up`;
+    $("cD").textContent = `${km(Math.max(0, C.dist_m - x))}`; $("cDr").textContent = `km of ${km(C.dist_m)}`;
+    const up = Course.climbLeft(C, x); $("cU").textContent = Math.round(up); $("cUr").textContent = `m of ${C.ascent_m}`;
+    const nx = r.cst.done ? null : Course.nextChange(C, x);
+    $("cNext").innerHTML = r.cst.done ? `<b>${esc(C.name)}</b> done. Ride on, or End to save.` : nx ? `Next: <b>${nx.grade > 0 ? "+" : nx.grade < 0 ? "−" : ""}${Math.abs(nx.grade).toFixed(1)}%</b> in <b>${nx.at_m >= 1000 ? (nx.at_m / 1000).toFixed(1) + " km" : nx.at_m + " m"}</b>` : "The same to the end.";
+    $("cPause").textContent = r.state === "paused" ? "Resume" : "Pause"; $("cPause").classList.toggle("primary", r.state === "paused");
+    $("cView").textContent = st.view === "3d" ? "Map: 3D" : "Map: 2D";
+    $("cAuto").textContent = AUTO.on ? "Auto-pause on" : "Auto-pause off";
+    if (CMAP && CMAP.ok) CMAP.update(x);
+    if (r.wt !== profAt){ profAt = r.wt; const pr = $("crProf"); if (pr) pr.innerHTML = courseProfileSVG(C, x, Math.max(300, pr.clientWidth || 800), 110); }
+    if (CPHOTO && CPHOTO.on){ const p = Course.posAt(C, x); CPHOTO.update(p.lat, p.lon); }
+  }
+
   // ---------- drawing ----------
   let S0 = null;            // the session on the start screen
   const page = () => document.getElementById("plPage");
   function note(msg){ const el = document.getElementById("plNote"); if (el){ el.textContent = msg; el.hidden = false; clearTimeout(note.t); note.t = setTimeout(() => { el.hidden = true; }, 8000); } }
   function setDevState(kind, text){ const el = document.querySelector(`[data-dev="${kind}"] .pl-devst`); if (el) el.textContent = text; }
   function devHTML(kind){
-    const on = kind === "trainer" ? !!DEV.trainer : kind === "breath" ? !!DEV.breath : !!DEV.strap, name = kind === "trainer" ? DEV.trainerName : kind === "breath" ? DEV.breathName : DEV.strapName, saved = lsGet(LS[kind]);
-    const label = kind === "trainer" ? "trainer" : kind === "breath" ? "breathing sensor" : "heart-rate strap";
-    return `<button class="pl-dev${on ? " on" : ""}" data-dev="${kind}"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}><span class="pl-devk">${on ? "✓ " : ""}${kind === "trainer" ? "Trainer" : kind === "breath" ? "Breathing" : "Heart rate"}</span><span class="pl-devst">${on ? esc(name) : saved ? `connect ${esc(saved)}` : `connect ${label}`}</span></button>`;
+    const on = !!DEV[kind], name = DEV[kind + "Name"], saved = lsGet(LS[kind]);
+    const label = kind === "trainer" ? "trainer" : kind === "breath" ? "breathing sensor" : kind === "meter" ? "bike power meter" : "heart-rate strap";
+    return `<button class="pl-dev${on ? " on" : ""}" data-dev="${kind}"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}><span class="pl-devk">${on ? "✓ " : ""}${kind === "trainer" ? "Trainer" : kind === "breath" ? "Breathing" : kind === "meter" ? "Power meter" : "Heart rate"}</span><span class="pl-devst">${on ? esc(name) : saved ? `connect ${esc(saved)}` : `connect ${label}`}</span></button>`;
   }
-  function drawDevices(){ document.querySelectorAll(".pl-devs").forEach(el => { el.innerHTML = devHTML("trainer") + devHTML("strap") + devHTML("breath"); }); const st = document.getElementById("plStart"); if (st) st.textContent = DEV.trainer ? "Start" : "Start without the trainer"; }
+  function drawDevices(){ document.querySelectorAll(".pl-devs").forEach(el => { el.innerHTML = devHTML("trainer") + devHTML("meter") + devHTML("strap") + devHTML("breath"); }); const st = document.getElementById("plStart"); if (st) st.textContent = DEV.trainer ? "Start" : "Start without the trainer"; }
   function bindDevices(root){
     root.addEventListener("click", e => {
       const b = e.target.closest("[data-dev]"); if (!b) return;
-      if (b.dataset.dev === "trainer") connectTrainer().catch(() => {}); else if (b.dataset.dev === "breath") connectBreath().catch(() => {}); else connectStrap().catch(() => {});
+      if (b.dataset.dev === "trainer") connectTrainer().catch(() => {}); else if (b.dataset.dev === "breath") connectBreath().catch(() => {}); else if (b.dataset.dev === "meter") connectMeter().catch(() => {}); else connectStrap().catch(() => {});
     });
   }
   const support = () => SIM.on ? `<div class="pl-warn hu-hold">Simulator: made-up power, heart rate and cadence${CLK.speed > 1 ? `, ${CLK.speed}× time` : ""}. Nothing here is a real ride.</div>`
@@ -819,7 +1075,8 @@
     const fuel = (S.fuel || []).length ? `<div class="pl-sec"><span class="hu-lab">Fuel for this ride</span><ul class="pl-fuel">${S.fuel.map(m => `<li><span class="pl-ft">${m.slot === "before" ? "Before" : "On the bike"}${m.time ? " · " + esc(hm12(m.time)) : ""}</span><span>${esc(m.what)}${m.carbs_g ? ` <b>${m.carbs_g} g carbs</b>` : ""}</span></li>`).join("")}</ul></div>` : "";
     const others = (S.choices || []).filter(c => c.id !== w.id);
     const rows = ivs.map(x => `<li><span class="pl-it">${clock(x.start_s)}</span><span class="pl-il">${esc(x.label)}${x.rep ? ` <span class="small">${esc(x.rep)}</span>` : ""}</span><span class="pl-iw">${esc(targetWords(x, 0))}</span><span class="pl-id">${clock(x.dur_s)}</span></li>`).join("");
-    return `${pending}${support()}
+    const hrT = +lsGet("way-player-hr-target") || 116, hrMin = +lsGet("way-player-hr-min") || 60;
+    return `${pending}${support()}${modeTabs("hr")}
       <div class="pl-ttl"><h2 class="pl-h">${esc(w.name)}</h2>${when ? `<span class="hu-chip hu-dim">${esc(when)}</span>` : ""}</div>
       <div class="pl-sec pl-fsec"><span class="hu-lab">The power to follow · watts at FTP ${ftp}</span><div class="pf-box pf-whole" id="plWhole"></div>${goalOf(w, ivs) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(w, ivs), [], 88)}</div>` : ""}</div>
       <div class="hu-fields pl-sum">
@@ -828,8 +1085,11 @@
         <div class="hu-field"><span class="k">Load</span><span class="n">${w.tss != null ? w.tss : "—"}</span><span class="u">TSS</span></div>
       </div>
       ${fuel}
+      <div class="pl-sec pl-hold"><span class="hu-lab">Or hold a heart rate</span>
+        <div class="pl-holdrow"><label>Target <input id="plHrT" type="number" min="80" max="185" step="1" value="${hrT}"> bpm</label><label>for <input id="plHrMin" type="number" min="5" max="360" step="5" value="${hrMin}"> min</label><button id="plHrGo">Ride at this heart rate</button></div>
+        <div class="small">The trainer moves the watts to hold it.</div></div>
       <div class="pl-sec">
-        <div class="pl-devs">${devHTML("trainer")}${devHTML("strap")}${devHTML("breath")}</div>
+        <div class="pl-devs">${devHTML("trainer")}${devHTML("meter")}${devHTML("strap")}${devHTML("breath")}</div>
         <button class="primary pl-go" id="plStart"${!navigator.bluetooth && !SIM.on ? " disabled" : ""}>${DEV.trainer ? "Start" : "Start without the trainer"}</button>
         <div class="small pl-hint">End always saves the ride.</div>
       </div>
@@ -968,11 +1228,12 @@
   }
 
   function drawRide(){
+    if (ride && ride.course) return drawCourseRide();
     const el = page(); if (!el || !ride) return;
     const ftp = ride.ftp;
     try{ window.scrollTo(0, 0); }catch{}
     el.innerHTML = `<div class="pl-wrap"><div class="pl-ride">
-      <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("strap")}${devHTML("breath")}</div></div>
+      <div class="pl-top"><div class="pl-now"><span class="hu-lab" id="plPos"></span><span class="pl-lbl" id="plLbl"></span></div><div class="pl-devs pl-devs-sm">${devHTML("trainer")}${devHTML("meter")}${devHTML("strap")}${devHTML("breath")}</div></div>
       <div class="pl-bkbox" id="plBk"></div>
       <div class="pl-big">
         <div class="pl-bn"><span class="k">Time</span><span class="n" id="fT0">0:00</span><span class="u" id="fIl"></span></div>
@@ -1015,6 +1276,7 @@
   let stripAt = -1;
   function paint(){
     if (!ride || !alive()) return;
+    if (ride.course) return paintCourse();
     const $ = id => document.getElementById(id);
     if (!$("fP")) return;
     const r = ride, k = idxAt(r, r.wt), iv = r.intervals[k] || null, nx = r.intervals[k + 1] || null, total = totalOf(r);
@@ -1026,7 +1288,7 @@
     { const m = $("fMpa"), M = r.mpa; if (m){ const pw = fresh(L.bikeAt) ? L.power : null;
         m.textContent = !M ? "" : M.bt ? `★ breakthrough · MPA ${M.mpa}` : `MPA ${M.mpa} · tank ${M.tank}%`;
         m.classList.toggle("bt", !!(M && M.bt)); m.classList.toggle("near", !!(M && !M.bt && pw != null && M.tank <= 60 && pw >= M.mpa * 0.95)); } }
-    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? (hrLed(iv) && now() - L.hrAt <= 15000 ? ` · holding HR ${HR_Z1_AIM}` : "") : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.lo}–${iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
+    $("fPt").textContent = !iv ? "" : iv.target_w != null ? `${tgt} W${ergActive(iv) ? (hrLed(iv) && now() - L.hrAt <= 15000 ? ` · holding HR ${HR_Z1_AIM}` : "") : " · ERG off"}` : iv.kind === "hr" ? `${tgt} W · for HR ${iv.target_hr.aim != null ? iv.target_hr.aim : iv.target_hr.lo + "–" + iv.target_hr.hi}${ride.seek && ride.seek.first ? " · finding it" : ""}` : "";
     const hr = fresh(L.hrAt) ? L.hr : null;
     $("fH").textContent = hr != null ? hr : "—";
     $("fH").className = "n";   // numbers are ink; the heart rate's bucket is the bar beside it
@@ -1062,6 +1324,7 @@
     paintEdge();
   }
   function drawSaving(rec){
+    if (CMAP){ CMAP.destroy(); CMAP = null; }
     const el = page(); if (!el) return;
     el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">Saving the ride</h2></div><div class="small">Building the file and sending it to The Way and intervals.icu…</div>`;
   }
@@ -1079,11 +1342,16 @@
         <div class="hu-field"><span class="k">Power</span><span class="n">${s.avg_w != null ? s.avg_w : "—"}<small> W</small></span><span class="u">${s.np_w ? `NP ${s.np_w} W · ` : ""}${s.tss != null ? `${s.tss} TSS` : ""}</span></div>
         <div class="hu-field"><span class="k">Heart rate</span><span class="n">${s.avg_hr != null ? s.avg_hr : "—"}</span><span class="u">${s.max_hr ? `max ${s.max_hr}` : "no strap"}</span></div>
       </div>` : "";
+    const cr = rec.course, cset = rec.cset || {}, ps = rec.psrc || null;
+    const courseLine = cr && !r.empty ? `<div class="pl-result ok cr-res"><b>${esc(cr.name)}</b>: ${km(s.distance_m || 0)} of ${km(cr.dist_m)} km, ${s.ascent_m != null ? s.ascent_m : "—"} m climbed, a virtual ride.
+        ${cset.difficulty != null && cset.difficulty < 100 ? `<span class="hu-chip hu-ink">difficulty ${cset.difficulty}%</span> The climbs were eased on the trainer; the time and speed use the true grade.` : `Difficulty ${cset.difficulty != null ? cset.difficulty : 100}%.`}
+        ${ps ? ` Power from ${ps.meter >= ps.trainer ? "the bike's power meter" : "the trainer"}.` : ""}</div>` : "";
     el.innerHTML = `<div class="pl-ttl"><h2 class="pl-h">${head}</h2><span class="hu-chip ${ok ? "hu-dim" : "hu-ink"}">${ok ? "saved" : r.stored ? "upload pending" : "kept here"}</span></div>
       <div class="pl-result ${ok ? "ok" : "bad"}">${line}</div>
+      ${courseLine}
       ${rec.mpa && rec.mpa.bt ? `<div class="pl-result ok pl-btres">★ Breakthrough at ${clock(rec.mpa.bt.wt)}: ${rec.mpa.bt.watts} W where the signature allowed ${rec.mpa.bt.mpa} W${rec.mpa.over_s > 3 ? `, ${rec.mpa.over_s} seconds above it` : ""}. </div>` : ""}
       ${fields}
-      ${!r.empty && rec.samples && rec.samples.length ? (() => { const lines = (rec.bk && rec.bk.lines) || BKS.lines, plan = BK().planFromSteps(rec.intervals || [], rec.ftp || 175, lines);
+      ${!r.empty && !cr && rec.samples && rec.samples.length ? (() => { const lines = (rec.bk && rec.bk.lines) || BKS.lines, plan = BK().planFromSteps(rec.intervals || [], rec.ftp || 175, lines);
           const act = BK().actualFromSamples(rec.samples.map(a => ({ w: a[1], hr: a[3] })), lines);
           return `<div class="pl-bkres"><span class="hu-lab">Buckets${plan.planned ? ", ridden against the plan" : ""}</span>${BK().miniHTML({ plan: plan.planned ? plan : null, actual: act, colours: (rec.bk && rec.bk.colours) || BKS.colours })}</div>`; })() : ""}
       ${!r.empty && goalOf(rec.workout, rec.intervals) ? `<div class="pl-goal pl-goal-start">${goalHTML(goalOf(rec.workout, rec.intervals), rec.samples, 120)}</div>` : ""}
@@ -1137,6 +1405,17 @@
     if (ride && (ride.state === "riding" || ride.state === "paused" || ride.state === "countin")){ drawRide(); return; }
     if (ride && ride.state === "ended") ride = null;    // a ride already ended shows in the list below until it is saved
     if (SIM.on){ DEV.trainer = DEV.trainer || { sim: true }; DEV.trainerName = "Simulated trainer"; DEV.strap = DEV.strap || { sim: true }; DEV.strapName = "Simulated strap"; }
+    const mode = q.get("mode") === "course" || q.get("mode") === "hr" ? q.get("mode") : (lsGet(MODE_KEY) === "course" ? "course" : "hr");
+    lsSet(MODE_KEY, mode);
+    if (mode === "course"){
+      // the planning numbers (FTP) and the zones still come from the site, but nothing waits for them
+      if (!S0) try{ S0 = await loadSession("today"); }catch{ S0 = null; }
+      if (!alive()) return;
+      const pend = await pendingHTML(S0);
+      if (!alive()) return;
+      await drawCourseStart(el, pend);
+      return;
+    }
     const id = q.get("id");
     let S = null, err = null;
     try{ S = await loadSession(id || "today"); }catch(e){ err = e; }
@@ -1155,6 +1434,15 @@
     const go = document.getElementById("plStart");
     drawWhole(S);
     if (go) go.onclick = () => { go.disabled = true; clearInterval(autoTimer); begin(S0); };
+    // the heart rate he types: held for the minutes he gives (heart-rate mode)
+    const hg = document.getElementById("plHrGo");
+    if (hg) hg.onclick = () => {
+      const t = Math.max(80, Math.min(185, Math.round(+document.getElementById("plHrT").value || 116))), m = Math.max(5, Math.min(360, Math.round(+document.getElementById("plHrMin").value || 60)));
+      lsSet("way-player-hr-target", t); lsSet("way-player-hr-min", m);
+      hg.disabled = true; clearInterval(autoTimer);
+      begin(Object.assign({}, S0, { none: false, workout: { id: "hr-" + t, name: `Hold ${t} bpm`, date: keyOf(new Date()), time: null },
+        intervals: [{ label: `Hold ${t} bpm`, start_s: 0, dur_s: m * 60, kind: "hr", target_hr: { lo: t - 5, hi: t + 3, aim: t }, target_w: null, target_w_end: null, rep: null }] }));
+    };
     autoConnect();
   };
 
@@ -1168,6 +1456,6 @@
       target_w: iv && iv.target_w != null ? Math.round(iv.target_w) : null, step: iv ? (iv.label || iv.kind || null) : null, step_left_s: iv ? Math.max(0, Math.round(iv.start_s + iv.dur_s - ride.wt)) : null,
       avg_hr: mean(3), avg_power: mean(1) };
   }
-  window.__player = { get ride(){ return ride; }, get fit(){ return lastFit; }, live: liveNow, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; }, power(w){ SIM.force = w == null ? null : +w; } } };
+  window.__player = { get map(){ return CMAP; }, get ride(){ return ride; }, get fit(){ return lastFit; }, live: liveNow, DB, coach: COACH, sim: { coast(on){ SIM.coast = !!on; }, power(w){ SIM.force = w == null ? null : +w; } } };
   if (location.hash.replace(/^#/, "").split("?")[0] === "player") nav();
 })();

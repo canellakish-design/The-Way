@@ -4,8 +4,10 @@
    intervals.icu exactly as a Garmin file would:
      header (14 bytes, its own CRC) · definition + data messages · file CRC
    Messages: file_id (activity, manufacturer "development"), event (timer start / stop),
-   record (one per second: time, heart rate, cadence, power, speed, distance), one lap per
+   record (one per second: time, heart rate, cadence, power, speed, distance, altitude), one lap per
    workout interval, session (cycling, indoor cycling, totals), activity.
+   A course ride (course mode, pwa/course.js) is written as a virtual ride (sub sport 58, virtual_activity): its
+   distance and altitude are the course's, second by second, with the climbing in the session. No positions.
    FIT time is seconds since 1989-12-31 00:00 UTC (unix − 631065600). A missing value is
    written as the type's "invalid" (0xFF, 0xFFFF, 0xFFFFFFFF).
    Loads as a browser global (window.FIT) and as a Node module (bridge/player.test.js). */
@@ -17,7 +19,7 @@
   const MSG = {
     file_id:  { num: 0,  fields: [["type", 0, ENUM], ["manufacturer", 1, U16], ["product", 2, U16], ["serial_number", 3, U32Z], ["time_created", 4, U32]] },
     event:    { num: 21, fields: [["timestamp", 253, U32], ["event", 0, ENUM], ["event_type", 1, ENUM], ["event_group", 4, U8]] },
-    record:   { num: 20, fields: [["timestamp", 253, U32], ["heart_rate", 3, U8], ["cadence", 4, U8], ["power", 7, U16], ["speed", 6, U16], ["distance", 5, U32]] },
+    record:   { num: 20, fields: [["timestamp", 253, U32], ["heart_rate", 3, U8], ["cadence", 4, U8], ["power", 7, U16], ["speed", 6, U16], ["distance", 5, U32], ["altitude", 2, U16]] },
     lap:      { num: 19, fields: [["message_index", 254, U16], ["timestamp", 253, U32], ["event", 0, ENUM], ["event_type", 1, ENUM], ["start_time", 2, U32],
                 ["total_elapsed_time", 7, U32], ["total_timer_time", 8, U32], ["total_distance", 9, U32], ["avg_heart_rate", 15, U8], ["max_heart_rate", 16, U8],
                 ["avg_cadence", 17, U8], ["avg_power", 19, U16], ["max_power", 20, U16], ["lap_trigger", 24, ENUM], ["sport", 25, ENUM], ["sub_sport", 39, ENUM]] },
@@ -25,7 +27,7 @@
                 ["sport", 5, ENUM], ["sub_sport", 6, ENUM], ["total_elapsed_time", 7, U32], ["total_timer_time", 8, U32], ["total_distance", 9, U32],
                 ["total_calories", 11, U16], ["avg_heart_rate", 16, U8], ["max_heart_rate", 17, U8], ["avg_cadence", 18, U8], ["avg_power", 20, U16], ["max_power", 21, U16],
                 ["first_lap_index", 25, U16], ["num_laps", 26, U16], ["trigger", 28, ENUM], ["normalized_power", 34, U16], ["training_stress_score", 35, U16],
-                ["intensity_factor", 36, U16], ["threshold_power", 45, U16]] },
+                ["intensity_factor", 36, U16], ["threshold_power", 45, U16], ["total_ascent", 22, U16], ["total_descent", 23, U16]] },
     activity: { num: 34, fields: [["timestamp", 253, U32], ["total_timer_time", 0, U32], ["num_sessions", 1, U16], ["type", 2, ENUM], ["event", 3, ENUM], ["event_type", 4, ENUM], ["local_timestamp", 5, U32]] }
   };
   const EVENT = { timer: 0, session: 8, lap: 9, activity: 26 }, EVENT_TYPE = { start: 0, stop: 1, stop_all: 4 };
@@ -106,7 +108,9 @@
       avg_cadence: avg(cad), np: np(pw), kj: pw.reduce((a, b) => a + b, 0) / 1000 };
   }
 
-  /* o: { startMs, samples:[{t (ms), power, cadence, hr, speed (km/h), i (interval index)}], pauses:[[stopMs, resumeMs]], ftp, tzOffsetS }
+  /* o: { startMs, samples:[{t (ms), power, cadence, hr, speed (km/h), i (interval index), dist_m?, alt_m?}], pauses:[[stopMs, resumeMs]], ftp, tzOffsetS,
+          virtual? (a course ride: sub sport virtual_activity) }
+     When a sample carries dist_m (a course ride), that is the distance; otherwise it is the speed added up second by second.
      Returns { bytes: Uint8Array, summary }. */
   function buildActivity(o){
     const rows = (o.samples || []).filter(s => s && Number.isFinite(s.t)).slice().sort((a, b) => a.t - b.t);
@@ -117,7 +121,8 @@
     w.write("event", { timestamp: fitTime(t0), event: EVENT.timer, event_type: EVENT_TYPE.start, event_group: 0 });
     // the records, with the timer stopping and starting around each pause
     const pauses = (o.pauses || []).filter(p => p && p[0] >= t0 && p[0] <= tEnd).sort((a, b) => a[0] - b[0]);
-    let pi = 0, dist = 0;
+    let pi = 0, dist = 0, ascent = 0, descent = 0, prevAlt = null;
+    const SUB = o.virtual ? 58 : 6;   // 58: virtual_activity (a course ride), 6: indoor_cycling
     for (const r of rows){
       while (pi < pauses.length && pauses[pi][1] != null && pauses[pi][1] <= r.t){
         w.write("event", { timestamp: fitTime(pauses[pi][0]), event: EVENT.timer, event_type: EVENT_TYPE.stop_all, event_group: 0 });
@@ -125,10 +130,12 @@
         pi++;
       }
       const mps = r.speed != null && r.speed >= 0 ? r.speed / 3.6 : null;
-      if (mps != null) dist += mps;                   // one second at this speed
+      if (r.dist_m != null && Number.isFinite(r.dist_m)) dist = Math.max(dist, r.dist_m);   // the course's own distance
+      else if (mps != null) dist += mps;              // one second at this speed
       r.dist = dist;
+      if (r.alt_m != null && Number.isFinite(r.alt_m)){ if (prevAlt != null){ const x = r.alt_m - prevAlt; if (x > 0) ascent += x; else descent -= x; } prevAlt = r.alt_m; }
       w.write("record", { timestamp: fitTime(r.t), heart_rate: r.hr > 0 ? r.hr : null, cadence: r.cadence, power: r.power,
-        speed: mps == null ? null : mps * 1000, distance: dist * 100 });
+        speed: mps == null ? null : mps * 1000, distance: dist * 100, altitude: r.alt_m != null && Number.isFinite(r.alt_m) ? (r.alt_m + 500) * 5 : null });
     }
     w.write("event", { timestamp: fitTime(tEnd), event: EVENT.timer, event_type: EVENT_TYPE.stop_all, event_group: 0 });
     // one lap per workout interval: a run of samples with the same interval index
@@ -140,19 +147,20 @@
       w.write("lap", { message_index: k, timestamp: fitTime(z.t), event: EVENT.lap, event_type: EVENT_TYPE.stop, start_time: fitTime(a.t),
         total_elapsed_time: (z.t - a.t + 1000), total_timer_time: g.rows.length * 1000, total_distance: (z.dist - prevDist) * 100,
         avg_heart_rate: s.avg_hr, max_heart_rate: s.max_hr, avg_cadence: s.avg_cadence, avg_power: s.avg_power, max_power: s.max_power,
-        lap_trigger: k === groups.length - 1 ? 7 : 0, sport: 2, sub_sport: 6 });
+        lap_trigger: k === groups.length - 1 ? 7 : 0, sport: 2, sub_sport: SUB });
     });
     const s = stats(rows), timer = rows.length, elapsed = Math.round((tEnd - t0) / 1000) + 1;
     const ftp = o.ftp || 175, IF = s.np ? s.np / ftp : null;
     const summary = { start_ms: t0, end_ms: tEnd, seconds: timer, elapsed_s: elapsed, distance_m: Math.round(dist),
       avg_w: s.avg_power != null ? Math.round(s.avg_power) : null, np_w: s.np, max_w: s.max_power,
       avg_hr: s.avg_hr != null ? Math.round(s.avg_hr) : null, max_hr: s.max_hr, avg_cad: s.avg_cadence != null ? Math.round(s.avg_cadence) : null,
-      kj: Math.round(s.kj), laps: groups.length, ftp, tss: IF ? Math.round(timer / 3600 * IF * IF * 100) : null, if: IF ? Math.round(IF * 100) / 100 : null };
+      kj: Math.round(s.kj), laps: groups.length, ftp, ascent_m: prevAlt != null ? Math.round(ascent) : null, virtual: !!o.virtual, tss: IF ? Math.round(timer / 3600 * IF * IF * 100) : null, if: IF ? Math.round(IF * 100) / 100 : null };
     w.write("session", { message_index: 0, timestamp: fitTime(tEnd), event: EVENT.session, event_type: EVENT_TYPE.stop, start_time: fitTime(t0),
-      sport: 2, sub_sport: 6, total_elapsed_time: elapsed * 1000, total_timer_time: timer * 1000, total_distance: dist * 100,
+      sport: 2, sub_sport: SUB, total_elapsed_time: elapsed * 1000, total_timer_time: timer * 1000, total_distance: dist * 100,
       total_calories: s.kj, avg_heart_rate: s.avg_hr, max_heart_rate: s.max_hr, avg_cadence: s.avg_cadence, avg_power: s.avg_power, max_power: s.max_power,
       first_lap_index: 0, num_laps: groups.length, trigger: 0, normalized_power: s.np,
-      training_stress_score: summary.tss != null ? summary.tss * 10 : null, intensity_factor: IF ? IF * 1000 : null, threshold_power: ftp });
+      training_stress_score: summary.tss != null ? summary.tss * 10 : null, intensity_factor: IF ? IF * 1000 : null, threshold_power: ftp,
+      total_ascent: prevAlt != null ? ascent : null, total_descent: prevAlt != null ? descent : null });
     const tzs = o.tzOffsetS != null ? o.tzOffsetS : (typeof Date === "function" ? -new Date(tEnd).getTimezoneOffset() * 60 : 0);
     w.write("activity", { timestamp: fitTime(tEnd), total_timer_time: timer * 1000, num_sessions: 1, type: 0, event: EVENT.activity, event_type: EVENT_TYPE.stop, local_timestamp: fitTime(tEnd) + tzs });
     return { bytes: w.finish(), summary, counts: w.counts };
